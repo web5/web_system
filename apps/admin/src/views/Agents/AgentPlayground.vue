@@ -31,6 +31,9 @@
         option-filter-prop="label"
         :loading="agentsLoading"
       >
+        <a-select-option key="__auto__" value="auto" label="自动（意图路由）">
+          自动（意图路由）
+        </a-select-option>
         <a-select-option v-for="a in agents" :key="a.id" :value="a.id" :label="`${a.name} (${a.id})`">
           {{ a.name }} <span class="opt-id">{{ a.id }}</span>
         </a-select-option>
@@ -158,7 +161,7 @@
               v-model:value="userInput"
               :rows="2"
               :auto-size="{ minRows: 1, maxRows: 6 }"
-              placeholder="输入消息，Enter 发送 / Shift+Enter 换行"
+              placeholder="输入消息，Enter 发送 / Shift+Enter 换行（支持 @agentId 前缀手动指定，如 @translate 帮我翻译…）"
               :disabled="streaming"
               @keydown="onKeydown"
             />
@@ -294,7 +297,7 @@ const userStore = useUserStore();
 const agents = ref<AgentDef[]>([]);
 const agentsLoading = ref(false);
 const loading = ref(false);
-const agentId = ref('');
+const agentId = ref('auto');
 const userInput = ref('');
 const conversationId = ref('');
 const streaming = ref(false);
@@ -319,6 +322,7 @@ function findStreamingAssistant(): Msg | undefined {
 }
 
 const agentNameOfId = computed(() => {
+  if (agentId.value === 'auto') return '自动（意图路由）';
   const a = agents.value.find((x) => x.id === agentId.value);
   return a ? `${a.name}（${a.id}）` : agentId.value || '';
 });
@@ -411,7 +415,6 @@ async function reloadAgents() {
     const res: any = await listAgentDefs();
     const list = (res?.data ?? res ?? []) as AgentDef[];
     agents.value = list;
-    if (!agentId.value && list.length) agentId.value = list[0].id;
   } catch {
     agents.value = [];
   } finally {
