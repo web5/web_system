@@ -28,10 +28,10 @@ describe('resolveRunStages / isRollbackAnchor（v5 执行计划与回滚锚点�
     { kind: 'script', key: 'verify', label: '探活', watchdog: true },
   ];
 
-  it('无 nodes/steps → legacy 九阶段，回滚锚点=verify', () => {
+  it('无 nodes/steps → legacy 全阶段（含 prebuild，共 10），回滚锚点=verify', () => {
     const plan = resolveRunStages({});
     expect(plan.mode).toBe('legacy');
-    expect(plan.keys.length).toBe(9);
+    expect(plan.keys.length).toBe(10);
     expect(isRollbackAnchor('verify', plan)).toBe(true);
     expect(isRollbackAnchor('build', plan)).toBe(false);
   });

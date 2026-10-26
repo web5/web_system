@@ -18,6 +18,7 @@ import {
 export const CONFIGURABLE_STAGES = [
   'check',
   'pull',
+  'prebuild',
   'build',
   'upload',
   'restart',
@@ -83,7 +84,9 @@ export const STAGE_BUILTIN_DESCRIPTIONS: Record<string, string> = {
   check:
     '安全基线：校验模块存在与类型（micro-frontend/frontend/backend）；prod 限定 master 分支；指定 commit 时按磁盘产物决定是否复用。',
   pull:
-    '内置拉取：发布目录 git fetch → checkout 目标分支 → reset commit → clean；pnpm-lock.yaml 指纹变化才 install；并预构建共享 workspace 包（@web-system/shared / @web-system/types）。',
+    '内置拉取：发布目录 git fetch → checkout 目标分支 → reset commit → clean；pnpm-lock.yaml 指纹变化才 install。',
+  prebuild:
+    '内置预构建：调 scripts/prebuild-workspace-deps.mjs 对 packages 全量 isStale 判定，陈旧即重建（防后端打包吃旧 dist）。',
   build:
     '【必填·由模块提供】每模块独立的构建命令（DB 真相源），可任意 shell；未配置即发布终止。',
   upload:
