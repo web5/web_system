@@ -204,6 +204,7 @@ export class AgentEngine {
         yield {
           type: 'error',
           content: withCode(AGENT_ERROR_CODES.MODEL_ERROR, detail),
+          runId,
           usage: usageOf(accPrompt, accCompletion),
         };
         this.emit('onRunEnd', {
@@ -220,6 +221,7 @@ export class AgentEngine {
         yield {
           type: 'error',
           content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, '模型未返回结果'),
+          runId,
         };
         this.emit('onRunEnd', {
           runId,
@@ -250,7 +252,7 @@ export class AgentEngine {
       // 既污染后续上下文，前端历史载入时还会渲染出一个空气泡。这里直接判失败返回。
       if (!resp.content && (!resp.toolCalls || resp.toolCalls.length === 0)) {
         const detail = '模型返回了空结果';
-        yield { type: 'error', content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail) };
+        yield { type: 'error', content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail), runId };
         this.emit('onRunEnd', {
           runId,
           status: 'error',
@@ -293,6 +295,7 @@ export class AgentEngine {
           content: resp.content,
           step,
           conversationId: currentConversationId,
+          runId,
           usage: usageOf(accPrompt, accCompletion),
         };
         this.emit('onRunEnd', {
@@ -358,6 +361,7 @@ export class AgentEngine {
     yield {
       type: 'error',
       content: `达到最大步数限制 (${agent.maxSteps})`,
+      runId,
       usage: usageOf(accPrompt, accCompletion),
     };
     this.emit('onRunEnd', {
