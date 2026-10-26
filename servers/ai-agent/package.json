@@ -14,7 +14,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config e2e/jest.config.js"
+    "test:e2e": "jest --config e2e/jest.config.js",
+    "prebuild": "pnpm --filter @kedouai/agent-core build"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
