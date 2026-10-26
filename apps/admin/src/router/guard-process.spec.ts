@@ -52,8 +52,16 @@ describe('admin 路由守卫 · 登录判定口径', () => {
 
   it('V5 口径一致性：isAuthed 与「非空且未过期」完全等价（防止两处再写歪）', () => {
     const cases = [jwtWithExp(nowSec() - 1), jwtWithExp(nowSec() + 60), '', 'garbage'];
-    for (const t of cases) {
-      expect(isAuthed(t)).toBe(!!t && !isTokenExpired(t));
+    // 冻结 Date.now()：isAuthed 内部会调一次 isTokenExpired，断言右侧又调一次，
+    // 不冻结的话 CI 环境时钟漂移会让两次结果不一致（flaky）。
+    const mockNow = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+    try {
+      for (const t of cases) {
+        expect(isAuthed(t)).toBe(!!t && !isTokenExpired(t));
+      }
+    } finally {
+      jest.restoreAllMocks();
     }
   });
 });
