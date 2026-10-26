@@ -40,7 +40,8 @@ const form = reactive({
   llm_prompt: '',
   publish_targets: [] as string[],
   publish_mode: 'publish' as 'draft' | 'publish',
-  tencent_folder: '',
+  // issue-5：管线级公众号封面素材 media_id，留空走内置通用封面
+  cover_media_id: '',
   enabled: true,
 });
 
@@ -60,7 +61,9 @@ async function loadPipeline() {
       llm_prompt: p.llm_prompt ?? '',
       publish_targets: p.publish_targets ?? [],
       publish_mode: (p.publish_mode as 'draft' | 'publish') ?? 'publish',
-      tencent_folder: p.tencent_folder ?? '',
+      // issue-3：腾讯文档目录字段已从表单下线（腾讯文档通道 2026-10-23 停发）。
+      // 这里不再读写 tencent_folder —— 不出现在 dto 里，update 就不会动历史值。
+      cover_media_id: p.cover_media_id ?? '',
       enabled: p.enabled,
     });
   } catch {
@@ -83,7 +86,7 @@ async function submit() {
     llm_prompt: form.llm_prompt || null,
     publish_targets: form.publish_targets,
     publish_mode: form.publish_mode,
-    tencent_folder: form.tencent_folder || null,
+    cover_media_id: form.cover_media_id.trim() || null,
     enabled: form.enabled,
   };
   saving.value = true;
@@ -114,6 +117,7 @@ onMounted(loadPipeline);
     </div>
 
     <a-form layout="vertical" class="pipeline-form" :loading="loading">
+      <!-- issue-3 布局重排：三行两列（基础 → 发布）+ 封面/启用 + prompt 通栏，字段权重一眼可读 -->
       <a-row :gutter="16">
         <a-col :span="12">
           <a-form-item label="编码 code" required>
@@ -140,31 +144,37 @@ onMounted(loadPipeline);
           </a-form-item>
         </a-col>
       </a-row>
-      <a-form-item label="发布目标">
-        <a-select v-model:value="form.publish_targets" mode="multiple" placeholder="选择发布通道">
-          <a-select-option v-for="t in PUBLISH_TARGETS" :key="t.value" :value="t.value">{{ t.label }}</a-select-option>
-        </a-select>
-      </a-form-item>
-      <a-form-item label="发布模式">
-        <a-select v-model:value="form.publish_mode">
-          <a-select-option v-for="m in PUBLISH_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-select-option>
-        </a-select>
-        <div class="field-hint">
-          仅对「公众号」目标生效；腾讯文档没有草稿概念，始终直接发布。
-        </div>
-      </a-form-item>
       <a-row :gutter="16">
         <a-col :span="12">
-          <a-form-item label="腾讯文档目录">
-            <a-input v-model:value="form.tencent_folder" placeholder="每日论文学习" />
+          <a-form-item label="发布目标">
+            <a-select v-model:value="form.publish_targets" mode="multiple" placeholder="选择发布通道">
+              <a-select-option v-for="t in PUBLISH_TARGETS" :key="t.value" :value="t.value">{{ t.label }}</a-select-option>
+            </a-select>
           </a-form-item>
         </a-col>
         <a-col :span="12">
-          <a-form-item label="启用">
-            <a-switch v-model:checked="form.enabled" />
+          <a-form-item label="发布模式">
+            <a-select v-model:value="form.publish_mode">
+              <a-select-option v-for="m in PUBLISH_MODES" :key="m.value" :value="m.value">{{ m.label }}</a-select-option>
+            </a-select>
           </a-form-item>
         </a-col>
       </a-row>
+      <!-- issue-5：按管线配封面，论文/AI 资讯各用各的图（发布器优先用显式 thumb_media_id） -->
+      <a-form-item label="公众号封面">
+        <a-input
+          v-model:value="form.cover_media_id"
+          placeholder="封面素材 media_id，如 BUSabtk9juW9…"
+          class="mono"
+          allow-clear
+        />
+        <div class="field-hint">
+          公众号「素材管理」上传封面图后取 media_id 填入；留空则用默认通用封面（正文有图时优先用正文首图）。
+        </div>
+      </a-form-item>
+      <a-form-item label="启用">
+        <a-switch v-model:checked="form.enabled" />
+      </a-form-item>
       <a-form-item label="LLM prompt 模板">
         <a-textarea v-model:value="form.llm_prompt" :rows="4" placeholder="可选，留空走默认" class="mono" />
       </a-form-item>
