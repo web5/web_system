@@ -174,7 +174,7 @@ async function loadPipeline() {
       // issue-3：腾讯文档目录字段已从表单下线（腾讯文档通道 2026-10-23 停发）。
       // 这里不再读写 tencent_folder —— 不出现在 dto 里，update 就不会动历史值。
       cover_media_id: p.cover_media_id ?? '',
-      default_cover_id: (p as any).default_cover_id ?? null,
+      default_cover_id: p.default_cover_id ?? null,
       enabled: p.enabled,
     });
     // 回填后判定输入模式：值不在素材库 → 切到手动，避免 select 显示一堆看不清的字符
