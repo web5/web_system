@@ -39,7 +39,7 @@ WRITE_OP_PAT = re.compile(
     'sed[ \t]+-[A-Za-z\'\"]*i'          # sed -i / sed -i''
     '|perl[ \t]+-i'
     '|tee[ \t]'
-    '|cp[ \t]|mv[ \t]|rm[ \t]|install[ \t]'
+    '|[ \t](?:cp|mv|rm|install)[ \t]'
     '|git[ \t]+apply'
     '|git[ \t]+checkout[ \t]+--'
     '|patch[ \t]'
@@ -47,7 +47,8 @@ WRITE_OP_PAT = re.compile(
     '|node[ \t]+-e'
     '|writeFile(Sync)?[(]'
     '|open[(][^)]*[\'"][wa]'
-    '|<<[A-Za-z\'"]'
+    # ⚠️ 不要把 `<<` 收进写算子：`python3 - <<'PYEOF'` 只是把脚本喂给 stdin，不落盘；
+    # 真正的 heredoc 落盘（`cat <<EOF > a.wxss`）由 redirect_targets 判目标，比这里准。
     ')'
 )
 
@@ -101,6 +102,63 @@ def within_repo(root, cwd, p):
     return ap.startswith(root + os.sep) or ap == root
 
 
+def redirect_targets(cmd):
+    """引号感知地解析重定向目标 token（只取目标本身，不扫尾巴）。
+
+    必要性（2026-10-26 实测踩坑）：旧实现扫 `>` 后 160 字符找 UI 路径——
+    ① `grep ... 2>/dev/null` 的 `2>/dev/null` 被当文件重定向，尾巴里恰好有后续
+       只读命令（`wc -l ...vue`）→ 误判「重定向写 UI」，纯只读命令被 deny；
+    ② 复合命令（`;` 连接）后半段只是读 UI 文件，也被卷进「重定向目标」；
+    ③ `strip_quoted` 会把带引号的目标整个吃掉（`cat > "a.vue"` → 目标丢失，漏判）。
+    改为解析**真正的重定向目标 token**：引号外的 `>` / `>>`，跳过 fd 复制/关闭
+    （`>&2` `2>&1` `>&-`），目标 token 可带引号；只对该 token 做 UI 判定。
+    """
+    targets = []
+    i = 0
+    n = len(cmd)
+    while i < n:
+        ch = cmd[i]
+        if ch in ('"', "'"):
+            q = ch
+            i += 1
+            while i < n and cmd[i] != q:
+                if cmd[i] == '\\' and i + 1 < n:
+                    i += 1
+                i += 1
+            i += 1  # 吃掉收尾引号
+            continue
+        if ch == '>':
+            i += 2 if i + 1 < n and cmd[i + 1] == '>' else 1
+            while i < n and cmd[i] in ' \t':
+                i += 1
+            if i < n and cmd[i] == '&':
+                # `>&2` / `2>&1` / `>&-` 是 fd 复制或关闭，不是文件写；
+                # bash 的 `>&file` 等价 `>file 2>&1`，是文件写，跳过 `&` 继续取目标。
+                if i + 1 < n and (cmd[i + 1].isdigit() or cmd[i + 1] == '-'):
+                    continue
+                i += 1
+            start = i
+            if i < n and cmd[i] in ('"', "'"):
+                q = cmd[i]
+                i += 1
+                while i < n and cmd[i] != q:
+                    if cmd[i] == '\\' and i + 1 < n:
+                        i += 1
+                    i += 1
+                i += 1  # 吃掉收尾引号
+            else:
+                while i < n and cmd[i] not in ' \t;|&<>':
+                    i += 1
+            token = cmd[start:i]
+            if len(token) >= 2 and token[0] == token[-1] and token[0] in ('"', "'"):
+                token = token[1:-1]
+            if token and token != '/dev/null':
+                targets.append(token)
+            continue
+        i += 1
+    return targets
+
+
 def command_of(payload):
     if payload.get('tool_name') == 'read_file':
         return ''
@@ -137,14 +195,14 @@ def main():
 
     # 2) 双命中判定（判定优先于白名单）
     #    白名单不赦免写语义 —— 否则 `echo x > a.wxss` 会因 `echo ` 在白名单里被放过。
-    #    写算子/重定向只在「去引号」文本上判定：commit message 等字面量不算写操作。
+    #    写算子只在「去引号」文本上判定（commit message 等字面量不算写操作）；
+    #    重定向判定用**原文**做引号感知解析（只取重定向目标 token，不扫尾巴）——
+    #    2>/dev/null、复合命令里的只读 .vue 引用、引号包裹的目标，均按真实目标判。
     plain = strip_quoted(cmd)
-    redirected = False
-    for mm in re.finditer('>>?', plain):
-        tail = plain[mm.end():mm.end() + 160]
-        if any(within_repo(root, cwd, p) for p in ui_targets(tail)):
-            redirected = True
-            break
+    redirected = any(
+        any(within_repo(root, cwd, p) for p in ui_targets(t))
+        for t in redirect_targets(cmd)
+    )
 
     if WRITE_OP_PAT.search(plain) or redirected:
         C.deny(DENY_MSG, stop_reason='UI 源码须经原型改动通道')
