@@ -51,17 +51,17 @@ describe('admin 路由守卫 · 登录判定口径', () => {
   });
 
   it('V5 口径一致性：isAuthed 与「非空且未过期」完全等价（防止两处再写歪）', () => {
-    const cases = [jwtWithExp(nowSec() - 1), jwtWithExp(nowSec() + 60), '', 'garbage'];
-    // 冻结 Date.now()：isAuthed 内部会调一次 isTokenExpired，断言右侧又调一次，
-    // 不冻结的话 CI 环境时钟漂移会让两次结果不一致（flaky）。
-    const mockNow = Date.now();
-    jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-    try {
-      for (const t of cases) {
-        expect(isAuthed(t)).toBe(!!t && !isTokenExpired(t));
-      }
-    } finally {
-      jest.restoreAllMocks();
+    // 用极端 exp 值（1 = 1970 远古过期，9999999999 = 2286 远未来）而非 nowSec()±1，
+    // 消除 CI 时钟精度导致的边界 flaky。注意 exp 不能是 0（会被 isTokenExpired
+    // 的 `if (!payload.exp)` 判为"无 exp"→ 不过期）。
+    const cases = [
+      jwtWithExp(1), // 1970 年，必过期
+      jwtWithExp(9999999999), // 2286 年，必有效
+      '',
+      'garbage',
+    ];
+    for (const t of cases) {
+      expect(isAuthed(t)).toBe(!!t && !isTokenExpired(t));
     }
   });
 });
