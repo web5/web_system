@@ -14,6 +14,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
+import { moduleOverlayContainer } from '@/utils/mount';
 import {
   deleteMedia,
   generateMediaCover,
@@ -396,6 +397,7 @@ onMounted(async () => {
     <!-- 按标题生成 -->
     <a-modal
       v-model:open="genOpen"
+      :get-container="moduleOverlayContainer"
       title="按标题生成封面"
       :confirm-loading="generating"
       ok-text="生成"
@@ -424,7 +426,7 @@ onMounted(async () => {
     </a-modal>
 
     <!-- 编辑 -->
-    <a-modal v-model:open="editOpen" title="编辑封面" ok-text="保存" cancel-text="取消" @ok="saveEdit">
+    <a-modal v-model:open="editOpen" :get-container="moduleOverlayContainer" title="编辑封面" ok-text="保存" cancel-text="取消" @ok="saveEdit">
       <a-form layout="vertical">
         <a-form-item label="名称">
           <a-input v-model:value="editForm.name" placeholder="便于以后检索，如「日报-科技渐变」" />
@@ -440,7 +442,7 @@ onMounted(async () => {
     </a-modal>
 
     <!-- 设为管线默认封面 -->
-    <a-modal v-model:open="bindOpen" title="设为管线默认封面" ok-text="保存" cancel-text="取消" @ok="saveBind">
+    <a-modal v-model:open="bindOpen" :get-container="moduleOverlayContainer" title="设为管线默认封面" ok-text="保存" cancel-text="取消" @ok="saveBind">
       <a-form layout="vertical">
         <a-form-item label="选择管线">
           <a-select v-model:value="bindPipelineId" placeholder="选一条管线">
