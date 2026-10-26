@@ -19,12 +19,10 @@ import { StepContext } from './step.types';
  * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
  */
 /**
- * 共享包清单只收 shared/types 两个**被 main 指向 dist 的全局公共依赖**。
- * ⚠️ 模块级依赖（如 @web-system/ui）**不进这份清单**（2026-09-21 用户定）：
- * 依赖谁、要不要先构建，是**模块自己的事** → 写在各自流水线 build 节点脚本里
- * （deploy_pipeline_step_commands，页面可编辑）；工厂内置清单会随依赖增长越收越耦合。
+ * 预构建已改为统一脚本 `scripts/prebuild-workspace-deps.mjs`（全量扫 packages/*，
+ * isStale 判定）。原 PREBUILD_SHARED_PACKAGES 硬编码清单已移除 —— 2026-10-26
+ * 故障根因即清单漏 @kedouai/agent-core，硬编码清单会随依赖增长持续漏项。
  */
-const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
 
 /**
  * pull 内置步骤执行体（category=code）——「拉码」的回退实现。
@@ -80,22 +78,27 @@ export class PullExecutor {
       this.logger.warn(`依赖同步失败（${ctx.pipeline.moduleKey}）: ${(e as Error).message}`);
     }
 
-    // 共享 workspace 包预构建：流水级一次（admin/portal shell 等所有依赖方共用 dist）
-    for (const pkg of PREBUILD_SHARED_PACKAGES) {
-      try {
-        ctx.log(`预构建共享包: ${pkg}`);
-        const t0 = Date.now();
-        this.command.exec(
-          `${this.command.pnpmBin()} --filter ${pkg} build`,
-          this.git.workspace(),
-        );
-        ctx.log(`预构建完成: ${pkg}（${Date.now() - t0}ms）`);
-      } catch (e) {
-        // 共享包预构建失败不阻断：模块 build 自己也会重建（向后兼容历史脚本）。
-        // 但仍打印显著 warning，避免调试时遗漏根因。
-        ctx.log(`[warn] 共享包 ${pkg} 预构建失败: ${(e as Error).message}`);
-        this.logger.warn(`共享包 ${pkg} 预构建失败: ${(e as Error).message}`);
+    // workspace 包预构建（兜底）：调统一脚本 `scripts/prebuild-workspace-deps.mjs`。
+    //
+    // 为什么兜底还要跑（prebuild 步骤也会跑）：
+    //   1) v5 nodes 模式下 git 节点脚本驱动时，afterRun → afterSync 是唯一平台收尾点；
+    //   2) 存量模板 steps 显式数组（无 prebuild）时，靠这里兜底。
+    // 脚本幂等（isStale：dist 新于源码即跳过），二次执行开销可忽略。
+    //
+    // ⚠️ 不再维护硬编码清单（原 PREBUILD_SHARED_PACKAGES = shared/types）：
+    //   2026-10-26 故障根因即清单漏 @kedouai/agent-core，改脚本全量扫描 packages/*。
+    try {
+      ctx.log('预构建 workspace 依赖（兜底）');
+      const t0 = Date.now();
+      const output = this.command.exec('node scripts/prebuild-workspace-deps.mjs', this.git.workspace());
+      for (const line of (output || '').split('\n')) {
+        if (line.trim()) ctx.log(line);
       }
+      ctx.log(`workspace 预构建完成（${Date.now() - t0}ms）`);
+    } catch (e) {
+      // 与历史行为一致：失败不阻断（模块 build 自己也会重建），但日志醒目指向根因
+      ctx.log(`[warn] workspace 预构建失败: ${(e as Error).message}`);
+      this.logger.warn(`workspace 预构建失败（${ctx.pipeline.moduleKey}）: ${(e as Error).message}`);
     }
   }
 }

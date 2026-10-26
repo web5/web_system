@@ -53,6 +53,8 @@ export const STEP_SEMANTIC_ORDER: ReadonlyArray<readonly [string, string]> = [
   ['check', 'pointer'],
   ['check', 'verify'],
   ['check', 'cleanup'],
+  ['pull', 'prebuild'],
+  ['prebuild', 'build'],
   ['pull', 'build'],
   ['pull', 'upload'],
   ['pull', 'restart'],

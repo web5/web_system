@@ -14,6 +14,7 @@ import { PipelineVarController } from './pipeline-var.controller';
 // 内置步骤执行器（每个步骤的执行体独立为类，注入各自工具）
 import { CheckExecutor } from './steps/check.executor';
 import { PullExecutor } from './steps/pull.executor';
+import { PrebuildExecutor } from './steps/prebuild.executor';
 import { UploadExecutor } from './steps/upload.executor';
 import { ApplyExecutor } from './steps/apply.executor';
 import { VersionExecutor } from './steps/version.executor';
@@ -95,6 +96,7 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     // 内置步骤执行体（独立注入工具，engine 不感知实现细节）
     CheckExecutor,
     PullExecutor,
+    PrebuildExecutor,
     UploadExecutor,
     ApplyExecutor,
     VersionExecutor,
@@ -106,16 +108,18 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
       useFactory: (
         check: CheckExecutor,
         pull: PullExecutor,
+        prebuild: PrebuildExecutor,
         upload: UploadExecutor,
         apply: ApplyExecutor,
         version: VersionExecutor,
         pointer: PointerExecutor,
         cleanup: CleanupExecutor,
       ) =>
-        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup } as BuiltinExecutors),
+        buildBuiltinSteps({ check, pull, prebuild, upload, apply, version, pointer, cleanup } as BuiltinExecutors),
       inject: [
         CheckExecutor,
         PullExecutor,
+        PrebuildExecutor,
         UploadExecutor,
         ApplyExecutor,
         VersionExecutor,

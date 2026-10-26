@@ -5,10 +5,10 @@ import { CommandService } from '../../shell/command.service';
 import { StepContext } from './step.types';
 
 /**
- * 共享 workspace 包预构建是 admin/portal 并发改造的关键——必须保证：
+ * workspace 包预构建（兜底路径，2026-10-26 改为调统一脚本）——必须保证：
  *   1) install 完成后一定执行（不静默跳过）
- *   2) 任意一次失败不阻断流水线（个别包损坏还有模块本体重建兜底）
- *   3) 日志写入 ctx.log（运维能从流水线日志看到共享构建走没走）
+ *   2) 失败不阻断流水线（prebuild 步骤是主路径；这里是 nodes/旧模板兜底）
+ *   3) 日志写入 ctx.log（运维能从流水线日志看到预构建走没走）
  */
 describe('PullExecutor（pull 步骤内置逻辑）', () => {
   let executor: PullExecutor;
@@ -54,44 +54,32 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     return { ctx, logs, p };
   }
 
-  it('拉取代码后立即预构建共享包 @web-system/shared 与 @web-system/types（模块级依赖不进清单）', async () => {
+  it('拉取代码后立即调统一脚本预构建 workspace 依赖（不再硬编码包清单）', async () => {
     const { ctx, logs } = makeCtx();
     await executor.run(ctx);
 
-    // 两次 pnpm --filter ... build 调用都到位
-    // （@web-system/ui 这类模块级依赖由各流水线 build 节点脚本自建，不进工厂清单——2026-09-21 用户定）
+    // 统一脚本：全量扫 packages，isStale 判定（防再漏 agent-core 这类包）
     expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/shared build'),
+      expect.stringContaining('prebuild-workspace-deps.mjs'),
       '/tmp/ws',
     );
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/types build'),
-      '/tmp/ws',
-    );
+    // 不再按包清单逐个 pnpm --filter（硬编码清单是 2026-10-26 故障根因）
     expect(cmd.exec).not.toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/ui build'),
+      expect.stringContaining('--filter @web-system/shared build'),
     );
 
-    // 流水线日志里能看到「预构建共享包」字样
-    expect(logs.some((l) => l.includes('预构建共享包'))).toBe(true);
-    expect(logs.some((l) => l.includes('@web-system/shared'))).toBe(true);
-    expect(logs.some((l) => l.includes('@web-system/types'))).toBe(true);
+    // 流水线日志里能看到预构建字样
+    expect(logs.some((l) => l.includes('预构建 workspace 依赖'))).toBe(true);
   });
 
-  it('任一共享包预构建失败不阻断（继续后续操作）', async () => {
+  it('脚本预构建失败不阻断（主路径是 prebuild 步骤，这里是兜底）', async () => {
     cmd.exec.mockImplementation((c: string) => {
-      if (c.includes('@web-system/shared')) throw new Error('tsc 编译失败');
+      if (c.includes('prebuild-workspace-deps')) throw new Error('tsc 编译失败');
       return '';
     });
     const { ctx, logs } = makeCtx();
     await expect(executor.run(ctx)).resolves.toBeUndefined();
-
-    // 第二次（types）仍然执行，pipeline 不中断
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/types build'),
-      '/tmp/ws',
-    );
-    expect(logs.some((l) => l.includes('[warn] 共享包 @web-system/shared 预构建失败'))).toBe(true);
+    expect(logs.some((l) => l.includes('[warn] workspace 预构建失败'))).toBe(true);
   });
 
   it('只负责拉码：版本身份回填由平台统一做（避免与 DB 脚本路径两套逻辑）', async () => {
@@ -115,26 +103,22 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     const { ctx, logs } = makeCtx();
     await executor.afterSync(ctx);
     expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/shared build'),
+      expect.stringContaining('prebuild-workspace-deps.mjs'),
       '/tmp/ws',
     );
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/types build'),
-      '/tmp/ws',
-    );
-    expect(logs.some((l) => l.includes('预构建共享包'))).toBe(true);
+    expect(logs.some((l) => l.includes('预构建 workspace 依赖'))).toBe(true);
   });
 
-  it('pnpm install 失败也不阻断：仅记 warn，仍继续共享预构建', async () => {
+  it('pnpm install 失败也不阻断：仅记 warn，仍继续预构建', async () => {
     git.syncDependencies.mockImplementation(() => {
       throw new Error('pnpm install EAGAIN');
     });
     const { ctx, logs } = makeCtx();
     await expect(executor.run(ctx)).resolves.toBeUndefined();
     expect(logs.some((l) => l.includes('[warn] 依赖同步失败'))).toBe(true);
-    // 共享预构建仍在 install 失败后跑（去掉 install 依赖：曾被锁住的旧实现）
+    // 预构建仍在 install 失败后跑（去掉 install 依赖：曾被锁住的旧实现）
     expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/shared build'),
+      expect.stringContaining('prebuild-workspace-deps.mjs'),
       '/tmp/ws',
     );
   });

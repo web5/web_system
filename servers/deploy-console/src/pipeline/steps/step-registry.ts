@@ -2,6 +2,7 @@ import { DeployPipelineEntity } from '../../entities/deploy-pipeline.entity';
 import { BuiltinStepDef } from './step.types';
 import { CheckExecutor } from './check.executor';
 import { PullExecutor } from './pull.executor';
+import { PrebuildExecutor } from './prebuild.executor';
 import { UploadExecutor } from './upload.executor';
 import { ApplyExecutor } from './apply.executor';
 import { VersionExecutor } from './version.executor';
@@ -22,6 +23,7 @@ export const PIPELINE_BUILTIN_STEPS = 'PIPELINE_BUILTIN_STEPS';
 export interface BuiltinExecutors {
   check: CheckExecutor;
   pull: PullExecutor;
+  prebuild: PrebuildExecutor;
   upload: UploadExecutor;
   /** 后台模块部署生效（版本目录 → dist + 重启 + 切指针），方案 A 2026-09-17 */
   apply: ApplyExecutor;
@@ -53,6 +55,12 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       run: (ctx) => ex.pull.run(ctx),
       // 命令驱动（DB 锁定脚本拉码）时，依赖同步与预构建仍由平台收尾
       afterRun: (ctx) => ex.pull.afterSync(ctx),
+    },
+    prebuild: {
+      category: 'build',
+      commandMode: 'base', // 内置执行体恒跑（脚本预构建），命令作为附加动作叠加
+      skip: skipReuseArtifact,
+      run: (ctx) => ex.prebuild.run(ctx),
     },
     build: {
       category: 'build',
