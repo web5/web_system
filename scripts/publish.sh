@@ -72,6 +72,42 @@ if [ "$SKIP_CHECK" != "1" ]; then
   fi
 fi
 
+# ---------- 1.5 dist 产物校验（#335：防旧 dist 上线）----------
+# 背景：release dist 是 2026-09-24 旧构建，dist/app.module.js 的 envFilePath
+# 只有 .env 无 .env.generated，导致进程读不到下发配置——验证时只看源码没看
+# 运行目录 dist 被坑。故每次发布前校验 dist 入口含 .env.generated 字符串。
+check_dist_env_generated() {
+  local svc="$1"
+  local dir
+  case "$svc" in
+    gateway)     dir=gateway ;;
+    auth)        dir=auth-service ;;
+    user)        dir=user-service ;;
+    ai)          dir=ai-service ;;
+    ai-agent)    dir=ai-agent ;;
+    system)      dir=system-service ;;
+    todo)        dir=todo-service ;;
+    content-hub) dir=content-hub ;;
+    mcp-gateway) dir=mcp-gateway ;;
+    *)           return 0 ;;  # 非后端服务（cdn/portal/admin）不校验
+  esac
+  local entry="$ROOT/servers/$dir/dist/app.module.js"
+  if [ ! -f "$entry" ]; then
+    err "dist 校验失败：$entry 不存在——先 build 再落 release，运行目录 dist 过旧"
+  fi
+  if ! grep -q '.env.generated' "$entry"; then
+    err "dist 校验失败：$entry 不含 .env.generated 字符串——先 build 再落 release，运行目录 dist 过旧（#335）"
+  fi
+  log "  dist 校验通过: $svc"
+}
+
+if [ "$SKIP_CHECK" != "1" ]; then
+  log "校验 dist 产物含 .env.generated（#335）..."
+  for tgt in $NORMALIZED; do
+    check_dist_env_generated "$tgt"
+  done
+fi
+
 # ---------- 2. 部署 ----------
 # 注意：deploy.sh 在 build 失败时会 exit 1。这里把输出捕获到变量后再判断真实退出码，
 #       避免管道 + head 引发的 SIGPIPE 误判（不用 pipefail 组合）。
