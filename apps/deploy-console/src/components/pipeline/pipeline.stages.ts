@@ -274,6 +274,29 @@ export function legacyToNodes(opts: {
   return nodes
 }
 
+/**
+ * 新建流水线的默认节点序列（Q3，2026-10-27 拍板）。
+ *
+ * - 后台（moduleType='be'）：拉取代码 → 预构建 → 构建 → 发布确认 → 发布。
+ *   预构建是**普通 shell 节点**（key=prebuild），脚本 `node scripts/prebuild-workspace-deps.mjs`
+ *   在创建后连同节点一起预置进 deploy_pipeline_step_commands（流水线 × 节点 key 真相源）；
+ *   用户可删，无删除保护。前端/小程序（'fe' / 未选）默认序列**不含**该节点。
+ * - 审批节点的 `approvers` / `onReject` 只在后端 ApprovalNode 建模，前端 TemplateNode
+ *   还没跟上，故就地断言 —— 后端 normalizeNodes 会正常接收。
+ */
+export function defaultNodesFor(moduleType: string): TemplateNode[] {
+  const nodes: TemplateNode[] = [{ kind: 'shell', key: 'git', label: '拉取代码' }]
+  if (moduleType === 'be') {
+    nodes.push({ kind: 'shell', key: 'prebuild', label: '预构建' })
+  }
+  nodes.push(
+    { kind: 'shell', key: 'build', label: '构建' },
+    { kind: 'approval', key: 'gate', label: '发布确认', approvers: [], onReject: 'abort' } as TemplateNode,
+    { kind: 'shell', key: 'release', label: '发布' },
+  )
+  return nodes
+}
+
 export function formatTimeShort(ts?: number | string): string {
   const n = toMs(ts)
   return n ? dayjs(n).format('MM-DD HH:mm:ss') : '—'

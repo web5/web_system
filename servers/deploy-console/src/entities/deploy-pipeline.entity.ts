@@ -10,7 +10,6 @@ import { AbstractEntity } from '@web-system/shared';
 export const PIPELINE_STAGES = [
   'check',
   'pull',      // 发布目录 git 拉取（fetch + checkout 分支 + reset commit）
-  'prebuild',  // workspace 依赖预构建（packages/* isStale 判定后重建，防打包吃旧 dist）
   'build',     // 前端 vite build / 后端 nest build
   'upload',    // 前端产物投递
   'restart',   // 后端 pm2 重启

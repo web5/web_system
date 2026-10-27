@@ -5,10 +5,12 @@ import { CommandService } from '../../shell/command.service';
 import { StepContext } from './step.types';
 
 /**
- * workspace 包预构建（兜底路径，2026-10-26 改为调统一脚本）——必须保证：
- *   1) install 完成后一定执行（不静默跳过）
- *   2) 失败不阻断流水线（prebuild 步骤是主路径；这里是 nodes/旧模板兜底）
- *   3) 日志写入 ctx.log（运维能从流水线日志看到预构建走没走）
+ * pull 拉码后的平台收尾（Q2，2026-10-27 拍板：预构建兜底**完全移除**）——必须保证：
+ *   1) afterSync 只做依赖同步（pnpm-lock 指纹变化才 install）；
+ *   2) **不再调** `scripts/prebuild-workspace-deps.mjs`、**不再输出**预构建相关日志
+ *      （预构建已是画布上的普通脚本节点 key=prebuild，需要的流水线自行添加）；
+ *   3) 依赖安装失败不阻断流水线，仅醒目 warn。
+ * ⚠️ 防回退：也不许恢复旧 PREBUILD_SHARED_PACKAGES 硬编码清单（2026-10-26 #270 根因）。
  */
 describe('PullExecutor（pull 步骤内置逻辑）', () => {
   let executor: PullExecutor;
@@ -54,32 +56,33 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     return { ctx, logs, p };
   }
 
-  it('拉取代码后立即调统一脚本预构建 workspace 依赖（不再硬编码包清单）', async () => {
+  it('拉取代码后不再调预构建脚本、不再输出预构建日志（Q2 兜底完全移除）', async () => {
     const { ctx, logs } = makeCtx();
     await executor.run(ctx);
 
-    // 统一脚本：全量扫 packages，isStale 判定（防再漏 agent-core 这类包）
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('prebuild-workspace-deps.mjs'),
-      '/tmp/ws',
-    );
-    // 不再按包清单逐个 pnpm --filter（硬编码清单是 2026-10-26 故障根因）
+    expect(git.syncToBranch).toHaveBeenCalledWith('master', 'prev');
+    expect(git.syncDependencies).toHaveBeenCalled();
+    // 不再出现 prebuild-workspace-deps.mjs 调用（预构建改普通脚本节点，平台不代跑）
     expect(cmd.exec).not.toHaveBeenCalledWith(
-      expect.stringContaining('--filter @web-system/shared build'),
+      expect.stringContaining('prebuild-workspace-deps.mjs'),
+      expect.anything(),
     );
-
-    // 流水线日志里能看到预构建字样
-    expect(logs.some((l) => l.includes('预构建 workspace 依赖'))).toBe(true);
+    expect(cmd.exec).not.toHaveBeenCalled();
+    // 不再出现预构建相关日志（含「兜底」「workspace 预构建」字样）
+    expect(logs.some((l) => l.includes('预构建'))).toBe(false);
+    expect(logs.some((l) => l.includes('prebuild'))).toBe(false);
   });
 
-  it('脚本预构建失败不阻断（主路径是 prebuild 步骤，这里是兜底）', async () => {
-    cmd.exec.mockImplementation((c: string) => {
-      if (c.includes('prebuild-workspace-deps')) throw new Error('tsc 编译失败');
-      return '';
-    });
+  it('afterSync 可独立调用：git 阶段由 DB 锁定脚本执行时，只收尾依赖同步、不碰预构建', async () => {
     const { ctx, logs } = makeCtx();
-    await expect(executor.run(ctx)).resolves.toBeUndefined();
-    expect(logs.some((l) => l.includes('[warn] workspace 预构建失败'))).toBe(true);
+    await executor.afterSync(ctx);
+    expect(git.syncDependencies).toHaveBeenCalled();
+    expect(cmd.exec).not.toHaveBeenCalledWith(
+      expect.stringContaining('prebuild-workspace-deps.mjs'),
+      expect.anything(),
+    );
+    expect(cmd.exec).not.toHaveBeenCalled();
+    expect(logs.some((l) => l.includes('预构建'))).toBe(false);
   });
 
   it('只负责拉码：版本身份回填由平台统一做（避免与 DB 脚本路径两套逻辑）', async () => {
@@ -99,27 +102,15 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     expect(git.syncToBranch).toHaveBeenCalledWith('master', 'abc1234');
   });
 
-  it('afterSync 可独立调用：git 阶段由 DB 锁定脚本执行时，引擎用它收尾依赖同步与预构建', async () => {
-    const { ctx, logs } = makeCtx();
-    await executor.afterSync(ctx);
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('prebuild-workspace-deps.mjs'),
-      '/tmp/ws',
-    );
-    expect(logs.some((l) => l.includes('预构建 workspace 依赖'))).toBe(true);
-  });
-
-  it('pnpm install 失败也不阻断：仅记 warn，仍继续预构建', async () => {
+  it('pnpm install 失败也不阻断：仅记 warn，且不再继续预构建', async () => {
     git.syncDependencies.mockImplementation(() => {
       throw new Error('pnpm install EAGAIN');
     });
     const { ctx, logs } = makeCtx();
     await expect(executor.run(ctx)).resolves.toBeUndefined();
     expect(logs.some((l) => l.includes('[warn] 依赖同步失败'))).toBe(true);
-    // 预构建仍在 install 失败后跑（去掉 install 依赖：曾被锁住的旧实现）
-    expect(cmd.exec).toHaveBeenCalledWith(
-      expect.stringContaining('prebuild-workspace-deps.mjs'),
-      '/tmp/ws',
-    );
+    // 预构建已移除：install 失败后不再有任何预构建调用/日志
+    expect(cmd.exec).not.toHaveBeenCalled();
+    expect(logs.some((l) => l.includes('预构建'))).toBe(false);
   });
 });
