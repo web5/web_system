@@ -19,6 +19,7 @@ import {
 } from '@web-system/shared';
 import { GatewayRouteEntity } from './entities/gateway-route.entity';
 import { GatewayAccessLogEntity } from './entities/gateway-access-log.entity';
+import { resolveThrottleTracker } from './trust-proxy';
 import { DeployDeploymentEntity } from './deploy-version/deploy-deployment.entity';
 import { DeployModuleEntity } from './deploy-version/deploy-module.entity';
 import { DeployCanaryRuleEntity } from './deploy-version/deploy-canary-rule.entity';
@@ -70,6 +71,13 @@ import {
     ThrottlerModule.forRoot([{
       ttl: 60_000,       // 时间窗口 60 秒
       limit: 100,        // 窗口内最多 100 次请求
+      // 兜底 tracker（2026-10-27）：@nestjs/throttler v6 的默认 getTracker 就是
+      // `req.ip`（见 node_modules/@nestjs/throttler/dist/throttler.guard.js:141
+      // `async getTracker(req) { return req.ip; }`）。
+      // 若 req.ip 为 undefined（例如 socket.remoteAddress 缺失导致地址链为空），
+      // 限流 key 会退化成 undefined → 所有流量又挤进同一个桶，等于限流失效。
+      // 这里显式回退，保证 tracker 永不为 undefined（实现见 ./trust-proxy.ts）。
+      getTracker: resolveThrottleTracker,
     }]),
     HealthModule,
     MiniScanModule,
