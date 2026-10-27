@@ -54,19 +54,23 @@ export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
 }
 
 /**
- * 内容层夹带 URL / 链接的中和（P2 #308）。
+ * 内容层夹带 URL / 链接的中和（P2 #308 + P3 复测观察）。
  * 目标：日报正文彻底不出现可点击链接或裸 URL。
- * 处理顺序：先去 markdown 链接（保留文字），再去裸 URL，最后去残留的 href。
+ * 处理顺序：先整壳去 <a> 标签，再剥 markdown 链接，去裸 URL，去空 scheme 残段。
  */
 function stripLinks(text: string): string {
   return text
+    // <a href="...">text</a> 整壳清除（P3#3：只清 href= 会留空壳标签）
+    .replace(/<a\s[^>]*>[\s\S]*?<\/a>/gi, '')
     // markdown 链接 [text](url) → text
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // 裸 URL（http/https）→ 空
+    // 裸 URL（http/https + 主机）
     .replace(/https?:\/\/[^\s<>"'　-〿＀-￯]+/g, '')
-    // 残留 href=... 属性（如果摘要里有 HTML 片段）
+    // 空 scheme 残段（P3#1：单独 "https://" 无主机）
+    .replace(/https?:\/\/(?=[\s]|$)/g, '')
+    // 残留 href=... 属性
     .replace(/href\s*=\s*["'][^"']*["']/gi, '')
-    // 清理多余空白（连续空格/空行）
+    // 清理多余空白
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 }

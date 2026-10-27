@@ -369,6 +369,34 @@ describe('日报方案B D1-D4（V19-V23）', () => {
     expect(html).toContain('多智能体协作框架发布');
   });
 
+  it('P3#3: <a> HTML 标签壳被整壳清除（不残留空壳标签）', () => {
+    const items = [
+      {
+        title: 'Test',
+        summary: '详见 <a href="https://x.com">链接文字</a> 了解更多。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    // 不出现 <a> 标签、不出现 <a > 空壳
+    expect(html).not.toContain('<a');
+    // 不出现转义后的标签壳（&lt;a）
+    expect(html).not.toContain('&lt;a');
+  });
+
+  it('P3#1: 空 scheme 残段（单独 https://）被清除', () => {
+    const items = [
+      {
+        title: 'Test',
+        summary: '研究进展可参考 https:// 获取详情。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('https://');
+    expect(html).not.toContain('http://');
+  });
+
   it('端到端：日报 HTML 结构完整', () => {
     const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
     const html = markdownToHtml(md);
