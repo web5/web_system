@@ -20,7 +20,8 @@ export async function generateSummary(title: string, content: string): Promise<s
     );
   } catch (e) {
     logger.warn(`摘要生成失败: ${(e as Error).message}`);
-    return content.slice(0, 100);
+    // REQ-2 (#271)：不静默 slice(0,100) 兜底——返回空串让调用方感知失败
+    return '';
   }
 }
 
