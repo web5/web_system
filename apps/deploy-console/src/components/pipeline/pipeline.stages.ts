@@ -278,7 +278,8 @@ export function legacyToNodes(opts: {
  * 新建流水线的默认节点序列（Q3，2026-10-27 拍板）。
  *
  * - 后台（moduleType='be'）：拉取代码 → 预构建 → 构建 → 发布确认 → 发布。
- *   预构建是**普通 shell 节点**（key=prebuild），脚本 `node scripts/prebuild-workspace-deps.mjs`
+ *   预构建是**普通 shell 节点**（key=prebuild），脚本是自包含多行 bash（`prebuildScriptBody`：
+ *   `set -euo pipefail` + `cd "${RELEASE_DIR}"` + isStale 判定重建 packages/*，Q1=A 纯 bash 形态）
  *   在创建后连同节点一起预置进 deploy_pipeline_step_commands（流水线 × 节点 key 真相源）；
  *   用户可删，无删除保护。前端/小程序（'fe' / 未选）默认序列**不含**该节点。
  * - 审批节点的 `approvers` / `onReject` 只在后端 ApprovalNode 建模，前端 TemplateNode

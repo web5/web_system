@@ -6,9 +6,10 @@ import { StepContext } from './step.types';
 
 /**
  * 共享 workspace 包预构建**不再由平台兜底**（2026-10-27 拍板 Q2：完全移除）：
- * 预构建改为画布上的普通脚本节点（key=prebuild，脚本 `node scripts/prebuild-workspace-deps.mjs`，
- * 需要的流水线自行添加）。⚠️ 切勿恢复硬编码包清单（原 PREBUILD_SHARED_PACKAGES）——
- * 2026-10-26 故障根因即清单漏 @kedouai/agent-core；要跑就走统一脚本全量扫 packages/*。
+ * 预构建改为画布上的普通脚本节点（key=prebuild，脚本是自包含多行 bash——`prebuildScriptBody`，
+ * 全量扫 packages/* 做 isStale 判定重建，Q1=A 纯 bash 形态；需要的流水线自行添加）。
+ * ⚠️ 切勿恢复硬编码包清单（原 PREBUILD_SHARED_PACKAGES）——
+ * 2026-10-26 故障根因即清单漏 @kedouai/agent-core；要跑就走统一预构建 bash 逻辑（画布 prebuild 节点）。
  */
 
 /**

@@ -7,8 +7,9 @@ import { StepContext } from './step.types';
 /**
  * pull 拉码后的平台收尾（Q2，2026-10-27 拍板：预构建兜底**完全移除**）——必须保证：
  *   1) afterSync 只做依赖同步（pnpm-lock 指纹变化才 install）；
- *   2) **不再调** `scripts/prebuild-workspace-deps.mjs`、**不再输出**预构建相关日志
- *      （预构建已是画布上的普通脚本节点 key=prebuild，需要的流水线自行添加）；
+ *   2) **不调**任何预构建逻辑（含仓内已删的 prebuild-workspace-deps.mjs）、
+ *      **不再输出**预构建相关日志
+ *      （预构建已是画布上的普通脚本节点 key=prebuild，脚本为自包含 bash，需要的流水线自行添加）；
  *   3) 依赖安装失败不阻断流水线，仅醒目 warn。
  * ⚠️ 防回退：也不许恢复旧 PREBUILD_SHARED_PACKAGES 硬编码清单（2026-10-26 #270 根因）。
  */
@@ -62,9 +63,9 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
 
     expect(git.syncToBranch).toHaveBeenCalledWith('master', 'prev');
     expect(git.syncDependencies).toHaveBeenCalled();
-    // 不再出现 prebuild-workspace-deps.mjs 调用（预构建改普通脚本节点，平台不代跑）
+    // 不再调任何预构建（预构建改画布普通脚本节点，平台不代跑；仓内 .mjs 已删）
     expect(cmd.exec).not.toHaveBeenCalledWith(
-      expect.stringContaining('prebuild-workspace-deps.mjs'),
+      expect.stringContaining('prebuild'),
       expect.anything(),
     );
     expect(cmd.exec).not.toHaveBeenCalled();
@@ -78,7 +79,7 @@ describe('PullExecutor（pull 步骤内置逻辑）', () => {
     await executor.afterSync(ctx);
     expect(git.syncDependencies).toHaveBeenCalled();
     expect(cmd.exec).not.toHaveBeenCalledWith(
-      expect.stringContaining('prebuild-workspace-deps.mjs'),
+      expect.stringContaining('prebuild'),
       expect.anything(),
     );
     expect(cmd.exec).not.toHaveBeenCalled();
