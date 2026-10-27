@@ -155,7 +155,7 @@ request.interceptors.response.use(
           const userStore = useUserStore();
           userStore.logout();
 
-          message.error('登录已过期，请重新登录');
+          message.error({ content: '登录已过期，请重新登录', key: 'auth-expired' });
           const currentPath = router.currentRoute.value.fullPath;
           const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
           router.push(`/login${redirectPath}`);

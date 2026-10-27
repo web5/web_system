@@ -8,6 +8,9 @@ const http = axios.create({
   timeout: 30000,
 })
 
+// 401 跳转防重入锁（#288：多实例并发 401 只跳 1 次登录页）
+let isRedirecting = false
+
 /**
  * 直连网关的第二实例（baseURL `/api`）：用于访问**其它服务**的接口。
  *
@@ -42,8 +45,13 @@ for (const instance of [http, sysHttp]) {
       if (error.response?.status === 401 && !isLoginRequest) {
         const authStore = useAuthStore()
         authStore.logout()
-        message.error('登录已过期，请重新登录')
-        router.push('/login')
+        // antd message key 幂等：多实例/并发 401 只弹 1 次 toast（#288）
+        message.error({ content: '登录已过期，请重新登录', key: 'auth-expired' })
+        if (!isRedirecting) {
+          isRedirecting = true
+          setTimeout(() => { isRedirecting = false }, 60000)
+          router.push('/login')
+        }
       }
       return Promise.reject(error)
     },
