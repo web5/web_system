@@ -143,6 +143,25 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       }
       fs.rmSync(path.join(bundle, 'dist'), { recursive: true, force: true });
       fs.cpSync(output, path.join(bundle, 'dist'), { recursive: true, dereference: false, verbatimSymlinks: true });
+      // 打包后入口校验（D）：cpSync 后立即验证 bundle/dist/main.js，把「并发抢包」从
+      // inspect 处的裸 ENOENT 变成指向根因的可读错误（2026-10-27 content-hub 故障加固）。
+      // 窗口：L128 existsSync(service/dist/main.js) 校验后到此处 cpSync 之间，对方 run 的
+      // renameSync(dist→original-dist); renameSync(bundle→dist) 可把 service/dist 整个换成
+      // 运行时包（runtime-manifest.json + dist/dist/main.js）——本方拷到的就是这种异常布局。
+      const bundleEntry = path.join(bundle, 'dist', 'main.js');
+      if (!fs.existsSync(bundleEntry) || !fs.statSync(bundleEntry).isFile()) {
+        const nestedEntry = path.join(bundle, 'dist', 'dist', 'main.js');
+        const runtimeManifest = path.join(bundle, 'dist', 'runtime-manifest.json');
+        if (fs.existsSync(nestedEntry) && fs.existsSync(runtimeManifest)) {
+          throw new Error(
+            '构建产物被并发替换/布局异常：期望 bundle/dist/main.js，实际见 dist/dist/main.js + runtime-manifest.json（疑似运行时包混入）' +
+              '——工作区可能被另一条流水线同时操作（git→package 临界区被抢），请重试并确认工作区锁已生效',
+          );
+        }
+        throw new Error(
+          `构建产物入口缺失：打包后未找到 bundle/dist/main.js（实际路径 ${bundleEntry}，构建产物布局异常，非预期的 dist 内容）`,
+        );
+      }
       const workspacePackages = new Map<string, string>();
       for (const name of fs.readdirSync(path.join(root, 'packages'))) {
         const directory = path.join(root, 'packages', name);
