@@ -7,7 +7,8 @@
  *
  * 配置：
  *   TOKENHUB_BASE_URL  默认 https://tokenhub.tencentmaas.com/v1
- *   TOKENHUB_API_KEY   缺省回落到 HY3_API_KEY（同一把网关 key）
+ *   TOKENHUB_API_KEY   缺省回落到 HY3_API_KEY → LLM_API_KEY（同一把网关 key）
+ *   构造参数 apiKey     显式传入优先于环境变量（调用方最清楚用哪把 key）
  */
 import {
   BaseAiClient,
@@ -63,16 +64,25 @@ export class TokenHubClient extends BaseAiClient {
   readonly displayName: string;
   readonly description: string;
   private readonly logger = new Logger(TokenHubClient.name);
+  /** 显式传入的 API key（优先于环境变量） */
+  private readonly explicitApiKey?: string;
 
-  constructor(modelId: string, displayName?: string) {
+  constructor(modelId: string, displayName?: string, apiKey?: string) {
     super();
     this.modelId = modelId;
     this.displayName = displayName || modelId;
     this.description = `TokenHub 托管模型 ${modelId}`;
+    this.explicitApiKey = apiKey;
   }
 
   private getApiKey(): string {
-    return process.env.TOKENHUB_API_KEY ?? process.env.HY3_API_KEY ?? '';
+    return (
+      this.explicitApiKey?.trim() ||
+      process.env.TOKENHUB_API_KEY ||
+      process.env.HY3_API_KEY ||
+      process.env.LLM_API_KEY ||
+      ''
+    );
   }
   private getBaseUrl(): string {
     return process.env.TOKENHUB_BASE_URL || process.env.HY3_BASE_URL || DEFAULT_BASE_URL;
@@ -98,7 +108,7 @@ export class TokenHubClient extends BaseAiClient {
   ): Promise<ChatWithToolsResult> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     const payload: Record<string, unknown> = {
@@ -179,7 +189,7 @@ export class TokenHubClient extends BaseAiClient {
   ): AsyncGenerator<StreamToolEvent, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     // 观测：本轮客户端模式（排查"正文为空/被截断"用，日志 [tokenhub] 前缀）
@@ -309,7 +319,7 @@ export class TokenHubClient extends BaseAiClient {
   ): AsyncGenerator<StreamChunk, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
     const payload: Record<string, unknown> = {
       model: this.modelId,

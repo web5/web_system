@@ -7,6 +7,7 @@
  * 环境变量口径与 agent-core 统一：
  *   TOKENHUB_API_KEY / HY3_API_KEY（回落）、TOKENHUB_BASE_URL、TOKENHUB_MODEL
  * 旧的 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 作为兼容别名继续识别。
+ * 显式传 key 给客户端构造，避免客户端内部漏读某级 env 回调（P0 回归根因）。
  */
 import { Logger } from '@nestjs/common';
 // 引主入口获取 TokenHubClient（子路径 @kedouai/agent-core/clients 已出，
@@ -82,8 +83,9 @@ export async function chat(
   const envThinking = (process.env.LLM_THINKING ?? '').toLowerCase() === 'auto';
   const wantsThinking = opts.thinking === 'auto' || envThinking;
 
-  // TokenHubClient 构造时传 modelId，密钥/URL 从环境变量读（TOKENHUB_API_KEY → HY3_API_KEY）
-  const client = new TokenHubClient(resolveModel());
+  // TokenHubClient 构造时传 modelId + 显式 key（优先于 env），
+  // 确保 resolveApiKey() 的兜底链结果被实际使用（P0 回归根因）
+  const client = new TokenHubClient(resolveModel(), undefined, apiKey);
 
   const coreOpts: CoreChatOptions = {
     temperature: opts.temperature ?? 0.3,
