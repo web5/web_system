@@ -60,11 +60,9 @@ function contentHubServiceAuth(prefix) {
   };
 }
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const MINI_PROGRAM_APP_ID = process.env.MINI_PROGRAM_APP_ID || '';
-const MINI_PROGRAM_SECRET = process.env.MINI_PROGRAM_SECRET || '';
+// OFFICIAL_ACCOUNT_* 保留：content-hub 块 WECHAT_MP_* 回落依赖（2026-10-27 拍板）
 const OFFICIAL_ACCOUNT_APP_ID = process.env.OFFICIAL_ACCOUNT_APP_ID || '';
 const OFFICIAL_ACCOUNT_SECRET = process.env.OFFICIAL_ACCOUNT_SECRET || '';
-const WECHAT_OAUTH_REDIRECT_URI = process.env.WECHAT_OAUTH_REDIRECT_URI || '';
 
 // 启动前校验 JWT_SECRET 非空
 if (!JWT_SECRET) {
@@ -292,11 +290,8 @@ module.exports = {
         // 服务 .env 兜底，ecosystem 不再注入（2026-10-27 拍板）：
         //   INTERNAL_API_KEY（内部鉴权；服务侧 internal-key.guard 读）
         //   TOKENHUB_API_KEY（embedding/LLM；服务侧仍有 HY3_API_KEY / LLM_API_KEY 回落）
-        // TOKENHUB_BASE_URL / EMBEDDING_MODEL / EVAL_LLM_MODEL 为非空默认值（非密钥），暂留；
-        //   若后续要迁配置中心单源，注意它们同样会挡死 .env.generated 同名键。
-        TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL || 'https://tokenhub.tencentmaas.com/v1',
-        EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'bge-m3',
-        EVAL_LLM_MODEL: process.env.EVAL_LLM_MODEL || 'deepseek-v4-flash',
+        //   TOKENHUB_BASE_URL / EMBEDDING_MODEL / EVAL_LLM_MODEL —— 非空默认值同样会挡死
+        //   .env.generated 同名键，单源统一一并清（2026-10-27 拍板），键值由配置中心下发
       },
       error_file: `${logBase}/knowledge-service-error.log`,
       out_file: `${logBase}/knowledge-service-out.log`,
