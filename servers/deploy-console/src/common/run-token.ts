@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { getSensitiveConfig } from './sensitive-config';
 
 /**
  * 流水线 **run 短期令牌**（替掉注入脚本的长期 `INTERNAL_API_KEY`）。
@@ -85,8 +86,10 @@ const revoked = new Map<string, number>();
  * 是同一个值，等于把静态 key 换个形式继续在脚本里传，本期的收益就白做了。
  */
 function signingSecret(): string {
+  // #349：RUN_TOKEN_SECRET 走读取层（config_items 优先 → env 兜底）；
+  // CONFIG_MASTER_KEY / JWT_SECRET 是引导/回退键，仍直接读 process.env
   return (
-    process.env.RUN_TOKEN_SECRET ||
+    getSensitiveConfig('RUN_TOKEN_SECRET') ||
     process.env.CONFIG_MASTER_KEY ||
     process.env.JWT_SECRET ||
     ''

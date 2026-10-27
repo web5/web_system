@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { describeVerifyFailure, looksLikeRunToken, verifyRunToken } from './run-token';
+import { getSensitiveConfig } from './sensitive-config';
 
 /**
  * 校验「脚本调平台」的内部凭据：请求头 `x-internal-key`。
@@ -52,7 +53,8 @@ export function assertInternalKey(req: { headers?: Record<string, unknown> }): I
     };
   }
 
-  const expected = process.env.INTERNAL_API_KEY || '';
+  // #349：读取层 config_items 解密优先 → process.env 兜底（DB 挂安静降级）
+  const expected = getSensitiveConfig('INTERNAL_API_KEY');
   if (!expected) {
     throw new UnauthorizedException(
       '服务未配置 INTERNAL_API_KEY，内部接口不可用（run 短期令牌不受此限制）',
