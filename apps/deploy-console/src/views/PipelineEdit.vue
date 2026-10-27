@@ -26,7 +26,7 @@ import StepBranchEditor from '@/components/pipeline/StepBranchEditor.vue'
 import StepConditionEditor from '@/components/pipeline/StepConditionEditor.vue'
 import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
 import VarReferenceTable from '@/components/pipeline/VarReferenceTable.vue'
-import { isShellNode, nodeDisplayName } from '@/components/pipeline/pipeline.stages'
+import { isShellNode, nodeDisplayName, defaultNodesFor } from '@/components/pipeline/pipeline.stages'
 
 /**
  * 编辑流水线（定义态）。
@@ -207,20 +207,9 @@ async function saveNodeFromDrawer() {
 const vars = ref<PipelineVar[]>([])
 
 /**
- * 默认节点序列（新建态）：拉取代码 → 构建 → 发布确认 → 发布
- *
- * 注意：审批节点的 `approvers` / `onReject` 目前只在后端 `ApprovalNode` 里建模，
- * 前端 api 的 `TemplateNode` 还没跟上（改了会碰到别人正在编辑的同一文件），
- * 所以这里就地断言 —— 后端 normalizeNodes 会正常接收。
+ * 默认节点序列（新建态）见 `defaultNodesFor`（pipeline.stages.ts）：
+ * 后台 = 拉取代码 → 预构建 → 构建 → 发布确认 → 发布；前端/小程序不含预构建（Q3，2026-10-27）。
  */
-function defaultNodes(): TemplateNode[] {
-  return [
-    { kind: 'shell', key: 'git', label: '拉取代码' },
-    { kind: 'shell', key: 'build', label: '构建' },
-    { kind: 'approval', key: 'gate', label: '发布确认', approvers: [], onReject: 'abort' } as TemplateNode,
-    { kind: 'shell', key: 'release', label: '发布' },
-  ]
-}
 
 const isPlatformNode = (key: string) => (PLATFORM_NODE_KEYS as readonly string[]).includes(key)
 
@@ -249,7 +238,7 @@ async function load() {
         defaultTarget: 'auto',
         approvers: [],
       }
-      nodeDraft.value = defaultNodes()
+      nodeDraft.value = defaultNodesFor(moduleType.value)
       vars.value = []
       selNodeKey.value = ''
       editingItem.value = null
@@ -499,6 +488,21 @@ async function prefillBuildScript(id: string) {
   }
 }
 
+/**
+ * 预构建节点脚本预置（Q3，2026-10-27）：v5 节点脚本真相源是 deploy_pipeline_step_commands
+ * （流水线 × 节点 key），后台默认节点含 prebuild 时**连脚本一起预置**。
+ * 仅后台（be）默认序列带该节点；创建前已从画布删掉该节点则不预置。失败不阻塞创建。
+ */
+async function prefillPrebuildScript(id: string) {
+  if (moduleType.value !== 'be') return
+  if (!nodeDraft.value.some((n) => n.key === 'prebuild')) return
+  try {
+    await pipelineStepApi.save(id, 'prebuild', { command: 'node scripts/prebuild-workspace-deps.mjs' })
+  } catch {
+    // 预填失败不阻塞创建（用户可自己在节点抽屉里改脚本）
+  }
+}
+
 async function save() {
   if (!metaDraft.value.name.trim()) { message.warning('流水线名必填'); return }
   if (isCreate.value && !metaDraft.value.key.trim()) { message.warning('流水线 key 必填'); return }
@@ -525,6 +529,8 @@ async function save() {
       } as any)
       // 按「前端 / 后台」预填构建节点脚本（用户 2026-09-15：新建时选类型 → 初始流水线带出构建命令）
       await prefillBuildScript(created.id)
+      // 后台默认序列的预构建节点连脚本一起预置（Q3，2026-10-27）
+      await prefillPrebuildScript(created.id)
       dirty.value = false
       message.success('流水线已创建，key 已锁定')
       router.replace({ name: 'PipelineEdit', params: { id: created.id } })
