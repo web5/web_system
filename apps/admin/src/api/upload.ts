@@ -32,7 +32,7 @@ uploadRequest.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response;
       if (status === 401) {
-        message.error('登录已过期，请重新登录');
+        message.error({ content: '登录已过期，请重新登录', key: 'auth-expired' });
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
