@@ -69,6 +69,39 @@ describe('isolated backend runtime', () => {
     expect(fs.readFileSync(path.join(output, 'main.js'), 'utf8')).toContain('new-runtime');
   });
 
+  it('D 校验：并发换入运行时包布局（dist/dist/main.js + runtime-manifest.json）时报可读错误，而非裸 ENOENT', async () => {
+    // 模拟 TOCTOU：L128 校验通过后、cpSync 前，对方 run 的 renameSync 把 service/dist
+    // 整个换成运行时包（见诊断报告证据 3-5）。packager 的 prepare 在 pnpm deploy 期间执行，
+    // 正落在窗口内。
+    const commands = packager(() => {
+      fs.rmSync(output, { recursive: true, force: true });
+      write(path.join(output, 'dist/main.js'), 'module.exports = "swapped-runtime";');
+      write(path.join(output, 'runtime-manifest.json'), JSON.stringify({ format: 'web-system-runtime-v1' }));
+      write(path.join(output, 'package.json'), JSON.stringify({ name: '@web-system/todo-service' }));
+      write(path.join(output, 'version.json'), JSON.stringify({ version: 'swapped' }));
+      fs.mkdirSync(path.join(output, 'node_modules'), { recursive: true });
+    });
+    await expect(executeBackendRuntime(packageInput(), { run: commands })).rejects.toThrow(
+      /构建产物被并发替换\/布局异常.*bundle\/dist\/main\.js.*dist\/dist\/main\.js.*runtime-manifest\.json.*运行时包混入/,
+    );
+  });
+
+  it('D 校验：打包后入口缺失（非运行时包形态）时报入口缺失错误', async () => {
+    const commands = packager(() => {
+      fs.rmSync(output, { recursive: true, force: true });
+      write(path.join(output, 'unrelated.txt'), 'not an entry');
+    });
+    await expect(executeBackendRuntime(packageInput(), { run: commands })).rejects.toThrow(
+      /构建产物入口缺失.*bundle\/dist\/main\.js/,
+    );
+  });
+
+  it('D 校验回归：正常布局（dist/main.js 存在）打包成功，不误报', async () => {
+    const result = await executeBackendRuntime(packageInput(), { run: packager() });
+    expect(result).toMatchObject({ action: 'package' });
+    expect(fs.existsSync(path.join(output, 'dist/main.js'))).toBe(true);
+  });
+
   it('refuses runtime overlap before running a package manager', async () => {
     const commands = packager();
     await expect(executeBackendRuntime({ ...packageInput(), runtimeRoot: workspace }, { run: commands })).rejects.toThrow(/overlaps/);

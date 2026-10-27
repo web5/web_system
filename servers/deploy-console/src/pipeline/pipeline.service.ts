@@ -95,6 +95,8 @@ import { runOrchestration, type EngineStep } from '../pipeline-orchestration/orc
 import type { ConditionVars } from './steps/condition';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { runActionSequence } from './steps/action-sequence';
+// 工作区文件锁（方案 B）：git→package 临界区跨 run/跨模块互斥（2026-10-27 并发抢包根因）
+import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
 import { resolveServiceStep } from './steps/service-tools';
 // 拉码结果的版本身份与一致性断言（纯函数）
@@ -1677,6 +1679,39 @@ export class PipelineService {
       return;
     }
 
+    // 工作区文件锁（方案 B）：抢 RELEASE_DIR 上的锁，横跨整个「git→prebuild→build→package」
+    // 临界区（在本 run 生命周期的 try/finally 里持有）。同工作区同一时刻只允许一个 run
+    // 处于该临界区——跨 env（dev/prod）与跨模块（共用 checkout 的 git reset）都互斥。
+    // 锁等待超时与构建失败在错误信息上明确区分（WorkspaceLockTimeoutError）。
+    let releaseWorkspaceLock: WorkspaceLockRelease | null = null;
+    try {
+      releaseWorkspaceLock = await acquireWorkspaceLock(this.releaseWorkspace, p.id);
+    } catch (e) {
+      const reason =
+        e instanceof WorkspaceLockTimeoutError
+          ? e.message
+          : `工作区锁获取失败: ${(e as Error).message}`;
+      p.status = 'failed';
+      p.error = reason;
+      p.progress = {
+        ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+        message: e instanceof WorkspaceLockTimeoutError ? '锁等待超时（非构建失败）' : '工作区锁获取失败',
+      };
+      p.endTime = Date.now();
+      await this.save(p);
+      await this.auditService.log({
+        user: p.operator || 'unknown',
+        action: 'pipeline.rejected',
+        env: p.env,
+        component: p.moduleKey,
+        status: 'failed',
+        detail: reason,
+      });
+      this.logger.warn(`工作区锁未获取: ${p.id} ${p.env}/${p.moduleKey}: ${reason}`);
+      await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      return;
+    }
+
     try {
       p.status = 'running';
       await this.save(p);
@@ -1873,6 +1908,8 @@ export class PipelineService {
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      // 释放工作区文件锁（方案 B）：临界区结束（含失败/取消/审批挂起）即放行下一个 run
+      releaseWorkspaceLock?.();
       // 撤销本次 run 签发的短期令牌：脚本已跑完，令牌再有效就是多余的敞口
       // （挂起等审批也走这里 —— 恢复时会重新签发新令牌，不受影响）
       this.revokeScriptTokens(p.id);
