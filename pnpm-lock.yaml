@@ -797,6 +797,9 @@ importers:
 
   servers/content-hub:
     dependencies:
+      '@kedouai/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -18107,7 +18110,7 @@ snapshots:
 
   jest-cli@29.7.0(@types/node@22.19.15):
     dependencies:
-      '@jest/core': 29.7.0(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.6.3))
+      '@jest/core': 29.7.0(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))
       '@jest/test-result': 29.7.0
       '@jest/types': 29.6.3
       chalk: 4.1.2
@@ -18919,7 +18922,7 @@ snapshots:
 
   jest@29.7.0(@types/node@22.19.15):
     dependencies:
-      '@jest/core': 29.7.0(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.6.3))
+      '@jest/core': 29.7.0(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@20.19.37)(typescript@5.9.3))
       '@jest/types': 29.6.3
       import-local: 3.2.0
       jest-cli: 29.7.0(@types/node@22.19.15)
