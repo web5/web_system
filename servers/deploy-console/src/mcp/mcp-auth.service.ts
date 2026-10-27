@@ -5,6 +5,8 @@ export interface McpKeyVerifyResult {
   valid: boolean;
   ownerId?: string;
   keyId?: string;
+  /** Key 名（mcp_api_keys.name，用户建 Key 时起的名，如 `ai-ops-automation`）；触发来源归因用 */
+  keyName?: string;
 }
 
 /**
@@ -49,7 +51,13 @@ export class McpAuthService {
           valid?: boolean;
           ownerId?: string | null;
           keyId?: string | null;
-          data?: { valid?: boolean; ownerId?: string | null; keyId?: string | null };
+          keyName?: string | null;
+          data?: {
+            valid?: boolean;
+            ownerId?: string | null;
+            keyId?: string | null;
+            keyName?: string | null;
+          };
         };
         // 兼容裸响应与全局拦截器包装
         const d = json?.data ?? json;
@@ -57,6 +65,7 @@ export class McpAuthService {
           valid: !!d?.valid,
           ownerId: d?.ownerId ?? undefined,
           keyId: d?.keyId ?? undefined,
+          keyName: d?.keyName ?? undefined,
         };
       }
     } catch (e) {

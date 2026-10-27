@@ -39,6 +39,11 @@ import { evalCondition } from './steps/condition';
 import { pickStepBranch } from './steps/step-branch';
 import { assertBackendRuntimePlan } from './backend-runtime-safety';
 import { submissionConflictWhere } from './submission-admission';
+import {
+  assertTriggerSource,
+  composeApprovalChannel,
+  formatSubmitAuditDetail,
+} from './trigger-source';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
@@ -540,6 +545,12 @@ export interface SubmitPipelineDto {
   target?: 'local' | 'remote';
   /** 灰度规则（mode=grayscale 时必填）：{ type:'percent'|'user-list'|'header', ... } */
   grayscaleRule?: Record<string, unknown>;
+  /**
+   * 触发来源（可选，向后兼容）：`ui` / `mcp:<keyName>` / `ci:<source>` 等。
+   * 缺省由各通道派生；MCP 通道服务端强制并入 Key 名，不信任调用方单方声明。
+   * 白名单字符集、长度 ≤128（见 trigger-source.ts），非法 400。
+   */
+  triggerSource?: string;
 }
 
 /**
@@ -864,6 +875,8 @@ export class PipelineService {
     if (mode === 'grayscale' && !dto.grayscaleRule) {
       throw new BadRequestException('灰度发布必须提供 grayscaleRule');
     }
+    // 触发来源（2026-10-27 防再犯）：白名单校验 + 落库，供归因「谁的会话/哪把 Key/哪个脚本」
+    const triggerSource = assertTriggerSource(dto.triggerSource);
 
     const running = await this.pipelineRepo.findOne({
       where: submissionConflictWhere({ env: dto.env, moduleKey: dto.moduleKey, configuredCutover: this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS') }),
@@ -952,6 +965,8 @@ export class PipelineService {
         ? [`该发布需审批（模板「${tpl.name}」）：提交已阻断，审批通过后自动执行`]
         : [],
       operator,
+      // 触发来源快照（提交时固化，归因用）
+      triggerSource,
       grayscaleRule: dto.grayscaleRule,
       startTime: Date.now(),
     });
@@ -973,7 +988,7 @@ export class PipelineService {
         env: dto.env,
         component: dto.moduleKey,
         status: 'pending_approval',
-        detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）→ 需审批，已阻断等待`,
+        detail: formatSubmitAuditDetail(id, mode, tpl.name, triggerSource, true),
       });
       this.notifications.notify({
         event: 'deploy.pending-approval',
@@ -993,7 +1008,7 @@ export class PipelineService {
       env: dto.env,
       component: dto.moduleKey,
       status: 'started',
-      detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）`,
+      detail: formatSubmitAuditDetail(id, mode, tpl.name, triggerSource),
     });
 
     // 后台执行，不阻塞提交响应（投递目标已随实例快照 runTarget 固化）
@@ -1163,6 +1178,9 @@ export class PipelineService {
       grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
       target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
       pipelineId: p.pipelineId ?? undefined,
+      // 重试沿用原触发来源：归因要回答「这条发布最初是谁触发的」，
+      // 重试只是同通道的再执行（UI 重试按钮也保留原 Key/脚本指纹）
+      triggerSource: p.triggerSource,
     };
     return this.submit(dto, operator || p.operator);
   }
@@ -1177,14 +1195,17 @@ export class PipelineService {
    *  - **流水线级门禁**（`pending-approval`，历史）：提交即阻断，批准后从头执行。
    *
    * @param nodeKey 指定要批准的节点（同一时刻至多一条待决单，缺省自动取待决的那条）
+   * @param channel 审批通道标记（`ui` / `mcp:<keyName>`），写进审计便于归因（2026-10-27）
    */
   async approve(
     id: string,
     reviewer?: string,
     comment?: string,
     nodeKey?: string,
+    channel?: string,
   ): Promise<{ id: string; status: string; resumedFrom?: string }> {
     const p = await this.get(id);
+    const via = composeApprovalChannel(channel);
 
     // 节点级：从被挂起的节点之后继续
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
@@ -1224,11 +1245,12 @@ export class PipelineService {
         env: p.env,
         component: p.moduleKey,
         status: 'approved',
-        detail: `节点「${approval.nodeKey ?? '-'}」审批通过，流水线 ${id} 从其后继续执行（意见: ${comment?.trim() || '-'}）`,
+        detail: `节点「${approval.nodeKey ?? '-'}」审批通过，流水线 ${id} 从其后继续执行（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
         changes: [
           { field: 'approval.status', before: 'pending', after: 'approved' },
           { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
           { field: 'approval.comment', before: null, after: comment?.trim() || null },
+          { field: 'approval.channel', before: null, after: via },
         ],
       });
       this.notifications.notify({
@@ -1275,10 +1297,11 @@ export class PipelineService {
       env: p.env,
       component: p.moduleKey,
       status: 'approved',
-      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
       changes: [
         { field: 'approval.status', before: 'pending', after: 'approved' },
         { field: 'approval.comment', before: null, after: comment?.trim() || null },
+        { field: 'approval.channel', before: null, after: via },
       ],
     });
     this.notifications.notify({
@@ -1309,8 +1332,10 @@ export class PipelineService {
     reviewer?: string,
     comment?: string,
     nodeKey?: string,
+    channel?: string,
   ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
+    const via = composeApprovalChannel(channel);
 
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
       const approval =
@@ -1344,10 +1369,11 @@ export class PipelineService {
         env: p.env,
         component: p.moduleKey,
         status: 'rejected',
-        detail: `节点「${approval.nodeKey ?? '-'}」审批拒绝，流水线 ${id} 终止（onReject=${onReject}, 意见: ${comment?.trim() || '-'}）`,
+        detail: `节点「${approval.nodeKey ?? '-'}」审批拒绝，流水线 ${id} 终止（onReject=${onReject}, 意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
         changes: [
           { field: 'approval.status', before: 'pending', after: 'rejected' },
           { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
+          { field: 'approval.channel', before: null, after: via },
         ],
       });
       this.notifications.notify({
@@ -1388,10 +1414,11 @@ export class PipelineService {
       env: p.env,
       component: p.moduleKey,
       status: 'rejected',
-      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
       changes: [
         { field: 'approval.status', before: 'pending', after: 'rejected' },
         { field: 'approval.comment', before: null, after: comment?.trim() || null },
+        { field: 'approval.channel', before: null, after: via },
       ],
     });
     this.notifications.notify({
