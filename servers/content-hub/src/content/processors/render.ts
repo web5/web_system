@@ -39,16 +39,36 @@ export function toRenderItem(it: {
  * D4：不输出首行 `# 标题`（与文章标题重复，公众号正文不需要再写一遍）。
  * D1 Option B（#308）：公众号正文**不输出 URL**（微信剥外链，链接必死）。
  *   来源承载位走 content_source_url（公众号「阅读原文」按钮），由 pipeline 传入。
+ * P2（#308 复测）：summary/title 内容里的裸 URL / markdown 链接会被 markdownToHtml
+ *   auto-linkify 变成 <a>，微信剥链后残留死链文本。源头中和，不让 URL 漏进日报。
  */
 export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
   const lines: string[] = [];
   items.forEach((it, i) => {
-    lines.push(`## ${i + 1}. ${it.title}`);
+    lines.push(`## ${i + 1}. ${stripLinks(it.title)}`);
     lines.push('');
-    lines.push(it.summary || '');
+    lines.push(stripLinks(it.summary || ''));
     lines.push('');
   });
   return lines.join('\n');
+}
+
+/**
+ * 内容层夹带 URL / 链接的中和（P2 #308）。
+ * 目标：日报正文彻底不出现可点击链接或裸 URL。
+ * 处理顺序：先去 markdown 链接（保留文字），再去裸 URL，最后去残留的 href。
+ */
+function stripLinks(text: string): string {
+  return text
+    // markdown 链接 [text](url) → text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // 裸 URL（http/https）→ 空
+    .replace(/https?:\/\/[^\s<>"'　-〿＀-￯]+/g, '')
+    // 残留 href=... 属性（如果摘要里有 HTML 片段）
+    .replace(/href\s*=\s*["'][^"']*["']/gi, '')
+    // 清理多余空白（连续空格/空行）
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 /** HTML 转义（防 HTML 残片当正文渲染） */

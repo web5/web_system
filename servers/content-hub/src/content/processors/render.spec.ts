@@ -312,6 +312,63 @@ describe('日报方案B D1-D4（V19-V23）', () => {
     expect(html).not.toContain('→');
   });
 
+  it('P2: summary 内容里的裸 URL 被中和，不泄漏到 HTML', () => {
+    const items = [
+      {
+        title: 'Test Article',
+        summary: '研究进展可参考 https://arxiv.org/abs/2026.10234 获取详情。',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('P2: summary 里的 markdown 链接被中和（保留文字、去掉链接）', () => {
+    const items = [
+      {
+        title: 'Test Article',
+        summary: '详见 [论文原文](https://arxiv.org/abs/2026.10234) 了解更多。',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('href=');
+    // 保留文字
+    expect(html).toContain('论文原文');
+  });
+
+  it('P2: title 里的 URL 也被中和', () => {
+    const items = [
+      {
+        title: 'See https://example.com/bad-link for details',
+        summary: '正常摘要内容',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('P2: 正常无 URL 的内容不受影响', () => {
+    const items = [
+      {
+        title: 'AI Agent 新突破',
+        summary: '多智能体协作框架发布，支持复杂任务分解与并行执行。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).toContain('AI Agent 新突破');
+    expect(html).toContain('多智能体协作框架发布');
+  });
+
   it('端到端：日报 HTML 结构完整', () => {
     const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
     const html = markdownToHtml(md);
