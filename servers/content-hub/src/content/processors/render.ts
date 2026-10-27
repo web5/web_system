@@ -99,7 +99,8 @@ const TRAILING_PUNCT = /[),.;:!?，。；：！？、）】》」』…]+$/;
  */
 function inline(text: string): string {
   const kept: string[] = [];
-  const ph = (i: number) => ` ${i} `;
+  // 🔴 占位符用 \u0000 包裹，绝不能用空格——否则「空格+整数+空格」被当占位符吃掉
+  const ph = (i: number) => `\u0000${i}\u0000`;
 
   // 1. 行内代码（内容转义，不参与后续格式化）
   const noCode = text.replace(/`([^`]+)`/g, (_m, code: string) => {
@@ -152,7 +153,7 @@ function inline(text: string): string {
     },
   );
 
-  return withBare.replace(/ (\d+) /g, (_m, i: string) => kept[Number(i)] ?? '');
+  return withBare.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? '');
 }
 
 /** 解析表格行：`| a | b |` → `['a', 'b']` */

@@ -410,3 +410,49 @@ describe('日报方案B D1-D4（V19-V23）', () => {
     expect(html).not.toContain('AI 资讯日报 ｜ 2026-10-27');
   });
 });
+
+/**
+ * P0 回归（#308 发版阻塞）：markdownToHtml 吃空格夹整数。
+ *
+ * 根因：inline() 占位符用 ` ${i} ` （空格+数字+空格），还原时 /\d+/ 误匹配
+ * 正文里的「空格+整数+空格」（如「A 3 B」），导致数字被当占位符替换为空。
+ * 修法：占位符改 \u0000 包裹（不可能出现在正文中）。
+ */
+describe('P0 回归：空格夹整数不被吃（#308）', () => {
+  it('空格+纯整数+空格 不被删除', () => {
+    expect(markdownToHtml('A 3 B')).toContain('3');
+    expect(markdownToHtml('A 0 B')).toContain('0');
+    expect(markdownToHtml('A 100 B')).toContain('100');
+    expect(markdownToHtml('第 3 版')).toContain('3');
+    expect(markdownToHtml('修复了 3 个问题')).toContain('3');
+    expect(markdownToHtml('参数量达 6710 亿')).toContain('6710');
+  });
+
+  it('安全形态不受影响（对照组）', () => {
+    expect(markdownToHtml('A 3B')).toContain('3B');
+    expect(markdownToHtml('A3 B')).toContain('A3');
+    expect(markdownToHtml('A 3.5 B')).toContain('3.5');
+    expect(markdownToHtml('A 3, B')).toContain('3');
+    expect(markdownToHtml('A 第3 B')).toContain('第3');
+    expect(markdownToHtml('A v3 B')).toContain('v3');
+    expect(markdownToHtml('A 3个 B')).toContain('3个');
+    expect(markdownToHtml('3 结束')).toContain('3');
+    expect(markdownToHtml('A（3）B')).toContain('3');
+    expect(markdownToHtml('A 3、B')).toContain('3');
+  });
+
+  it('多空格变体也不被吃', () => {
+    expect(markdownToHtml('A  3  B')).toContain('3');
+    expect(markdownToHtml('提升 6710 倍')).toContain('6710');
+    expect(markdownToHtml('20 条短条目')).toContain('20');
+  });
+
+  it('实际场景：中文摘要里的数字完好', () => {
+    const html = markdownToHtml('参数量提升 3 倍，推理速度提高 40%。');
+    expect(html).toContain('3 倍');
+    expect(html).toContain('40%');
+    const html2 = markdownToHtml('20 条短条目，处理了 6710 个 token。');
+    expect(html2).toContain('20 条');
+    expect(html2).toContain('6710 个');
+  });
+});
