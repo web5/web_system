@@ -50,6 +50,18 @@ export function applyTrustProxy(
 }
 
 /**
+ * 限流 tracker 需要的最小请求形态。
+ *
+ * 兼容 express 的 Request（ip: string / socket: Socket），
+ * 也兼容「socket.remoteAddress 缺失」等极端输入 —— 这里刻意放宽成 null-able，
+ * 因为「值可能缺失」正是这个兜底函数要处理的情况。
+ */
+export interface TrackerRequest {
+  ip?: string | null;
+  socket?: { remoteAddress?: string | null } | null;
+}
+
+/**
  * 限流 tracker 兜底。
  *
  * @nestjs/throttler v6 的默认 getTracker 就是 `req.ip`
@@ -58,6 +70,6 @@ export function applyTrustProxy(
  * 限流 key 会退化成 sha256(前缀-undefined) → 所有流量同一个桶 → 限流静默失效。
  * 这里显式回退，保证 tracker 永不为 undefined。
  */
-export function resolveThrottleTracker(req: Record<string, any>): string {
+export function resolveThrottleTracker(req: TrackerRequest): string {
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }

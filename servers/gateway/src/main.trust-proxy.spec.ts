@@ -30,19 +30,25 @@ import * as http from 'http';
 import type { AddressInfo } from 'net';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+// express 内部模块没有官方类型声明，但 tsconfig 里 noImplicitAny=false，
+// 因此这个 import 在类型层面是合法的；运行时经 esModuleInterop 拿到 module.exports。
+import expressRequestProto from 'express/lib/request';
 import {
   DEFAULT_TRUST_PROXY,
   applyTrustProxy,
   buildTrustProxyList,
   resolveThrottleTracker,
+  type TrackerRequest,
 } from './trust-proxy';
 
+/** express app 实例类型（由 express() 工厂函数推导，避免手写 any） */
+type ExpressApp = ReturnType<typeof express>;
+
 // express 真实的 req.ip getter（express/lib/request.js 里 defineGetter 定义的那个函数）
-const expressRequestProto = require('express/lib/request');
 const ipGetter = Object.getOwnPropertyDescriptor(expressRequestProto, 'ip')!.get!;
 
 /** 生产形态请求：socket 对端 = prod nginx 内网 IP；XFF 由 nginx 追加（最右 = 真实客户端 IP） */
-function prodRequest(app: any, xff?: string) {
+function prodRequest(app: ExpressApp, xff?: string) {
   return {
     app,
     headers: xff ? { 'x-forwarded-for': xff } : {},
@@ -52,7 +58,7 @@ function prodRequest(app: any, xff?: string) {
 }
 
 /** 用 express 真实 getter 求生产形态下的 req.ip */
-function prodReqIp(app: any, xff?: string): string | undefined {
+function prodReqIp(app: ExpressApp, xff?: string): string | undefined {
   return ipGetter.call(prodRequest(app, xff));
 }
 
@@ -269,7 +275,7 @@ describe('5. 限流 tracker 兜底：永不为 undefined', () => {
   });
 
   it('任何输入都不会返回 undefined / 空串（否则限流 key 退化成同一个桶）', () => {
-    const inputs: any[] = [
+    const inputs: TrackerRequest[] = [
       {},
       { ip: '' },
       { ip: null },
