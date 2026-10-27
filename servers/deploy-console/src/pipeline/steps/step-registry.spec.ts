@@ -23,13 +23,12 @@ describe('step-registry（内置步骤配置化声明）', () => {
   const p = (over: Record<string, unknown> = {}) =>
     ({ moduleType: undefined, reuseArtifact: false, skipVerify: false, ...over }) as never;
 
-  it('九步骤齐全（restart / verify 已下沉；prebuild=workspace 依赖预构建），category 与 commandMode 正确', () => {
+  it('八步骤齐全（restart / verify 已下沉；prebuild 已去内置 = 普通脚本节点），category 与 commandMode 正确', () => {
     expect(Object.keys(registry).sort()).toEqual(
-      ['apply', 'build', 'check', 'cleanup', 'pointer', 'prebuild', 'pull', 'upload', 'version'],
+      ['apply', 'build', 'check', 'cleanup', 'pointer', 'pull', 'upload', 'version'],
     );
     expect(registry.check).toMatchObject({ category: 'semantic', commandMode: 'base' });
     expect(registry.pull).toMatchObject({ category: 'code', commandMode: 'override' });
-    expect(registry.prebuild).toMatchObject({ category: 'build', commandMode: 'base' });
     expect(registry.build).toMatchObject({ category: 'build', commandMode: 'required' });
     expect(registry.upload).toMatchObject({ category: 'deploy', commandMode: 'override' });
     expect(registry.apply).toMatchObject({ category: 'deploy', commandMode: 'none' });

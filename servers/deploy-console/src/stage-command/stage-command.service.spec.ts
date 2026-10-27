@@ -112,16 +112,16 @@ describe('StageCommandService', () => {
 
   describe('resolveView（流水线脚本视图：合并已配置命令与流程内置说明）', () => {
     /**
-     * 预期排序：全阶段齐全（按 PIPELINE_STAGES 顺序，含 prebuild），永不省略；
+     * 预期排序：全阶段齐全（按 PIPELINE_STAGES 顺序，9 阶段），永不省略；
      * 一旦少一个，前端「流水线步骤」面板就会缺一条，发布流程不透明。
      */
-    it('始终返回全部 10 阶段（含 prebuild；仅 source 不同：configured/builtin/required-unset/semantic）', async () => {
+    it('始终返回全部 9 阶段（仅 source 不同：configured/builtin/required-unset/semantic）', async () => {
       repo.find.mockResolvedValue([]); // 完全没配置
       const view = await service.resolveView('admin');
-      expect(view).toHaveLength(10);
+      expect(view).toHaveLength(9);
       const stages = view.map((v) => v.stage).sort();
       expect(stages).toEqual(
-        ['build', 'check', 'cleanup', 'pointer', 'prebuild', 'pull', 'restart', 'upload', 'verify', 'version'].sort(),
+        ['build', 'check', 'cleanup', 'pointer', 'pull', 'restart', 'upload', 'verify', 'version'].sort(),
       );
     });
 
@@ -183,10 +183,6 @@ describe('StageCommandService', () => {
       const pull = view.find((v) => v.stage === 'pull')!;
       expect(pull.builtin).toContain('git fetch');
       expect(pull.builtin).toContain('pnpm-lock.yaml');
-      // 预构建职责已从 pull 描述移到独立 prebuild 词条
-      const prebuild = view.find((v) => v.stage === 'prebuild')!;
-      expect(tags.prebuild).toBe('builtin');
-      expect(prebuild.builtin).toContain('prebuild-workspace-deps');
     });
 
     it('check 阶段 base 模式：内置+命令叠加（commandMode=base）', async () => {

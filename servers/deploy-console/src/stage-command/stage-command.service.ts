@@ -112,7 +112,6 @@ export interface StageScriptView {
 const STAGE_TITLES: Record<string, string> = {
   check: '校验',
   pull: '拉取代码',
-  prebuild: '预构建',
   build: '构建',
   upload: '投递',
   restart: '重启',
@@ -134,7 +133,6 @@ const STAGE_TITLES: Record<string, string> = {
 const STAGE_COMMAND_MODE: Record<string, StageScriptView['commandMode']> = {
   check: 'base',
   pull: 'override',
-  prebuild: 'base',
   build: 'required',
   upload: 'override',
   restart: 'override',
