@@ -59,6 +59,16 @@ describe('sensitive-config', () => {
       expect(getSensitiveConfig('INTERNAL_API_KEY')).toBe('env-value-when-empty-cache');
     });
 
+    it('【影子风险】config_items 空串视为未配置，不把 env 值影子掉', () => {
+      // 模拟库实测场景：ADMIN_PASS / RUN_TOKEN_SECRET 三条 value 长度=0（空串占位）
+      primeSensitiveConfig({ ADMIN_PASS: '', RUN_TOKEN_SECRET: '' });
+      process.env.ADMIN_PASS = 'env-admin-pass';
+      process.env.RUN_TOKEN_SECRET = 'env-run-token-secret';
+      // 空串必须视为未配置 → 继续走 process.env 兜底，不能返回 '' 影子掉 env 值
+      expect(getSensitiveConfig('ADMIN_PASS')).toBe('env-admin-pass');
+      expect(getSensitiveConfig('RUN_TOKEN_SECRET')).toBe('env-run-token-secret');
+    });
+
     it('缓存中只灌了部分键，未灌的键走 env 兜底', () => {
       primeSensitiveConfig({ JWT_SECRET: 'db-jwt' });
       process.env.INTERNAL_API_KEY = 'env-internal';
