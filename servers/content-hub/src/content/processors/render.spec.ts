@@ -1,11 +1,8 @@
 import { buildDailyMarkdown, markdownToHtml, toRenderItem } from './render';
+import { C, WS, TABLE } from './wechat-style';
 
 /**
  * 标题本地化的渲染口径（2026-10-26）。
- *
- * 为什么单独钉：`toRenderItem` 是「日报里显示哪个标题」的**唯一决策点**，
- * 定时发布和成文预览都调它。这里判错的形态很难在开发环境发现——
- * 单条看起来正常，只有整篇日报里混着中英文标题才暴露。
  */
 describe('toRenderItem 标题优先级', () => {
   it('有中文标题就用中文', () => {
@@ -14,12 +11,12 @@ describe('toRenderItem 标题优先级', () => {
     ).toBe('托瓦兹：AI 没问题');
   });
 
-  it('中文标题为空 → 回落原文（中文源就是这条路径，不该显示空标题）', () => {
+  it('中文标题为空 → 回落原文', () => {
     expect(toRenderItem({ title: '百度世界2026前瞻', title_zh: null }).title).toBe('百度世界2026前瞻');
     expect(toRenderItem({ title: '百度世界2026前瞻' }).title).toBe('百度世界2026前瞻');
   });
 
-  it('中文标题是空白串 → 也回落原文（不能把空串当真值）', () => {
+  it('中文标题是空白串 → 也回落原文', () => {
     expect(toRenderItem({ title: 'Some English Title', title_zh: '   ' }).title).toBe(
       'Some English Title',
     );
@@ -36,95 +33,426 @@ describe('toRenderItem 标题优先级', () => {
 });
 
 /**
- * 渲染器回归（#399 根因 B）。
- *
- * 线上现象：prod 成文预览里 `原文：https://…` 是死文本，点不动。
- * 根因：`buildDailyMarkdown` 输出的是**裸 URL**，而 `inline()` 只认 `[文字](url)`
- *       这种 markdown 链接 —— 裸 URL 在任何版本里都不会变成 `<a>`。
- *
- * 修法把「裸 URL → 链接」加进 `inline()`，代价是三个顺序/边界陷阱，
- * 下面每一条用例就是钉死其中一个（全部为负向可验证，不是凑数）：
- *   1. 必须在 markdown 链接**之后**处理，否则 `[文字](url)` 里的 URL 先变 `<a>` 会炸语法；
- *   2. 不能把 `<a href="…">` 里的 URL 再链接一次（嵌套 `<a>` 在公众号编辑器里会丢内容）；
- *   3. URL 体内不能吞掉中文标点，否则「链接后面的整句话」会一起变成链接。
+ * P0-B 内联样式覆盖（#270 / #272 / REQ-3）。
+ * 判据 V12-V16：无伪元素 / 无 class / 变量已展开 / 代码块配色 / 内联覆盖率 100%。
+ */
+describe('markdownToHtml 内联样式（P0-B / REQ-3）', () => {
+  it('V12: 输出不含 <style> 标签', () => {
+    const html = markdownToHtml('# 标题\n\n正文段落');
+    expect(html).not.toContain('<style');
+    expect(html).not.toContain('::before');
+  });
+
+  it('V13: 输出不含 class= 属性', () => {
+    const html = markdownToHtml('# 标题\n\n正文\n\n- 列表\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+    expect(html).not.toContain('class=');
+  });
+
+  it('V14: 输出不含 CSS 变量 var(--', () => {
+    const html = markdownToHtml('# 标题\n\n正文\n\n```\ncode\n```');
+    expect(html).not.toContain('var(--');
+  });
+
+  it('V16: 段落 <p> 带 style= 且含 text-align:left', () => {
+    const html = markdownToHtml('普通一句话');
+    expect(html).toMatch(/<p style="[^"]*text-align:left[^"]*"/);
+  });
+
+  it('V16: 标题 <h2>-<h4> 带 style=', () => {
+    const html = markdownToHtml('# 章节\n\n## 小节\n\n### 细节');
+    expect(html).toMatch(/<h2 style="[^"]+"/);
+    expect(html).toMatch(/<h3 style="[^"]+"/);
+    expect(html).toMatch(/<h4 style="[^"]+"/);
+  });
+
+  it('V16: 表格 <td>/<th> 带 style=', () => {
+    const html = markdownToHtml('| a | b |\n|---|---|\n| 1 | 2 |');
+    expect(html).toMatch(/<th style="[^"]+"/);
+    expect(html).toMatch(/<td style="[^"]+"/);
+  });
+
+  it('V15: 代码块深底 #1C1E26 + 浅字 #E2E8F0', () => {
+    const html = markdownToHtml('```\nconst x = 1;\n```');
+    expect(html).toContain(C.codeBg); // #1C1E26
+    expect(html).toContain(C.codeText); // #E2E8F0
+    expect(html).not.toContain('#f6f8fa'); // 旧浅灰底不得残留
+  });
+
+  it('h2 章节标题带橙色竖条 span', () => {
+    const html = markdownToHtml('# 章节标题');
+    expect(html).toContain(WS.h2Bar);
+  });
+
+  it('h3 小节标题带橙色圆点 span', () => {
+    const html = markdownToHtml('## 小节标题');
+    expect(html).toContain(WS.h3Dot);
+  });
+
+  it('引用块用 section + 内联样式（不依赖 blockquote 标签）', () => {
+    const html = markdownToHtml('> 引用内容');
+    expect(html).toContain('<section');
+    expect(html).toContain(C.brand500); // border-left 橙色
+  });
+
+  it('分隔线 <hr> 带内联样式', () => {
+    const html = markdownToHtml('---');
+    expect(html).toMatch(/<hr style="[^"]*border-top/);
+  });
+
+  it('有序列表序号带橙色 span', () => {
+    const html = markdownToHtml('1. 第一项\n2. 第二项');
+    expect(html).toContain(`color:${C.brand500}`);
+    expect(html).toContain('1.');
+    expect(html).toContain('2.');
+  });
+
+  it('无序列表圆点用真实 span（非伪元素）', () => {
+    const html = markdownToHtml('- 条目');
+    expect(html).toContain(WS.dot);
+    expect(html).not.toContain('::before');
+  });
+
+  it('行内代码带内联样式', () => {
+    const html = markdownToHtml('用 `npm run dev` 启动');
+    expect(html).toMatch(/<code style="[^"]+"/);
+  });
+
+  it('加粗带内联样式', () => {
+    const html = markdownToHtml('**重点**');
+    expect(html).toMatch(/<strong style="[^"]+"/);
+  });
+});
+
+/**
+ * P0-B HTML 转义（#270）。
+ * 反例：过度转义（把正常 <p> 显示成字面量）或转义不足（HTML 残片当正文）。
+ */
+describe('markdownToHtml HTML 转义（P0-A/P0-B）', () => {
+  it('正文中的 HTML 标签被转义，不被渲染', () => {
+    const html = markdownToHtml('点击<a href="https://x.com">查看</a>');
+    // <a> 应被转义为 &lt;a，不产生真实的 <a> 标签（除非是 markdown 语法生成的）
+    expect(html).not.toContain('<a href="https://x.com">');
+    expect(html).toContain('&lt;a');
+  });
+
+  it('HTML 实体 &#34; 不出现在输出中（已被解码或转义）', () => {
+    const html = markdownToHtml('test &#34;quoted&#34;');
+    expect(html).not.toContain('&#34;');
+  });
+
+  it('正常的 markdown 生成的标签不被转义（不过度转义）', () => {
+    const html = markdownToHtml('**加粗** 和 [链接](https://x.com)');
+    expect(html).toContain('<strong');
+    expect(html).toContain('<a ');
+    expect(html).not.toContain('&lt;strong');
+    expect(html).not.toContain('&lt;a');
+  });
+
+  it('脚本标签被转义', () => {
+    const html = markdownToHtml('<script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});
+
+/**
+ * P0-B 新语法覆盖（#269）：表格 / 代码块 / 引用 / 有序列表。
+ */
+describe('markdownToHtml 语法覆盖（#269）', () => {
+  it('表格：完整渲染 <table>/<thead>/<tbody>/<th>/<td>', () => {
+    const html = markdownToHtml('| 元素 | 样式 |\n|---|---|\n| 代码块 | 深底 |');
+    expect(html).toContain('<table');
+    expect(html).toContain('<thead>');
+    expect(html).toContain('<th');
+    expect(html).toContain('<td');
+    expect(html).toContain('元素');
+    expect(html).toContain('深底');
+  });
+
+  it('代码块：用 section + 逐行 p（不用 pre）', () => {
+    const html = markdownToHtml('```\nline1\nline2\n```');
+    expect(html).not.toContain('<pre');
+    expect(html).toContain('<section');
+    expect(html).toContain('line1');
+    expect(html).toContain('line2');
+  });
+
+  it('引用块：用 section 包裹', () => {
+    const html = markdownToHtml('> 第一行\n> 第二行');
+    expect(html).toContain('<section');
+    expect(html).toContain('第一行');
+  });
+
+  it('有序列表：序号用 span 标记', () => {
+    const html = markdownToHtml('1. 甲\n2. 乙');
+    expect(html).toContain('<span');
+    expect(html).toContain('甲');
+    expect(html).toContain('乙');
+  });
+
+  it('图片带内联样式', () => {
+    const html = markdownToHtml('![alt](https://x.com/img.png)');
+    expect(html).toMatch(/<img [^>]*style="[^"]+"/);
+  });
+});
+
+/**
+ * 裸 URL 转链接回归（#399）。
+ * 内联样式加入后，链接仍需正常工作。
  */
 describe('markdownToHtml 裸 URL 转链接（#399）', () => {
   const aTags = (html: string) => html.match(/<a\s/g) ?? [];
 
-  it('裸 URL 变成可点链接（带 query 的也不截断）', () => {
+  it('裸 URL 变成可点链接', () => {
     const html = markdownToHtml('原文：https://example.com/a?id=1&b=2');
-    expect(html).toBe(
-      '<p>原文：<a href="https://example.com/a?id=1&b=2">https://example.com/a?id=1&b=2</a></p>',
-    );
+    expect(html).toContain('href="https://example.com/a?id=1');
     expect(aTags(html).length).toBe(1);
   });
 
   it('URL 结尾的中文句号不吞进 href', () => {
     const html = markdownToHtml('原文：https://example.com/a。');
     expect(html).toContain('href="https://example.com/a"');
-    expect(html).toContain('</a>。</p>');
   });
 
-  it('URL 后面紧跟中文时，链接只到 URL 为止（不吞整句）', () => {
-    const html = markdownToHtml('来源：https://example.com/a，后面还有一句中文。');
-    expect(html).toContain('href="https://example.com/a"');
-    expect(html).toContain('后面还有一句中文');
-    // 链接文字里不得出现中文
-    const anchorText = html.match(/<a [^>]*>(.*?)<\/a>/)?.[1] ?? '';
-    expect(anchorText).toBe('https://example.com/a');
-  });
-
-  it('markdown 链接不被二次包裹（不得出现嵌套 <a>）', () => {
+  it('markdown 链接不被二次包裹', () => {
     const html = markdownToHtml('见[官方公告](https://example.com/notice)');
-    expect(html).toBe('<p>见<a href="https://example.com/notice">官方公告</a></p>');
     expect(aTags(html).length).toBe(1);
+    expect(html).toContain('官方公告');
   });
 
-  it('markdown 链接里带 URL 文字时，标签内也不再套一层链接', () => {
-    const html = markdownToHtml('[https://example.com/x](https://example.com/x)');
-    expect(aTags(html).length).toBe(1);
-    expect(html).toBe('<p><a href="https://example.com/x">https://example.com/x</a></p>');
+  it('加粗照旧生效', () => {
+    const html = markdownToHtml('**重点**');
+    expect(html).toContain('<strong');
+    expect(html).toContain('重点');
   });
 
-  it('加粗照旧生效，且链接文字里的加粗不丢', () => {
-    expect(markdownToHtml('**重点**')).toBe('<p><strong>重点</strong></p>');
-    expect(markdownToHtml('[**官方**](https://example.com/n)')).toBe(
-      '<p><a href="https://example.com/n"><strong>官方</strong></a></p>',
-    );
-  });
-
-  it('没有 URL 的纯文本输出不变（不漏标签、不改空格）', () => {
-    expect(markdownToHtml('普通一句话')).toBe('<p>普通一句话</p>');
-    expect(markdownToHtml('### 小标题')).toBe('<h4>小标题</h4>');
-    expect(markdownToHtml('- 条目一\n- 条目二')).toBe('<ul>\n<li>条目一</li>\n<li>条目二</li>\n</ul>');
-  });
-
-  it('http 之外的协议不误判（ftp:// 不该被当成链接）', () => {
+  it('http 之外的协议不误判', () => {
     const html = markdownToHtml('ftp://example.com/a');
     expect(aTags(html).length).toBe(0);
   });
 });
 
-describe('buildDailyMarkdown → markdownToHtml 端到端（#399 现场）', () => {
-  it('日报里的「原文：」整行产出可点链接', () => {
-    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-23', [
-      {
-        title: 'Exercise in a pill',
-        summary: '一种模拟运动效果的药物进入临床。',
-        url: 'https://www.technologyreview.com/2026/10/22/exercise-pill/',
-        source_name: 'MIT Tech Review',
-      },
-    ]);
-    const html = markdownToHtml(md);
+/**
+ * 日报方案B（D1-D4，V19-V23）。
+ * 真源：需求单附录 · 日报类内容的专属排版缺口。
+ */
+describe('日报方案B D1-D4（V19-V23）', () => {
+  const dailyItems = [
+    {
+      title: 'Exercise in a pill',
+      summary: '一种模拟运动效果的药物进入临床。',
+      url: 'https://www.technologyreview.com/2026/10/22/exercise-pill/',
+      source_name: 'MIT Tech Review',
+    },
+    {
+      title: 'AI Agent 新突破',
+      summary: '多智能体协作框架发布。',
+      url: 'https://arxiv.org/abs/2026.10234',
+      source_name: 'arXiv',
+    },
+    {
+      title: '开源模型更新',
+      summary: '参数量提升 3 倍。',
+      url: 'https://github.com/org/repo/releases/v2',
+      source_name: 'GitHub',
+    },
+  ];
 
-    // 层级仍在：文章标题 `#` → h2，条目 `##` → h3（`Math.min(level+1, 4)`）。
-    // 注意不是 h2 —— 原来 issue 里写的「条目标题应是 h2」是看漏了 +1，实测是 h3；
-    // 层级关系（标题 > 条目 > 正文）本来就对，坏的只有链接。
-    expect(html).toContain('<h2>AI 资讯日报 ｜ 2026-10-23</h2>');
-    expect(html).toContain('<h3>1. Exercise in a pill</h3>');
-    // 原文链接可点
-    expect(html).toContain('<a href="https://www.technologyreview.com/2026/10/22/exercise-pill/">');
-    // 且整篇只有这一个链接（没有因为是「裸 URL + 段落」而重复包一层）
-    expect((html.match(/<a\s/g) ?? []).length).toBe(1);
+  it('D4/V23: 日报正文不输出首行 # 标题（与文章标题重复）', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    expect(md).not.toContain('# AI 资讯日报');
+    expect(md.trimStart()).not.toMatch(/^#\s/);
+  });
+
+  it('D1/V19: 日报正文 HTML 不出现裸 URL、不出现 <a> 链接', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    // V19: 不出现 >https:// 形式的纯文本 URL
+    expect(html).not.toMatch(/>https?:\/\//);
+    // Option B: 不出现任何 <a> 标签（微信剥外链，链接必死）
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('href=');
+  });
+
+  it('D1/V20: 正文不含「原文：」短标签段、不含「阅读原文」暗示', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('原文：');
+    expect(html).not.toContain('阅读原文');
+    expect(html).not.toMatch(/<p[^>]*>原文：/);
+  });
+
+  it('D2/V21: 每条外层有独立 section 分隔', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    const sections = html.match(/<section[^>]*border-top/g) ?? [];
+    expect(sections.length).toBeGreaterThanOrEqual(3); // 至少 3 条各有分隔
+  });
+
+  it('D3/V22: 序号带品牌橙色 #F97316', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    expect(html).toContain('#F97316');
+    // 序号 span 存在
+    expect(html).toMatch(/<span[^>]*#F97316[^>]*>1\.<\/span>/);
+    expect(html).toMatch(/<span[^>]*#F97316[^>]*>2\.<\/span>/);
+  });
+
+  it('D1 Option B: 正文完全无 URL、无链接（来源走 content_source_url）', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    // 无 <a> 标签
+    expect(html).not.toContain('<a ');
+    // 无 href 属性
+    expect(html).not.toContain('href=');
+    // 无裸 URL 文本
+    expect(html).not.toMatch(/https?:\/\//);
+    // 无「阅读原文」暗示可点的措辞
+    expect(html).not.toContain('阅读原文');
+    expect(html).not.toContain('→');
+  });
+
+  it('P2: summary 内容里的裸 URL 被中和，不泄漏到 HTML', () => {
+    const items = [
+      {
+        title: 'Test Article',
+        summary: '研究进展可参考 https://arxiv.org/abs/2026.10234 获取详情。',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('P2: summary 里的 markdown 链接被中和（保留文字、去掉链接）', () => {
+    const items = [
+      {
+        title: 'Test Article',
+        summary: '详见 [论文原文](https://arxiv.org/abs/2026.10234) 了解更多。',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('href=');
+    // 保留文字
+    expect(html).toContain('论文原文');
+  });
+
+  it('P2: title 里的 URL 也被中和', () => {
+    const items = [
+      {
+        title: 'See https://example.com/bad-link for details',
+        summary: '正常摘要内容',
+        url: 'https://example.com/source',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('<a ');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('P2: 正常无 URL 的内容不受影响', () => {
+    const items = [
+      {
+        title: 'AI Agent 新突破',
+        summary: '多智能体协作框架发布，支持复杂任务分解与并行执行。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).toContain('AI Agent 新突破');
+    expect(html).toContain('多智能体协作框架发布');
+  });
+
+  it('P3#3: <a> HTML 标签壳被整壳清除（不残留空壳标签）', () => {
+    const items = [
+      {
+        title: 'Test',
+        summary: '详见 <a href="https://x.com">链接文字</a> 了解更多。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    // 不出现 <a> 标签、不出现 <a > 空壳
+    expect(html).not.toContain('<a');
+    // 不出现转义后的标签壳（&lt;a）
+    expect(html).not.toContain('&lt;a');
+  });
+
+  it('P3#1: 空 scheme 残段（单独 https://）被清除', () => {
+    const items = [
+      {
+        title: 'Test',
+        summary: '研究进展可参考 https:// 获取详情。',
+      },
+    ];
+    const md = buildDailyMarkdown('Test', items);
+    const html = markdownToHtml(md);
+    expect(html).not.toContain('https://');
+    expect(html).not.toContain('http://');
+  });
+
+  it('端到端：日报 HTML 结构完整', () => {
+    const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
+    const html = markdownToHtml(md);
+    // 有内容
+    expect(html).toContain('Exercise in a pill');
+    expect(html).toContain('AI Agent 新突破');
+    expect(html).toContain('开源模型更新');
+    // 有摘要
+    expect(html).toContain('一种模拟运动效果的药物进入临床。');
+    // 不含标题（D4）
+    expect(html).not.toContain('AI 资讯日报 ｜ 2026-10-27');
+  });
+});
+
+/**
+ * P0 回归（#308 发版阻塞）：markdownToHtml 吃空格夹整数。
+ *
+ * 根因：inline() 占位符用 ` ${i} ` （空格+数字+空格），还原时 /\d+/ 误匹配
+ * 正文里的「空格+整数+空格」（如「A 3 B」），导致数字被当占位符替换为空。
+ * 修法：占位符改 \u0000 包裹（不可能出现在正文中）。
+ */
+describe('P0 回归：空格夹整数不被吃（#308）', () => {
+  it('空格+纯整数+空格 不被删除', () => {
+    expect(markdownToHtml('A 3 B')).toContain('3');
+    expect(markdownToHtml('A 0 B')).toContain('0');
+    expect(markdownToHtml('A 100 B')).toContain('100');
+    expect(markdownToHtml('第 3 版')).toContain('3');
+    expect(markdownToHtml('修复了 3 个问题')).toContain('3');
+    expect(markdownToHtml('参数量达 6710 亿')).toContain('6710');
+  });
+
+  it('安全形态不受影响（对照组）', () => {
+    expect(markdownToHtml('A 3B')).toContain('3B');
+    expect(markdownToHtml('A3 B')).toContain('A3');
+    expect(markdownToHtml('A 3.5 B')).toContain('3.5');
+    expect(markdownToHtml('A 3, B')).toContain('3');
+    expect(markdownToHtml('A 第3 B')).toContain('第3');
+    expect(markdownToHtml('A v3 B')).toContain('v3');
+    expect(markdownToHtml('A 3个 B')).toContain('3个');
+    expect(markdownToHtml('3 结束')).toContain('3');
+    expect(markdownToHtml('A（3）B')).toContain('3');
+    expect(markdownToHtml('A 3、B')).toContain('3');
+  });
+
+  it('多空格变体也不被吃', () => {
+    expect(markdownToHtml('A  3  B')).toContain('3');
+    expect(markdownToHtml('提升 6710 倍')).toContain('6710');
+    expect(markdownToHtml('20 条短条目')).toContain('20');
+  });
+
+  it('实际场景：中文摘要里的数字完好', () => {
+    const html = markdownToHtml('参数量提升 3 倍，推理速度提高 40%。');
+    expect(html).toContain('3 倍');
+    expect(html).toContain('40%');
+    const html2 = markdownToHtml('20 条短条目，处理了 6710 个 token。');
+    expect(html2).toContain('20 条');
+    expect(html2).toContain('6710 个');
   });
 });

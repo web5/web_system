@@ -1,4 +1,6 @@
-/** 渲染器——Markdown 日报组装 + Markdown→公众号 HTML 转换 */
+/** 渲染器——Markdown 日报组装 + Markdown→公众号 HTML 转换（P0-B 内联样式版） */
+
+import { WS, TABLE } from './wechat-style';
 
 export interface RenderItem {
   title: string;
@@ -12,8 +14,7 @@ export interface RenderItem {
  *
  * 🔴 **只在这里决定「日报里显示哪个标题」**。
  *   定时发布（`pipeline.service.run`）和成文预览重建（`content.service`）都必须调它，
- *   禁止各自 `items.map(...)` —— #399（裸 URL 未转链接）就是「一处改了、一处漏了」
- *   造成的线上事故，同一条规矩现在也适用于标题。
+ *   禁止各自 `items.map(...)`。
  *
  * 中文标题优先：`title_zh` 为空表示原文本身就是中文，回落 `title`。
  */
@@ -32,107 +33,285 @@ export function toRenderItem(it: {
   };
 }
 
-/** 组装 Markdown 日报（腾讯文档直接用） */
+/**
+ * 组装 Markdown 日报。
+ *
+ * D4：不输出首行 `# 标题`（与文章标题重复，公众号正文不需要再写一遍）。
+ * D1 Option B（#308）：公众号正文**不输出 URL**（微信剥外链，链接必死）。
+ *   来源承载位走 content_source_url（公众号「阅读原文」按钮），由 pipeline 传入。
+ * P2（#308 复测）：summary/title 内容里的裸 URL / markdown 链接会被 markdownToHtml
+ *   auto-linkify 变成 <a>，微信剥链后残留死链文本。源头中和，不让 URL 漏进日报。
+ */
 export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
-  const lines: string[] = [`# ${title}`, ''];
+  const lines: string[] = [];
   items.forEach((it, i) => {
-    lines.push(`## ${i + 1}. ${it.title}`);
+    lines.push(`## ${i + 1}. ${stripLinks(it.title)}`);
     lines.push('');
-    lines.push(it.summary || '');
-    if (it.url) lines.push('');
-    if (it.url) lines.push(`原文：${it.url}`);
+    lines.push(stripLinks(it.summary || ''));
     lines.push('');
   });
   return lines.join('\n');
 }
 
 /**
- * 裸 URL 的匹配。三处刻意排除，每一处都对应一种真实串：
- *   - 前置 `"` `'` `=` —— `<a href="http…">` / `href=http…` 里的 URL 不能再被链接一次（否则嵌套 <a>）
- *   - 前置 `/`         —— `https://a.com/https://b` 不能在 URL 中间断开
- *   - URL 体内的中日韩标点（`\u3000-\u303f` `\uff00-\uffef`）
- *                      —— `https://a.com/a，后面还有中文` 若不排除，整句会被吞成一个链接
- *
- * 不靠 lookbehind：老 Node / 部分转译链路会直接语法报错，用「吃掉一个前置字符再回填」等价且到处能跑。
+ * 内容层夹带 URL / 链接的中和（P2 #308 + P3 复测观察）。
+ * 目标：日报正文彻底不出现可点击链接或裸 URL。
+ * 处理顺序：先整壳去 <a> 标签，再剥 markdown 链接，去裸 URL，去空 scheme 残段。
  */
-const BARE_URL = /(^|[^"'=\w/])(https?:\/\/[^\s<>"'\u3000-\u303f\uff00-\uffef]+)/g;
+function stripLinks(text: string): string {
+  return text
+    // <a href="...">text</a> 整壳清除（P3#3：只清 href= 会留空壳标签）
+    .replace(/<a\s[^>]*>[\s\S]*?<\/a>/gi, '')
+    // markdown 链接 [text](url) → text
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // 裸 URL（http/https + 主机）
+    .replace(/https?:\/\/[^\s<>"'　-〿＀-￯]+/g, '')
+    // 空 scheme 残段（P3#1：单独 "https://" 无主机）
+    .replace(/https?:\/\/(?=[\s]|$)/g, '')
+    // 残留 href=... 属性
+    .replace(/href\s*=\s*["'][^"']*["']/gi, '')
+    // 清理多余空白
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
 
-/** URL 末尾被误吞的标点（半角 + 中文全角都算，句号/逗号/括号不属于 URL） */
+/** HTML 转义（防 HTML 残片当正文渲染） */
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * 裸 URL 的匹配。三处刻意排除，每一处都对应一种真实串：
+ *   - 前置 `"` `'` `=` —— `<a href="http…">` / `href=http…` 里的 URL 不能再被链接一次
+ *   - 前置 `/`         —— `https://a.com/https://b` 不能在 URL 中间断开
+ *   - URL 体内的中日韩标点（CJK 标点）
+ */
+const BARE_URL = /(^|[^"'=\w/])(https?:\/\/[^\s<>"'　-〿＀-￯]+)/g;
+
+/** URL 末尾被误吞的标点（半角 + 中文全角都算） */
 const TRAILING_PUNCT = /[),.;:!?，。；：！？、）】》」』…]+$/;
 
 /**
- * 行内格式：加粗 + markdown 链接 + 裸 URL。
+ * 行内格式：行内代码 + 加粗 + 斜体 + markdown 链接 + 裸 URL。
+ * 文本内容先 HTML 转义，生成的标签带内联样式。
  *
- * 🔴 顺序是**有语义的**，不能换：
- *   1. 先加粗 —— 链接文字里可以有 `**粗体**`，反过来（先提链接）会让标签内的
- *      markdown 失去处理机会。
- *   2. 再把 `[文字](url)` 整段摘成占位符 —— 否则第 3 步会把里面的 URL 先变成
- *      `<a>`，`[文字](<a …>)` 语法直接崩掉（这是 #399 根因 B 最容易踩的坑）。
- *   3. 然后才处理裸 URL —— 此时文本里已经没有任何「属于 markdown 语法的 URL」。
- *   4. 最后还原占位符。
+ * 🔴 顺序有语义：代码 → 转义 → 加粗 → 斜体 → md链接 → 裸URL → 还原。
  */
 function inline(text: string): string {
   const kept: string[] = [];
-  const placeholder = (i: number) => `\u0000${i}\u0000`;
+  // 🔴 占位符用 \u0000 包裹，绝不能用空格——否则「空格+整数+空格」被当占位符吃掉
+  const ph = (i: number) => `\u0000${i}\u0000`;
 
-  const withBold = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // 1. 行内代码（内容转义，不参与后续格式化）
+  const noCode = text.replace(/`([^`]+)`/g, (_m, code: string) => {
+    kept.push(`<code style="${WS.codeSpan}">${esc(code)}</code>`);
+    return ph(kept.length - 1);
+  });
 
-  const withoutMdLinks = withBold.replace(
-    /\[(.+?)\]\((.+?)\)/g,
-    (_m, label: string, href: string) => {
-      kept.push(`<a href="${href}">${label}</a>`);
-      return placeholder(kept.length - 1);
+  // 2. HTML 转义（防止 HTML 残片当正文）
+  const safe = esc(noCode);
+
+  // 3. 加粗
+  const withBold = safe.replace(
+    /\*\*(.+?)\*\*/g,
+    (_m, inner: string) => `<strong style="${WS.strong}">${inner}</strong>`,
+  );
+
+  // 4. 斜体（*text* 但不是 **text**）
+  const withEm = withBold.replace(
+    /(?<![*\w])\*([^*]+?)\*(?!\*)/g,
+    (_m, inner: string) => `<em style="${WS.em}">${inner}</em>`,
+  );
+
+  // 4.5 图片（在链接之前，因为 ![alt](src) 形似 [alt](src)）
+  const noImages = withEm.replace(
+    /!\[(.*?)\]\((.+?)\)/g,
+    (_m, alt: string, src: string) => {
+      kept.push(`<img src="${src}" alt="${esc(alt)}" style="${WS.img}">`);
+      return ph(kept.length - 1);
     },
   );
 
-  const withBareLinks = withoutMdLinks.replace(
+  // 5. markdown 链接
+  const noMdLinks = noImages.replace(
+    /\[(.+?)\]\((.+?)\)/g,
+    (_m, label: string, href: string) => {
+      kept.push(`<a href="${href}" style="${WS.a}">${label}</a>`);
+      return ph(kept.length - 1);
+    },
+  );
+
+  // 6. 裸 URL
+  const withBare = noMdLinks.replace(
     BARE_URL,
     (whole: string, pre: string, url: string) => {
       const tailMatch = url.match(TRAILING_PUNCT);
       const tail = tailMatch ? tailMatch[0] : '';
       const clean = tail ? url.slice(0, -tail.length) : url;
-      // 全是标点（理论上进不来）就原样返回，不产出空链接
       if (!clean) return whole;
-      return `${pre}<a href="${clean}">${clean}</a>${tail}`;
+      return `${pre}<a href="${clean}" style="${WS.a}">${clean}</a>${tail}`;
     },
   );
 
-  return withBareLinks.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? '');
+  return withBare.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => kept[Number(i)] ?? '');
 }
 
-/** 简单 Markdown → HTML（公众号正文；h1 降级为 h2，因公众号标题本身是 h1） */
+/** 解析表格行：`| a | b |` → `['a', 'b']` */
+function parseTableRow(line: string): string[] {
+  return line
+    .replace(/^\||\|$/g, '')
+    .split('|')
+    .map((c) => c.trim());
+}
+
+/**
+ * Markdown → 公众号 HTML（全内联样式）。
+ *
+ * h1 降级为 h2（公众号标题本身是 h1）。
+ * 支持：标题 / 段落 / 加粗 / 斜体 / 行内代码 / 链接 / 图片 / 列表（ul/ol）/
+ *       代码块 / 表格 / 引用 / 分隔线。
+ *
+ * D2/D3：日报条目（`## N. 标题`）自动 `<section>` 分隔 + 橙色序号。
+ */
 export function markdownToHtml(md: string): string {
   const lines = md.split('\n');
   const html: string[] = [];
-  let inList = false;
+  let i = 0;
+  let entryOpen = false; // D2: 日报条目 section 是否打开
 
-  const closeList = () => {
-    if (inList) {
-      html.push('</ul>');
-      inList = false;
+  const closeEntry = () => {
+    if (entryOpen) {
+      html.push('</section>');
+      entryOpen = false;
     }
   };
 
-  for (const line of lines) {
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // ── 代码块 ``` ──
+    if (/^```/.test(line)) {
+      closeEntry();
+      i++;
+      const codeLines: string[] = [];
+      while (i < lines.length && !/^```/.test(lines[i])) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      const rows = codeLines
+        .map((l) => {
+          const body = esc(l).replace(/ {2}/g, '&nbsp;&nbsp;');
+          return `<p style="${WS.codeLine}">${body || '&nbsp;'}</p>`;
+        })
+        .join('');
+      html.push(`<section style="${WS.codeWrap}">${rows}</section>`);
+      continue;
+    }
+
+    // ── 分隔线 --- ──
+    if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      closeEntry();
+      html.push(`<hr style="${WS.hr}">`);
+      i++;
+      continue;
+    }
+
+    // ── 表格 | a | b | ──
+    if (/^\|.*\|/.test(line) && i + 1 < lines.length && /^\|[\s\-:|]+\|$/.test(lines[i + 1].trim())) {
+      closeEntry();
+      const headers = parseTableRow(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|/.test(lines[i])) {
+        rows.push(parseTableRow(lines[i]));
+        i++;
+      }
+      const head = headers.map((c) => `<th style="${TABLE.th}">${inline(c)}</th>`).join('');
+      const body = rows
+        .map((row) => `<tr>${row.map((c) => `<td style="${TABLE.td}">${inline(c)}</td>`).join('')}</tr>`)
+        .join('');
+      html.push(`<table style="${TABLE.table}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`);
+      continue;
+    }
+
+    // ── 引用块 > ──
+    if (/^>\s?/.test(line)) {
+      closeEntry();
+      const quoteLines: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ''));
+        i++;
+      }
+      const inner = quoteLines.map((l) => `<p style="${WS.p}">${inline(l)}</p>`).join('');
+      html.push(`<section style="${WS.quote}">${inner}</section>`);
+      continue;
+    }
+
+    // ── 标题 # ──
     if (/^#{1,6}\s/.test(line)) {
-      closeList();
       const level = (line.match(/^#+/) ?? [''])[0].length;
       const text = line.replace(/^#+\s*/, '');
       const h = Math.min(level + 1, 4);
-      html.push(`<h${h}>${inline(text)}</h${h}>`);
-    } else if (/^[-*]\s/.test(line)) {
-      if (!inList) {
-        html.push('<ul>');
-        inList = true;
+
+      // D2/D3：日报条目（## N. 标题）→ section 分隔 + 橙色序号
+      const entryMatch = text.match(/^(\d+)\.\s+(.+)$/);
+      if (h === 3 && entryMatch) {
+        closeEntry();
+        const num = entryMatch[1];
+        const title = entryMatch[2];
+        html.push(`<section style="${WS.entrySection}">`);
+        html.push(`<h3 style="${WS.h3}"><span style="${WS.entryNum}">${num}.</span>${inline(title)}</h3>`);
+        entryOpen = true;
+      } else {
+        closeEntry();
+        if (h === 2) {
+          html.push(`<h2 style="${WS.h2}">${WS.h2Bar}${inline(text)}</h2>`);
+        } else if (h === 3) {
+          html.push(`<h3 style="${WS.h3}">${WS.h3Dot}${inline(text)}</h3>`);
+        } else {
+          html.push(`<h${h} style="${WS.h4}">${inline(text)}</h${h}>`);
+        }
       }
-      html.push(`<li>${inline(line.replace(/^[-*]\s*/, ''))}</li>`);
-    } else if (line.trim() === '') {
-      closeList();
-    } else {
-      closeList();
-      html.push(`<p>${inline(line)}</p>`);
+      i++;
+      continue;
     }
+
+    // ── 无序列表 - ──
+    if (/^[-*]\s/.test(line)) {
+      closeEntry();
+      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
+        const text = lines[i].replace(/^[-*]\s*/, '');
+        html.push(`<p style="${WS.li}">${WS.dot}${inline(text)}</p>`);
+        i++;
+      }
+      continue;
+    }
+
+    // ── 有序列表 1. ──
+    if (/^\d+\.\s/.test(line)) {
+      closeEntry();
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        const m = lines[i].match(/^(\d+)\.\s+(.*)$/);
+        if (m) {
+          html.push(`<p style="${WS.li}"><span style="${WS.entryNum}">${m[1]}.</span>${inline(m[2])}</p>`);
+        }
+        i++;
+      }
+      continue;
+    }
+
+    // ── 空行 ──
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+
+    // ── 段落 ──
+    html.push(`<p style="${WS.p}">${inline(line)}</p>`);
+    i++;
   }
-  closeList();
+
+  closeEntry();
   return html.join('\n');
 }
