@@ -23,6 +23,20 @@ import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
 import { ReleaseVerifyService } from '../release-verify/release-verify.service';
 import { ReleaseVerifyDto } from '../release-verify/dto/release-verify.dto';
 import { ModuleRollbackDto } from './dto/module-rollback.dto';
+import {
+  assertTriggerSource,
+  composeMcpTriggerSource,
+} from '../pipeline/trigger-source';
+
+/**
+ * MCP 请求上由 `McpKeyGuard` 挂载的鉴权结果（见 mcp-key.guard.ts）。
+ * 用明确结构替代 `any`：R4 TS 铁律（commit hook 红线）。
+ */
+interface McpRequest {
+  mcpOperator?: string;
+  mcpKeyId?: string;
+  mcpKeyInfo?: { ownerId?: string; keyId?: string; keyName?: string };
+}
 
 /**
  * MCP 发布接口（/api/mcp/*）。
@@ -53,8 +67,18 @@ export class McpController {
     private readonly releaseVerifyService: ReleaseVerifyService,
   ) {}
 
-  private operator(req: any): string {
+  private operator(req: McpRequest): string {
     return req?.mcpOperator || 'unknown';
+  }
+
+  /** 本次调用所持 MCP Key 的名称（触发来源归因用；缺失时 undefined，由 compose 回落 mcp:unknown） */
+  private keyName(req: McpRequest): string | undefined {
+    return req?.mcpKeyInfo?.keyName ?? undefined;
+  }
+
+  /** 审计通道标记：`mcp:<keyName>`（与触发来源同一套归因语言） */
+  private approvalChannel(req: McpRequest): string {
+    return composeMcpTriggerSource(undefined, this.keyName(req));
   }
 
   /**
@@ -206,6 +230,13 @@ export class McpController {
         versionTag: body?.versionTag,
         target: body?.target,
         grayscaleRule: body?.grayscaleRule,
+        // 触发来源（2026-10-27 防再犯）：服务端强制把 MCP Key 名并入，
+        // 不可被调用方抹掉 —— 形如 `<body.triggerSource>|mcp:<keyName>` 或 `mcp:<keyName>`。
+        // operator=1 无法区分「哪把 Key/谁的会话」的教训就来自两轮非预期 PROD 批量发布。
+        triggerSource: composeMcpTriggerSource(
+          assertTriggerSource(body?.triggerSource),
+          this.keyName(req),
+        ),
       },
       this.operator(req),
     );
@@ -229,6 +260,7 @@ export class McpController {
       error: p.error,
       result: p.result,
       operator: p.operator,
+      triggerSource: p.triggerSource,
       startTime: p.startTime,
       endTime: p.endTime,
     };
@@ -249,29 +281,34 @@ export class McpController {
   }
 
   /**
-   * 审批通过 —— 打通自动化发布的「最后一公里」。
+   * 审批通过 —— 打通自动化发布的「最后一公里」（dev/非 prod 环境）。
    *
    * 背景：流水线提交（`POST /api/mcp/pipeline`）走 MCP Key 没问题，但构建完成后
    * 挂起 `awaiting-approval` 时 MCP 通道**没有审批路由**，只能回到控制台 JWT 的
    * `/api/pipelines/:id/approve`。结果是自动化发布永远卡在半路，最后一步不得不
    * 自签控制台 JWT 绕过（不可审计、与「优先 MCP Key」的约定相悖）。
    *
-   * 安全约定（与控制台一致，不因通道放宽）：
+   * 安全约定（与控制台一致，不因通道放宽；2026-10-27 起**收紧**）：
    *  - `ownedPipeline()`：只有**提交者本人**能审批自己的流水线（非本人 → 404）
-   *  - prod 必须 `confirm=true`（审批是最终放行点，比提交更需要显式确认）
+   *  - **prod 一律拒绝**：prod 环境必须人工审批（控制台 JWT 通道），
+   *    MCP 通道不允许审批 prod 运行 —— 防 `/tmp/prod-deploy.sh` 式批量自动审批
+   *    （2026-10-27 两轮非预期 PROD 批量发布的根因之一就是「MCP 提交+自动审批一体」）
    *  - 审批人由 Key 的 ownerId 解析而来（`reviewerOf`），审计可追溯到人；
    *    权限仍走 `deploy:pipeline:approve`，MCP 通道**不放宽**任何校验
+   *  - 审批通道 `mcp:<keyName>` 写进审计，便于归因
    */
   @Post('pipeline/:jobId/approve')
-  @ApiOperation({ summary: '审批通过（仅提交者本人；prod 需 confirm=true）' })
+  @ApiOperation({ summary: '审批通过（仅提交者本人；prod 一律拒绝，必须走控制台人工审批）' })
   async approvePipeline(
     @Param('jobId') jobId: string,
     @Body() body: { comment?: string; nodeKey?: string; confirm?: boolean },
     @Req() req: any,
   ) {
     const p = await this.ownedPipeline(jobId, req);
-    if (p.env === 'prod' && body?.confirm !== true) {
-      throw new BadRequestException('Prod operations require confirm=true');
+    if (p.env === 'prod') {
+      throw new BadRequestException(
+        'prod 环境必须人工审批（控制台），MCP 通道不允许审批 prod 运行',
+      );
     }
     const reviewer = await this.reviewerOf(req);
     const result = await this.pipelineService.approve(
@@ -279,13 +316,19 @@ export class McpController {
       reviewer,
       body?.comment,
       body?.nodeKey,
+      this.approvalChannel(req),
     );
     return { jobId, ...result };
   }
 
-  /** 审批拒绝（意见必填，与控制台同语义） */
+  /**
+   * 审批拒绝（意见必填，与控制台同语义）。
+   *
+   * **prod 保留可用**：拒绝是「不放行」，风险方向与 approve 相反 ——
+   * 自动化发现异常时仍能主动叫停 prod 发布，故不受「prod 必须人工审批」限制。
+   */
   @Post('pipeline/:jobId/reject')
-  @ApiOperation({ summary: '审批拒绝（仅提交者本人；必填审批意见）' })
+  @ApiOperation({ summary: '审批拒绝（仅提交者本人；必填审批意见；prod 亦可拒绝）' })
   async rejectPipeline(
     @Param('jobId') jobId: string,
     @Body() body: { comment?: string; nodeKey?: string },
@@ -301,6 +344,7 @@ export class McpController {
       reviewer,
       body?.comment,
       body?.nodeKey,
+      this.approvalChannel(req),
     );
     return { jobId, ...result };
   }

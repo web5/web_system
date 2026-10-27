@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 import { Repository } from 'typeorm';
 import { DeployReleaseEventEntity } from '../entities/deploy-release-event.entity';
 import { PipelineService, SubmitPipelineDto } from '../pipeline/pipeline.service';
+import { deriveCiTriggerSource } from '../pipeline/trigger-source';
 import { ReleaseHookDto } from './release-hook.dto';
 
 /** 签名头（与 GitHub Webhook 同名，便于复用生态习惯） */
@@ -157,6 +158,8 @@ export class ReleaseHookService {
         commitId: dto.commitId,
         mode: (dto.mode as SubmitPipelineDto['mode']) ?? 'direct',
         target: dto.target as SubmitPipelineDto['target'],
+        // 触发来源（2026-10-27 归因防再犯）：`ci:<source>` 形态，与 operator 对齐
+        triggerSource: deriveCiTriggerSource(source),
       };
       // operator 统一为 ci:<source>，禁止落到 mcp/anonymous/unknown
       const r = await this.pipeline.submit(submitDto, `ci:${source}`);

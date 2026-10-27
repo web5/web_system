@@ -12,6 +12,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { PipelineService, SubmitPipelineDto } from './pipeline.service';
 import { DeployService } from '../deploy/deploy.service';
 import { CurrentUser } from '../common/decorators';
+import { assertTriggerSource, deriveUiTriggerSource } from './trigger-source';
 
 /**
  * 发布流水线控制台接口（走控制台 JWT 鉴权）。
@@ -32,7 +33,9 @@ export class PipelineController {
     if (body.env === 'prod' && (body as any).confirm !== true) {
       throw new BadRequestException('Prod operations require confirm=true');
     }
-    return this.pipelineService.submit(body, user?.username);
+    // UI 通道触发来源：body 可带页面/会话标识，缺省派生 `ui`（2026-10-27 归因防再犯）
+    const triggerSource = deriveUiTriggerSource(assertTriggerSource(body.triggerSource));
+    return this.pipelineService.submit({ ...body, triggerSource }, user?.username);
   }
 
   /** 注意：声明在 @Get(':id') 之前，避免 branch-commits 被当成 id 吞掉 */
@@ -121,7 +124,8 @@ export class PipelineController {
     @Body() body: { comment?: string; nodeKey?: string },
     @CurrentUser() user: any,
   ) {
-    return this.pipelineService.approve(id, user?.username, body?.comment, body?.nodeKey);
+    // 通道=ui：审计记审批通道，便于与 MCP 通道归因（2026-10-27）
+    return this.pipelineService.approve(id, user?.username, body?.comment, body?.nodeKey, 'ui');
   }
 
   @Post(':id/reject')
@@ -134,7 +138,7 @@ export class PipelineController {
     if (!body?.comment?.trim()) {
       throw new BadRequestException('拒绝必须填写审批意见');
     }
-    return this.pipelineService.reject(id, user?.username, body.comment, body?.nodeKey);
+    return this.pipelineService.reject(id, user?.username, body.comment, body?.nodeKey, 'ui');
   }
 
   @Delete(':id')

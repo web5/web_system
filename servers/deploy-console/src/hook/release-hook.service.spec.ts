@@ -124,6 +124,9 @@ describe('ReleaseHookService · 幂等受理', () => {
 
     expect(submitted).toHaveLength(1);
     expect(submitted[0].operator).toBe('ci:release.yml');
+    // 触发来源（2026-10-27 防再犯）：hook 通道记 ci:<source>，与 operator 对齐
+    const submittedDto = submitted[0].dto as { triggerSource?: string };
+    expect(submittedDto.triggerSource).toBe('ci:release.yml');
     expect(r).toEqual({
       deliveryId: 'd-1',
       duplicate: false,
@@ -132,6 +135,17 @@ describe('ReleaseHookService · 幂等受理', () => {
       approvalId: undefined,
     });
     expect(saved[0].status).toBe('accepted');
+  });
+
+  it('source 缺失时 triggerSource 回落 ci:unknown-workflow（与 operator 同源）', async () => {
+    const { svc, submitted } = makeService({ secret: SECRET });
+    await svc.handle(
+      { ...dto, source: undefined } as ReleaseHookDto,
+      JSON.stringify(dto),
+    );
+    const submittedDto = submitted[0].dto as { triggerSource?: string };
+    expect(submittedDto.triggerSource).toBe('ci:unknown-workflow');
+    expect(submitted[0].operator).toBe('ci:unknown-workflow');
   });
 
   it('重复投递：不产生第二条流水线，返回首次结果', async () => {
