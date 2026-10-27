@@ -114,10 +114,10 @@ module.exports = {
         TODO_SERVICE_URL: 'http://127.0.0.1:6005',
         MCP_GATEWAY_URL: 'http://127.0.0.1:6006',
         CONTENT_HUB_SERVICE_URL: 'http://127.0.0.1:6007',
-        // 服务间鉴权（mcp-gateway → gateway 调 /api/content-hub 时必须带此 Bearer）
-        // 新名 CONTENT_HUB_SERVICE_KEY 优先，旧名 FINNEWS_SERVICE_KEY 兼容（gateway 两个都读）
-        CONTENT_HUB_SERVICE_KEY: process.env.CONTENT_HUB_SERVICE_KEY || process.env.FINNEWS_SERVICE_KEY || '',
-        FINNEWS_SERVICE_KEY: process.env.FINNEWS_SERVICE_KEY || '',
+        // 🔴 服务间鉴权密钥不再在此注入：dotenv 不覆盖已存在的 process.env，
+        // 注入 '' 会把 .env.generated / .env 的真实值挡死（同 content-hub 2026-10-26 事故形态）。
+        // 密钥改由配置中心下发 .env.generated 优先、服务 .env 兜底，ecosystem 不再注入（2026-10-27 拍板）：
+        //   CONTENT_HUB_SERVICE_KEY / FINNEWS_SERVICE_KEY（gateway 两个都读，新名优先、旧名兼容）
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6000',
         CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://kedouai.com,https://admin.kedouai.com',
         JWT_SECRET,
@@ -136,11 +136,10 @@ module.exports = {
         ...baseDbConfig,
         JWT_SECRET,
         JWT_EXPIRES_IN: '7d',
-        MINI_PROGRAM_APP_ID,
-        MINI_PROGRAM_SECRET,
-        OFFICIAL_ACCOUNT_APP_ID,
-        OFFICIAL_ACCOUNT_SECRET,
-        WECHAT_OAUTH_REDIRECT_URI,
+        // 🔴 微信凭据不再在此注入：dotenv 不覆盖已存在的 process.env，注入 '' 会把
+        // .env.generated / .env 的真实值挡死。密钥改由配置中心下发 .env.generated 优先、
+        // 服务 .env 兜底，ecosystem 不再注入（2026-10-27 拍板）：
+        //   MINI_PROGRAM_APP_ID/SECRET / OFFICIAL_ACCOUNT_APP_ID/SECRET / WECHAT_OAUTH_REDIRECT_URI
       },
       error_file: `${logBase}/auth-error.log`,
       out_file: `${logBase}/auth-out.log`,
@@ -243,16 +242,11 @@ module.exports = {
         // 机构行为（institution 接口同样在 content-hub 内）：auth 独立 env，便于将来拆服务单独换 key
         INSTITUTION_SERVICE_URL: process.env.INSTITUTION_SERVICE_URL || 'http://127.0.0.1:6007',
         ...contentHubServiceAuth('INSTITUTION'),
-        // 兼容遗留共享密钥（内部/WorkBuddy 集成）；对外公网改为每用户 API Key
-        MCP_CLIENT_KEY: process.env.MCP_CLIENT_KEY || '',
-        // 运营后台密钥：保护 /api/keys 的列表/吊销接口（X-Admin-Key）
-        MCP_ADMIN_KEY: process.env.MCP_ADMIN_KEY || '',
-        // 申请验证码邮件（SMTP）；留空则申请接口返回 503
-        SMTP_HOST: process.env.SMTP_HOST || '',
-        SMTP_PORT: process.env.SMTP_PORT || 465,
-        SMTP_USER: process.env.SMTP_USER || '',
-        SMTP_PASS: process.env.SMTP_PASS || '',
-        SMTP_FROM: process.env.SMTP_FROM || '',
+        // 🔴 密钥与 SMTP 不再在此注入：dotenv 不覆盖已存在的 process.env，注入 '' 会把
+        // .env.generated / .env 的真实值挡死。密钥改由配置中心下发 .env.generated 优先、
+        // 服务 .env 兜底，ecosystem 不再注入（2026-10-27 拍板）：
+        //   MCP_CLIENT_KEY（服务侧 mcp.controller.ts 仍读，走 .env 兜底）
+        //   MCP_ADMIN_KEY / SMTP_HOST|PORT|USER|PASS|FROM —— 实测无服务代码消费（历史残留），一并移除
       },
       error_file: `${logBase}/mcp-gateway-error.log`,
       out_file: `${logBase}/mcp-gateway-out.log`,
@@ -293,9 +287,14 @@ module.exports = {
         DB_DATABASE: KNOWLEDGE_DB_DATABASE,
         AUTH_SERVICE_URL,
         SYSTEM_SERVICE_URL,
-        INTERNAL_API_KEY: process.env.KNOWLEDGE_INTERNAL_API_KEY || process.env.INTERNAL_API_KEY || '',
+        // 🔴 服务密钥不再在此注入：dotenv 不覆盖已存在的 process.env，注入 '' 会把
+        // .env.generated / .env 的真实值挡死。密钥改由配置中心下发 .env.generated 优先、
+        // 服务 .env 兜底，ecosystem 不再注入（2026-10-27 拍板）：
+        //   INTERNAL_API_KEY（内部鉴权；服务侧 internal-key.guard 读）
+        //   TOKENHUB_API_KEY（embedding/LLM；服务侧仍有 HY3_API_KEY / LLM_API_KEY 回落）
+        // TOKENHUB_BASE_URL / EMBEDDING_MODEL / EVAL_LLM_MODEL 为非空默认值（非密钥），暂留；
+        //   若后续要迁配置中心单源，注意它们同样会挡死 .env.generated 同名键。
         TOKENHUB_BASE_URL: process.env.TOKENHUB_BASE_URL || 'https://tokenhub.tencentmaas.com/v1',
-        TOKENHUB_API_KEY: process.env.TOKENHUB_API_KEY || process.env.HY3_API_KEY || process.env.LLM_API_KEY || '',
         EMBEDDING_MODEL: process.env.EMBEDDING_MODEL || 'bge-m3',
         EVAL_LLM_MODEL: process.env.EVAL_LLM_MODEL || 'deepseek-v4-flash',
       },
