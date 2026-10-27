@@ -34,11 +34,14 @@ describe('chat() 统一 LLM 客户端（REQ-2）', () => {
     expect(opts.thinking).toBeUndefined(); // 不传 = 客户端默认行为
   });
 
-  it('chat() 是 async 函数，返回 Promise<string>', () => {
+  it('chat() 是 async 函数，返回 Promise<string>', async () => {
+    // 删密钥确保立即 reject，不发起真实网络请求（防 Jest open handles）
+    delete process.env.LLM_API_KEY;
+    delete process.env.TOKENHUB_API_KEY;
+    delete process.env.HY3_API_KEY;
     const result = chat([{ role: 'user', content: 'test' }]);
     expect(result).toBeInstanceOf(Promise);
-    // 立即 catch 防 unhandled rejection（密钥缺失会 reject）
-    result.catch(() => {});
+    await expect(result).rejects.toThrow(); // await 让 Promise 彻底 settle
   });
 });
 
