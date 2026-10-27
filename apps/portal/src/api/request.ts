@@ -221,7 +221,7 @@ request.interceptors.response.use(
           // 60 秒后自动解锁，防止永久锁死
           setTimeout(() => { isRedirecting = false; }, 60000);
           clearStoredAuth();
-          message.error('登录已过期，请重新登录');
+          message.error({ content: '登录已过期，请重新登录', key: 'auth-expired' });
           const currentPath = router.currentRoute.value.fullPath;
           const redirectPath = currentPath !== '/login' ? `?redirect=${encodeURIComponent(currentPath)}` : '';
           router.push(`/login${redirectPath}`);
