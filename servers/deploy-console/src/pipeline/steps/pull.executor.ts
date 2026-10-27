@@ -5,26 +5,11 @@ import { parseReleaseRef } from '../release-paths';
 import { StepContext } from './step.types';
 
 /**
- * 共享 workspace 包预构建开关。
- *
- * `packages/shared` 与 `packages/types` 是几乎所有前端/微前端的公共依赖，被
- * `package.json: main` 指向 `dist/`（非源码别名）。若不在流水线级一次预构建，
- * 就会出现两类历史问题：
- *   1) 每个模块的 build 脚本各自 `pnpm --filter @web-system/shared build`，
- *      两条 admin/portal 并发流水线会把对方的 dist `mv` 到 `/tmp`，再各自重建——
- *      形成「并发 mv → 重建」竞态，导致 vite 打包解析失败。
- *   2) 单条流水线的 shared/types 重建耗时~几秒（tsc），多个微前端串联就是几倍 N。
- *
- * 因此抽到拉码之后一次执行（在 pnpm install 之后、模块 build 之前）。
- * 关闭开关 → 跳过预构建，回退到各模块脚本自理（兼容「临时禁掉共享构建」调试场景）。
+ * 共享 workspace 包预构建**不再由平台兜底**（2026-10-27 拍板 Q2：完全移除）：
+ * 预构建改为画布上的普通脚本节点（key=prebuild，脚本 `node scripts/prebuild-workspace-deps.mjs`，
+ * 需要的流水线自行添加）。⚠️ 切勿恢复硬编码包清单（原 PREBUILD_SHARED_PACKAGES）——
+ * 2026-10-26 故障根因即清单漏 @kedouai/agent-core；要跑就走统一脚本全量扫 packages/*。
  */
-/**
- * 共享包清单只收 shared/types 两个**被 main 指向 dist 的全局公共依赖**。
- * ⚠️ 模块级依赖（如 @web-system/ui）**不进这份清单**（2026-09-21 用户定）：
- * 依赖谁、要不要先构建，是**模块自己的事** → 写在各自流水线 build 节点脚本里
- * （deploy_pipeline_step_commands，页面可编辑）；工厂内置清单会随依赖增长越收越耦合。
- */
-const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
 
 /**
  * pull 内置步骤执行体（category=code）——「拉码」的回退实现。
@@ -33,7 +18,7 @@ const PREBUILD_SHARED_PACKAGES = ['@web-system/shared', '@web-system/types'];
  * - **只负责把代码拉到目标 commit**（fetch/checkout/reset/clean，含 .git 校验）；
  * - 版本身份（`gitCommit` / `versionTag`）由平台统一回填（`PipelineService.resolveGitIdentity`），
  *   因为 v5 下该阶段可能改由 DB 锁定脚本执行（`nodeKey='git'`），两条路径必须同源；
- * - 依赖同步与共享包预构建在 `afterSync()`：脚本驱动时引擎会显式调用它。
+ * - 依赖同步在 `afterSync()`：脚本驱动时引擎会显式调用它。
  */
 @Injectable()
 export class PullExecutor {
@@ -56,11 +41,10 @@ export class PullExecutor {
   }
 
   /**
-   * 拉码之后的平台侧收尾：依赖同步 + 共享包预构建。
+   * 拉码之后的平台侧收尾：依赖同步。
    *
    * 单独暴露的原因：git 阶段可能由 **DB 锁定脚本**驱动（脚本只负责"把代码拉到位"），
-   * 此时依赖安装与预构建仍必须由平台执行 —— 预构建要流水线级只做一次，
-   * 交给各模块脚本会重现「并发 mv → 重建」竞态（见文件头注释）。
+   * 此时依赖安装仍必须由平台执行。
    */
   async afterSync(ctx: StepContext): Promise<void> {
     // 依赖同步：pnpm-lock.yaml 变化才重装（避免每次全量 install；失败不阻断）
@@ -78,24 +62,6 @@ export class PullExecutor {
           `后续模块构建大概率报 resolve 失败；请在发布目录手工 pnpm install 后重试`,
       );
       this.logger.warn(`依赖同步失败（${ctx.pipeline.moduleKey}）: ${(e as Error).message}`);
-    }
-
-    // 共享 workspace 包预构建：流水级一次（admin/portal shell 等所有依赖方共用 dist）
-    for (const pkg of PREBUILD_SHARED_PACKAGES) {
-      try {
-        ctx.log(`预构建共享包: ${pkg}`);
-        const t0 = Date.now();
-        this.command.exec(
-          `${this.command.pnpmBin()} --filter ${pkg} build`,
-          this.git.workspace(),
-        );
-        ctx.log(`预构建完成: ${pkg}（${Date.now() - t0}ms）`);
-      } catch (e) {
-        // 共享包预构建失败不阻断：模块 build 自己也会重建（向后兼容历史脚本）。
-        // 但仍打印显著 warning，避免调试时遗漏根因。
-        ctx.log(`[warn] 共享包 ${pkg} 预构建失败: ${(e as Error).message}`);
-        this.logger.warn(`共享包 ${pkg} 预构建失败: ${(e as Error).message}`);
-      }
     }
   }
 }

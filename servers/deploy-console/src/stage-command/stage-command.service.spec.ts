@@ -112,7 +112,7 @@ describe('StageCommandService', () => {
 
   describe('resolveView（流水线脚本视图：合并已配置命令与流程内置说明）', () => {
     /**
-     * 预期排序：九阶段齐全（按 CONFIGURABLE_STAGES 顺序），永不省略；
+     * 预期排序：全阶段齐全（按 PIPELINE_STAGES 顺序，9 阶段），永不省略；
      * 一旦少一个，前端「流水线步骤」面板就会缺一条，发布流程不透明。
      */
     it('始终返回全部 9 阶段（仅 source 不同：configured/builtin/required-unset/semantic）', async () => {
@@ -182,7 +182,7 @@ describe('StageCommandService', () => {
       // 每条 builtin 都有说明文字，前端可以直接渲染
       const pull = view.find((v) => v.stage === 'pull')!;
       expect(pull.builtin).toContain('git fetch');
-      expect(pull.builtin).toContain('workspace');
+      expect(pull.builtin).toContain('pnpm-lock.yaml');
     });
 
     it('check 阶段 base 模式：内置+命令叠加（commandMode=base）', async () => {
