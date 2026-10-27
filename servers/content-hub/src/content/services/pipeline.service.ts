@@ -146,6 +146,9 @@ export class PipelineService {
           // 公众号通道：日报 markdown 转 HTML（图片已由发布器处理）
           html: target === 'wechat_mp' ? markdownToHtml(markdown) : undefined,
           folder: pipeline.tencent_folder ?? undefined,
+          // D1 Option B（#308）：公众号正文不输出 URL，来源承载走 content_source_url
+          // （公众号「阅读原文」按钮）。日报多条目取头条条目源 URL。
+          source_url: renderItems.find((it) => it.url)?.url ?? renderItems[0]?.url,
           // 封面只在公众号通道有用（腾讯文档没有封面概念）。
           // 优先素材库解析出的 media_id（可重传刷新），退回 issue-5 直配的 media_id。
           ...(target === 'wechat_mp'
@@ -182,6 +185,7 @@ export class PipelineService {
                         thumbMediaId ?? pipeline.cover_media_id ?? undefined,
                     }
                   : {}),
+                source_url: renderItems.find((it) => it.url)?.url ?? renderItems[0]?.url,
                 folder: pipeline.tencent_folder ?? undefined,
               },
             },

@@ -37,7 +37,8 @@ export function toRenderItem(it: {
  * 组装 Markdown 日报。
  *
  * D4：不输出首行 `# 标题`（与文章标题重复，公众号正文不需要再写一遍）。
- * D1：`原文：长URL` → `[阅读原文 →](url)`（URL 藏 href，正文不裸奔）。
+ * D1 Option B（#308）：公众号正文**不输出 URL**（微信剥外链，链接必死）。
+ *   来源承载位走 content_source_url（公众号「阅读原文」按钮），由 pipeline 传入。
  */
 export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
   const lines: string[] = [];
@@ -45,10 +46,6 @@ export function buildDailyMarkdown(title: string, items: RenderItem[]): string {
     lines.push(`## ${i + 1}. ${it.title}`);
     lines.push('');
     lines.push(it.summary || '');
-    if (it.url) {
-      lines.push('');
-      lines.push(`[阅读原文 →](${it.url})`);
-    }
     lines.push('');
   });
   return lines.join('\n');

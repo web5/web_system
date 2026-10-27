@@ -264,17 +264,21 @@ describe('日报方案B D1-D4（V19-V23）', () => {
     expect(md.trimStart()).not.toMatch(/^#\s/);
   });
 
-  it('D1/V19: 日报正文 HTML 中不出现裸 URL 文本', () => {
+  it('D1/V19: 日报正文 HTML 不出现裸 URL、不出现 <a> 链接', () => {
     const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
     const html = markdownToHtml(md);
-    // 不出现 >https:// 形式的纯文本 URL
+    // V19: 不出现 >https:// 形式的纯文本 URL
     expect(html).not.toMatch(/>https?:\/\//);
+    // Option B: 不出现任何 <a> 标签（微信剥外链，链接必死）
+    expect(html).not.toContain('<a ');
+    expect(html).not.toContain('href=');
   });
 
-  it('D1/V20: 正文不含「原文：」短标签段', () => {
+  it('D1/V20: 正文不含「原文：」短标签段、不含「阅读原文」暗示', () => {
     const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
     const html = markdownToHtml(md);
     expect(html).not.toContain('原文：');
+    expect(html).not.toContain('阅读原文');
     expect(html).not.toMatch(/<p[^>]*>原文：/);
   });
 
@@ -294,12 +298,18 @@ describe('日报方案B D1-D4（V19-V23）', () => {
     expect(html).toMatch(/<span[^>]*#F97316[^>]*>2\.<\/span>/);
   });
 
-  it('D1: 阅读原文链接仍可点击（URL 在 href 中）', () => {
+  it('D1 Option B: 正文完全无 URL、无链接（来源走 content_source_url）', () => {
     const md = buildDailyMarkdown('AI 资讯日报 ｜ 2026-10-27', dailyItems);
     const html = markdownToHtml(md);
-    // URL 在 href 属性中（可点击），但不在正文中作为纯文本
-    expect(html).toContain('href="https://www.technologyreview.com/2026/10/22/exercise-pill/"');
-    expect(html).toContain('href="https://arxiv.org/abs/2026.10234"');
+    // 无 <a> 标签
+    expect(html).not.toContain('<a ');
+    // 无 href 属性
+    expect(html).not.toContain('href=');
+    // 无裸 URL 文本
+    expect(html).not.toMatch(/https?:\/\//);
+    // 无「阅读原文」暗示可点的措辞
+    expect(html).not.toContain('阅读原文');
+    expect(html).not.toContain('→');
   });
 
   it('端到端：日报 HTML 结构完整', () => {
