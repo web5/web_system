@@ -29,7 +29,9 @@ module.exports = {
     { name: 'web-system',         cwd: ROOT + '/servers/system-service',      script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6004 } },
     { name: 'web-todo',           cwd: ROOT + '/servers/todo-service',        script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6005 } },
     { name: 'web-mcp-gateway',    cwd: ROOT + '/servers/mcp-gateway',         script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6006 } },
-    { name: 'web-content-hub',    cwd: ROOT + '/servers/content-hub',         script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6007 } },
+    { name: 'web-content-hub',    cwd: ROOT + '/servers/content-hub',         script: 'dist/main.js', max_memory_restart: '512M',
+      // NODE_ENV 固化 production：与 prod 口径一致，压 synchronize 撞列漂移，2026-10-27 拍板（#338）
+      env: { PORT: 6007, NODE_ENV: 'production' } },
     { name: 'web-upload',         cwd: ROOT + '/servers/upload-service',      script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6008 } },
     { name: 'web-knowledge',      cwd: ROOT + '/servers/knowledge-service',   script: 'dist/main.js', max_memory_restart: '512M', env: { PORT: 6011 } },
   ],

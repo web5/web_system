@@ -255,6 +255,7 @@ module.exports = {
       name: 'content-hub',
       script: './servers/content-hub/dist/main.js',
       env: {
+        // 与 prod 口径一致，压 synchronize 撞列漂移，2026-10-27 拍板（#338）
         NODE_ENV: 'production',
         PORT: 6007,
         ...baseDbConfig,
