@@ -28,6 +28,8 @@ const NON_EXPORT_TERMS = new Set([
   'ReAct', 'OpenAI', 'MCP', 'SSE', 'JSON', 'OTel', 'TC3', 'MIT', 'Node',
   'TypeScript', 'WSA', 'Bing', 'DeepSeek', 'TokenHub', 'HTTP', 'API', 'CLI',
   'Deepseek', 'Hy3', 'Readme', 'README',
+  // env 变量名（不是导出符号）：D1 think 统一策略
+  'TOKENHUB_THINKING', 'MODEL_MAX_OUTPUT_TOKENS_JSON',
 ]);
 
 /** 收集 index.ts 的实际导出名（递归展开 `export * from './x'`） */

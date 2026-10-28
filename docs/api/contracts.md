@@ -210,7 +210,8 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 
 | 层 | 真相源 | 说明 |
 |---|---|---|
-| 参数形状（运行时） | `packages/agent-core/src/clients/base-ai.client.ts` → `ChatOptions` | `temperature` / `maxTokens` / `topP` / `thinking` |
+| 参数形状（运行时） | `packages/agent-core/src/clients/base-ai.client.ts` → `ChatOptions` | `temperature` / `maxTokens` / `topP` / `thinking`（P2 单次覆盖）/ `agentThinking`（P3 定义层）/ `omitThinking`（wire 逃生） |
+| think 统一策略 | `packages/agent-core/src/clients/thinking-policy.ts` → `resolveThinking` / `resolveMaxTokens` | D1 唯一判定链，tokenhub / hy3 / content-hub 三处收口同一函数 |
 | 参数形状（定义侧） | `packages/agent-core/src/interfaces/agent.interface.ts` → `AgentDefinition` | Agent 级默认参数，随定义下发 |
 | 持久化 | `servers/ai-service/src/agent-def/entities/agent-definition.entity.ts` + DB `agent_definitions` | 后台编辑落这里，30s 轮询下发 |
 | 模型清单 | DB 字典 `llm_models`（admin 字典管理）→ `ModelCatalogService` | **ai-agent 已字典驱动；ai-service 曾硬编码** |
@@ -221,9 +222,9 @@ grep -nE "@All\('|@Post\('|@Get\('" servers/gateway/src/proxy/proxy.controller.t
 |---|---|---|
 | **C7-a** | 契约面新增一个调参字段 → **必须同时**加 DB 列 + DTO + 下发映射，三处缺一即「填了不生效」 | 后台能填、引擎不读 |
 | **C7-b** | **`temperature` 与 `topP` 互斥**：二者只填其一，保存时校验报错 | 同时填 → 输出时好时坏，无法归因（官方口径：只改其一） |
-| **C7-c** | `thinking` 优先级：`RunInput` 单次覆盖 > Agent 定义字段 > env `TOKENHUB_THINKING` > 客户端按模型名推断 | 优先级反了会出现「关不掉 / 开不了」 |
+| **C7-c** | `thinking` 优先级（**D1 改版**）：**带工具强制 enabled（纠正一切 disabled，最高）** > `RunInput` 单次覆盖（仅非工具）> Agent 定义字段 > env `TOKENHUB_THINKING` > 形态默认（非工具→disabled）；**「客户端按模型名推断」已删除**（不再 `modelId.includes('deepseek')`）。budget 仅在最终 enabled 时携带：`min(模型 max_tokens 上限, maxTokens/2)`，强制场景恒用公式值 | 优先级反了会出现「关不掉 / 开不了」；模型名推断回来 = 三份心智复发 |
 | **C7-d** | **意图分类链路不受 Agent 定义控制**：固定 `maxTokens=256` + `thinking: disabled`，由 `CLASSIFY_MAX_TOKENS` 与代码强制 | 放开即复现「思考 token 吃光输出预算 → 100% 兜底」 |
-| **C7-e** | 新增字段**全为 null 时行为必须与旧版完全一致**（可回归对照） | 存量 agent 行为漂移 |
+| **C7-e** | 新增字段**全为 null 时行为必须与旧版完全一致**（可回归对照）。**D1 例外（拍板口径）**：`thinking=null` + 带工具 = **强制 enabled**（旧版不发/按模型推断）；`thinking=null` + 非工具 = **disabled**（旧版 hy3 不发参=默认思考）——有意变更，见 D1 §7 差异表 | 存量 agent 行为漂移 |
 | **C7-f** | Agent 定义里的 `model` 必须能在 `ClientRegistry` 解析；解析不到按服务侧策略回落（ai-agent → `hy3`） | 选了没注册的模型直接报错 |
 | **C7-g** | `src/index.ts` 对 `interfaces/agent.interface` 是**包级 `export *`** —— 契约面新增字段对所有 import 方**自动可见**（编译时即生效，无需对方改代码） | 「我加了字段对方怎么知道」的答案是：一定知道；反过来说，删字段会**直接编译失败**（比静默失效好） |
 | **C7-h** | 老前端（表单没有新字段）保存时，后端对新增参数必须走**「传了才覆盖」**而非 `?? null` | 否则一次表单保存就把后台已配参数**静默清空**（见 §9 D10） |
