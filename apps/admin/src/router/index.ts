@@ -153,6 +153,19 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'Agent 定义管理', permission: 'agents:manage' },
           },
           {
+            // 新建：详情页形态（page-spec v2，编辑弹窗已废弃），静态段优先于 :id
+            path: 'definitions/new',
+            name: 'AgentDefCreate',
+            component: () => import('@/views/Agents/AgentDefDetail.vue'),
+            meta: { title: '新建 Agent', permission: 'agents:manage' },
+          },
+          {
+            path: 'definitions/:id',
+            name: 'AgentDefDetail',
+            component: () => import('@/views/Agents/AgentDefDetail.vue'),
+            meta: { title: 'Agent 定义详情', permission: 'agents:manage' },
+          },
+          {
             path: 'skills',
             name: 'SkillList',
             component: () => import('@/views/Agents/SkillList.vue'),
