@@ -22,6 +22,17 @@
     </template>
   </a-page-header>
 
+  <!-- 内联确认条（page-spec v2 §1：丢弃确认/返回拦截不用弹窗，用内联确认条） -->
+  <div v-if="confirmBar" class="cfm-bar" role="alert">
+    <span class="cfm-text">
+      {{ confirmBar === 'back' ? '返回将丢弃未保存的修改，确认返回？' : '放弃未保存的修改？' }}
+    </span>
+    <a-button size="small" type="primary" danger @click="confirmBarOk">
+      {{ confirmBar === 'back' ? '放弃并返回' : '确认放弃' }}
+    </a-button>
+    <a-button size="small" @click="confirmBar = ''">继续编辑</a-button>
+  </div>
+
   <a-spin :spinning="loading">
     <a-empty v-if="loadError" :description="loadError" />
     <!-- 两卡：基础配置默认展开 / 高级默认折叠（page-spec v2 信息架构） -->
@@ -200,6 +211,31 @@ const thinkingForm = ref<ThinkingFormValue>('null');
 const keywordsInput = ref<string[]>([]);
 const tuningErrors = ref<Partial<Record<'temperature' | 'maxTokens' | 'topP' | 'maxSteps', string>>>({});
 const auditEntries = ref<TuningAuditEntry[]>([]);
+/** 内联确认条：'' 关闭 / 'discard' 放弃更改 / 'back' 返回拦截（v2 §1 不用弹窗） */
+const confirmBar = ref<'' | 'discard' | 'back'>('');
+
+/** 表单快照（脏态判定）：载入时记 baseline，之后对比 */
+function snapshot(): string {
+  return JSON.stringify({
+    id: form.id,
+    name: form.name,
+    description: form.description,
+    keywords: keywordsInput.value,
+    model: form.model,
+    capabilities: form.capabilities,
+    systemPrompt: form.systemPrompt,
+    memory: form.memory,
+    streaming: form.streaming,
+    maxSteps: form.maxSteps,
+    temperature: form.temperature,
+    maxTokens: form.maxTokens,
+    topP: form.topP,
+    thinking: thinkingForm.value,
+  });
+}
+let loadSnapshot = '';
+/** 是否有未保存的修改（放弃更改二次确认 / 返回拦截的判据） */
+const dirty = computed(() => snapshot() !== loadSnapshot);
 
 /** 挂工具判定（联动①②输入）：随能力配置实时变化 */
 const hasTools = computed(() =>
@@ -230,7 +266,7 @@ function unwrap(res: unknown): unknown {
   return r?.data ?? r;
 }
 
-/** 载入定义 → 表单（或新建默认态） */
+/** 载入定义 → 表单（或新建默认态）；并记录 baseline 快照（脏态判定） */
 function applyDef(def: AgentDef | null) {
   if (!def) {
     Object.assign(form, defaultAgentForm());
@@ -243,6 +279,8 @@ function applyDef(def: AgentDef | null) {
     keywordsInput.value = state.keywordsInput;
   }
   tuningErrors.value = {};
+  confirmBar.value = '';
+  loadSnapshot = snapshot();
 }
 
 async function load(): Promise<void> {
@@ -272,17 +310,37 @@ async function load(): Promise<void> {
 }
 
 function goBack(): void {
+  // 返回拦截：有未保存修改先出内联确认条（v2 状态矩阵「未保存离开拦截」）
+  if (dirty.value) {
+    confirmBar.value = 'back';
+    return;
+  }
   void router.push('/agents/definitions');
 }
 
-/** 放弃更改：还原打开时值（新建则回列表） */
+/** 放弃更改：二次确认（内联确认条），确认后还原打开时值；无修改时给可观察反馈 */
 function resetForm(): void {
+  if (!dirty.value) {
+    message.info('没有未保存的修改');
+    return;
+  }
+  confirmBar.value = 'discard';
+}
+
+/** 确认条主操作：discard=还原（新建则回列表）/ back=返回列表 */
+function confirmBarOk(): void {
+  const act = confirmBar.value;
+  confirmBar.value = '';
+  if (act === 'back') {
+    void router.push('/agents/definitions');
+    return;
+  }
   if (isCreate.value) {
-    goBack();
+    void router.push('/agents/definitions');
     return;
   }
   applyDef(currentDef.value);
-  message.info('已还原为载入时的值');
+  message.success('已还原为载入时的值');
 }
 
 /** 五控件当前值（审计与校验用） */
@@ -399,6 +457,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.cfm-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--ws-warning-100, #fef3dc);
+  border: 1px solid var(--ws-warning-500, #f5a623);
+  border-radius: var(--ws-radius-sm, 6px);
+  font-size: 13px;
+}
+.cfm-text {
+  flex: 1;
+  color: var(--ws-text-primary, #1a1a1a);
+}
 .def-cards {
   margin-top: 8px;
 }
