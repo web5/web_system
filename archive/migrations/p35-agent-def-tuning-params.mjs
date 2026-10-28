@@ -63,7 +63,7 @@ const EMIT_SQL = process.env.EMIT_SQL === '1';
 const COLUMNS = [
   { name: 'maxTokens', ddl: "ADD COLUMN `maxTokens` int DEFAULT NULL COMMENT '输出 token 上限'" },
   { name: 'topP', ddl: "ADD COLUMN `topP` float DEFAULT NULL COMMENT '核采样 top_p'" },
-  { name: 'thinking', ddl: "ADD COLUMN `thinking` json DEFAULT NULL COMMENT '思考预算覆盖'" },
+  { name: 'thinking', ddl: "ADD COLUMN `thinking` json DEFAULT NULL COMMENT '思考开关（enabled/disabled）'" },
 ];
 
 const TABLES = ['agent_definitions', 'agent_definition_versions'];

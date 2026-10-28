@@ -198,14 +198,24 @@ export class AgentDefSyncService {
   }
 
   /**
-   * 解析思考预算覆盖（C7）。
-   * 形状不对一律当「未配置」返回 null —— 脏数据不该把调用打挂，且 null 的语义就是
-   * 「沿用客户端默认」，与旧行为一致。
+   * 解析思考开关（C7 thinking 列，D1 值域收紧）。
+   *
+   * 合法形状仅 `{"type":"enabled"}` / `{"type":"disabled"}`（值域 enabled|disabled|null）。
+   * 存量值若带 `budget_tokens`，运行时读作显式 budget（向后兼容，UI 不暴露）。
+   * 非法形状按 NULL 处理并 WARN（防联调期旧形状污染）——null = 未配置，
+   * 走优先级链下层（env → 形态默认），与「未配置」语义一致。
    */
   private parseThinking(raw: unknown): ThinkingOption | null {
-    if (!raw || typeof raw !== 'object') return null;
+    if (raw == null) return null;
+    if (typeof raw !== 'object') {
+      this.logger.warn(`thinking 列形状非法（${typeof raw}），按 NULL 处理`);
+      return null;
+    }
     const t = raw as { type?: unknown; budget_tokens?: unknown };
-    if (t.type !== 'enabled' && t.type !== 'disabled') return null;
+    if (t.type !== 'enabled' && t.type !== 'disabled') {
+      this.logger.warn(`thinking.type 值域非法（${JSON.stringify(t.type)}），按 NULL 处理`);
+      return null;
+    }
     const opt: ThinkingOption = { type: t.type };
     if (typeof t.budget_tokens === 'number' && Number.isFinite(t.budget_tokens)) {
       opt.budget_tokens = t.budget_tokens;
