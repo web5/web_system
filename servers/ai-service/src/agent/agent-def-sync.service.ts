@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentRegistry, AgentDefinition } from '@kedouai/agent-core';
+import { AgentRegistry, AgentDefinition, ThinkingOption } from '@kedouai/agent-core';
 
 /**
  * Agent 定义同步器（一期，ai-service 自身）
@@ -92,12 +92,42 @@ export class AgentDefSyncService {
       model,
       tools: Array.isArray(row.tools) ? (row.tools as string[]) : [],
       maxSteps: Number(row.maxSteps) || 10,
-      temperature: typeof row.temperature === 'number' ? row.temperature : undefined,
+      // C7 生成参数：一律 null 兜底（null = 沿用客户端默认，行为与未配置一致）
+      temperature: typeof row.temperature === 'number' ? row.temperature : null,
+      maxTokens: typeof row.maxTokens === 'number' ? row.maxTokens : null,
+      topP: typeof row.topP === 'number' ? row.topP : null,
+      thinking: this.parseThinking(row.thinking),
       memory: {
         compactionThreshold: Number(memory.compactionThreshold) || 20,
         keepRecent: Number(memory.keepRecent) || 6,
         enabled: memory.enabled !== false,
       },
     };
+  }
+
+  /**
+   * 解析思考开关（C7 thinking 列，D1 值域收紧）。
+   *
+   * 合法形状仅 `{"type":"enabled"}` / `{"type":"disabled"}`（值域 enabled|disabled|null）。
+   * 存量值若带 `budget_tokens`，运行时读作显式 budget（向后兼容，UI 不暴露）。
+   * 非法形状按 NULL 处理并 WARN（防联调期旧形状污染）——null = 未配置，
+   * 走优先级链下层（env → 形态默认），与「未配置」语义一致。
+   */
+  private parseThinking(raw: unknown): ThinkingOption | null {
+    if (raw == null) return null;
+    if (typeof raw !== 'object') {
+      this.logger.warn(`thinking 列形状非法（${typeof raw}），按 NULL 处理`);
+      return null;
+    }
+    const t = raw as { type?: unknown; budget_tokens?: unknown };
+    if (t.type !== 'enabled' && t.type !== 'disabled') {
+      this.logger.warn(`thinking.type 值域非法（${JSON.stringify(t.type)}），按 NULL 处理`);
+      return null;
+    }
+    const opt: ThinkingOption = { type: t.type };
+    if (typeof t.budget_tokens === 'number' && Number.isFinite(t.budget_tokens)) {
+      opt.budget_tokens = t.budget_tokens;
+    }
+    return opt;
   }
 }

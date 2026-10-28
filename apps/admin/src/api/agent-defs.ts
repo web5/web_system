@@ -5,6 +5,9 @@
  * 接口前缀：/api/agent-defs（gateway pathRewrite → ai-service /admin/agent-defs）
  */
 import request from './request';
+import type { ThinkingOption } from '@/utils/tuning-params';
+
+export type { ThinkingOption };
 
 export interface ApiResponse<T = any> {
   code: number;
@@ -40,7 +43,14 @@ export interface AgentDef {
   capabilities: CapabilityRef[] | null;
   skills: SkillRef[] | null;
   maxSteps: number;
+  /** 采样温度：null = 不覆盖（运行时回落 0.7），禁止预填 0.7（C7-e / D10 修正） */
   temperature: number | null;
+  /** 输出上限：null = 未配置（带工具回落模型上限，非工具回落系统默认） */
+  maxTokens: number | null;
+  /** 核采样 top_p：与 temperature 互斥（C7-b） */
+  topP: number | null;
+  /** 思考开关：null = 未配置（走优先级链）；enabled/disabled 显式覆盖。budget_tokens 不入库 */
+  thinking: ThinkingOption | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
   /** 是否流式输出 */
   streaming: boolean;
@@ -71,7 +81,14 @@ export interface SaveAgentDefPayload {
   /** 能力数组（tool/mcp/skill）；不传时后端从 tools 派生 */
   capabilities?: CapabilityRef[];
   maxSteps: number;
+  /** 传了才覆盖（C7-h）；null = 显式清空为「未配置」 */
   temperature?: number | null;
+  /** 输出上限；null = 未配置 */
+  maxTokens?: number | null;
+  /** top_p；与 temperature 互斥（C7-b），同填保存被拒 */
+  topP?: number | null;
+  /** 思考开关三态；null = 未配置。budget_tokens 不进 agent 配置 */
+  thinking?: ThinkingOption | null;
   memory: { compactionThreshold: number; keepRecent: number; enabled: boolean };
   /** 是否流式输出（默认 true） */
   streaming?: boolean;

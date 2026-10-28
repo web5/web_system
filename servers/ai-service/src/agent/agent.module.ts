@@ -6,6 +6,7 @@ import { ImageGenTool } from './tools/image-gen.tool';
 import { ImageGenClient } from '../common/http/image-gen.client';
 import { AgentLogModule } from '../agent-log/agent-log.module';
 import { AgentDefSyncService } from './agent-def-sync.service';
+import { ModelCatalogService } from './model-catalog.service';
 import {
   AgentEngine,
   AgentRunner,
@@ -23,6 +24,10 @@ import {
  * 通过 useFactory 桥接进 Nest DI；ConversationMemory(DB 版) 与 ImageGenTool(生图) 为 ai-service 特有。
  * 说明：官方直连 DeepseekClient(deepseek-chat) 已下线，统一走 TokenHub 托管。
  * DeepSeek 注册键与 prod llm_models 字典及内置 Agent seed 一致：deepseek-v4-flash。
+ *
+ * ⚠️ 这里的两个 register 只是**启动兜底**（避免首次字典同步前的空窗期无模型可用）；
+ * 真正生效的清单由 `ModelCatalogService` 按「DB 字典 llm_models → TOKENHUB_MODELS → 代码内置」
+ * 轮询重建（与 ai-agent 一致）。所以**加模型改字典即可，不用改这里**。
  */
 const clientRegistryProvider: Provider = {
   provide: ClientRegistry,
@@ -81,6 +86,7 @@ const runnerProvider: Provider = {
     ImageGenClient,
     ImageGenTool,
     AgentDefSyncService,
+    ModelCatalogService,
   ],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry],
 })
@@ -92,6 +98,7 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     private readonly agentRegistry: AgentRegistry,
     private readonly imageGenTool: ImageGenTool,
     private readonly agentDefSync: AgentDefSyncService,
+    private readonly modelCatalog: ModelCatalogService,
   ) {}
 
   onModuleInit(): void {
@@ -101,9 +108,13 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
 
     // 启动 DB 定义同步：published 定义即注册表来源（DB 为唯一事实源，代码内置定义已删除）
     this.agentDefSync.start();
+
+    // 启动模型目录：清单来自 DB 字典 llm_models（与 ai-agent 同机制），60s 轮询重建注册表
+    this.modelCatalog.start();
   }
 
   onModuleDestroy(): void {
     this.agentDefSync.stop();
+    this.modelCatalog.stop();
   }
 }

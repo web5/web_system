@@ -184,3 +184,21 @@ client.chatWithToolsStream(messages, toolSchemas, { temperature: agent.temperatu
 4. 同时填 `temperature` 与 `top_p` 时，保存**被明确拒绝**并给出可读错误。
 5. 存量 agent（新字段全 null）行为与改动前**完全一致**（回归对照）。
 6. playbook 新增「参数档位」小节，与本文档 §5.4 一致。
+
+---
+
+## 8. 实施进度（2026-10-10 落盘）
+
+独立 worktree：`/Users/geekwen/workspace/web_system-llm-tuning`，分支 `feat/llm-tuning-multi-model`（基于 `origin/master` e072bea2），与主工作区的在办任务互不干扰。
+
+| 工作线 | 状态 | 交付物 |
+|---|---|---|
+| **契约先行** | ✅ 完成 | `docs/api/contracts.md` 新增 §7（C7 · Agent 生成参数与模型清单，含 C7-a…C7-h 约定 + §7.4 取值档位）；新增 `.codebuddy/rules/llm-interface/RULE.mdc` 动作门并在 `CODEBUDDY.md` §2.5.4 挂入口 —— **后续对话默认受此约定约束** |
+| **A 文档校准** | ✅ 完成 | README 的 `DeepseekClient` → `TokenHubClient`；`tokenhub.client.ts` 注释；`DEPSEEK_API_KEY` 拼写；playbook 两处过期提示；新增 `scripts/check-agent-core-exports.mjs`（README ↔ `index.ts` 导出对拍，DRIFT 才阻断）+ `npm run check:agent-core-exports` |
+| **C 调参补齐** | ✅ 后端完成 | 契约面四字段 → 引擎透传 → DB 三列（含版本快照）→ DTO + 互斥与值域校验 → 两处下发映射 → 迁移 `archive/migrations/p35-*`；README 新增「生成参数（C7）」 |
+| **B 多模型统一** | ✅ ai-service Agent 链路完成 | 新增 `servers/ai-service/src/agent/model-catalog.service.ts`（字典驱动，与 ai-agent 同源）并在 `agent.module.ts` 启动 |
+| **UI 表单（admin）** | ⏸ 待 UI 门 | 后台表单还需 `maxTokens` / `topP` / `thinking` 控件 + 修 `?? 0.7`（见评审报告 I-1 / I-2，已登记 contracts.md §9 D10） |
+
+**验证**：`packages/agent-core` 类型检查 0 错、70 个单测全绿；`servers/ai-service` 与 `servers/ai-agent` 类型检查 0 错；`EMIT_SQL=1` 校验迁移输出 6 条 DDL；对拍脚本无漂移。
+
+**评审报告**：`docs/api/reviews/contract-review-2026-10-10-c7-tuning-params.md`（阻塞 0 / 重要 2）。

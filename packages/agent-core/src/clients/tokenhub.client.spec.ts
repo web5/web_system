@@ -8,6 +8,13 @@
  * 修复：① getApiKey() 补 LLM_API_KEY 兜底；② 构造参数 apiKey 显式优先。
  */
 import { TokenHubClient } from './tokenhub.client';
+import { resolveThinking, resolveMaxTokens, lookupModelMaxTokens } from './thinking-policy';
+import { postJson } from '../lib/fetch-http';
+
+jest.mock('../lib/fetch-http', () => ({
+  postJson: jest.fn(),
+  streamSse: jest.fn(),
+}));
 
 describe('TokenHubClient.getApiKey() 密钥兜底链', () => {
   const origEnv = { ...process.env };
@@ -65,5 +72,89 @@ describe('TokenHubClient.getApiKey() 密钥兜底链', () => {
   it('无任何 key 时 isAvailable() 返回 false', () => {
     const client = new TokenHubClient('test-model');
     expect(client.isAvailable()).toBe(false);
+  });
+});
+
+const mockPost = postJson as jest.MockedFunction<typeof postJson>;
+const OK_RESP = {
+  choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+  usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+};
+const TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 't',
+    description: 'd',
+    parameters: { type: 'object' as const, properties: {}, required: [] },
+  },
+};
+
+describe('TokenHubClient.genParams → payload 与共享函数一致（T10）', () => {
+  const origEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env.TOKENHUB_API_KEY = 'test-key';
+    delete process.env.TOKENHUB_THINKING;
+    delete process.env.MODEL_MAX_OUTPUT_TOKENS_JSON;
+    mockPost.mockReset();
+    mockPost.mockResolvedValue(OK_RESP as any);
+  });
+
+  afterEach(() => {
+    process.env = { ...origEnv };
+  });
+
+  it('非工具 + agent disabled：payload.thinking 与 max_tokens 与共享函数一致', async () => {
+    const client = new TokenHubClient('hy4-preview');
+    await client.chatWithTools(
+      [{ role: 'user', content: 'hi', ts: Date.now() }],
+      [],
+      { maxTokens: 500, agentThinking: { type: 'disabled' } },
+    );
+    const payload = mockPost.mock.calls[0][1] as Record<string, any>;
+    const modelMaxTokens = lookupModelMaxTokens('hy4-preview');
+    const expected = resolveThinking({
+      hasTools: false,
+      maxTokens: 500,
+      agentThinking: { type: 'disabled' },
+      modelMaxTokens,
+      clientDefaultMaxTokens: 8000,
+    });
+    expect(payload.thinking).toEqual(expected!.thinking);
+    expect(payload.max_tokens).toBe(
+      resolveMaxTokens({ hasTools: false, maxTokens: 500, modelMaxTokens, clientDefault: 8000 }),
+    );
+  });
+
+  it('带工具 + 显式 disabled 被纠正；deepseek 系不再按模型名注入 budget:1024', async () => {
+    const client = new TokenHubClient('deepseek-v4-flash');
+    await client.chatWithTools([{ role: 'user', content: 'hi', ts: Date.now() }], [TOOL], {
+      thinking: { type: 'disabled' },
+    });
+    const payload = mockPost.mock.calls[0][1] as Record<string, any>;
+    const modelMaxTokens = lookupModelMaxTokens('deepseek-v4-flash');
+    const expected = resolveThinking({
+      hasTools: true,
+      maxTokens: undefined,
+      override: { type: 'disabled' },
+      modelMaxTokens,
+      clientDefaultMaxTokens: 8000,
+    });
+    expect(payload.thinking).toEqual(expected!.thinking);
+    expect(payload.thinking).toEqual({
+      type: 'enabled',
+      budget_tokens: Math.max(1, Math.floor(Math.min(modelMaxTokens, modelMaxTokens / 2))),
+    });
+    // 回归：旧代码对 deepseek 系硬编码 budget:1024，新策略一律公式值
+    expect((payload.thinking as any).budget_tokens).not.toBe(1024);
+    expect(payload.max_tokens).toBe(modelMaxTokens);
+  });
+
+  it('非工具未配置 deepseek：P5 disabled（旧「模型名推断 budget:1024」已删除）', async () => {
+    const client = new TokenHubClient('deepseek-v4-flash');
+    await client.chatWithTools([{ role: 'user', content: 'hi', ts: Date.now() }], [], {});
+    const payload = mockPost.mock.calls[0][1] as Record<string, any>;
+    expect(payload.thinking).toEqual({ type: 'disabled' });
+    expect(payload.max_tokens).toBe(8000); // 非工具未配 → 客户端现状默认透传
   });
 });

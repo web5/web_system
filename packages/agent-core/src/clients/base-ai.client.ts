@@ -86,15 +86,15 @@ export interface StreamToolEvent {
 /**
  * 思考开关（仅 TokenHub 系模型支持，网关透传官方 `thinking` 参数）。
  *
- * 之所以需要「按调用」覆盖：TokenHubClient 会按模型名自动给 DeepSeek 系注入
- * `budget:1024`（防长任务思考把正文挤成 0）。但对「只要一小段结构化输出」的低成本调用
- * （如意图分类 maxTokens=60），1024 的思考预算会把输出预算**全部吃光** ——
- * 实测 `finish_reason=length`、`content` 为空，调用方拿到空串只能当失败处理。
+ * D1 统一策略：开关判定与 budget 公式收口在 `thinking-policy.ts` 的 `resolveThinking`
+ * （不再按模型名推断）。优先级：带工具强制 enabled > options.thinking 显式（非工具）
+ * > agentThinking（agent 配置）> env `TOKENHUB_THINKING` > 形态默认（非工具→disabled）。
+ * 之所以要「按调用」覆盖：意图分类只要 60 token 的 JSON → 必须 disabled（显式传）；
  * 全局环境变量 `TOKENHUB_THINKING` 是给主对话用的，不能用它来修单点调用。
  */
 export interface ThinkingOption {
   type: 'enabled' | 'disabled';
-  /** type='enabled' 时的思考 token 上限 */
+  /** type='enabled' 时的思考 token 上限（缺省由共享函数按公式折算） */
   budget_tokens?: number;
 }
 
@@ -103,11 +103,22 @@ export interface ChatOptions {
   maxTokens?: number;
   topP?: number;
   /**
-   * 本次调用的思考开关（可选）。
-   * 传了则**覆盖**客户端按模型名推断的默认值；不传 = 沿用各客户端原有行为
-   * （因此对既有调用方零影响）。不支持该参数的客户端实现会忽略它。
+   * P2：本次调用的思考开关（可选，**非工具场景**最高优先）。
+   * 传了则覆盖 agent 配置与 env；带工具场景会被共享策略强制纠正为 enabled。
+   * 不支持该参数的客户端实现会忽略它。
    */
   thinking?: ThinkingOption;
+  /**
+   * P3：Agent 定义层思考配置（C7 `thinking` 列）。
+   * 与 `thinking`（P2 单次覆盖）**分层收参、不预合并**——
+   * 由 `resolveThinking` 按优先级链在客户端内闭环判定（O2-A）。
+   */
+  agentThinking?: ThinkingOption | null;
+  /**
+   * wire-format 逃生口：true 时客户端**整体不下发** `thinking` 字段
+   * （换不认该字段的服务商；不参与策略链，D1 §改造点 3）。
+   */
+  omitThinking?: boolean;
 }
 
 export interface ModelInfo {

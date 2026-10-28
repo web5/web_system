@@ -2,6 +2,10 @@
  * Agent 定义接口。
  */
 
+// type-only 引入：避免 interfaces → clients 的运行时循环依赖（base-ai.client 只依赖
+// interfaces/tool.interface，不构成环）。编译后本行会被擦除。
+import type { ThinkingOption } from '../clients/base-ai.client';
+
 export interface AgentMemoryConfig {
   compactionThreshold: number;
   keepRecent: number;
@@ -55,7 +59,21 @@ export interface AgentDefinition {
   /** 本地工具名数组（向后兼容；新配置统一走 capabilities） */
   tools: string[];
   maxSteps: number;
-  temperature?: number;
+  /**
+   * 采样温度（C7 生成参数）。
+   * 与 `topP` **互斥** —— 只填其一（官方口径：同时改二者无法归因）。null = 沿用客户端默认。
+   */
+  temperature?: number | null;
+  /** 输出 token 上限（防跑飞）。null = 沿用客户端 / 网关默认 */
+  maxTokens?: number | null;
+  /** 核采样 top_p。与 `temperature` 互斥；null = 不传 */
+  topP?: number | null;
+  /**
+   * 思考预算覆盖（按调用覆盖客户端按模型名推断的默认值）。
+   * `null` = 沿用客户端原有行为（对既有调用零影响）；不支持该参数的客户端会忽略。
+   * ⚠️ 意图分类链路**不受此字段控制**（固定 disabled，见 `docs/api/contracts.md` C7-d）。
+   */
+  thinking?: ThinkingOption | null;
   memory: AgentMemoryConfig;
   /** 三类能力统一引用（tool / mcp / skill） */
   capabilities?: CapabilityRef[];

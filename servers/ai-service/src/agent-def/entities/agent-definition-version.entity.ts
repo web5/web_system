@@ -1,6 +1,6 @@
 import { Column, Entity, PrimaryGeneratedColumn, Index } from 'typeorm';
 import { AbstractEntity } from '@web-system/shared';
-import { CapabilityRef, SkillRef } from '@kedouai/agent-core';
+import { CapabilityRef, SkillRef, ThinkingOption } from '@kedouai/agent-core';
 
 /**
  * Agent 定义历史版本表（支持回滚）
@@ -54,6 +54,18 @@ export class AgentDefinitionVersionEntity extends AbstractEntity {
 
   @Column({ type: 'float', nullable: true, comment: '采样温度' })
   temperature: number | null;
+
+  /** 输出 token 上限快照（C7 生成参数） */
+  @Column({ type: 'int', nullable: true, comment: '输出 token 上限' })
+  maxTokens: number | null;
+
+  /** 核采样 top_p 快照 */
+  @Column({ type: 'float', nullable: true, comment: '核采样 top_p' })
+  topP: number | null;
+
+  /** 思考预算覆盖快照 */
+  @Column({ type: 'json', nullable: true, comment: '思考预算覆盖' })
+  thinking: ThinkingOption | null;
 
   @Column({ type: 'json', comment: '记忆配置' })
   memory: {

@@ -33,3 +33,21 @@ describe('Compaction.extractPersistable', () => {
     expect(c.extractPersistable([])).toEqual([]);
   });
 });
+
+/**
+ * D1 R2 直调点护栏：摘要压缩显式 override enabled（防 P5=disabled 反转误伤质量）。
+ */
+describe('Compaction.compact · thinking 显式开启（D1 R2）', () => {
+  it('调用 chat 时带 thinking:{type:enabled}（不落 P5 disabled）', async () => {
+    const chat = jest.fn().mockResolvedValue('摘要内容');
+    const registry = { getOrFallback: jest.fn().mockReturnValue({ chat }) } as unknown as ClientRegistry;
+    const c = new Compaction(registry);
+
+    await c.compact(null, [{ role: 'user', content: 'hi', ts: 1 }], 'hy3');
+
+    expect(chat).toHaveBeenCalledTimes(1);
+    const options = chat.mock.calls[0][1];
+    expect(options.thinking).toEqual({ type: 'enabled' });
+    expect(options.maxTokens).toBe(800);
+  });
+});

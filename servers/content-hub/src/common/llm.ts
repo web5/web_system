@@ -12,8 +12,16 @@
 import { Logger } from '@nestjs/common';
 // 引主入口获取 TokenHubClient（子路径 @kedouai/agent-core/clients 已出，
 // 供支持 exports 的打包器用；ts-jest/CJS 下主入口等价可行）
-import { TokenHubClient } from '@kedouai/agent-core';
-import type { ChatMessage as CoreChatMessage, ChatOptions as CoreChatOptions } from '@kedouai/agent-core';
+import {
+  TokenHubClient,
+  resolveThinking,
+  lookupModelMaxTokens,
+} from '@kedouai/agent-core';
+import type {
+  ChatMessage as CoreChatMessage,
+  ChatOptions as CoreChatOptions,
+  ThinkingOption,
+} from '@kedouai/agent-core';
 
 const logger = new Logger('ContentHubLLM');
 
@@ -27,13 +35,14 @@ export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   /**
-   * 是否允许模型「先思考再回答」，默认 `disabled`。
+   * 是否允许模型「先思考再回答」，默认 `disabled`（D1 P5 形态默认）。
    *
    * 🔴 必须默认关掉，原因实测（2026-10-26，TokenHub / hy3）：
    *   `hy3` 是 reasoning 模型，`reasoning_content` 与 `content` **共用 max_tokens**。
    *   只吐 60 token 的 JSON，思考能烧 900~1500 token → finish_reason=length + content=""。
    *
-   * 换到不认该参数的服务商时，置 `LLM_THINKING=auto` 整体关掉。
+   * 映射（D1 §改造点 3）：'disabled'→显式关；'auto'→显式开（budget 走公式）；缺省→形态默认 disabled。
+   * 换到不认 `thinking` 字段的服务商时，置 env `LLM_THINKING=auto` 整体不下发该字段（wire-format 逃生）。
    */
   thinking?: 'disabled' | 'auto';
 }
@@ -58,11 +67,23 @@ function resolveModel(): string {
 }
 
 /**
+ * content-hub 自己的 thinking 取值 → 共享策略 P2 override（D1 §改造点 3）。
+ * - 'disabled' → {type:'disabled'}（显式关）
+ * - 'auto'     → {type:'enabled'}（显式开，budget 走公式）
+ * - 缺省       → undefined（落 P5 形态默认 = disabled，翻译类零漂移）
+ */
+function mapThinking(t?: 'disabled' | 'auto'): ThinkingOption | undefined {
+  if (t === 'disabled') return { type: 'disabled' };
+  if (t === 'auto') return { type: 'enabled' };
+  return undefined;
+}
+
+/**
  * 统一 chat 入口——内部走 agent-core TokenHubClient。
  *
  * 保留旧版的三个健壮性行为：
  *   1. 密钥缺失显式抛错
- *   2. thinking 默认 disabled
+ *   2. thinking 默认 disabled（零漂移）
  *   3. 空 content + finish_reason=length 显式抛错（不返回空串让上层误判）
  */
 export async function chat(
@@ -77,11 +98,11 @@ export async function chat(
   }
 
   /**
-   * thinking 控制：默认 disabled，`LLM_THINKING=auto` 或 opts.thinking==='auto' 时开。
-   * TokenHubClient 的 thinkingPayload 会优先用调用方传的 override。
+   * thinking 控制（D1 三处收口）：策略统一走 agent-core `resolveThinking`。
+   * `LLM_THINKING=auto` 是 wire-format 逃生口——整体不下发 thinking 字段
+   *（换不认该字段的服务商），不参与策略链。
    */
-  const envThinking = (process.env.LLM_THINKING ?? '').toLowerCase() === 'auto';
-  const wantsThinking = opts.thinking === 'auto' || envThinking;
+  const wireOff = (process.env.LLM_THINKING ?? '').toLowerCase() === 'auto';
 
   // TokenHubClient 构造时传 modelId + 显式 key（优先于 env），
   // 确保 resolveApiKey() 的兜底链结果被实际使用（P0 回归根因）
@@ -90,9 +111,19 @@ export async function chat(
   const coreOpts: CoreChatOptions = {
     temperature: opts.temperature ?? 0.3,
     maxTokens: opts.maxTokens ?? 500,
-    // 不开思考时显式传 disabled（TokenHubClient 只在传了 thinking 时才下发该参数）
-    ...(wantsThinking ? {} : { thinking: { type: 'disabled' as const } }),
   };
+  if (wireOff) {
+    coreOpts.omitThinking = true;
+  } else {
+    const resolved = resolveThinking({
+      hasTools: false,
+      maxTokens: opts.maxTokens ?? 500,
+      override: mapThinking(opts.thinking),
+      modelMaxTokens: lookupModelMaxTokens(resolveModel()),
+      clientDefaultMaxTokens: 500,
+    });
+    if (resolved) coreOpts.thinking = resolved.thinking;
+  }
 
   // agent-core ChatMessage 需要 ts 字段
   const coreMessages: CoreChatMessage[] = messages.map((m) => ({
