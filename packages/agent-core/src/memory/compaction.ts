@@ -50,7 +50,15 @@ export class Compaction {
           { role: 'system', content: SUMMARY_PROMPT, ts: Date.now() },
           { role: 'user', content: userPrompt, ts: Date.now() },
         ],
-        { temperature: 0.2, maxTokens: 800 },
+        {
+          temperature: 0.2,
+          maxTokens: 800,
+          // D1 R2 防误伤：摘要压缩是多事实取舍的压缩任务，旧默认（hy3 不发参=思考 /
+          // deepseek budget:1024）一直带思考；P5=disabled 会静默反转质量。
+          // 显式 override enabled 保留思考收益，budget 由公式封顶（≤ maxTokens/2），
+          // 比旧的无上限/1024 更不易挤空正文。
+          thinking: { type: 'enabled' },
+        },
       );
       return content.trim();
     } catch (error) {
