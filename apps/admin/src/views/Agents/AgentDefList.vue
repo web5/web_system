@@ -73,6 +73,9 @@
     </a-table>
   </a-card>
 
+  <!-- B3 调参审计区（仅超级管理员可见；本次会话保存的调参 diff 展示，后端落库不归 UI） -->
+  <TuningAuditList :visible="isSuperAdmin" :entries="auditEntries" />
+
   <!-- 编辑 / 新建 弹窗 -->
   <a-modal
     :open="editOpen"
@@ -123,7 +126,7 @@
         </a-col>
       </a-row>
       <a-row :gutter="16">
-        <a-col :span="8">
+        <a-col :span="12">
           <a-form-item label="模型">
             <a-select
               v-model:value="form.model"
@@ -134,20 +137,21 @@
             />
           </a-form-item>
         </a-col>
-        <a-col :span="8">
-          <a-form-item label="最大步数">
-            <a-input-number v-model:value="form.maxSteps" :min="1" :max="50" style="width: 100%" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="8">
-          <a-form-item label="Temperature">
-            <a-input-number v-model:value="form.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
-          </a-form-item>
-        </a-col>
       </a-row>
       <a-form-item label="能力配置（本地工具 / MCP 远程工具 / Skills）">
         <CapabilityConfigurator v-model:capabilities="form.capabilities" />
       </a-form-item>
+      <!-- B3 高级调参：五控件 + 三条联动 + 策略预览（仅超级管理员可见，S5 门禁） -->
+      <AgentTuningPanel
+        v-if="isSuperAdmin"
+        v-model:temperature="form.temperature"
+        v-model:max-tokens="form.maxTokens"
+        v-model:top-p="form.topP"
+        v-model:thinking="thinkingForm"
+        v-model:max-steps="form.maxSteps"
+        :has-tools="hasTools"
+        :errors="tuningErrors"
+      />
       <a-form-item label="System Prompt">
         <a-textarea
           v-model:value="form.systemPrompt"
@@ -220,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { moduleOverlayContainer } from '@/utils/mount';
 import dayjs from 'dayjs';
@@ -237,12 +241,28 @@ import {
   type SaveAgentDefPayload,
   type CapabilityRef,
 } from '@/api/agent-defs';
+import {
+  canAccessTuning,
+  defaultThinkingForm,
+  hasToolsOf,
+  thinkingToApi,
+  thinkingToForm,
+  validateTuning,
+  buildTuningAuditEntry,
+  type ThinkingFormValue,
+  type TuningAuditEntry,
+  type TuningFields,
+} from '@/utils/tuning-params';
 import { useUserStore } from '@/stores/user';
 import CapabilityConfigurator from './CapabilityConfigurator.vue';
+import AgentTuningPanel from './AgentTuningPanel.vue';
+import TuningAuditList from './TuningAuditList.vue';
 import { fetchDictItems } from '@/api/dict';
 
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('agents:manage');
+/** B3 门禁：调参入口/区块仅超级管理员可见（S5） */
+const isSuperAdmin = computed(() => canAccessTuning(userStore.roles));
 
 const loading = ref(false);
 const defs = ref<AgentDef[]>([]);
@@ -252,6 +272,17 @@ const saving = ref(false);
 const versionsOpen = ref(false);
 const versions = ref<AgentDefVersion[]>([]);
 const currentDef = ref<AgentDef | null>(null);
+/** thinking 表单三态（与 API 形状的映射在保存/载入时转换） */
+const thinkingForm = ref<ThinkingFormValue>('null');
+/** 保存校验错误（C7-b 等），字段级红字；校验失败不清已填值 */
+const tuningErrors = ref<Partial<Record<'temperature' | 'maxTokens' | 'topP' | 'maxSteps', string>>>({});
+/** 本次会话内的调参审计条目（页面审计区展示） */
+const auditEntries = ref<TuningAuditEntry[]>([]);
+
+/** 挂工具判定（联动①②输入）：随能力配置实时变化 */
+const hasTools = computed(() =>
+  hasToolsOf(form.tools, (form.capabilities || []).filter((c) => c.enabled !== false)),
+);
 
 const defaultForm = (): SaveAgentDefPayload => ({
   id: '',
@@ -261,7 +292,11 @@ const defaultForm = (): SaveAgentDefPayload => ({
   tools: [],
   capabilities: [],
   maxSteps: 10,
-  temperature: 0.7,
+  // D10 修正：空值保持「未配置」，禁止 ?? 0.7 预填
+  temperature: null,
+  maxTokens: null,
+  topP: null,
+  thinking: null,
   memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
   streaming: true,
   description: '',
@@ -336,6 +371,8 @@ function openCreate() {
   editing.value = null;
   Object.assign(form, defaultForm());
   keywordsInput.value = [];
+  thinkingForm.value = 'null';
+  tuningErrors.value = {};
   editOpen.value = true;
 }
 
@@ -354,12 +391,21 @@ function openEdit(def: AgentDef) {
     tools: [...(def.tools || [])],
     capabilities: caps,
     maxSteps: def.maxSteps,
-    temperature: def.temperature ?? 0.7,
+    // D10 修正：temperature 空值保持 null（「未配置」），不再 ?? 0.7 预填
+    temperature: def.temperature ?? null,
+    maxTokens: def.maxTokens ?? null,
+    topP: def.topP ?? null,
+    thinking: def.thinking ?? null,
     memory: { ...def.memory },
     streaming: def.streaming !== false,
     description: def.description ?? '',
     keywords: def.keywords ?? [],
   });
+  // 联动①：带工具 + 未配置 → 默认 enabled（W1 配置默认侧）
+  const ht = hasToolsOf(def.tools, caps);
+  const tf = thinkingToForm(def.thinking);
+  thinkingForm.value = tf === 'null' ? defaultThinkingForm(ht) : tf;
+  tuningErrors.value = {};
   keywordsInput.value = [...(def.keywords || [])];
   editOpen.value = true;
 }
@@ -367,6 +413,18 @@ function openEdit(def: AgentDef) {
 function closeEdit() {
   editOpen.value = false;
   editing.value = null;
+  tuningErrors.value = {};
+}
+
+/** 五控件当前值（审计与校验用） */
+function currentTuningFields(): TuningFields {
+  return {
+    temperature: form.temperature ?? null,
+    maxTokens: form.maxTokens ?? null,
+    topP: form.topP ?? null,
+    thinking: thinkingForm.value,
+    maxSteps: form.maxSteps,
+  };
 }
 
 async function save() {
@@ -374,21 +432,79 @@ async function save() {
     message.warning('Agent ID 和名称必填');
     return;
   }
+  // C7-b 互斥 + 值域预防性校验（超管可编辑调参时；真相源仍在后端）
+  if (isSuperAdmin.value) {
+    const v = validateTuning({
+      temperature: form.temperature ?? null,
+      maxTokens: form.maxTokens ?? null,
+      topP: form.topP ?? null,
+      maxSteps: form.maxSteps,
+    });
+    if (!v.ok) {
+      // 字段级红字 + 保存被拒，**不清已填值**
+      tuningErrors.value = v.errors;
+      message.error(v.errors.temperature || v.errors.topP || v.errors.maxTokens || v.errors.maxSteps || '调参校验未通过');
+      return;
+    }
+    tuningErrors.value = {};
+  }
+
+  const beforeTuning = editing.value
+    ? {
+        temperature: editing.value.temperature ?? null,
+        maxTokens: editing.value.maxTokens ?? null,
+        topP: editing.value.topP ?? null,
+        thinking: thinkingToForm(editing.value.thinking),
+        maxSteps: editing.value.maxSteps,
+      }
+    : null;
+
   saving.value = true;
   try {
     // tags 选择器是 string[] 的中间态，落 payload 前同步一次
     form.keywords = keywordsInput.value.map((k) => k.trim()).filter(Boolean);
+    // thinking 三态 → API 形状（null / {"type":"enabled"} / {"type":"disabled"}），budget 不下发
+    form.thinking = thinkingToApi(thinkingForm.value);
+    const afterTuning = currentTuningFields();
+
     if (editing.value) {
-      const res: any = await updateAgentDef(editing.value.id, form);
+      await updateAgentDef(editing.value.id, form);
+      // D4：保存成功仅 Toast，不自动跳审计屏
       message.success('已保存（如修改了 prompt，需点"发布"才生效）');
     } else {
-      const res: any = await createAgentDef(form);
+      await createAgentDef(form);
       message.success('已创建草稿，点击"发布"生效');
     }
+
+    // S6 审计条目：改前→改后字段 diff + 运行时生效值（页面审计区展示）
+    if (isSuperAdmin.value && beforeTuning) {
+      const entry = buildTuningAuditEntry({
+        agentId: form.id,
+        agentName: form.name,
+        operator: userStore.userInfo?.nickname || userStore.userInfo?.username || '超级管理员',
+        before: beforeTuning,
+        after: afterTuning,
+        hasTools: hasTools.value,
+      });
+      if (entry.diffs.length > 0) {
+        auditEntries.value = [entry, ...auditEntries.value];
+      }
+    }
+
     closeEdit();
     await reload();
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存失败');
+  } catch (e: unknown) {
+    // 后端返回的中文原文优先（C7-b 真相源在后端）
+    const err = e as { response?: { data?: { message?: string } }; message?: string };
+    const msg = err?.response?.data?.message || err?.message || '保存失败';
+    message.error(msg);
+    if (/temperature|topP|互斥/i.test(msg)) {
+      tuningErrors.value = {
+        ...tuningErrors.value,
+        temperature: 'temperature 与 topP 只能填一个（互斥校验）',
+        topP: 'temperature 与 topP 只能填一个（互斥校验）',
+      };
+    }
   } finally {
     saving.value = false;
   }
