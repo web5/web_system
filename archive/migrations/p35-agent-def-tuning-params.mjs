@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * p35：给 agent 定义补 **C7 生成参数** 列（`maxTokens` / `topP` / `thinking`）。
+ * p35：给 agent 定义补 **C7 生成参数** 列（`max_tokens` / `top_p` / `thinking`）。
  *
  * 背景（2026-10-10，`docs/api/contracts.md` §7 / §9 D8）：
  *   `ChatOptions` 早就支持 `maxTokens` / `topP` / `thinking`，但
@@ -12,8 +12,14 @@
  *   （历史快照，回滚时不丢参数）。三列**全部 nullable**：不填 = 沿用客户端默认，
  *   因此存量 agent 的行为与本迁移前完全一致（C7-e）。
  *
+ * 列名口径（2026-10-28 修订）：走 SnakeNamingStrategy snake_case（`max_tokens` / `top_p`），
+ *   与 ai-service 实体映射一致——2026-10-28 dev 实锤驼峰列名（`maxTokens` / `topP`）撞
+ *   `ER_BAD_FIELD_ERROR: Unknown column 'AgentDefinitionEntity.max_tokens'`，服务启动即回滚。
+ *   `thinking` 单词驼峰/蛇形同形，不受影响。
+ *
  * 幂等性：information_schema 守卫加列；无回填步骤（存量一律保持 NULL，不猜默认值）。
- * 可重复执行，重复跑全部跳过。
+ *   可重复执行，重复跑全部跳过。脏环境自愈：若只有驼峰旧列（早期错误版本创建），
+ *   走 `ALTER TABLE ... RENAME COLUMN` 改名为 snake_case，而不是重复 ADD。
  *
  * 用法：
  *   DB_HOST=... DB_PORT=3306 DB_USER=root DB_PASSWORD=... DB_NAME=web_system \
@@ -23,8 +29,8 @@
  *   EMIT_SQL=1   只打印 SQL（本机连不上内网库时 scp 到服务器执行）
  *
  * 回滚（无破坏需求时不必执行；注意「定义侧」与「代码侧」要一起回）：
- *   ALTER TABLE agent_definitions DROP COLUMN maxTokens, DROP COLUMN topP, DROP COLUMN thinking;
- *   ALTER TABLE agent_definition_versions DROP COLUMN maxTokens, DROP COLUMN topP, DROP COLUMN thinking;
+ *   ALTER TABLE agent_definitions DROP COLUMN max_tokens, DROP COLUMN top_p, DROP COLUMN thinking;
+ *   ALTER TABLE agent_definition_versions DROP COLUMN max_tokens, DROP COLUMN top_p, DROP COLUMN thinking;
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,10 +66,27 @@ const cfg = {
 const DRY_RUN = process.env.DRY_RUN === '1';
 const EMIT_SQL = process.env.EMIT_SQL === '1';
 
+/**
+ * name：snake_case 列名（实体映射口径，守卫与 ADD 的目标名）
+ * legacyName：早期错误版本的驼峰列名（仅脏环境 RENAME 自愈用）；与 name 同形则无自愈路径
+ * add：干净环境的 ADD COLUMN DDL
+ */
 const COLUMNS = [
-  { name: 'maxTokens', ddl: "ADD COLUMN `maxTokens` int DEFAULT NULL COMMENT '输出 token 上限'" },
-  { name: 'topP', ddl: "ADD COLUMN `topP` float DEFAULT NULL COMMENT '核采样 top_p'" },
-  { name: 'thinking', ddl: "ADD COLUMN `thinking` json DEFAULT NULL COMMENT '思考开关（enabled/disabled）'" },
+  {
+    name: 'max_tokens',
+    legacyName: 'maxTokens',
+    add: "ADD COLUMN `max_tokens` int DEFAULT NULL COMMENT '输出 token 上限'",
+  },
+  {
+    name: 'top_p',
+    legacyName: 'topP',
+    add: "ADD COLUMN `top_p` float DEFAULT NULL COMMENT '核采样 top_p'",
+  },
+  {
+    name: 'thinking',
+    legacyName: 'thinking',
+    add: "ADD COLUMN `thinking` json DEFAULT NULL COMMENT '思考开关（enabled/disabled）'",
+  },
 ];
 
 const TABLES = ['agent_definitions', 'agent_definition_versions'];
@@ -94,14 +117,27 @@ async function main() {
         kind: 'add-column',
         table,
         name: col.name,
-        sql: `ALTER TABLE \`${table}\` ${col.ddl}`,
+        legacyName: col.legacyName,
+        sql: `ALTER TABLE \`${table}\` ${col.add}`,
+        // 脏环境自愈：早期错误版本建了驼峰旧列时改名而不是重复 ADD
+        renameSql:
+          col.legacyName !== col.name
+            ? `ALTER TABLE \`${table}\` RENAME COLUMN \`${col.legacyName}\` TO \`${col.name}\``
+            : null,
       });
     }
   }
 
   if (EMIT_SQL || DRY_RUN) {
-    process.stderr.write(`-- p35 agent 定义生成参数：${steps.length} 步\n`);
-    for (const s of steps) process.stdout.write(`${s.sql};\n`);
+    process.stderr.write(
+      `-- p35 agent 定义生成参数：${steps.length} 步（列名 snake_case：max_tokens / top_p / thinking）\n`,
+    );
+    for (const s of steps) {
+      process.stdout.write(`${s.sql};\n`);
+      if (s.renameSql) {
+        process.stderr.write(`-- 脏环境（已有 \`${s.legacyName}\` 旧列）时改执行：${s.renameSql};\n`);
+      }
+    }
     if (DRY_RUN) process.stderr.write('-- DRY_RUN：以上 SQL 未执行\n');
     return;
   }
@@ -122,17 +158,22 @@ async function main() {
   let skipped = 0;
 
   for (const step of steps) {
-    if (step.kind === 'add-column') {
-      if (!(await tableExists(conn, step.table))) {
-        process.stderr.write(`跳过：表 ${step.table} 不存在\n`);
-        skipped++;
-        continue;
-      }
-      if (await columnExists(conn, step.table, step.name)) {
-        process.stderr.write(`跳过：${step.table}.${step.name} 已存在\n`);
-        skipped++;
-        continue;
-      }
+    if (!(await tableExists(conn, step.table))) {
+      process.stderr.write(`跳过：表 ${step.table} 不存在\n`);
+      skipped++;
+      continue;
+    }
+    if (await columnExists(conn, step.table, step.name)) {
+      process.stderr.write(`跳过：${step.table}.${step.name} 已存在\n`);
+      skipped++;
+      continue;
+    }
+    // 脏环境自愈：snake 列没有、驼峰旧列在 → RENAME 改名（dev 2026-10-28 的坑就是这种形态）
+    if (step.renameSql && (await columnExists(conn, step.table, step.legacyName))) {
+      await conn.query(step.renameSql);
+      process.stderr.write(`改名：${step.table}.${step.legacyName} → ${step.name}\n`);
+      executed++;
+      continue;
     }
     await conn.query(step.sql);
     process.stderr.write(`执行：${step.table} ${step.name}\n`);
