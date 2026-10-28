@@ -20,3 +20,12 @@ export type {
 } from './base-ai.client';
 export { Hy3Client } from './hy3.client';
 export { TokenHubClient } from './tokenhub.client';
+// D1 think 统一策略（三处收口的单一事实源）
+export {
+  resolveThinking,
+  resolveMaxTokens,
+  lookupModelMaxTokens,
+  MODEL_MAX_OUTPUT_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT,
+} from './thinking-policy';
+export type { ResolveThinkingInput, ResolveMaxTokensInput } from './thinking-policy';

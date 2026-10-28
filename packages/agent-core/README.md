@@ -78,6 +78,7 @@ for await (const ev of engine.run(
 | 引擎 | `AgentEngine`、`AgentRunner` |
 | 注册表 | `ToolRegistry`、`AgentRegistry`、`ClientRegistry` |
 | 客户端 | `BaseAiClient`、`Hy3Client`、`TokenHubClient` |
+| think 统一策略（D1） | `resolveThinking`、`resolveMaxTokens`、`lookupModelMaxTokens`、`MODEL_MAX_OUTPUT_TOKENS`、`DEFAULT_MODEL_MAX_OUTPUT` |
 | 记忆 | `InMemoryConversationMemory`、`Compaction` |
 | 搜索 | `SearchProviderRegistry`、`SearchProvider`、`WebSearchTool`、`BingSearchProvider` |
 | coding | `ListDirTool`、`ReadFileTool`、`GrepSearchTool`、`WriteFileTool`、`ShellExecTool` |
@@ -93,7 +94,22 @@ Agent 定义里的 `temperature` / `maxTokens` / `topP` / `thinking` 会在 `Age
 
 - `temperature` 与 `topP` **只能填其一**（同时填会让输出时好时坏且无法归因）；
 - `thinking` 为 `ThinkingOption`：`{ type: 'enabled' | 'disabled', budget_tokens?: number }`，
-  `null` = 沿用客户端按模型名推断的默认行为。**意图分类链路不受它控制**（固定 disabled）。
+  `null` = 未配置。**意图分类链路不受它控制**（固定 disabled）。
+
+### think 统一策略（D1）
+
+thinking 判定与 budget 公式收口在 `resolveThinking`（`thinking-policy.ts`，tokenhub / hy3 /
+content-hub 三处同一函数）。优先级（P1 最高）：
+
+1. **带工具强制 enabled**（纠正一切 disabled；显式 budget 不放行，一律公式值）
+2. `options.thinking` 显式（仅非工具场景）
+3. `options.agentThinking`（Agent 定义层，C7 `thinking` 列）
+4. env `TOKENHUB_THINKING`（`none|disabled`→关；`budget:<N>`→开+限；仅作用于未决调用）
+5. 形态默认（非工具→`disabled`）
+
+budget 仅在最终 enabled 时携带：`budget_tokens = min(模型 max_tokens 上限, maxTokens/2)`
+（`MODEL_MAX_OUTPUT_TOKENS` 常量表 + env `MODEL_MAX_OUTPUT_TOKENS_JSON` 覆盖，未知模型回落
+`DEFAULT_MODEL_MAX_OUTPUT=8192`）。带工具未配 maxTokens 时默认 = 模型上限。
 
 取值档位与完整契约见 `docs/api/contracts.md` §7（C7）。
 

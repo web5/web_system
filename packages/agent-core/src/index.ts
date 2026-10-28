@@ -17,6 +17,15 @@ export { LOAD_SKILL_TOOL_NAME } from './core/agent-engine';
 export * from './clients/base-ai.client';
 export { Hy3Client } from './clients/hy3.client';
 export { TokenHubClient } from './clients/tokenhub.client';
+// D1 think 统一策略（三处收口的单一事实源）
+export {
+  resolveThinking,
+  resolveMaxTokens,
+  lookupModelMaxTokens,
+  MODEL_MAX_OUTPUT_TOKENS,
+  DEFAULT_MODEL_MAX_OUTPUT,
+} from './clients/thinking-policy';
+export type { ResolveThinkingInput, ResolveMaxTokensInput } from './clients/thinking-policy';
 
 // 注册表
 export { ToolRegistry } from './registry/tool.registry';
