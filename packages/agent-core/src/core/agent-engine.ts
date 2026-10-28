@@ -185,7 +185,10 @@ export class AgentEngine {
     if (agent.temperature != null) chatOptions.temperature = agent.temperature;
     if (agent.maxTokens != null) chatOptions.maxTokens = agent.maxTokens;
     if (agent.topP != null) chatOptions.topP = agent.topP;
-    if (agent.thinking != null) chatOptions.thinking = agent.thinking;
+    // D1 分层透传（O2-A，不预合并）：P3 agent 配置 → agentThinking；P2 单次覆盖 → thinking。
+    // 判定在客户端 resolveThinking 内闭环（带工具强制 enabled 等），引擎不参与合并。
+    if (agent.thinking != null) chatOptions.agentThinking = agent.thinking;
+    if (input.thinking != null) chatOptions.thinking = input.thinking;
 
     for (let step = 0; step < agent.maxSteps; step++) {
       const stepStartedAt = Date.now();
