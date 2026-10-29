@@ -33,11 +33,19 @@ function isPublicAuthRequest(config?: InternalAxiosRequestConfig): boolean {
  * 「二维码已过期 / 刷新二维码」，用户点刷新也没用（token 还在，次次 401）。
  *
  * 这类接口本身就是匿名可用的，带上坏凭据只会把「能自愈的公开链路」一起拖死。
+ *
+ * 2026-10-29 追加（fix/auth-stale-token-blocks-login）：登录/注册/刷新同样属于
+ * 「用凭据换凭据」，且浏览器里可能残留**上一会话已登出**的旧 token。一旦带上，
+ * 网关黑名单 Guard 会在转发前拦成 401「令牌已失效（已登出）」，请求根本到不了
+ * auth-service → 表现为「密码正确却永远登不进去」。因此一并纳入本白名单。
  */
 const NO_AUTH_HEADER_PATHS = [
   '/auth/qrcode/create',
   '/auth/qrcode/check',
   '/auth/qrcode/oauth-url',
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
 ];
 
 function skipAuthHeader(config?: InternalAxiosRequestConfig): boolean {
@@ -200,7 +208,9 @@ request.interceptors.response.use(
 
       if (status === 401) {
         // 公开鉴权接口（登录/注册/刷新）→ 凭据错误，不弹"登录已过期"，不跳转
+        // 但要清掉残留凭据：否则下一次登录仍会带上旧 token（见 NO_AUTH_HEADER_PATHS 注释）
         if (isPublicAuthRequest(config)) {
+          clearStoredAuth();
           return Promise.reject(error);
         }
 
