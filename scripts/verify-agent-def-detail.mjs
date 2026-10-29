@@ -650,28 +650,28 @@ const leakWords = ['落地契约', 'AnswerBlocks', 'debug-slot-note'].filter((k)
 rec('25d AppDefDetail.vue 无技术文案泄漏（debug-slot 瘦身）',
   leakWords.join('|') || '(无)', '(无)', leakWords.length === 0);
 
-// —— 26 label 对齐（2026-10-29 拍板：a-form-item 放回 vertical 上下文）——
-// 症状：五个 a-form-item 游离在 form 上下文外 → antd 回落 horizontal 且 label 列宽
-// 自适应文字宽 → 四个数值输入左缘参差（真实页面实测 349/398/303/397，最大差 95px）。
+// —— 26 label 对齐（2026-10-29 拍板修正：按 page-spec §3.2 定稿口径 —— label 左置固定 84px）——
+// 症状：五个 a-form-item 游离在 form 上下文外 → antd label 列宽自适应文字宽 →
+// 四个数值输入左缘参差（真实页面实测 349/398/303/397，最大差 95px）。
+// 口径来源：原型 :215-216/:221（.flb{flex:0 0 84px}）+ page-spec §3.2:120。
+// ⚠️ layout="vertical" 是被原型明确否掉的上一版（本次实现曾误用，已纠正，禁回潮）。
 // 本脚本是 file:// 原型机检（与本地服务解耦，见 docs/api/contracts.md「无头验证」），
-// 量不到真实 app 几何 → 这里断言**成因结构**；几何证据（改前/改后 left 坐标、
-// label 底 vs 控件顶）在 docs/ui/reviews/agent-tuning-label-vertical-2026-10-29.md。
-// 26a（静态）：五个 a-form-item 必须整体包在 <a-form layout="vertical"> 里——
-//    开标签在首个 a-form-item 之前、闭标签在最后一个 a-form-item 之后，缺一即 FAIL。
-const formOpen = panelSrc.indexOf('<a-form layout="vertical"');
-const formClose = panelSrc.lastIndexOf('</a-form>');
-const firstItemOpen = panelSrc.indexOf('<a-form-item');
-const lastItemClose = panelSrc.lastIndexOf('</a-form-item>');
-const wrapped = formOpen >= 0 && formOpen < firstItemOpen && formClose > lastItemClose;
-rec('26a 调参面板 a-form-item 全部处于 vertical form 上下文',
-  wrapped ? 'vertical 包裹全部' : `formOpen=${formOpen} firstItem=${firstItemOpen} formClose=${formClose} lastItem=${lastItemClose}`,
-  'vertical 包裹全部', wrapped);
-// 26b（静态）：对齐必须来自 vertical 上下文本身，禁走「固定 label 宽度」补丁
-//    （原型 .flb{flex:0 0 84px} 的实现端等价物：labelCol / wrapperCol / label-width）。
-const patchHits = ['label-col', 'labelCol', 'wrapper-col', 'wrapperCol', 'label-width', 'labelWidth']
-  .filter((k) => panelSrc.includes(k));
-rec('26b 未用固定 label 宽度补丁（对齐来自 vertical 上下文）',
-  patchHits.join('|') || '(无)', '(无)', patchHits.length === 0);
+// 量不到真实 app 几何 → 断言**成因结构**；几何证据（两视口 left/width/换行实测）
+// 在 docs/ui/reviews/agent-tuning-label-align-2026-10-29.md。
+// 26a（静态）：label 列必须固定 84px，且 layout="vertical" 残留必须为 0
+//    （先剥掉 HTML 注释再数——注释里提及「曾试过 vertical」是文档，不是代码回潮）
+const panelCode = panelSrc.replace(/<!--[\s\S]*?-->/g, '');
+const labelCol84 = /label-col="[^"]*84px/.test(panelCode);
+const verticalLeftover = (panelCode.match(/layout="vertical"/g) || []).length;
+rec('26a label 左置固定 84px（§3.2）且 layout="vertical" 残留 0',
+  `label-col 84px=${labelCol84 ? '有' : '无'} / vertical 残留 ${verticalLeftover}`,
+  '有 / 残留 0', labelCol84 && verticalLeftover === 0);
+// 26b（静态）：label-col 不得出现 84px 以外的固定宽度（防改成 120px 之类再破坏规格）
+const badLabelWidths = [...panelSrc.matchAll(/label-col="[^"]*?width:\s*'(\d+)px'/g)]
+  .map((m) => m[1]).filter((w) => w !== '84');
+rec('26b label-col 固定宽度只允许 84px',
+  badLabelWidths.join('|') || '(无非 84px 固定值)', '(无非 84px 固定值)',
+  badLabelWidths.length === 0);
 
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
