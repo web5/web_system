@@ -8,6 +8,7 @@ import {
   Param,
   Req,
   UseGuards,
+  Header,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -66,7 +67,16 @@ export class PermissionController {
     return this.svc.deleteRole(code);
   }
 
+  /**
+   * 🔴 必须 no-store：权限是**随登录账号变化**的敏感数据，绝不能被浏览器缓存。
+   *
+   * 事故（issue #478）：express 默认给响应加 ETag，浏览器二次请求带
+   * If-None-Match → 上游回 304、响应体为空。客户端拿到空权限 → 超管登录成功
+   * 却整站 403，且 403 页显示「当前账号没有后台访问权限」，把缓存问题伪装成
+   * 权限问题。换账号登录时尤其致命（旧的缓存权限被沿用）。
+   */
   @Get('permissions/my')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: '当前登录用户权限码数组' })
   async myPermissions(@Req() req: Request) {
     const user = (req as any).user;
