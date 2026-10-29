@@ -23,13 +23,17 @@
          label 左置、**固定 84px**、控件左缘对齐（原型 :215-216 / :221 .flb{flex:0 0 84px}）。
          曾试过 layout="vertical"，属**被否掉的上一版**（原型注释明写「上一版 label 上置…
          每字段 3 行、一堆小字」），已回退，勿再改回。
-         :model="{}" 仅为补齐 form 上下文；字段值仍走 defineModel 直连父组件，不经 model。 -->
+         :model="{}" 仅为补齐 form 上下文；字段值仍走 defineModel 直连父组件，不经 model。
+         wrapper-col flex:'1 1 0'：antd 行是 flex-wrap:wrap，control 用 basis:auto 时基线尺寸取
+         内容 max-content——thinking 行 extra 文案实测 535px > 可用 485px，整块 control 被
+         折到下一行、左缘退回行首（2026-10-29 dev 实测 253 vs 其余 337）。basis 归 0 后
+         control 恒占 label 之外的全部剩余宽，五行左缘恒等。 -->
     <a-form
       layout="horizontal"
       label-align="left"
       :colon="false"
       :label-col="{ style: { width: '84px' } }"
-      :wrapper-col="{ style: { flex: '1 1 auto', minWidth: 0 } }"
+      :wrapper-col="{ style: { flex: '1 1 0', minWidth: 0 } }"
       :model="{}"
     >
       <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填） -->
@@ -229,6 +233,16 @@ const preview = computed(() =>
 }
 /* -8px 上边距已实测（2026-10-29，vertical 上下文）：与上方 form-item 的视觉间距
    = 24（form-item margin-bottom）− 8 = 16px，与改前完全一致 → 维持不变，不照搬调整 */
+/* thinking 三按钮组：label 左置 84px 后 control 列可用宽收窄（1440 下 485 / 1280 下 405），
+   radio 组自身 max-content 292px 虽放得下，但更窄容器（侧栏展开 / 更小视口）可能放不下——
+   antd .ant-form-item-row 默认 flex-wrap:wrap，一旦放不下整块 control 会折到行首。
+   组内允许换行（gap 统一间隙，不靠 margin 补）后，最小占宽降到单按钮 ≈124px，
+   任何宽度下都不会再把 control 整块挤下去；按钮文字不得压小（禁缩字号硬塞一行）。 */
+.b3-tuning :deep(.ant-radio-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .b3-budget-preview {
   margin: -8px 0 16px;
   padding: 8px 12px;
