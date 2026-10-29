@@ -9,7 +9,7 @@
       <span class="b3-tuning-title">高级调参</span>
       <a-tag v-if="hasTools" color="blue">带工具 · 强制 enabled 生效</a-tag>
       <a-tag v-else>非工具</a-tag>
-      <a-tag class="b3-role-tag">仅超级管理员可编辑</a-tag>
+      <a-tag class="b3-role-tag">仅管理员及以上可编辑</a-tag>
     </div>
 
     <a-row :gutter="16">

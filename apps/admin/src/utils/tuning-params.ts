@@ -174,11 +174,16 @@ export function validateTuning(p: {
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
-// ===== 角色门禁（S5 仅超管） =====
+// ===== 角色门禁（S5） =====
 
-/** 调参入口/区块仅超级管理员可见（原型 data-need-role="superadmin" 口径） */
+/**
+ * 调参入口/区块管理员及以上可见（原型 data-need-role="admin" 口径）。
+ * 用户 2026-10-29 拍板放开 admin（原仅 super_admin）；editor/viewer 不可见。
+ * 后端本就允许 admin（agent-def.controller 仅 agents:view/manage，
+ * ROLE_PERMISSIONS.admin 含 agents:manage），此处只是 UI 层门禁对齐。
+ */
 export function canAccessTuning(roles: string[] | undefined | null): boolean {
-  return Array.isArray(roles) && roles.includes('super_admin');
+  return Array.isArray(roles) && (roles.includes('super_admin') || roles.includes('admin'));
 }
 
 // ===== 生效策略预览（轻量版 P1–P5） =====

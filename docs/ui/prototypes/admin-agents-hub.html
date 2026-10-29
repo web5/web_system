@@ -570,10 +570,12 @@
   .state-box b{display:block;color:var(--ws-text-primary);font-size:14px;margin-bottom:6px;}
   .state-box .skel{height:12px;background:var(--ws-bg-subtle);border-radius:var(--ws-radius-sm);margin:10px auto;max-width:320px;}
 
-  /* 角色可见性（≤2 角色纯 CSS，机检可见） */
-  html[data-demo-role="admin"] [data-need-role="superadmin"]{display:none;}
+  /* 角色可见性（纯 CSS，机检可见）——新口径：admin 及以上可见调参区，editor/viewer 不可见 */
+  html[data-demo-role="editor"] [data-need-role="admin"],
+  html[data-demo-role="viewer"] [data-need-role="admin"]{display:none;}
   .role-fallback{display:none;padding:16px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
-  html[data-demo-role="admin"] .role-fallback{display:block;}
+  html[data-demo-role="editor"] .role-fallback,
+  html[data-demo-role="viewer"] .role-fallback{display:block;}
 
   /* 标注层（data-anno 待确认项） */
   [data-demo-anno="on"] [data-anno]{outline:1px dashed var(--ws-brand-500);position:relative;}
@@ -3253,7 +3255,7 @@
         <div class="only-loading"><div class="state-box"><b>正在加载 Agent 定义与生效策略…</b><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
         <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" data-dr="empty-cta">开始配置</button></div></div>
         <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" data-dr="error-cta">返回修改</button></div></div>
-        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅超级管理员可见</b>普通管理员可查看基础配置；如需调参权限请联系超级管理员。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
+        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅管理员及以上可见</b>编辑者/查看者可查看基础配置；如需调参权限请联系管理员开通。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
         <div class="only-misconfig"><div class="warn-tool" style="margin:0 0 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>误配态演示：thinking=disabled，但该 Agent 挂载工具</b><div class="wd">运行时会被强制纠正为 enabled；表单下方红框为联动一警示。</div></div></div></div>
         <div class="only-normal">
         <div class="dt-head">
@@ -3329,12 +3331,12 @@
         </div>
 
         <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」· 仅超管可见） -->
-        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="superadmin">
+        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="admin">
           <div class="card-hd" data-toggle="card-adv" role="button" tabindex="0" aria-expanded="false">
             <span class="t">高级</span><span class="d">五控件调参 → 直接对话 → 用例批量验证</span>
             <span class="sp"></span>
             <span class="tag gray" id="adv-summary">temp 0.7 · max 4096</span>
-            <span class="tag">仅超级管理员可编辑</span>
+            <span class="tag">仅管理员及以上可编辑</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="adv-body-wrap">
@@ -3541,11 +3543,11 @@
         </div>
 
         <!-- 卡片三：调参审计（TuningAuditList.vue 口径 · 仅超管可见 · 保存成功追加条目） -->
-        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="superadmin" data-anno="D4">
+        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="admin" data-anno="D4">
           <div class="card-hd" data-toggle="card-audit" role="button" tabindex="0" aria-expanded="false">
             <span class="t">调参审计</span><span class="d">改前 → 改后字段级 diff · 审计不可删改</span>
             <span class="sp"></span>
-            <span class="tag gray">仅超级管理员可见</span>
+            <span class="tag gray">仅管理员及以上可见</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="audit-body">
@@ -3553,7 +3555,7 @@
           </div>
         </div>
 
-        <div class="role-fallback" data-dr="role-fallback">调参与审计仅超级管理员可见（切到超管角色可编辑）</div>
+        <div class="role-fallback" data-dr="role-fallback">调参与审计仅管理员及以上可见（切到管理员及以上角色可编辑）</div>
 
         <!-- 原型演示控件：明确与产品功能分离（早前挂在调试台工具条上，容易被当成产品能力） -->
         <div class="note demo">
