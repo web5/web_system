@@ -561,6 +561,74 @@ await wait(280);
 rec('10g-modal2 弹窗可关闭', await page.$eval('#zm-triggerMask', (e) => e.classList.contains('on')), false);
 rec('10g-err 自媒体运营交互后仍无 JS 报错', jsErrors.length, 0);
 
+// 10h 面包屑契约（2026-10-29）：把「模块 crumb 写」这条**隐式依赖**钉成显式契约
+//  —— 实测结论（详见 docs/ui/reviews/proto-crumb-contract-2026-10-29.md）：
+//    · 稿自己的 #crumb 在 <header class="topbar">（admin-media-ops.html:439），而抽取区
+//      <div class="content"> 从 447 行起 → **该元素从不进 hub**；但抽取逻辑把全部 <script>
+//      整段照搬，故 go()（:1423）/ accEdit()（:1485）对 #crumb 的写落在 **hub 壳**元素上。
+//    · 主屏：hub 的 paint() 最后写（zmSync → hash → showHub → 重绘），模块写被覆盖，不可见；
+//    · 子页 4 个：hub 的 CRUMBS **没有这 4 个键**，paint() 会写空 → 模块的写是**唯一来源**。
+//  —— 所以这不是「可以随手删掉的冗余」：谁把模块的 crumb 写隔离掉、或改了 hub 壳 #crumb 的
+//      id/class（go()/accEdit() 均无 null 守卫 → 抛错会让整个自媒体模块切屏失效），
+//      4 个子页的面包屑会**静默变空**。下面两条就是为此设的哨兵。
+/* ⚠️ 必须容 null：万一 hub 壳的 #crumb 被改名/移除，这里要**报 FAIL**，
+   而不是抛异常把整个机检跑崩（崩了就看不到后面几十条断言的结果了）。 */
+const crumbText = () => page.$eval('#crumb', (e) => e.textContent.trim().replace(/\s+/g, ' '))
+  .catch(() => null);
+const crumbLevel = async () => {
+  const t = await crumbText();
+  return t ? t.split('/').map((s) => s.trim()).filter(Boolean).length : 0;
+};
+const gotoScreen = async (s) => {
+  await page.$eval(`.ad-item[data-screen="${s}"]`, (e) => e.click());
+  await wait(420);
+};
+
+/* 主屏集合取自菜单（与 proto-shell.mjs 的 SHELL_NAV 单源对齐，不在此硬编码） */
+const contentScreens = (await page.$$eval('.ad-item[data-screen^="content-"]',
+  (ns) => ns.map((n) => n.dataset.screen))).sort();
+const mainDetail = [];
+const emptyCrumb = [];
+for (const s of contentScreens) {
+  await gotoScreen(s);
+  const t = await crumbText();
+  const lv = await crumbLevel();
+  mainDetail.push(`${s.replace('content-', '')}:${lv}`);
+  if (!t) emptyCrumb.push(s);
+}
+/* 子页：hub 的 CRUMBS 无键 → 只有模块的 crumb 写在供内容 */
+const SUB_PAGES = [
+  { key: 'source-edit', parent: 'content-sources' },
+  { key: 'item-detail', parent: 'content-items' },
+  { key: 'pipeline-edit', parent: 'content-pipelines' },
+  { key: 'account-edit', parent: 'content-accounts' },
+];
+const subDetail = [];
+const levelBad = [];
+for (const { key, parent } of SUB_PAGES) {
+  await gotoScreen(parent);
+  const pLv = await crumbLevel();
+  const btn = await page.$(`#zm-screen-${MOUNT_MAP[parent]} [onclick*="go('${key}')"]`);
+  if (!btn) { subDetail.push(`${key}:入口缺失`); emptyCrumb.push(`${key}(入口缺失)`); continue; }
+  await btn.click();
+  await wait(420);
+  const t = await crumbText();
+  const lv = await crumbLevel();
+  subDetail.push(`${key}:${lv}/${pLv}`);
+  if (!t) emptyCrumb.push(key);
+  /* ⚠️ 必须是 **严格大于**（子页 = 父屏 + 1 级），不能写成 ≥：
+       变异测试实测 —— 把模块的 crumb 写屏蔽掉后，子页面包屑**不会变空**，而是
+       停留在父屏那两级（进主屏时 paint() 写的，进子页时没人覆盖）→ 变成 2/2。
+       用 ≥ 的话 2≥2 仍然通过，这条断言就成了摆设。 */
+  if (lv <= pLv) levelBad.push(`${key}:${lv}≤${pLv}`);
+}
+rec('10h-1 面包屑非空：6 主屏 + 4 子页（子页无 hub CRUMBS 键 → 全靠模块 crumb 写）',
+  `空=[${emptyCrumb.join(',')}] 主屏[${mainDetail.join(' ')}] 子页(层级/父屏)[${subDetail.join(' ')}]`,
+  '空=[]', emptyCrumb.length === 0);
+rec('10h-2 子页面包屑层级 = 父主屏 + 1 级（少一级说明模块的 crumb 写没生效）',
+  `越级=[${levelBad.join(',')}] 子页(层级/父屏)[${subDetail.join(' ')}]`,
+  '越级=[] （每个子页层级均 = 父屏+1）', levelBad.length === 0);
+
 
 // 10f 页面头部说明必须写明「注册表机制」，否则新人还是按老办法手工整合
 rec('10f 页头写明整合机制（注册表 + 重跑 build）',
