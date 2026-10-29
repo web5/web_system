@@ -250,3 +250,72 @@ thinking=enabled 态「上方 form-item 底 → 预览框顶」：
 - 26c/26d 仍是结构断言（file:// 机检量不到 app 几何）；真实几何靠 `/tmp/measure-label4.mjs`（数 control 左缘，含 radio 行）复跑——**后续量测请用它，不要再用只数 input 的旧脚本**。
 - thinking 行 extra 文案 max-content 535px 是折行的触发源；若后续按 §3.2:125 改成业务词短文案，max-content 会缩短（basis 0 仍然是对的，不必回退）。
 - 未触碰：D4 七天留存、`canAccessTuning` 门禁、策略预览整宽、hub/原型、主工作区。
+
+## 九、label 右对齐（用户 2026-10-29 追加拍板）
+
+用户在左对齐版本上追加拍板：**label 文字右对齐**（84px 定宽不变）。改动仅 `AgentTuningPanel.vue` 一处 + 机检两条。
+
+### 9.1 改动
+
+1. `label-align="left"` → `label-align="right"`（prop 落位，无 CSS hack 替代 prop）。
+2. **判据盲区实测**（这是本次的核心发现）：只有 prop 是不够的。antd 把 prop 落成
+   `.ant-form-item-label` 的 `text-align: end`（管列内摆放），但 `<label>` 本身是
+   **inline-flex 容器**、`justify-content` 默认 normal（≈flex-start）→ 容器内文字仍贴左。
+   只改 prop 时五个 label 文本右缘实测 `335/325/319/319/323`（不全等），且
+   「Temperature」文本 82px > 内容盒、溢出到距控件仅 **2px**（拍板要求 ≥8px）。
+   需三条配套（均已落 scoped CSS，见 9.2）：
+   - ① label 容器 `justify-content: flex-end`（flex 容器内文字对齐由它管）；
+   - ② 清掉 `:colon="false"` 下**仍占位**的 `::after` 冒号位——antd 对无冒号 label 的
+     处理是 `content: " "` + `margin: 0 8px 0 2px`（实测 `getComputedStyle(lab,'::after')`），
+     字符不渲染但 10px margin 仍在 flex 布局里占位，右对齐时把文字顶离列右缘
+     （实测文字右缘 327 vs 列右缘 337）；
+   - ③ 列距 `column-gap: 12px` 落在 `.ant-form-item-row` 上——原型 `.fitem{gap:12px}`
+     的口径。**不占用 84px 定宽**（若用 padding-right 挤在 84px 内，「Temperature」82px
+     文本反而溢出内盒贴向控件）。
+
+### 9.2 几何实测（1440 / 1280 双视口，`/tmp/measure-label5.mjs`，vite + dev 后端代理）
+
+| 行 | label 文本右缘 | control 左缘 | 间距 | 行数 | 逐行右缘 |
+|---|---|---|---|---|---|
+| Temperature | 337 | 349 | 12 | 1 | 337 |
+| 输出上限 maxTokens | 337 | 349 | 12 | 2 | **337 / 337**（两行均右对齐，无首行右次行左） |
+| Top P | 337 | 349 | 12 | 1 | 337 |
+| thinking | 337 | 349 | 12 | 1 | 337 |
+| 最大步数 max_steps | 337 | 349 | 12 | 2 | **337 / 337** |
+
+- 五行文本右缘 `337×5` 全等、五行 control 左缘 `349×5` 全等，两视口**逐像素一致**（label 列定宽，与视口无关）。
+- 间距 12px ≥ 拍板的 8px（12px 即原型 `.fitem{gap:12px}`，非新发明口径）。
+- `scrollWidth === innerWidth`（1440/1280 均无横向滚动）；radio 单行（高 32）、`radioRightVsCtrlRight=0`、`radioBottomVsExtraTop=0`（不与 extra 重叠）。
+- 截图：`/tmp/right-align2-1440-panel.png`、`/tmp/right-align2-1280-panel.png`。
+
+### 9.3 机检（26e + 26f）
+
+- **26e**：源码 `label-align` 必须为 `"right"` 且不得残留 `"left"`（注释剥离后计数）。
+- **26f**：右对齐三条配套（label 规则含 `justify-content: flex-end`、`::after` 规则含
+  `content: none` + `margin: 0`、`.ant-form-item-row` 规则含 `column-gap: 12px`）。
+- **为什么两条而非一条**：26e 对 9.1 的盲区是瞎的——prop 为 right 时文本右缘仍可参差。
+  变异实测（同一份代码）：
+
+| 变异体 | 注入 | 结果 |
+|---|---|---|
+| ① `label-align="right"` → `"left"` | python 替换（仅模板 prop） | **仅 26e FAIL**（❌ 失败 1 项），26f 仍绿 |
+| ② 删掉 `justify-content: flex-end` | python 删行 | **仅 26f FAIL**（❌ 失败 1 项），26e 仍绿——证明 26e 单独存在是瞎的 |
+
+还原后 `verify-agent-def-detail.mjs` **151 项全过**（149 + 26e + 26f）。
+
+### 9.4 验证门（本次）
+
+| 门 | 结果 |
+|---|---|
+| `vue-tsc --noEmit` | exit 0 |
+| `eslint src/views/Agents/AgentTuningPanel.vue` | exit 0 |
+| `npm test`（apps/admin） | 10 suites / 124 tests 全过 |
+| `verify-agent-def-detail.mjs` | **151 项全过**（含 26e/26f） |
+| `build-agents-hub.mjs` 重生成 | hub diff = 0（本次不动原型/hub） |
+| `verify-agents-hub.mjs` | 243/246——仅既有 8b/8e/9r 菜单漂移（master 上的「封面素材」菜单项增量，与本改动无关） |
+
+### 9.5 遗留 / 风险
+
+- page-spec §2.1「label 对齐」行原写 `label-align="left"`，本轮已同步为右对齐拍板口径（单独 commit，先于 UI commit 落库作 Proto 凭证）。
+- 产品同学出《表单控件与开关规范》时，本行即基线：**label 右对齐 + 84px 定宽 + 列距 12px（原型 `.fitem{gap:12px}`）**；antd 无冒号 label 的 `::after` 占位（10px）是全局坑，规范落地其他表单时同样要清。
+- 未触碰：D4 七天留存、`canAccessTuning` 门禁、策略预览整宽、thinking 折行修复（§八）、hub/原型、主工作区。

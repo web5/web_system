@@ -691,6 +691,31 @@ const radioRule = (panelCode.match(/\.ant-radio-group\)\s*\{[\s\S]*?\}/) || ['']
 rec('26d radio 组内部可换行（flex-wrap: wrap）',
   radioRule ? (/flex-wrap:\s*wrap/.test(radioRule) ? 'flex-wrap: wrap ✓' : '缺 flex-wrap: wrap') : '未找到 .ant-radio-group 规则',
   'flex-wrap: wrap ✓', /flex-wrap:\s*wrap/.test(radioRule) && radioRule !== '');
+// —— 26e/26f：label 右对齐（2026-10-29 用户追加拍板：label 文字右对齐，84px 定宽不变）——
+// ⚠️ 判据盲区实测：只有 label-align="right" 这个 prop 是**不够的**——antd 把 prop 落成
+// .ant-form-item-label 的 text-align:end（只管列内摆放），而 <label> 是 inline-flex 容器、
+// justify 默认 normal（≈flex-start），容器内文字仍贴左 → 五个文本右缘实测
+// 335/325/319/319/323 参差、「Temperature」距控件仅 2px（< 拍板要求的 8px）。
+// 要右缘全等还须三条配套：① label 容器 justify-content: flex-end；② 清掉 ：colon="false"
+// 下仍残留占位的 ::after 冒号位（content:" " + margin: 0 8px 0 2px，占 10px——antd 空冒号
+// 不渲染字符但 margin 仍在）；③ 列距 column-gap: 12px（原型 .fitem{gap:12px} 口径，
+// 放列外不占 84px 定宽）。26e 锁 prop、26f 锁配套，两者互补、缺一即盲。
+// 26e（静态）：label-align 必须是 right，且不得残留 left
+const labelAlignRight = /label-align="right"/.test(panelCode);
+const labelAlignLeft = (panelCode.match(/label-align="left"/g) || []).length;
+rec('26e label 右对齐（label-align="right"，2026-10-29 追加拍板）',
+  `right=${labelAlignRight ? '有' : '无'} / left 残留 ${labelAlignLeft}`,
+  'right=有 / left 残留 0', labelAlignRight && labelAlignLeft === 0);
+// 26f（静态）：右对齐的三条配套规则（缺任何一条，五个 label 文本右缘就不全等）
+const labelRule = (panelCode.match(/\.ant-form-item-label > label\)\s*\{[\s\S]*?\}/) || [''])[0];
+const labelAfterRule = (panelCode.match(/\.ant-form-item-label > label\)::after\s*\{[\s\S]*?\}/) || [''])[0];
+const rowGapRule = (panelCode.match(/\.ant-form-item-row\)\s*\{[\s\S]*?\}/) || [''])[0];
+const labelFlexEnd = /justify-content:\s*flex-end/.test(labelRule);
+const afterCleared = /content:\s*none/.test(labelAfterRule) && /margin:\s*0/.test(labelAfterRule);
+const rowGap12 = /column-gap:\s*12px/.test(rowGapRule);
+rec('26f 右对齐配套（label flex-end / ::after 清除 / 列距 12px）',
+  `flex-end=${labelFlexEnd ? '有' : '无'} / after清除=${afterCleared ? '有' : '无'} / 列距12px=${rowGap12 ? '有' : '无'}`,
+  'flex-end=有 / after清除=有 / 列距12px=有', labelFlexEnd && afterCleared && rowGap12);
 
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
