@@ -49,7 +49,7 @@
       联动二 maxTokens 占位随工具语义切换（空=模型上限 / 空=系统默认）；
       联动三 thinking=enabled → budget 只读预览实时重算。
     ⑭ 新增「生效策略预览」：P1–P5 优先级链命中档实时标注 + thinking / budget_tokens / max_tokens 三值输出。
-    ⑮ 仅超管可见：调参卡与审计卡 data-need-role="superadmin"（演示控件可切普通管理员对照）。
+    ⑮ 角色门禁（用户 2026-10-29 拍板放开 admin）：调参卡与审计卡 data-need-role="admin"——admin 及以上可见，editor/viewer 不可见（演示控件可切角色对照）。
     ⑯ 调参审计：保存成功追加审计条目（字段级 改前→改后 + 运行时生效值），见 TuningAuditList.vue 口径。
     ⑰ 原型演示控件 L1（demo-control-panel.md）：六场景包 S1–S6 + 屏直达 + 角色/数据态真开关 + H 隐没。
       控件脚本独立于主脚本（DEMO-PANEL-START/END 标记），抽进 hub 时整段不带入（照 admin-media-ops 先例）。
@@ -547,10 +547,12 @@
   .state-box b{display:block;color:var(--ws-text-primary);font-size:14px;margin-bottom:6px;}
   .state-box .skel{height:12px;background:var(--ws-bg-subtle);border-radius:var(--ws-radius-sm);margin:10px auto;max-width:320px;}
 
-  /* 角色可见性（≤2 角色纯 CSS，机检可见） */
-  html[data-demo-role="admin"] [data-need-role="superadmin"]{display:none;}
+  /* 角色可见性（纯 CSS，机检可见）——新口径：admin 及以上可见调参区，editor/viewer 不可见 */
+  html[data-demo-role="editor"] [data-need-role="admin"],
+  html[data-demo-role="viewer"] [data-need-role="admin"]{display:none;}
   .role-fallback{display:none;padding:16px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
-  html[data-demo-role="admin"] .role-fallback{display:block;}
+  html[data-demo-role="editor"] .role-fallback,
+  html[data-demo-role="viewer"] .role-fallback{display:block;}
 
   /* 标注层（data-anno 待确认项） */
   [data-demo-anno="on"] [data-anno]{outline:1px dashed var(--ws-brand-500);position:relative;}
@@ -787,7 +789,7 @@
         <div class="only-loading"><div class="state-box"><b>正在加载 Agent 定义与生效策略…</b><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
         <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" data-dr="empty-cta">开始配置</button></div></div>
         <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" data-dr="error-cta">返回修改</button></div></div>
-        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅超级管理员可见</b>普通管理员可查看基础配置；如需调参权限请联系超级管理员。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
+        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅管理员及以上可见</b>编辑者/查看者可查看基础配置；如需调参权限请联系管理员开通。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
         <div class="only-misconfig"><div class="warn-tool" style="margin:0 0 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>误配态演示：thinking=disabled，但该 Agent 挂载工具</b><div class="wd">运行时会被强制纠正为 enabled；表单下方红框为联动一警示。</div></div></div></div>
         <div class="only-normal">
         <div class="dt-head">
@@ -863,12 +865,12 @@
         </div>
 
         <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」· 仅超管可见） -->
-        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="superadmin">
+        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="admin">
           <div class="card-hd" data-toggle="card-adv" role="button" tabindex="0" aria-expanded="false">
             <span class="t">高级</span><span class="d">五控件调参 → 直接对话 → 用例批量验证</span>
             <span class="sp"></span>
             <span class="tag gray" id="adv-summary">temp 0.7 · max 4096</span>
-            <span class="tag">仅超级管理员可编辑</span>
+            <span class="tag">仅管理员及以上可编辑</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="adv-body-wrap">
@@ -1075,11 +1077,11 @@
         </div>
 
         <!-- 卡片三：调参审计（TuningAuditList.vue 口径 · 仅超管可见 · 保存成功追加条目） -->
-        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="superadmin" data-anno="D4">
+        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="admin" data-anno="D4">
           <div class="card-hd" data-toggle="card-audit" role="button" tabindex="0" aria-expanded="false">
             <span class="t">调参审计</span><span class="d">改前 → 改后字段级 diff · 审计不可删改</span>
             <span class="sp"></span>
-            <span class="tag gray">仅超级管理员可见</span>
+            <span class="tag gray">仅管理员及以上可见</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="audit-body">
@@ -1087,7 +1089,7 @@
           </div>
         </div>
 
-        <div class="role-fallback" data-dr="role-fallback">调参与审计仅超级管理员可见（切到超管角色可编辑）</div>
+        <div class="role-fallback" data-dr="role-fallback">调参与审计仅管理员及以上可见（切到管理员及以上角色可编辑）</div>
 
         <!-- 原型演示控件：明确与产品功能分离（早前挂在调试台工具条上，容易被当成产品能力） -->
         <div class="note demo">
@@ -1132,7 +1134,8 @@
         <button class="dc-btn preset" data-dc-preset="p2" type="button">S2 存量简单 agent · 全部未配置</button>
         <button class="dc-btn preset" data-dc-preset="p3" type="button">S3 误配 disabled · 红字警示</button>
         <button class="dc-btn preset" data-dc-preset="p4" type="button">S4 temp+topP 同填 · 保存被拒</button>
-        <button class="dc-btn preset" data-dc-preset="p5" type="button">S5 普通管理员 · 调参不可见</button>
+        <button class="dc-btn preset" data-dc-preset="p5" type="button">S5 编辑者 · 调参不可见</button>
+        <button class="dc-btn preset" data-dc-preset="p5b" type="button">S5b 普通管理员 · 调参可见（新口径）</button>
         <button class="dc-btn preset" data-dc-preset="p6" type="button">S6 保存成功 · 审计改前改后</button>
       </div>
       <div class="dc-why" id="dc-why"></div>
@@ -1142,6 +1145,8 @@
       <div class="dc-chips">
         <button class="dc-btn" data-dc-role="superadmin" type="button">超级管理员</button>
         <button class="dc-btn" data-dc-role="admin" type="button">普通管理员</button>
+        <button class="dc-btn" data-dc-role="editor" type="button">编辑者</button>
+        <button class="dc-btn" data-dc-role="viewer" type="button">查看者</button>
       </div>
     </div>
     <div class="dc-sec">
@@ -2276,7 +2281,9 @@
     },
     roles: {
       superadmin: '超级管理员',
-      admin: '普通管理员'
+      admin: '普通管理员',
+      editor: '编辑者',
+      viewer: '查看者'
     },
     states: {
       normal: '正常', loading: '加载中', empty: '空态',
@@ -2291,8 +2298,10 @@
         why:'联动一：挂工具却选 disabled → 警示框出现；运行时会被强制纠正' },
       { id:'p4', label:'S4 temp+topP 同填 · 保存被拒', role:'superadmin', screen:'screen-detail', state:'error',
         why:'互斥校验：同填保存被拒（字段值不清空），错误态可返回修改' },
-      { id:'p5', label:'S5 普通管理员 · 调参不可见', role:'admin', screen:'screen-detail', state:'forbidden',
-        why:'仅超管可见：调参卡与审计卡整块消失，普通管理员只剩基础配置' },
+      { id:'p5', label:'S5 编辑者 · 调参不可见', role:'editor', screen:'screen-detail', state:'forbidden',
+        why:'新口径：admin 及以上可见；editor/viewer 不可见——调参卡与审计卡整块消失，只剩基础配置' },
+      { id:'p5b', label:'S5b 普通管理员 · 调参可见（新口径）', role:'admin', screen:'screen-detail', state:'normal',
+        why:'用户 2026-10-29 拍板：放开 admin——普通管理员与超管同权可见调参区与审计区' },
       { id:'p6', label:'S6 保存成功 · 审计改前改后', role:'superadmin', screen:'screen-detail', state:'normal',
         why:'审计条目形态：字段级 diff（划线改前 → 加粗改后）+ 运行时生效值行' }
     ]

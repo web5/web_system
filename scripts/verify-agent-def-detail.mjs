@@ -596,6 +596,27 @@ const dynUnbound = await page.$$eval(
 rec('23c 动态元素（try/cp/retry/确认框）也命中绑定清单',
   dynUnbound.length + ' 个未绑：' + (dynUnbound.slice(0, 3).join(' || ') || '(空)'), '0 个未绑：(空)', dynUnbound.length === 0);
 
+// —— 24 角色门禁（2026-10-29 拍板：admin 及以上可见调参区，editor/viewer 不可见）——
+// 真点角色按钮后按 computed display 判定卡片可见性（与 vis 同一「真实可见性」口径）
+await clickEl('[data-dc-state="normal"]');
+const cardGate = async (roleBtn, expectVisible) => {
+  await clickEl(roleBtn);
+  await wait(120);
+  const adv = await vis('#card-adv');
+  const audit = await vis('#card-audit');
+  return { adv, audit, ok: adv === expectVisible && audit === expectVisible };
+};
+const r24a = await cardGate('[data-dc-role="superadmin"]', true);
+rec('24a 超管：调参卡+审计卡可见', JSON.stringify(r24a), 'adv/audit 均 true', r24a.ok);
+const r24b = await cardGate('[data-dc-role="admin"]', true);
+rec('24b 普通管理员：调参卡+审计卡可见（新口径，2026-10-29 拍板放开 admin）', JSON.stringify(r24b), 'adv/audit 均 true', r24b.ok);
+const r24c = await cardGate('[data-dc-role="editor"]', false);
+rec('24c 编辑者：调参卡+审计卡不可见', JSON.stringify(r24c), 'adv/audit 均 false', r24c.ok);
+const r24d = await cardGate('[data-dc-role="viewer"]', false);
+rec('24d 查看者：调参卡+审计卡不可见', JSON.stringify(r24d), 'adv/audit 均 false', r24d.ok);
+rec('24e editor 下 role-fallback 兜底文案可见', await vis('.role-fallback'), true);
+await clickEl('[data-dc-role="superadmin"]');
+
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
 console.log(fail.length ? `\n❌ 失败 ${fail.length} 项` : `\n✅ 全部通过（${out.length} 项）`);

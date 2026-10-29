@@ -652,11 +652,16 @@ const CSS_NEEDLES = [
   ['.strat-chain{list-style', '.strat 策略预览'],
   ['.audit-item{padding', '.audit-item 审计条目'],
   ['.state-box{padding', '.state-box 状态占位'],
-  ['html[data-demo-role="admin"] [data-need-role="superadmin"]', '角色可见性规则'],
+  ['html[data-demo-role="editor"] [data-need-role="admin"]', '角色可见性规则（editor 不可见）'],
+  ['html[data-demo-role="viewer"] [data-need-role="admin"]', '角色可见性规则（viewer 不可见）'],
 ];
 for (const [needle, why] of CSS_NEEDLES) {
   rec(`11a hub CSS 含 ${why}`, hubHtml.includes(needle), true);
 }
+
+// 11a-2 旧「仅 super_admin」门禁已随口径放开移除（2026-10-29 拍板：admin 及以上可见）
+rec('11a-2 hub 不再含旧 data-need-role="superadmin" 门禁',
+  hubHtml.includes('data-need-role="superadmin"'), false);
 
 // ⑪b 模块关键 CSS 条目数不为 0（防「整块 CSS 被过滤掉」的静默丢失）
 const KEY_SEL = ['.f-tag{', '.warn-tool{', '.budget-ro{', '.strat{', '.audit-item{', '.state-box{', '.role-fallback{', '.only-loading,'];

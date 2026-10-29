@@ -169,6 +169,21 @@
 | 用例 | 未运行 / 运行中（按钮锁定防连点）/ 通过 / 与基线不同（含差异摘要）/ 运行失败 / **无基线**（`base` 为空时不判通过，提示先填基线）/ 新增空态 |
 | 页面 | 只读态（系统内置定义 `__intent__`，**待确认是否可编辑**）/ 未保存离开拦截 |
 
+### 5.1 角色门禁（S5）—— 2026-10-29 口径修订
+
+> 本稿 v2.x 此前未记载调参区门禁（缺口，本次补齐）。此前实现为「仅 super_admin」，用户 2026-10-29 拍板放开。
+
+| 角色 | 调参卡（高级 · 模型参数调试）+ 审计卡 | 说明 |
+|---|---|---|
+| super_admin | ✅ 可见可编辑 | — |
+| admin | ✅ **可见可编辑（本次放开）** | 与超管同权；后端 `agents:manage` 本就含 admin，无需后端改动 |
+| editor | ❌ 不可见 | 卡片整块隐藏（原型 `data-need-role="admin"` + 角色态 CSS），落 `role-fallback` 兜底文案 |
+| viewer | ❌ 不可见 | 同上 |
+
+- 判据唯一真源：`apps/admin/src/utils/tuning-params.ts` `canAccessTuning(roles)` —— `roles` 含 `super_admin` 或 `admin` 即可
+- 原型演示：场景 **S5 编辑者 · 调参不可见**（`role=editor + state=forbidden`）与 **S5b 普通管理员 · 调参可见**（`role=admin + state=normal`）
+- 机检：`verify-agent-def-detail.mjs` 24a–24e（真点角色按钮按真实可见性判定）+ `verify-agents-hub.mjs` 11a 角色可见性规则两条 + 11a-2 旧 `data-need-role="superadmin"` 门禁已移除
+
 ## 6. Token（禁裸值）
 
 `--ws-brand-700`（AA 深档：链接、主按钮底、badge 文字）、`--ws-ok-700`（成功文字）、`--ws-danger-soft`（差异与失败底）、
