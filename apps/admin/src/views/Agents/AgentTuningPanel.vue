@@ -30,7 +30,7 @@
          control 恒占 label 之外的全部剩余宽，五行左缘恒等。 -->
     <a-form
       layout="horizontal"
-      label-align="left"
+      label-align="right"
       :colon="false"
       :label-col="{ style: { width: '84px' } }"
       :wrapper-col="{ style: { flex: '1 1 0', minWidth: 0 } }"
@@ -221,15 +221,49 @@ const preview = computed(() =>
 .b3-role-tag {
   margin-left: auto;
 }
-/* label 列：规格 page-spec §3.2 —— 固定 84px、左对齐（label-align="left"）、无冒号
+/* label 列：固定 84px、**右对齐**（label-align="right"，2026-10-29 用户追加拍板）、无冒号
    （:colon="false"，原型 .flb 无冒号）。antd horizontal 默认 nowrap，84px 里长 label
    会被截断 → 这里纠正为可换行：行高 20px + 上内距 6px，单行时文字在 32px 控件高度内
-   视觉居中，换代后自然向下撑开（实测两行 46px < 行高 56px，不溢出、不压控件）。 */
+   视觉居中，换代后自然向下撑开（实测两行 46px < 行高 56px，不溢出、不压控件）。
+   justify-content: flex-end —— antd 的 <label> 是 inline-flex 容器（flex 项按
+   justify-content 排，text-align 管不到容器内文字；默认 normal≈flex-start），
+   右对齐时文字仍贴在内容盒左缘 → 五个 label 文本右缘不齐（实测 335/325/319/319/323）、
+   最长那条还会溢出内盒贴到控件（「Temperature」文本 82px > 内容盒，右缘 335 vs 控件 337
+   只剩 2px）。显式 flex-end 后每行文字都靠内容右缘，五个右缘恒等（实测 349-12=337）。
+   换行仍走继承的 text-align:end（label-align="right" 由 antd 落在 .ant-form-item-label 上），
+   长 label 两行都右对齐，不出现「首行右、次行左」。
+   ⚠️ flex-end 必须收进 min-width:576px 守卫，不能无条件写：<576px 时 ant-design-vue
+   **会自动切上置**（es/form/style/index.js:380 的 @media(max-width: screenXSMax=575px)
+   → makeVerticalLayout :337-356，label/control 各 flex:0 0 100% 各占满一行；它挂在
+   genVerticalStyle 顶层返回对象里、被 genComponentStyleHook 无条件导出，对 horizontal
+   也生效；screenXSMax = screenSM - 1 = 575，见 es/theme/util/alias.js:29）。上置态由
+   makeVerticalLayoutLabel(:328-336) 设 text-align:start 要求**左**对齐；而 justify-content
+   作用在 <label> 这个 inline-flex 容器内部、不受 text-align 管辖 → 无条件 flex-end 会把
+   上置态的 label 推到行尾。 */
 .b3-tuning :deep(.ant-form-item-label > label) {
   height: auto;
   white-space: normal;
   line-height: 20px;
   padding-top: 6px;
+}
+@media (min-width: 576px) {
+  .b3-tuning :deep(.ant-form-item-label > label) {
+    justify-content: flex-end;
+  }
+}
+/* antd 的冒号位：:colon="false" 只把 ::after 的 content 换成空格，**margin: 0 8px 0 2px 仍在**
+   ——它在 inline-flex 里是一个真实的 flex 项，右对齐时占住末尾 10px，文字右缘被顶到
+   327 而非列右缘 337（2026-10-29 实测定位）。显式清掉，五个 label 文本右缘才统一落在
+   列右缘（337），与控件左缘（349）拉开 12px。 */
+.b3-tuning :deep(.ant-form-item-label > label)::after {
+  content: none;
+  margin: 0;
+}
+/* label 列与控件列的间距：原型 .fitem{gap:12px} 的口径（2026-10-29 实测确认）。不占用
+   84px 定宽（若用 padding-right 挤在 84px 内，「Temperature」82px 文本会被压进 8px 内距、
+   反而溢出到控件侧），间距放在列外：label 文本右缘 337 → 控件左缘 349，恒等且 12px ≥ 8px。 */
+.b3-tuning :deep(.ant-form-item-row) {
+  column-gap: 12px;
 }
 /* -8px 上边距已实测（2026-10-29，vertical 上下文）：与上方 form-item 的视觉间距
    = 24（form-item margin-bottom）− 8 = 16px，与改前完全一致 → 维持不变，不照搬调整 */
