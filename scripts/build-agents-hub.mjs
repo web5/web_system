@@ -81,7 +81,19 @@ const stripWrapper = (s, openTag) => {
 /* ---------- 1. CSS：新稿整块保真 + Playground 专属规则合入 ---------- */
 /* ⚠️ between() 的切片含 '<style>' 开标签，必须剥掉：字面 '<style>' 混进 CSS 流会让
    解析器把它连到 :root 选择器上、整条 token 规则被丢（2026-10-11 实测：全站 var() 失效） */
-const dtStyleInner = between(dt, '<style>', '</style>').replace(/^<style>/, '');
+/**
+ * 取「内容 CSS」= 稿内所有 <style> 块 **减去** sync-prototype-shell 注入的壳块。
+ * 2026-10-28 事故：原实现 between() 只取**第一段** style，而 B3 五控件 CSS 误挂在第二段
+ * （壳块）尾部 → 整段被丢，hub 屏② 五个 .only-* 数据态同显 + .warn-tool SVG 撑爆。
+ * 现在按块收集、跳过壳标记块（hub 的 shellCss() 单源自带，重复合入=双份壳规则），
+ * 其余每一段（含未来新增的第三段）一律进 hub。
+ */
+const SHELL_CSS_MARK = '/* ===== PROTO-SHELL-CSS (auto, single source) ===== */';
+const styleBlocksOf = (html) => [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
+const contentCssOf = (html) => styleBlocksOf(html)
+  .filter((b) => !b.includes(SHELL_CSS_MARK))
+  .join('\n');
+const dtStyleInner = contentCssOf(dt);
 const dtScript = between(dt, '<script>', '</script>');
 
 /**
@@ -104,8 +116,8 @@ const cssBlocks = (css) => {
 };
 const selOf = (b) => b.slice(0, b.indexOf('{')).trim().replace(/\s+/g, ' ');
 
-const pgCssRaw = stripCssComments(between(pg, '<style>', '</style>'));
-const dtCssRaw = stripCssComments(between(dt, '<style>', '</style>'));
+const pgCssRaw = stripCssComments(contentCssOf(pg));
+const dtCssRaw = stripCssComments(contentCssOf(dt));
 const pgBlocks = cssBlocks(pgCssRaw);
 const dtBlocks = cssBlocks(dtCssRaw);
 const dtSels = new Set(dtBlocks.map(selOf));
@@ -130,8 +142,8 @@ const pgComposerJs = between(pg, '/* PG-COMPOSER-START', '/* PG-COMPOSER-END */'
   .replace(/^[\s\S]*?\*\//, '');   // 去掉 START 注释行剩余部分
 
 /* ---------- 3. 抽取新稿两屏 DOM（剥掉最外层 screen div，只取内部） ---------- */
-const listInner = stripWrapper(dt, '<div id="screen-list">');
-const detailInner = stripWrapper(dt, '<div id="screen-detail" class="hidden">');
+const listInner = stripWrapper(dt, '<div id="screen-list" class="screen">');
+const detailInner = stripWrapper(dt, '<div id="screen-detail" class="screen hidden" data-demo-state="normal">');
 const toastBlock = '<div class="toast hidden" id="toast" role="alert"></div>';
 
 /* ---------- 4. script 机械改写（切屏升级为 hash 路由） ---------- */
@@ -224,7 +236,8 @@ const CRUMBS = {
   roles: ['角色权限'], dicts: ['字典管理'], mcp: ['MCP 管理'], database: ['数据浏览'],
   /* 自媒体运营（2026-10-22 起）：与 BasicLayout.vue 的 a-sub-menu key="content" 逐项对齐 */
   'content-sources': ['自媒体运营', '采集源管理'], 'content-items': ['自媒体运营', '采集明细'],
-  'content-publications': ['自媒体运营', '公众号成文'], 'content-pipelines': ['自媒体运营', '发布管线'],
+  'content-publications': ['自媒体运营', '公众号成文'], 'content-media': ['自媒体运营', '封面素材'],
+  'content-pipelines': ['自媒体运营', '发布管线'],
   'content-monitor': ['自媒体运营', '采集监控'],
   'content-accounts': ['自媒体运营', '账号管理'],
   overview: ['Agents', 'Agent 概览'], observe: ['Agents', 'Agent 观测'], records: ['Agents', '运行记录'],
@@ -456,7 +469,9 @@ const screenBlock = (m) => {
     + `${head ? head + '\n' : ''}${body}\n      </div>`;
 };
 const DETAIL_SCREEN = `      <!-- 真实屏（同源抽取自定稿）：定义详情 · 高级 · 模型参数调试台 —— 无菜单项，经列表「编辑」进入（dt-head 即页头） -->\n`
-  + `      <div class="screen hidden" data-screen="detail">\n${detailInner}\n      </div>`;
+  /* data-demo-state 必须随容器带进 hub：状态矩阵 CSS 靠 `[data-demo-state="x"] .only-x` 选择器
+     命中；stripWrapper 会剥掉源稿 wrapper 上的这个属性，不补 = 默认态规则全部落空 */
+  + `      <div class="screen hidden" data-screen="detail" data-demo-state="normal">\n${detailInner}\n      </div>`;
 const SCREEN_BLOCKS = NAV.filter((m) => m.screen)
   .map((m) => (m.screen === 'list' ? screenBlock(m) + '\n\n' + DETAIL_SCREEN : screenBlock(m)))
   .join('\n\n');
@@ -722,6 +737,20 @@ const divClose = (htmlOnly.match(/<\/div>/g) || []).length;
 if (divOpen !== divClose) problems.push(`div 不配平（剥 script 后）：开 ${divOpen} / 闭 ${divClose}`);
 // ④ Playground 专属 CSS 必须合入（SVG 无尺寸约束会撑成 1026px 顶翻整屏）
 if (!out.includes('.pg-agent svg{width:var(--ws-icon-inline)')) problems.push('缺少 .pg-agent svg 尺寸规则——Playground 屏会布局爆炸');
+// ④b detail 屏状态矩阵 / 警示框 CSS 必须合入（2026-10-28：B3 CSS 误挂壳块尾部被 between() 丢掉
+//     → 五个 .only-* 数据态同显 + 警告 SVG 撑爆；这类「整块 CSS 静默丢失」必须当场炸）
+[['.only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}', '状态矩阵基础隐藏组'],
+ ['.warn-tool svg{width:18px', '.warn-tool svg 尺寸规则'],
+ ['[data-demo-state="normal"] .only-normal', '状态切换规则'],
+ ['data-screen="detail" data-demo-state="normal"', 'detail 容器 data-demo-state']].forEach(([tok, why]) => {
+  if (!out.includes(tok)) problems.push(`缺少 ${why}（${tok.slice(0, 40)}…）——detail 屏会布局爆炸/状态块同显`);
+});
+// ④c 模块关键 CSS 条目数不为 0（防「整块 CSS 被过滤掉」的静默丢失）
+const KEY_CSS = ['.f-tag{', '.warn-tool{', '.budget-ro{', '.strat{', '.audit-item{', '.state-box{', '.role-fallback{'];
+const keyHit = KEY_CSS.filter((k) => out.includes(k)).length;
+if (keyHit === 0) problems.push('detail 屏关键 CSS 条目 0 命中——v2.4 整块 CSS 疑似被过滤掉');
+else if (keyHit < KEY_CSS.length) problems.push(`detail 屏关键 CSS 仅 ${keyHit}/${KEY_CSS.length} 命中：`
+  + KEY_CSS.filter((k) => !out.includes(k)).join(' '));
 // ⑤ 两处对话面板必须同构：chatpanel ×2 / pg-toolbar ×2 / composer ×2（含 Playground 屏）
 [['class="chatpanel"', 2], ['class="pg-toolbar"', 2], ['class="composer"', 2]].forEach(([tok, n]) => {
   const got = out.split(tok).length - 1;

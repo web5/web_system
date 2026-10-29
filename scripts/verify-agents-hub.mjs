@@ -357,7 +357,7 @@ rec('9t 折叠/展开子菜单后无 JS 报错', jsErrors.length, 0);
 // 背景：产品意见「把菜单占位的原型稿也整合进来吧，后续就不用整合了，迭代也会更精准」。
 // 机制：scripts/lib/proto-registry.mjs 每屏一行 —— 写了 source 的屏由 build 从原型稿同源抽取。
 // 这一段证明三件事：① 登记了 = 真的合进去了；② 合进去没把别的屏弄坏；③ 占位屏的批次不是编的。
-const hubHtml = fs.readFileSync(ROOT + '/docs/ui/prototypes/admin-agents-hub.html', 'utf8');
+const hubHtml = fs.readFileSync((process.argv[2] || ROOT + '/docs/ui/prototypes/admin-agents-hub.html'), 'utf8');
 const regScreens = REGISTRY.map((r) => r.screen);
 const navScreens = NAV.map((m) => m.screen);
 
@@ -536,6 +536,112 @@ rec('10g-err 自媒体运营交互后仍无 JS 报错', jsErrors.length, 0);
 // 10f 页面头部说明必须写明「注册表机制」，否则新人还是按老办法手工整合
 rec('10f 页头写明整合机制（注册表 + 重跑 build）',
   await page.$eval('.proto-head', (e) => /proto-registry|注册表/.test(e.textContent)), true);
+
+// —— ⑪ detail 屏 CSS / 状态完整性（2026-10-28 事故复盘） ——
+// 事故：build 的 between('<style>','</style>') 只取第一段 style，而 B3 五控件 CSS 误挂在
+// 第二段（sync-prototype-shell 注入的壳块）尾部 → .only-* 状态矩阵 / .warn-tool 整块丢失，
+// hub 屏② 五个数据态同显 + 警告 SVG（viewBox 24）撑成巨大黑三角。单稿正常、hub 坏，
+// verify-agents-hub 当时 222/223 也没拦住 → 本段把这类「静默丢失」钉死。
+const dtHtml = fs.readFileSync(ROOT + '/docs/ui/prototypes/admin-agent-def-detail.html', 'utf8');
+
+// ⑪a 关键 CSS 规则必须在 hub CSS 流里（字符串断言，删掉规则立即 FAIL —— 经得起变异测试）
+const CSS_NEEDLES = [
+  ['.only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}', '状态矩阵基础隐藏组'],
+  ['[data-demo-state="loading"] .only-loading', '状态切换规则（loading）'],
+  ['[data-demo-state="normal"] .only-normal', '默认态显示规则'],
+  ['.warn-tool svg{width:18px', '.warn-tool svg 尺寸规则（防 SVG 撑爆）'],
+  ['.warn-tool{display:flex', '.warn-tool 警示框'],
+  ['.budget-ro{display:flex', '.budget-ro 只读预览'],
+  ['.strat-chain{list-style', '.strat 策略预览'],
+  ['.audit-item{padding', '.audit-item 审计条目'],
+  ['.state-box{padding', '.state-box 状态占位'],
+  ['html[data-demo-role="admin"] [data-need-role="superadmin"]', '角色可见性规则'],
+];
+for (const [needle, why] of CSS_NEEDLES) {
+  rec(`11a hub CSS 含 ${why}`, hubHtml.includes(needle), true);
+}
+
+// ⑪b 模块关键 CSS 条目数不为 0（防「整块 CSS 被过滤掉」的静默丢失）
+const KEY_SEL = ['.f-tag{', '.warn-tool{', '.budget-ro{', '.strat{', '.audit-item{', '.state-box{', '.role-fallback{', '.only-loading,'];
+rec('11b detail 屏关键 CSS 条目全命中（防整块丢失）',
+  KEY_SEL.filter((k) => !hubHtml.includes(k)).join('|'), '');
+
+// ⑪c 屏② DOM 的 data-demo-state 数量与 src 一致（stripWrapper 会剥 wrapper 属性，build 必须补回）
+//     只数 DOM 属性（`data-demo-state="`），不数 CSS 选择器里的 `[data-demo-state=…]`
+const countAttr = (html, region) => {
+  const seg = region ? html.slice(html.indexOf(region)) : html;
+  return (seg.match(/data-demo-state="/g) || []).length;
+};
+const srcDetailFrom = dtHtml.indexOf('<div id="screen-detail"');
+const srcDetailTo = dtHtml.indexOf('<aside class="demo-ctl"');
+const srcDetailHtml = dtHtml.slice(srcDetailFrom, srcDetailTo > srcDetailFrom ? srcDetailTo : undefined);
+const hubDetailFrom = hubHtml.indexOf('data-screen="detail"');
+const hubDetailTo = hubHtml.indexOf('data-screen="', hubDetailFrom + 10);
+const hubDetailHtml = hubHtml.slice(hubDetailFrom, hubDetailTo > hubDetailFrom ? hubDetailTo : undefined);
+const srcDemoCount = (srcDetailHtml.match(/data-demo-state="/g) || []).length;
+const hubDemoCount = (hubDetailHtml.match(/data-demo-state="/g) || []).length;
+rec('11c 屏② DOM 的 data-demo-state 数量与 src 一致', hubDemoCount, srcDemoCount);
+rec('11c2 detail 容器带 data-demo-state="normal"（状态矩阵选择器的挂载点）',
+  /data-screen="detail"[^>]*data-demo-state="normal"|data-demo-state="normal"[^>]*data-screen="detail"/.test(hubHtml), true);
+
+// ⑪d 运行时：默认态只显示 .only-normal，五个演示数据态全隐（CSS 真生效，不是只写了规则）
+await page.evaluate(() => { location.hash = '#/agents/definitions'; });
+await wait(200);
+await page.evaluate(() => {
+  const btns = document.querySelectorAll('.tbl .btn, [data-dr="row-edit"], .dt-back');
+  // 直接开 detail（与 openDef 同路径）：hash 路由 + 显示 detail 屏
+  location.hash = '#/agents/definitions/report-helper';
+});
+await wait(360);
+const stateVis = async () => {
+  const names = ['loading', 'empty', 'error', 'forbidden', 'misconfig', 'normal'];
+  const pairs = [];
+  for (const n of names) {
+    pairs.push(n + '=' + await vis(`[data-screen="detail"] .only-${n}`));
+  }
+  return pairs.join('|');
+};
+rec('11d 默认态（data-demo-state=normal）：仅 .only-normal 可见，五个数据态全隐',
+  await stateVis(), 'loading=false|empty=false|error=false|forbidden=false|misconfig=false|normal=true');
+
+// ⑪e 手动切 data-demo-state：单态可见、其余全隐（矩阵互斥真生效）
+//     ⚠️ misconfig 例外：按设计 = 警示横幅(.only-misconfig) + 正常表单(.only-normal) **同显**
+//     （「误配态演示」是在正常表单上方加红框警示，不是替换整屏）
+for (const st of ['loading', 'error', 'empty', 'forbidden']) {
+  await page.evaluate((s) => {
+    document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', s);
+  }, st);
+  await wait(120);
+  const expect = ['loading', 'empty', 'error', 'forbidden', 'misconfig', 'normal']
+    .map((n) => `${n}=${n === st}`).join('|');
+  rec(`11e 切 data-demo-state=${st} → 仅 .only-${st} 可见`, await stateVis(), expect);
+}
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'misconfig');
+});
+await wait(120);
+rec('11e 切 data-demo-state=misconfig → 警示横幅 + 正常表单同显（设计如此，非互斥替换）',
+  await stateVis(), 'loading=false|empty=false|error=false|forbidden=false|misconfig=true|normal=true');
+// 复位
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'normal');
+});
+await wait(120);
+
+// ⑪f .warn-tool svg 实际渲染尺寸 = 18×18（不是无约束撑爆）
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'misconfig');
+});
+await wait(120);
+const svgBox = await page.$eval('[data-screen="detail"] .only-misconfig .warn-tool svg', (e) => {
+  const r = e.getBoundingClientRect();
+  return Math.round(r.width) + 'x' + Math.round(r.height);
+});
+rec('11f 误配态 .warn-tool svg 渲染尺寸 = 18×18（无尺寸约束会撑成巨大黑三角）', svgBox, '18x18');
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'normal');
+});
+await wait(80);
 
 await browser.close();
 

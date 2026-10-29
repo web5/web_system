@@ -40,6 +40,19 @@
   · ⚠️ 用例中的公司 / 条款 / 代码 / 输出均为**演示数据**，仅示意对比形态，不构成投资或法务结论
   · ⚠️ 待落地前补齐的 token：--ws-overlay / --ws-shadow-float 仍未进 packages/ui/src/tokens.ts + tokens.css
     （与 admin-agents.html 同一遗留项，本稿沿用同值）
+  · v2.4 调整（2026-10-28 · B3 调参 UI 五控件并入，亮色 --ws-* 口径不变）：
+    ⑫ 高级 · 参数面板升级为 **B3 五控件**：temperature / 输出上限 maxTokens / Top P /
+      thinking 三态（未配置 NULL / enabled / disabled，对齐 AgentTuningPanel.vue）/ 最大步数 max_steps。
+      思考预算改为**只读预览**（budget_tokens = min(模型上限, maxTokens/2)，不作为 agent 级配置）；
+      保留采样方式互斥 seg 与按场景套用预设（page-spec v2 表单形态）。
+    ⑬ 三条联动（D1 §6.3）：联动一 挂工具误配 disabled → 红字警示（可点不锁死）；
+      联动二 maxTokens 占位随工具语义切换（空=模型上限 / 空=系统默认）；
+      联动三 thinking=enabled → budget 只读预览实时重算。
+    ⑭ 新增「生效策略预览」：P1–P5 优先级链命中档实时标注 + thinking / budget_tokens / max_tokens 三值输出。
+    ⑮ 仅超管可见：调参卡与审计卡 data-need-role="superadmin"（演示控件可切普通管理员对照）。
+    ⑯ 调参审计：保存成功追加审计条目（字段级 改前→改后 + 运行时生效值），见 TuningAuditList.vue 口径。
+    ⑰ 原型演示控件 L1（demo-control-panel.md）：六场景包 S1–S6 + 屏直达 + 角色/数据态真开关 + H 隐没。
+      控件脚本独立于主脚本（DEMO-PANEL-START/END 标记），抽进 hub 时整段不带入（照 admin-media-ops 先例）。
   ============================================================
 -->
 <style>
@@ -470,6 +483,109 @@
   .retry{margin-left:8px;}
   .inj{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ws-text-secondary);cursor:pointer;}
   .inj input{margin:0;}
+  /* ===== v2.4 B3 五控件 + 联动 + 策略预览 + 审计（亮色 --ws-*） ===== */
+  .f-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:400;padding:1px 6px;
+    border-radius:var(--ws-radius-sm);background:var(--ws-bg-subtle);color:var(--ws-text-secondary);
+    letter-spacing:.02em;margin-right:4px;vertical-align:middle;}
+  .f-tag.fix{background:var(--ws-ok-soft);color:var(--ws-ok-700);}
+  .f-tag.gate{background:var(--ws-danger-soft);color:var(--ws-danger);}
+  .tagline{display:flex;align-items:center;gap:6px;margin-top:2px;}
+  .tagline .muted{font-size:12px;color:var(--ws-text-secondary);}
+
+  .warn-tool{display:flex;gap:10px;align-items:flex-start;margin:10px 0 2px;padding:12px 14px;
+    background:var(--ws-danger-soft);border:1px solid var(--ws-danger);border-radius:var(--ws-radius-md);}
+  .warn-tool svg{width:18px;height:18px;flex:none;color:var(--ws-danger);margin-top:1px;}
+  .warn-tool b{display:block;font-size:13px;color:var(--ws-danger);margin-bottom:2px;}
+  .warn-tool .wd{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-snug);}
+
+  .budget-ro{display:flex;align-items:center;gap:10px;height:var(--ws-control-md);padding:0 12px;
+    background:var(--ws-bg-subtle);border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);
+    font-size:13px;color:var(--ws-text-primary);}
+  .budget-ro b{font-family:var(--ws-font-mono);font-weight:600;}
+  .budget-ro .bp-formula{font-size:12px;color:var(--ws-text-secondary);font-family:var(--ws-font-mono);}
+
+  .strat{margin-top:14px;padding:12px 14px;background:var(--ws-bg-subtle);
+    border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);}
+  .strat-t{font-size:13px;font-weight:600;color:var(--ws-text-primary);margin-bottom:8px;}
+  .strat-chain{list-style:none;margin:0 0 8px;padding:0;}
+  .strat-chain li{display:flex;gap:8px;font-size:12px;line-height:22px;color:var(--ws-text-secondary);}
+  .strat-chain li.hit{color:var(--ws-text-primary);}
+  .strat-chain .pno{font-family:var(--ws-font-mono);width:22px;flex:none;}
+  .strat-chain .plb{flex:1;}
+  .strat-chain .pst{color:var(--ws-text-secondary);}
+  .strat-chain li.hit .pst{color:var(--ws-brand-600);font-weight:600;}
+  .strat-out{font-size:12px;line-height:22px;color:var(--ws-text-secondary);border-top:1px dashed var(--ws-border);padding-top:8px;}
+  .strat-out b{font-family:var(--ws-font-mono);color:var(--ws-text-primary);font-weight:600;}
+  .strat-out .why{color:var(--ws-text-secondary);font-family:var(--ws-font-mono);}
+
+  /* 调参审计（TuningAuditList.vue 口径） */
+  .audit-item{padding:12px 0;border-bottom:1px solid var(--ws-border-subtle);}
+  .audit-item:last-child{border-bottom:none;}
+  .audit-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;}
+  .audit-time{font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-secondary);}
+  .audit-op{color:var(--ws-text-secondary);font-size:12px;}
+  .audit-diff{display:flex;gap:8px;font-size:12px;line-height:22px;}
+  .audit-diff .fld-n{width:96px;flex:none;color:var(--ws-text-secondary);}
+  .audit-diff .before{text-decoration:line-through;color:var(--ws-text-secondary);}
+  .audit-diff .arw{color:var(--ws-text-secondary);}
+  .audit-diff .after{font-weight:600;color:var(--ws-text-primary);}
+  .audit-runtime{margin-top:4px;font-size:12px;color:var(--ws-text-secondary);}
+
+  /* 演示状态矩阵（demo-control-panel.md §5.2，分支块） */
+  .only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}
+  [data-demo-state="loading"] .only-loading,
+  [data-demo-state="empty"] .only-empty,
+  [data-demo-state="error"] .only-error,
+  [data-demo-state="forbidden"] .only-forbidden,
+  [data-demo-state="misconfig"] .only-misconfig{display:block;}
+  [data-demo-state="loading"] .only-normal,
+  [data-demo-state="empty"] .only-normal,
+  [data-demo-state="error"] .only-normal,
+  [data-demo-state="forbidden"] .only-normal{display:none;}
+  [data-demo-state="normal"] .only-normal{display:block;}
+  .state-box{padding:40px 20px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
+  .state-box b{display:block;color:var(--ws-text-primary);font-size:14px;margin-bottom:6px;}
+  .state-box .skel{height:12px;background:var(--ws-bg-subtle);border-radius:var(--ws-radius-sm);margin:10px auto;max-width:320px;}
+
+  /* 角色可见性（≤2 角色纯 CSS，机检可见） */
+  html[data-demo-role="admin"] [data-need-role="superadmin"]{display:none;}
+  .role-fallback{display:none;padding:16px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
+  html[data-demo-role="admin"] .role-fallback{display:block;}
+
+  /* 标注层（data-anno 待确认项） */
+  [data-demo-anno="on"] [data-anno]{outline:1px dashed var(--ws-brand-500);position:relative;}
+  [data-demo-anno="on"] [data-anno]::after{content:attr(data-anno);position:absolute;top:-10px;left:-4px;
+    font-size:10px;padding:0 4px;background:var(--ws-brand-600);color:var(--ws-on-brand);border-radius:3px;z-index:5;}
+
+  /* ===== 原型演示控件（外来者 · 虚线白底，不是产品 UI） ===== */
+  .demo-ctl{position:fixed;right:16px;bottom:16px;width:300px;z-index:999;
+    background:#FFFFFF;border:1px dashed var(--ws-brand-500);border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,.16);font-size:12px;color:var(--ws-text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;}
+  .demo-ctl .dc-hd{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--ws-border-subtle);}
+  .demo-ctl .dc-hd .dc-t{font-weight:600;font-size:12px;}
+  .demo-ctl .dc-hd .dc-x{margin-left:auto;cursor:pointer;background:none;border:none;font-size:12px;
+    color:var(--ws-brand-600);padding:0 4px;}
+  .demo-ctl .dc-bd{padding:10px 12px;max-height:56vh;overflow:auto;}
+  .demo-ctl .dc-sec{margin-bottom:10px;}
+  .demo-ctl .dc-lb{font-size:11px;color:var(--ws-text-secondary);margin-bottom:4px;letter-spacing:.04em;}
+  .demo-ctl .dc-chips{display:flex;flex-wrap:wrap;gap:4px;}
+  .demo-ctl .dc-btn{border:1px solid var(--ws-border);background:#FFFFFF;color:var(--ws-text-primary);
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;line-height:1.5;}
+  .demo-ctl .dc-btn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .demo-ctl .dc-btn.on{background:var(--ws-brand-soft);color:var(--ws-brand-600);border-color:var(--ws-brand-400);}
+  .demo-ctl .dc-btn.preset{text-align:left;}
+  .demo-ctl .dc-why{font-size:11px;color:var(--ws-text-secondary);line-height:1.5;margin-top:4px;}
+  .demo-ctl .dc-keys{border-top:1px dashed var(--ws-border-subtle);padding-top:6px;margin-top:6px;
+    font-size:11px;color:var(--ws-text-secondary);}
+  .demo-ctl .dc-keys kbd{font-family:var(--ws-font-mono);background:var(--ws-bg-subtle);padding:0 4px;
+    border-radius:3px;font-size:10px;}
+  .demo-ctl.mini{width:44px;height:44px;overflow:hidden;border-radius:22px;}
+  .demo-ctl.mini .dc-bd{display:none;}
+  .demo-ctl.mini .dc-hd{padding:0;justify-content:center;height:100%;border:none;}
+  .demo-ctl.mini .dc-hd .dc-t{display:none;}
+  .demo-ctl.mini .dc-hd .dc-x{margin:0;}
+  @media print{ [data-demo-ctl]{display:none;} }
 </style>
 <style>
 /* ===== PROTO-SHELL-CSS (auto, single source) ===== */
@@ -550,6 +666,7 @@
   /* 折叠态头部：80px 宽容不下「logo + 按钮」（padding 16×2 后仅剩 48px）→ 收窄内边距，别挤压 logo */
   .ad-sider.collapsed .ad-sider-head{padding:0 10px;gap:6px;}
 
+
 </style>
 </head>
 <body>
@@ -580,14 +697,16 @@
         <div class="ad-item" data-screen="dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor">
+      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-media,content-pipelines,content-monitor,content-accounts">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></svg></span><span class="ad-t">自媒体运营</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="content-sources" title="采集源管理"><span class="ad-t">采集源管理</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-items" title="采集明细"><span class="ad-t">采集明细</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-publications" title="公众号成文"><span class="ad-t">公众号成文</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-media" title="封面素材"><span class="ad-t">封面素材</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-pipelines" title="发布管线"><span class="ad-t">发布管线</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-monitor" title="采集监控"><span class="ad-t">采集监控</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-accounts" title="账号管理"><span class="ad-t">账号管理</span></div>
         </div>
       </div>
       <div class="ad-sub open selected" data-sub="agents" data-screens="overview,observe,records,capabilities,knowledge,retrieval,list,skills,pg">
@@ -623,7 +742,7 @@
 
     <div class="ad-content">
       <!-- ========== 屏①：定义管理列表 ========== -->
-      <div id="screen-list">
+      <div id="screen-list" class="screen">
         <div class="toolbar">
           <h2>定义管理</h2>
           <span class="muted">共 4 条</span>
@@ -663,7 +782,14 @@
       </div>
 
       <!-- ========== 屏②：定义详情页 ========== -->
-      <div id="screen-detail" class="hidden">
+      <div id="screen-detail" class="screen hidden" data-demo-state="normal">
+        <!-- 演示数据态分支（demo-control-panel.md 方案 A）：仅演示控件切换，不进产品口径 -->
+        <div class="only-loading"><div class="state-box"><b>正在加载 Agent 定义与生效策略…</b><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
+        <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" data-dr="empty-cta">开始配置</button></div></div>
+        <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" data-dr="error-cta">返回修改</button></div></div>
+        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅超级管理员可见</b>普通管理员可查看基础配置；如需调参权限请联系超级管理员。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
+        <div class="only-misconfig"><div class="warn-tool" style="margin:0 0 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>误配态演示：thinking=disabled，但该 Agent 挂载工具</b><div class="wd">运行时会被强制纠正为 enabled；表单下方红框为联动一警示。</div></div></div></div>
+        <div class="only-normal">
         <div class="dt-head">
           <button class="dt-back" id="btn-back" data-dr="detail-back">
             <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>返回列表
@@ -736,12 +862,13 @@
           </div>
         </div>
 
-        <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」） -->
-        <div class="card" id="card-adv" data-dr="card-advanced">
+        <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」· 仅超管可见） -->
+        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="superadmin">
           <div class="card-hd" data-toggle="card-adv" role="button" tabindex="0" aria-expanded="false">
-            <span class="t">高级</span><span class="d">改参数 → 直接对话 → 用例批量验证</span>
+            <span class="t">高级</span><span class="d">五控件调参 → 直接对话 → 用例批量验证</span>
             <span class="sp"></span>
             <span class="tag gray" id="adv-summary">temp 0.7 · max 4096</span>
+            <span class="tag">仅超级管理员可编辑</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="adv-body-wrap">
@@ -768,6 +895,7 @@
                   <div class="fitem">
                     <div class="flb">采样方式</div>
                     <div class="fld">
+                      <div class="tagline"><span class="f-tag gate">C7-b 互斥</span></div>
                       <div class="seg" id="seg-sampler" data-dr="gen-params-sampler">
                         <button data-sampler="temp" class="on">Temperature</button>
                         <button data-sampler="topP">Top P</button>
@@ -782,23 +910,10 @@
                     <div class="flb">Temperature</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-temp" data-dr="gen-params-temperature">
-                        <input id="in-temp" value="0.7" inputmode="decimal" />
+                        <input id="in-temp" inputmode="decimal" />
                         <span class="clear" data-clear="temp">留空=默认</span>
                       </div>
-                      <div class="fhint hintrow">0–2，越小输出越稳定<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="frow">
-                  <div class="fitem">
-                    <div class="flb">Top P</div>
-                    <div class="fld">
-                      <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
-                        <input id="in-topP" placeholder="—" disabled inputmode="decimal" />
-                        <span class="clear" data-clear="topP">留空=默认</span>
-                      </div>
-                      <div class="fhint hintrow">0–1，与 Temperature 二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
+                      <div class="fhint hintrow"><span class="f-tag fix">?? 0.7 修正</span>留空=不覆盖，回落 0.7<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
                     </div>
                   </div>
                 </div>
@@ -808,10 +923,34 @@
                     <div class="flb">输出上限</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-max" data-dr="gen-params-maxTokens">
-                        <input id="in-max" value="4096" inputmode="numeric" /><span class="unit">tokens</span>
+                        <input id="in-max" inputmode="numeric" /><span class="unit">tokens</span>
                         <span class="clear" data-clear="maxTokens">留空=默认</span>
                       </div>
-                      <div class="fhint hintrow">回答长度上限，与思考预算共用额度<span class="sp"></span><span class="badge hidden" id="badge-max" data-dr="gen-params-maxTokens-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-max">留空=系统默认</span><span class="sp"></span><span class="badge hidden" id="badge-max" data-dr="gen-params-maxTokens-badge"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="frow">
+                  <div class="fitem">
+                    <div class="flb">Top P</div>
+                    <div class="fld">
+                      <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
+                        <input id="in-topP" placeholder="未配置" disabled inputmode="decimal" />
+                        <span class="clear" data-clear="topP">留空=默认</span>
+                      </div>
+                      <div class="fhint hintrow">0–1，与 Temperature 互斥二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="frow" id="conflict-row">
+                  <div class="fitem">
+                    <div class="flb"></div>
+                    <div class="fld">
+                      <div class="fhint hidden" id="conflict-hint" data-dr="mutex-conflict-hint" style="color:var(--ws-danger);font-weight:600;">
+                        temperature 与 top P 只能填一个，请清空其中一项后再保存（字段值不会丢）
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -821,29 +960,56 @@
                     <div class="flb">思考</div>
                     <div class="fld">
                       <div class="seg" id="seg-thinking" data-dr="gen-params-thinking">
-                        <button data-thinking="inherit" class="on">沿用默认</button>
-                        <button data-thinking="disabled">关闭</button>
-                        <button data-thinking="enabled">开启（限预算）</button>
+                        <button data-thinking="null" class="on">未配置 (NULL)</button>
+                        <button data-thinking="disabled">disabled</button>
+                        <button data-thinking="enabled">enabled</button>
                       </div>
-                      <div class="fhint hintrow"><span id="extra-thinking">关闭更快更省；推理类问题不建议关闭</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-thinking">未配置走优先级链；显式值覆盖</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
                     </div>
                   </div>
                 </div>
 
+                <!-- 联动三：thinking=enabled → budget 只读预览（不作为 agent 级配置） -->
                 <div class="frow hidden" id="row-budget">
                   <div class="fitem">
                     <div class="flb">思考预算</div>
                     <div class="fld">
-                      <div class="ctrl off" id="ctrl-budget" data-dr="gen-params-thinking-budget">
-                        <input id="in-budget" placeholder="如 2048" disabled inputmode="numeric" /><span class="unit">tokens</span>
+                      <div class="budget-ro" id="ctrl-budget" data-dr="gen-params-thinking-budget">
+                        <span>只读预览</span><b id="budget-val">—</b><span class="bp-formula" id="budget-formula"></span>
                       </div>
-                      <div class="fhint">思考最多用多少额度</div>
+                      <div class="fhint">不进配置，按公式随输出上限实时预览</div>
                     </div>
                   </div>
                 </div>
 
+                <div class="frow">
+                  <div class="fitem">
+                    <div class="flb">最大步数</div>
+                    <div class="fld">
+                      <div class="ctrl" id="ctrl-maxSteps" data-dr="gen-params-max-steps">
+                        <input id="in-steps" inputmode="numeric" />
+                      </div>
+                      <div class="fhint hintrow">工具编排轮数上限，1–50<span class="sp"></span><span class="badge hidden" id="badge-maxSteps"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 联动一：挂工具误配 disabled → 红字警示（可点不锁死，运行时强制纠正） -->
+                <div class="warn-tool hidden" id="warn-misconfig" data-dr="misconfig-warn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+                  <div><b>该 Agent 挂载工具，thinking 将被强制启用</b>
+                    <div class="wd">装配侧检测到带工具且未显式 enabled 时强制 enabled——此处选 disabled 不会生效，运行时会被纠正。</div></div>
+                </div>
+
                 <div class="fhint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ws-border-subtle);">
                   留空的项保存为 null，由服务端默认兜底；改动会立刻反映到右侧「生效参数」与用例对比。
+                </div>
+
+                <!-- 生效策略预览：P1–P5 优先级链 + 三值输出（D1） -->
+                <div class="strat" data-dr="strategy-preview" data-anno="D3">
+                  <div class="strat-t">生效策略预览</div>
+                  <ol class="strat-chain" id="strat-chain"></ol>
+                  <div class="strat-out" id="strat-out"></div>
                 </div>
               </div>
 
@@ -908,6 +1074,21 @@
           </div>
         </div>
 
+        <!-- 卡片三：调参审计（TuningAuditList.vue 口径 · 仅超管可见 · 保存成功追加条目） -->
+        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="superadmin" data-anno="D4">
+          <div class="card-hd" data-toggle="card-audit" role="button" tabindex="0" aria-expanded="false">
+            <span class="t">调参审计</span><span class="d">改前 → 改后字段级 diff · 审计不可删改</span>
+            <span class="sp"></span>
+            <span class="tag gray">仅超级管理员可见</span>
+            <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+          <div class="card-body hidden" id="audit-body">
+            <div id="audit-list"></div>
+          </div>
+        </div>
+
+        <div class="role-fallback" data-dr="role-fallback">调参与审计仅超级管理员可见（切到超管角色可编辑）</div>
+
         <!-- 原型演示控件：明确与产品功能分离（早前挂在调试台工具条上，容易被当成产品能力） -->
         <div class="note demo">
           <span class="k">原型演示</span>
@@ -925,12 +1106,71 @@
           ⑦ 「验收要点」用什么判据自动比对（现为人工查看双列输出 + 差异摘要）；⑧ 运行中是否冻结参数面板（现可边跑边改，结果归属可能含糊）；
           ⑨ 用例的来源与归属：本稿按「每个定义自带一组本业务用例」展示（未落库），真实实现是用例存 DB 跟定义绑定，还是先共用平台用例池？</span>
         </div>
+        </div><!-- /.only-normal -->
       </div>
     </div>
   </div>
 
   <div class="toast hidden" id="toast" role="alert"></div>
 </div>
+
+<!-- ===== 原型演示控件（L1 · 独立打开生效；抽进 hub 时脚本整段不带入） ===== -->
+<aside class="demo-ctl" data-demo-ctl id="demo-ctl" aria-label="原型演示控件">
+  <div class="dc-hd">
+    <span class="dc-t">(i) 原型演示控件</span>
+    <button class="dc-x" data-dc-toggle type="button" title="收起（H）">收起</button>
+  </div>
+  <div class="dc-bd">
+    <div class="dc-sec">
+      <div class="dc-lb">稿头</div>
+      <div>admin Agents · 定义详情 · 五控件调参｜桌面 Web｜2026-10-28<br>数据全为 mock · 待确认 <b data-dc-anno-count>0</b> 项 · 见稿内标注层（A）</div>
+    </div>
+    <div class="dc-sec">
+      <div class="dc-lb">场景包（1–6 直达）</div>
+      <div class="dc-chips">
+        <button class="dc-btn preset" data-dc-preset="p1" type="button">S1 超管 · 带工具默认强制开思考</button>
+        <button class="dc-btn preset" data-dc-preset="p2" type="button">S2 存量简单 agent · 全部未配置</button>
+        <button class="dc-btn preset" data-dc-preset="p3" type="button">S3 误配 disabled · 红字警示</button>
+        <button class="dc-btn preset" data-dc-preset="p4" type="button">S4 temp+topP 同填 · 保存被拒</button>
+        <button class="dc-btn preset" data-dc-preset="p5" type="button">S5 普通管理员 · 调参不可见</button>
+        <button class="dc-btn preset" data-dc-preset="p6" type="button">S6 保存成功 · 审计改前改后</button>
+      </div>
+      <div class="dc-why" id="dc-why"></div>
+    </div>
+    <div class="dc-sec">
+      <div class="dc-lb">角色</div>
+      <div class="dc-chips">
+        <button class="dc-btn" data-dc-role="superadmin" type="button">超级管理员</button>
+        <button class="dc-btn" data-dc-role="admin" type="button">普通管理员</button>
+      </div>
+    </div>
+    <div class="dc-sec">
+      <div class="dc-lb">数据态</div>
+      <div class="dc-chips">
+        <button class="dc-btn" data-dc-state="normal" type="button">正常</button>
+        <button class="dc-btn" data-dc-state="loading" type="button">加载中</button>
+        <button class="dc-btn" data-dc-state="empty" type="button">空态</button>
+        <button class="dc-btn" data-dc-state="error" type="button">错误</button>
+        <button class="dc-btn" data-dc-state="forbidden" type="button">无权限</button>
+        <button class="dc-btn" data-dc-state="misconfig" type="button">误配警示</button>
+      </div>
+    </div>
+    <div class="dc-sec">
+      <div class="dc-lb">屏直达</div>
+      <div class="dc-chips">
+        <button class="dc-btn" data-dc-screen="screen-list" type="button">定义管理</button>
+        <button class="dc-btn" data-dc-screen="screen-detail" type="button">定义详情 · 调参</button>
+      </div>
+    </div>
+    <div class="dc-sec">
+      <div class="dc-chips">
+        <button class="dc-btn" data-dc-reset type="button">复位</button>
+        <button class="dc-btn" data-dc-anno type="button">标注层</button>
+      </div>
+    </div>
+    <div class="dc-keys"><kbd>H</kbd> 隐没 · <kbd>[</kbd><kbd>]</kbd> 上下屏 · <kbd>1</kbd>–<kbd>6</kbd> 场景 · <kbd>A</kbd> 标注 · <kbd>?</kbd> 帮助</div>
+  </div>
+</aside>
 
 <script>
 (function(){
@@ -942,11 +1182,11 @@
        温度一高就会「顺着答」而失守）——用例表就是用来暴露这两类回归的。
      ============================================================ */
   var DEFS = {
-    'report-helper': { name:'财报解读助手', model:'deepseek-v4-flash', ver:7,
+    'report-helper': { name:'财报解读助手', model:'deepseek-v4-flash', ver:7, hasTools:true,
       purpose:'解读上市公司财报，抽取关键财务指标并给出风险提示',
       keywords:'财报,年报,季报,业绩',
       systemPrompt:'你是资深财务分析师。回答需先给结论，再列关键指标，最后提示风险。不确定的数据必须标注「未披露」，不得推断。',
-      params:{ sampler:'temp', temp:'0.7', topP:null, maxTokens:'4096', thinking:'inherit', budget:null },
+      params:{ sampler:'temp', temp:'0.7', topP:null, maxTokens:'4096', thinking:'null', maxSteps:'10' },
       // 示例问题：l = 按钮短标签，q = 完整问题（点击后按 q 跑）
       tryQ:[ { l:'茅台 2024 营收是多少', q:'贵州茅台 2024 年报的营业总收入是多少？' },
              { l:'算一下两年复合增速', q:'用 2023、2024 两年数据算营收复合增速，给出算式' },
@@ -970,11 +1210,11 @@
           base:'本助手只做财报数据解读，不做翻译。翻译需求建议转到通用对话，那里效果更好。' }
       ] },
 
-    'contract-extract': { name:'合同条款抽取', model:'deepseek-v4-flash', ver:3,
+    'contract-extract': { name:'合同条款抽取', model:'deepseek-v4-flash', ver:3, hasTools:false,
       purpose:'从合同文本中抽取关键条款、金额与违约风险',
       keywords:'合同,条款,违约,金额',
       systemPrompt:'你是法务助理。只抽取原文出现的条款，不得改写或推断；缺失字段返回 null。',
-      params:{ sampler:'temp', temp:'0.1', topP:null, maxTokens:'2048', thinking:'disabled', budget:null },
+      params:{ sampler:'temp', temp:'0.1', topP:null, maxTokens:'2048', thinking:'disabled', maxSteps:'10' },
       tryQ:[ { l:'抽取付款/账期/违约金', q:'（粘贴《设备采购框架协议》§5–§7）抽取付款方式、账期与违约金比例' },
              { l:'保密条款没写怎么返回', q:'保密条款没写的话你怎么返回？' },
              { l:'复述 §7.2 原文', q:'§7.2 的违约金条款原文是什么？' } ],
@@ -997,11 +1237,11 @@
           base:'原文（§7.2）：「乙方逾期交货的，每逾期一日按合同总额的 0.5% 支付违约金，累计不超过合同总额的 10%。」' }
       ] },
 
-    'code-review': { name:'代码评审助手', model:'hy3', ver:5,
+    'code-review': { name:'代码评审助手', model:'hy3', ver:5, hasTools:true,
       purpose:'评审代码变更，指出风险、可读性与改进点',
       keywords:'代码,评审,review,PR',
       systemPrompt:'你是资深工程师。按「阻塞 / 建议 / 小问题」三档给出评审意见，先讲风险。',
-      params:{ sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'inherit', budget:null },
+      params:{ sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'null', maxSteps:'10' },
       tryQ:[ { l:'评审这段 fetch 代码', q:"async function load() { const r = await fetch('/api/list'); const d = await r.json(); list.value = d.items }" },
              { l:'watch 写法有问题吗', q:'watch(() => props.id, () => { load(props.id) }) 这样写有问题吗？' },
              { l:'顺手改成 Python', q:'帮我顺手把这段代码改成 Python' } ],
@@ -1032,17 +1272,17 @@
   // 场景预设：档位严格取自 docs/api/contracts.md §7.4。契约给确定值的才填（分类 256 / 代码 ≥3000）；
   // 契约给区间或「按 X 自定」的一律留空，不替用户编造数值，区间原文在提示里回显。
   var PRESETS = {
-    classify:{ sampler:'temp', temp:'0',   topP:null, maxTokens:'256',  thinking:'disabled', budget:null,
+    classify:{ sampler:'temp', temp:'0',   topP:null, maxTokens:'256',  thinking:'disabled',
       lockThinking:true, note:'分类档 · temp 0 · max 256 · thinking 关闭（C7-d 锁定）' },
-    extract: { sampler:'temp', temp:'0.1', topP:null, maxTokens:null,   thinking:'disabled', budget:null,
+    extract: { sampler:'temp', temp:'0.1', topP:null, maxTokens:null,   thinking:'disabled',
       note:'抽取档 · temp 0.1 · max 按字段量（留空）· thinking 关闭' },
-    code:    { sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'inherit',  budget:null,
+    code:    { sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'null',
       note:'代码档 · temp 0.2 · max 3000 · thinking 视复杂度' },
-    chat:    { sampler:'temp', temp:'0.7', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    chat:    { sampler:'temp', temp:'0.7', topP:null, maxTokens:null,   thinking:'null',
       note:'对话档 · temp 0.7 · max 800~2000（留空）· thinking 可开' },
-    creative:{ sampler:'temp', temp:'0.9', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    creative:{ sampler:'temp', temp:'0.9', topP:null, maxTokens:null,   thinking:'null',
       note:'创意档 · temp 0.9 · max 放宽（留空）· thinking 可开' },
-    tool:    { sampler:'temp', temp:'0.3', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    tool:    { sampler:'temp', temp:'0.3', topP:null, maxTokens:null,   thinking:'null',
       note:'工具档 · temp 0.3 · max 按工具返回量（留空）· thinking 视链路长短' }
   };
 
@@ -1068,6 +1308,7 @@
   };
 
   // 字段表：基础配置 + 生成参数**一起**进对比（参数多，改了都得看得见）
+  // v2.4：budget 不再是配置字段（只读预览），新增 maxSteps
   var FIELDS = [
     { k:'purpose',      label:'用途说明',      kind:'basic', long:true },
     { k:'keywords',     label:'路由关键词',    kind:'basic' },
@@ -1077,18 +1318,18 @@
     { k:'topP',      label:'Top P',        kind:'param', badge:'badge-topP' },
     { k:'maxTokens', label:'maxTokens',    kind:'param', badge:'badge-max' },
     { k:'thinking',  label:'thinking',     kind:'param', badge:'badge-thinking' },
-    { k:'budget',    label:'思考预算 budget', kind:'param' }
+    { k:'maxSteps',  label:'max_steps',    kind:'param', badge:'badge-maxSteps' }
   ];
 
-  var $ = function(id){ return document.getElementById(id); };
+  var $ = function(id){ return document.querySelector("#" + id); };  /* querySelector 取代 getElementById：hub 内 media-ops/dict 的 id 前缀方案会全局劫持 getElementById（toast→zm-toast），querySelector 不受污染（2026-10-28 审计发现） */
   var qsa = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
 
   // ---------- 格式化 / 对比 ----------
   function fmt(k, v){
     var f = FIELDS.filter(function(x){ return x.k===k; })[0] || {};
-    if(v===null || v===undefined || v==='') return f.kind==='basic' ? '（空）' : '沿用服务侧默认';
+    if(v===null || v===undefined || v==='') return f.kind==='basic' ? '（空）' : '未配置';
     if(k==='sampler') return v==='temp' ? 'Temperature' : 'Top P';
-    if(k==='thinking') return v==='inherit' ? '沿用服务侧默认' : (v==='disabled' ? '关闭' : '开启（限 ' + (draft.budget||'未填') + '）');
+    if(k==='thinking') return v==='null' ? '未配置 (NULL)' : (v==='disabled' ? 'disabled' : 'enabled');
     var t = String(v);
     if(f.long && t.length>28) return t.slice(0,28) + '…';
     return t;
@@ -1111,7 +1352,7 @@
     if(p.sampler==='topP' && p.topP!==null) out.push('<span class="chip">topP '+p.topP+'</span>');
     if(p.maxTokens!==null) out.push('<span class="chip">max '+p.maxTokens+'</span>');
     out.push('<span class="chip none">thinking '
-      + (p.thinking==='inherit'?'沿用服务侧默认':(p.thinking==='disabled'?'关闭':'开启')) + '</span>');
+      + (p.thinking==='null'?'未配置':(p.thinking==='disabled'?'关闭':'开启')) + '</span>');
     return out.join('');
   }
 
@@ -1164,7 +1405,7 @@
     $('in-temp').value = draft.temp===null?'':draft.temp;
     $('in-topP').value = draft.topP===null?'':draft.topP;
     $('in-max').value  = draft.maxTokens===null?'':draft.maxTokens;
-    $('in-budget').value = draft.budget===null?'':draft.budget;
+    $('in-steps').value = draft.maxSteps===null?'':draft.maxSteps;
 
     var isTemp = draft.sampler==='temp';
     qsa('#seg-sampler button').forEach(function(b){ b.classList.toggle('on', b.dataset.sampler===draft.sampler); });
@@ -1173,34 +1414,89 @@
     $('ctrl-topP').classList.toggle('off', isTemp);
     $('in-topP').disabled = isTemp;
 
+    // C7-b 互斥红字提示：同填时两控件标红 + 行内提示常驻
+    //（error-cta「返回修改」切回 normal 后提示仍在、字段值不丢 —— 兑现错误态文案承诺）
+    var conflict = draft.temp!==null && draft.temp!=='' && draft.topP!==null && draft.topP!=='';
+    $('ctrl-temp').classList.toggle('err', conflict);
+    $('ctrl-topP').classList.toggle('err', conflict);
+    $('conflict-hint').classList.toggle('hidden', !conflict);
+
+    // 联动二：maxTokens 占位随工具语义切换（留空语义不同）
+    var hasT = !!(DEFS[current] && DEFS[current].hasTools);
+    $('in-max').placeholder = hasT ? '空 = 模型上限（8192）' : '空 = 系统默认';
+    $('extra-max').textContent = hasT ? '带工具留空 = 模型上限，不人为压小' : '留空 = 系统默认';
+
     qsa('#seg-thinking button').forEach(function(b){ b.classList.toggle('on', b.dataset.thinking===draft.thinking); });
     $('seg-thinking').classList.toggle('locked', thinkingLocked);
     if(thinkingLocked){
       $('extra-thinking').textContent = '分类场景强制关闭思考，已锁定（C7-d）；切到其它预设即解锁';
-    } else if(draft.thinking==='enabled' && draft.budget===null){
-      $('extra-thinking').textContent = '已开启但未填预算：不预填，由服务端兜底';
     } else if(draft.thinking==='enabled'){
-      $('extra-thinking').textContent = '按预算上限思考；预算与输出上限共用额度';
+      $('extra-thinking').textContent = '显式开启；budget 按公式下发';
     } else if(draft.thinking==='disabled'){
-      $('extra-thinking').textContent = '关闭更快更省；推理类问题不建议关闭';
+      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正';
     } else {
-      $('extra-thinking').textContent = '留空 = 沿用服务端默认';
+      $('extra-thinking').textContent = '未配置走优先级链；显式值覆盖';
     }
+
+    // 联动三：thinking=enabled → budget 只读预览（min(模型上限, maxTokens/2)）
     var showBudget = draft.thinking==='enabled';
     $('row-budget').classList.toggle('hidden', !showBudget);
-    $('ctrl-budget').classList.toggle('off', !showBudget);
-    $('in-budget').disabled = !showBudget;
+    if(showBudget){
+      var cap = 8192;   // 模型上限（D3：W5 机制定后换真值）
+      var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+      if(isNaN(mt) || mt<=0) mt = cap;
+      var bv = Math.min(cap, Math.floor(mt/2));
+      $('budget-val').textContent = bv;
+      $('budget-formula').textContent = '= min(' + cap + ', ' + (draft.maxTokens===null?cap:draft.maxTokens) + '/2)';
+    }
+
+    // 联动一：挂工具误配 disabled → 红字警示（可点不锁死）
+    var mis = hasT && draft.thinking==='disabled' && !thinkingLocked;
+    $('warn-misconfig').classList.toggle('hidden', !mis);
+
+    // 生效策略预览：P1–P5 + 三值输出
+    renderStrategy(hasT);
 
     $('rb-sampler').textContent = draft.sampler==='temp'
       ? 'temp ' + (draft.temp===null?'默认':draft.temp)
       : 'topP ' + (draft.topP===null?'默认':draft.topP);
     $('rb-max').textContent = 'max ' + (draft.maxTokens===null?'默认':draft.maxTokens);
-    $('rb-thinking').textContent = 'thinking ' + (draft.thinking==='inherit'?'沿用服务侧默认':(draft.thinking==='disabled'?'关闭':'开启（限 '+(draft.budget||'未填')+'）'));
+    $('rb-thinking').textContent = 'thinking ' + (draft.thinking==='null'?'未配置':(draft.thinking==='disabled'?'关闭':'开启'));
     var n = diffs().length;
     $('rb-note').textContent = n ? ('草稿：' + n + ' 项与线上不同') : '与线上一致';
     $('adv-summary').textContent = (draft.sampler==='temp' ? 'temp ' + (draft.temp===null?'默认':draft.temp) : 'topP ' + (draft.topP===null?'默认':draft.topP))
       + ' · max ' + (draft.maxTokens===null?'默认':draft.maxTokens);
     renderDiff();
+  }
+
+  // 生效策略预览（D1 优先级链 P1–P5）：命中档实时标注 + thinking/budget/max_tokens 三值
+  function renderStrategy(hasT){
+    var t = draft.thinking;
+    var p1hit = hasT;                       // 带工具强制 enabled
+    var p2hit = !hasT && t!=='null';        // options.thinking 显式（非工具）
+    var p3hit = !p1hit && !p2hit && t!=='null';
+    var chain = [
+      { no:1, label:'带工具强制 enabled', hit:p1hit, detail: p1hit?'命中':'未命中' },
+      { no:2, label:'options.thinking 显式（非工具）', hit:p2hit, detail: p2hit?(t==='enabled'?'enabled':'disabled'):'未命中' },
+      { no:3, label:'agent 配置', hit:p3hit, detail: p3hit?(t==='enabled'?'enabled':'disabled'):'未命中' },
+      { no:4, label:'env TOKENHUB_THINKING', hit:false, detail:'未设置' },
+      { no:5, label:'形态默认', hit:false, detail: (p1hit||p2hit||p3hit)?'未到达':'disabled' }
+    ];
+    var effThinking = p1hit ? 'enabled' : (p2hit||p3hit ? t : 'disabled');
+    $('strat-chain').innerHTML = chain.map(function(c){
+      return '<li class="'+(c.hit?'hit':'')+'"><span class="pno">P'+c.no+'</span>'
+        + '<span class="plb">'+c.label+'</span><span class="pst">'+c.detail+'</span></li>';
+    }).join('');
+    var cap = 8192;
+    var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+    if(isNaN(mt) || mt<=0) mt = cap;
+    var bv = effThinking==='enabled' ? Math.min(cap, Math.floor(mt/2)) : null;
+    var maxWhy = draft.maxTokens===null ? (hasT?'（模型上限）':'（系统默认）') : '（配置值）';
+    $('strat-out').innerHTML =
+      'thinking → <b>'+effThinking+'</b><br>'
+      + 'budget_tokens → <b>'+(bv===null?'不下发':bv)+'</b>'
+      + (bv===null?'':' <span class="why">= min('+cap+', '+(draft.maxTokens===null?cap:draft.maxTokens)+'/2)</span>')+'<br>'
+      + 'max_tokens → <b>'+(draft.maxTokens===null?cap:draft.maxTokens)+'</b> <span class="why">'+maxWhy+'</span>';
   }
   function renderDiff(){
     var d = diffs(), map = {};
@@ -1262,7 +1558,7 @@
     current = id;
     BASE = { purpose:d.purpose, keywords:d.keywords, model:d.model, systemPrompt:d.systemPrompt,
              sampler:d.params.sampler, temp:d.params.temp, topP:d.params.topP,
-             maxTokens:d.params.maxTokens, thinking:d.params.thinking, budget:d.params.budget };
+             maxTokens:d.params.maxTokens, thinking:d.params.thinking, maxSteps:d.params.maxSteps };
     draft = Object.assign({}, BASE);
     thinkingLocked = false;
     renderHead(); renderBasic();
@@ -1491,9 +1787,9 @@
     return head + body;
   }
   function paramLabel(p){
-    return (p.sampler==='temp' ? 'temp '+(p.temp===null?'沿用服务侧默认':p.temp) : 'topP '+(p.topP===null?'沿用服务侧默认':p.topP))
-      + ' · max ' + (p.maxTokens===null?'沿用服务侧默认':p.maxTokens)
-      + ' · thinking ' + (p.thinking==='inherit'?'沿用服务侧默认':(p.thinking==='disabled'?'关闭':'开启'));
+    return (p.sampler==='temp' ? 'temp '+(p.temp===null?'默认':p.temp) : 'topP '+(p.topP===null?'默认':p.topP))
+      + ' · max ' + (p.maxTokens===null?'默认':p.maxTokens)
+      + ' · thinking ' + (p.thinking==='null'?'未配置':(p.thinking==='disabled'?'关闭':'开启'));
   }
   function runAnswer(q, params, label, turn){
     turn = turn || newTurn();
@@ -1537,13 +1833,64 @@
   $('crumb-main').addEventListener('click', function(){ leaveDetail(this); });
   $('btn-back').addEventListener('click', function(){ leaveDetail(this); });
 
+  /* ---------- 状态 CTA（only-empty / only-error / only-forbidden 块内） ----------
+     绑定必须落在**主脚本段**：演示控件脚本（DEMO-PANEL）进 hub 时被 jsDrop 丢掉，
+     而这三个按钮随 DOM 进 hub —— 放错段 = hub 内死按钮（demo-control-panel.md 反模式）。
+     error-cta  文案承诺「字段值已保留」→ 只切态，不动 draft；互斥红字由 renderParams 常驻 */
+  function setDemoState(st){
+    var sd = $('screen-detail') || document.querySelector('[data-screen="detail"]');
+    if(sd) sd.setAttribute('data-demo-state', st || 'normal');
+  }
+  function expandAdvCard(){
+    var card = $('card-adv');
+    if(card && !card.classList.contains('open')){
+      var hd = card.querySelector('.card-hd');
+      if(hd) hd.click();
+    }
+    if(card && card.scrollIntoView) card.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+  var ctaError = document.querySelector('[data-dr="error-cta"]');
+  if(ctaError) ctaError.addEventListener('click', function(){
+    setDemoState('normal');
+    renderParams();   // 重渲染：互斥红字提示仍在、字段值不丢
+  });
+  var ctaEmpty = document.querySelector('[data-dr="empty-cta"]');
+  if(ctaEmpty) ctaEmpty.addEventListener('click', function(){
+    setDemoState('normal');
+    expandAdvCard();  // 「开始配置」→ 展开高级卡并滚到参数面板
+  });
+  var ctaForbidden = document.querySelector('[data-dr="forbidden-cta"]');
+  if(ctaForbidden) ctaForbidden.addEventListener('click', function(){ leaveDetail(this); });
+
+  /* 代码块「复制」按钮（动态生成于 .codeblk）：chatbox 事件委托接行为 */
+  var chatboxEl = $('chatbox');
+  if(chatboxEl) chatboxEl.addEventListener('click', function(e){
+    var cp = e.target.closest('.cp');
+    if(!cp) return;
+    var blk = cp.closest('.codeblk');
+    var pre = blk && blk.querySelector('pre');
+    var text = pre ? pre.textContent : '';
+    if(navigator.clipboard && text) navigator.clipboard.writeText(text).catch(function(){});
+    cp.textContent = '已复制';
+    setTimeout(function(){ cp.textContent = '复制'; }, 1200);
+  });
+
+  /* 顶栏主题按钮（proto-shell 注入的壳件）：接诚实行为，不留死点击 */
+  qsa('.ad-theme').forEach(function(b){
+    b.addEventListener('click', function(){
+      toast('主题切换落地时接入真实主题；本稿仅亮色（--ws-*）', true);
+    });
+  });
+
   qsa('[data-toggle]').forEach(function(hd){
     function toggle(){
       var card = $(hd.dataset.toggle);
       var open = !card.classList.contains('open');
       card.classList.toggle('open', open);
       hd.setAttribute('aria-expanded', open ? 'true' : 'false');
-      $('adv-body-wrap').classList.toggle('hidden', !$('card-adv').classList.contains('open'));
+      /* 卡体显隐按各自 body 处理（adv-body-wrap / audit-body） */
+      var body = card.querySelector('.card-body');
+      if(body) body.classList.toggle('hidden', !open);
     }
     hd.addEventListener('click', toggle);
     hd.addEventListener('keydown', function(e){
@@ -1575,7 +1922,6 @@
     b.addEventListener('click', function(){
       if(thinkingLocked) return;
       draft.thinking = b.dataset.thinking;
-      if(draft.thinking!=='enabled') draft.budget = null;   // 契约未给预算默认值，不预填
       renderParams();
     });
   });
@@ -1587,7 +1933,7 @@
       renderParams();
     });
   }
-  bindNum('in-temp','temp'); bindNum('in-topP','topP'); bindNum('in-max','maxTokens'); bindNum('in-budget','budget');
+  bindNum('in-temp','temp'); bindNum('in-topP','topP'); bindNum('in-max','maxTokens'); bindNum('in-steps','maxSteps');
   qsa('[data-clear]').forEach(function(c){
     c.addEventListener('click', function(){ draft[c.dataset.clear] = null; renderParams(); });
   });
@@ -1762,31 +2108,77 @@
       var n = Number(v);
       if(v==='' || isNaN(n) || (int && !Number.isInteger(n)) || n<min || n>max){
         // maxTokens 的控件 id 是 ctrl-max（不是 ctrl-maxTokens），这里显式映射
-        if(!bad) bad = { k:k, ctrl: k==='maxTokens' ? 'ctrl-max' : ('ctrl-' + k) };
+        if(!bad) bad = { k:k, ctrl: k==='maxTokens' ? 'ctrl-max' : (k==='maxSteps' ? 'ctrl-maxSteps' : ('ctrl-' + k)) };
       }
     }
     num('temp', 0, 2, false);
     num('topP', 0, 1, false);
     num('maxTokens', 1, 32768, true);
-    var b = draft.budget;
-    if(b!==null && !bad){ var nb = Number(b); if(isNaN(nb) || !Number.isInteger(nb) || nb<=0) bad={k:'budget', ctrl:'ctrl-budget'}; }
+    num('maxSteps', 1, 50, true);
+    // C7-b 互斥：同填一律拒收（S4 场景同款拒绝；字段值保留不清空）
+    if(!bad && draft.temp!==null && draft.temp!=='' && draft.topP!==null && draft.topP!==''){
+      return { ctrl:'ctrl-temp', msg:'保存失败：temperature 与 top P 只能填一个（C7-b 互斥）' };
+    }
     if(!bad) return null;
     var msg = { temp:'temperature 需为 0–2 之间的数字', topP:'top P 需为 0–1 之间的数字',
-                maxTokens:'输出上限须为 1–32768 的整数', budget:'思考预算须为正整数' }[bad.k];
+                maxTokens:'输出上限须为 1–32768 的整数', maxSteps:'最大步数须为 1–50 的整数' }[bad.k];
     return { ctrl:bad.ctrl, msg:'保存失败：' + msg };
   }
+
+  // ---------- 调参审计（TuningAuditList.vue 口径：字段级 改前→改后 + 运行时生效值） ----------
+  var AUDIT = [
+    { time:'2026-10-28 15:42:07', agent:'研发助手', op:'超级管理员 · 橙子',
+      diffs:[ { f:'thinking', before:'未配置', after:'enabled' }, { f:'maxTokens', before:'未配置', after:'8192' } ],
+      runtime:'运行时生效：budget_tokens=4096 · max_tokens=8192（模型上限）' },
+    { time:'2026-10-28 11:18:33', agent:'翻译助手', op:'超级管理员 · 橙子',
+      diffs:[ { f:'temperature', before:'0.7', after:'0.3' } ],
+      runtime:'运行时生效：thinking=未配置（走优先级链）· max_tokens=系统默认' }
+  ];
+  function renderAudit(){
+    $('audit-list').innerHTML = AUDIT.map(function(a){
+      return '<div class="audit-item"><div class="audit-head"><span class="audit-time">'+a.time+'</span>'
+        + '<b>'+a.agent+'</b><span class="audit-op">'+a.op+'</span></div>'
+        + a.diffs.map(function(d){
+            return '<div class="audit-diff"><span class="fld-n">'+d.f+'</span>'
+              + '<span class="before">'+d.before+'</span><span class="arw">→</span><span class="after">'+d.after+'</span></div>';
+          }).join('')
+        + '<div class="audit-runtime">'+a.runtime+'</div></div>';
+    }).join('');
+  }
+  function pushAudit(n, savedDiffs){
+    var ds = [];
+    (savedDiffs||[]).forEach(function(x){
+      ds.push({ f: x.label, before: fmt(x.k, x.from), after: fmt(x.k, x.to) });
+    });
+    if(!ds.length) return;
+    var cap = 8192;
+    var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+    if(isNaN(mt)||mt<=0) mt = cap;
+    var effT = (DEFS[current].hasTools && draft.thinking!=='enabled') ? 'enabled（强制）' : (draft.thinking==='null'?'未配置（走优先级链）':draft.thinking);
+    var bv = (effT.indexOf('enabled')===0) ? Math.min(cap, Math.floor(mt/2)) : null;
+    AUDIT.unshift({
+      time: new Date().toLocaleString('zh-CN', { hour12:false }).replace(/\//g,'-'),
+      agent: DEFS[current].name, op:'超级管理员 · 橙子', diffs: ds,
+      runtime: '运行时生效：thinking=' + effT + ' · budget_tokens=' + (bv===null?'不下发':bv)
+        + ' · max_tokens=' + (draft.maxTokens===null?(DEFS[current].hasTools?'8192（模型上限）':'系统默认'):draft.maxTokens)
+    });
+    renderAudit();
+  }
+
   function doSave(){
-    var n = diffs().length;
+    var dlist = diffs();
+    var n = dlist.length;
     Object.keys(BASE).forEach(function(k){ BASE[k] = draft[k]; });
     var d = DEFS[current];
     d.purpose = draft.purpose; d.keywords = draft.keywords; d.model = draft.model;
     d.systemPrompt = draft.systemPrompt;
     d.params = { sampler:draft.sampler, temp:draft.temp, topP:draft.topP,
-      maxTokens:draft.maxTokens, thinking:draft.thinking, budget:draft.budget };
+      maxTokens:draft.maxTokens, thinking:draft.thinking, maxSteps:draft.maxSteps };
     d.ver = d.ver + 1;
     renderHead();
     $('chips-' + current).innerHTML = chipsOf(BASE);
     renderParams();
+    pushAudit(n, dlist);
     toast('已保存 v'+d.ver+' · '+n+' 项生效；用例基线仍为线上版本（是否自动同步见页脚待拍板 ③）', true);
   }
   $('btn-save').addEventListener('click', function(){
@@ -1816,6 +2208,19 @@
 
   loadDef(current);
   renderCases();
+  renderAudit();
+
+  /* 暴露少量接口给演示控件脚本（独立 script 块，抽进 hub 时不带入） */
+  window.ADT = {
+    loadDef: loadDef, openDef: openDef, goList: goList, renderParams: renderParams,
+    renderAudit: renderAudit, renderBasic: renderBasic,
+    get draft(){ return draft; }, set draft(v){ draft = v; },
+    get BASE(){ return BASE; }, set BASE(v){ BASE = v; },
+    get DEFS(){ return DEFS; },
+    get thinkingLocked(){ return thinkingLocked; }, set thinkingLocked(v){ thinkingLocked = v; },
+    get AUDIT(){ return AUDIT; },
+    toast: toast
+  };
 })();
 </script>
 <script>
@@ -1851,5 +2256,180 @@
 })();
 
 </script>
+<!-- DEMO-PANEL-START -->
+<script>
+/* ============================================================
+   原型演示控件（L1）· 独立打开生效
+   · 抽进 admin-agents-hub.html 时本段脚本与 <aside data-demo-ctl> 均不带入
+     （照 admin-media-ops.html 先例：jsDrop；importFrom 装配只取第一段 script）
+   · 规格：skills/ux-prototype-designer/references/demo-control-panel.md
+   ============================================================ */
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var qsa = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+
+  /* 注册表（对象字段字面量：check-demo-panel 静态对账） */
+  var DEMO = {
+    screens: {
+      'screen-list':   { el:'screen-list',   label:'定义管理' },
+      'screen-detail': { el:'screen-detail', label:'定义详情 · 调参' }
+    },
+    roles: {
+      superadmin: '超级管理员',
+      admin: '普通管理员'
+    },
+    states: {
+      normal: '正常', loading: '加载中', empty: '空态',
+      error: '错误', forbidden: '无权限', misconfig: '误配警示'
+    },
+    presets: [
+      { id:'p1', label:'S1 超管 · 带工具默认强制开思考', role:'superadmin', screen:'screen-detail', state:'normal',
+        why:'主路径：五控件 + 三联动 + 策略预览；thinking=enabled 时 budget 只读预览出现' },
+      { id:'p2', label:'S2 存量简单 agent · 全部未配置', role:'superadmin', screen:'screen-detail', state:'normal',
+        why:'NULL 语义：temperature 留空不预填 0.7；maxTokens 占位=系统默认（非工具）' },
+      { id:'p3', label:'S3 误配 disabled · 红字警示', role:'superadmin', screen:'screen-detail', state:'misconfig',
+        why:'联动一：挂工具却选 disabled → 警示框出现；运行时会被强制纠正' },
+      { id:'p4', label:'S4 temp+topP 同填 · 保存被拒', role:'superadmin', screen:'screen-detail', state:'error',
+        why:'互斥校验：同填保存被拒（字段值不清空），错误态可返回修改' },
+      { id:'p5', label:'S5 普通管理员 · 调参不可见', role:'admin', screen:'screen-detail', state:'forbidden',
+        why:'仅超管可见：调参卡与审计卡整块消失，普通管理员只剩基础配置' },
+      { id:'p6', label:'S6 保存成功 · 审计改前改后', role:'superadmin', screen:'screen-detail', state:'normal',
+        why:'审计条目形态：字段级 diff（划线改前 → 加粗改后）+ 运行时生效值行' }
+    ]
+  };
+
+  var applyPreset = {
+    p1: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('report-helper');
+      var d = Object.assign({}, A.BASE); d.thinking = 'enabled'; A.draft = d;
+      A.thinkingLocked = false; A.renderParams(); expandAdv(); },
+    p2: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('contract-extract');
+      var d = Object.assign({}, A.BASE);
+      d.temp = null; d.topP = null; d.maxTokens = null; d.thinking = 'null'; d.maxSteps = '10';
+      d.sampler = 'temp'; A.draft = d;
+      A.thinkingLocked = false; A.renderParams(); expandAdv(); },
+    p3: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('report-helper');
+      var d = Object.assign({}, A.BASE); d.thinking = 'disabled'; A.draft = d;
+      A.thinkingLocked = false; A.renderParams(); expandAdv(); },
+    p4: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('report-helper');
+      var d = Object.assign({}, A.BASE); d.sampler = 'temp'; d.temp = '1'; d.topP = '0.9'; A.draft = d;
+      A.thinkingLocked = false; A.renderParams(); expandAdv(); },
+    p5: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('report-helper'); A.renderParams(); expandAdv(); },
+    p6: function(){ var A = window.ADT; if(!A) return;
+      A.loadDef('report-helper');
+      var d = Object.assign({}, A.BASE); d.thinking = 'enabled'; d.maxTokens = '8192'; A.draft = d;
+      A.thinkingLocked = false; A.renderParams(); expandAdv();
+      var btn = document.getElementById('btn-save');
+      if(btn) btn.click(); }
+  };
+
+  function expandAdv(){
+    var card = document.getElementById('card-adv');
+    if(card && !card.classList.contains('open')){
+      var hd = card.querySelector('.card-hd'); if(hd) hd.click();
+    }
+    var wrap = document.getElementById('adv-body-wrap');
+    if(wrap) wrap.classList.remove('hidden');
+    var ac = document.getElementById('card-audit');
+    if(ac && !ac.classList.contains('open')){
+      var ah = ac.querySelector('.card-hd'); if(ah) ah.click();
+    }
+  }
+
+  function setState(st){
+    var sd = document.getElementById('screen-detail');
+    if(sd) sd.setAttribute('data-demo-state', st || 'normal');
+    qsa('[data-dc-state]').forEach(function(b){ b.classList.toggle('on', b.dataset.dcState === st); });
+  }
+  function setRole(r){
+    document.documentElement.setAttribute('data-demo-role', r || 'superadmin');
+    qsa('[data-dc-role]').forEach(function(b){ b.classList.toggle('on', b.dataset.dcRole === r); });
+  }
+  function go(key){
+    var A = window.ADT; if(!A) return;
+    if(key === 'screen-list'){ A.goList(); }
+    else if(key === 'screen-detail'){ A.openDef('report-helper'); }
+    qsa('[data-dc-screen]').forEach(function(b){ b.classList.toggle('on', b.dataset.dcScreen === key); });
+    try { location.hash = '#' + key.replace('screen-', ''); } catch(e){}
+  }
+  function applyScenario(p){
+    if(!p) return;
+    setRole(p.role);
+    setState(p.state);
+    go(p.screen);
+    if(applyPreset[p.id]) applyPreset[p.id]();
+    qsa('[data-dc-preset]').forEach(function(b){ b.classList.toggle('on', b.dataset.dcPreset === p.id); });
+    $('dc-why').textContent = p.why || '';
+  }
+  function reset(){
+    qsa('.cfm').forEach(function(n){ n.remove(); });
+    var t = document.getElementById('toast'); if(t) t.classList.add('hidden');
+    applyScenario(DEMO.presets[0]);
+  }
+
+  qsa('[data-dc-preset]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = DEMO.presets.filter(function(x){ return x.id === b.dataset.dcPreset; })[0];
+      applyScenario(p);
+    });
+  });
+  qsa('[data-dc-role]').forEach(function(b){
+    b.addEventListener('click', function(){ setRole(b.dataset.dcRole); });
+  });
+  qsa('[data-dc-state]').forEach(function(b){
+    b.addEventListener('click', function(){ setState(b.dataset.dcState); });
+  });
+  qsa('[data-dc-screen]').forEach(function(b){
+    b.addEventListener('click', function(){ go(b.dataset.dcScreen); });
+  });
+  var resetBtn = document.querySelector('[data-dc-reset]');
+  if(resetBtn) resetBtn.addEventListener('click', reset);
+
+  var annoOn = false;
+  var annoBtn = document.querySelector('[data-dc-anno]');
+  function toggleAnno(){
+    annoOn = !annoOn;
+    document.documentElement.setAttribute('data-demo-anno', annoOn ? 'on' : 'off');
+    if(annoBtn) annoBtn.classList.toggle('on', annoOn);
+    var c = document.querySelector('[data-dc-anno-count]');
+    if(c) c.textContent = document.querySelectorAll('[data-anno]').length;
+  }
+  if(annoBtn) annoBtn.addEventListener('click', toggleAnno);
+
+  var ctl = $('demo-ctl');
+  var mini = false;
+  function toggleCtl(){
+    mini = !mini;
+    ctl.classList.toggle('mini', mini);
+  }
+  var tg = document.querySelector('[data-dc-toggle]');
+  if(tg) tg.addEventListener('click', toggleCtl);
+
+  document.addEventListener('keydown', function(e){
+    var tag = (e.target.tagName || '').toLowerCase();
+    if(tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+    if(e.key === 'h' || e.key === 'H'){ toggleCtl(); }
+    else if(e.key === '['){ go('screen-list'); }
+    else if(e.key === ']'){ go('screen-detail'); }
+    else if(e.key >= '1' && e.key <= '6'){ applyScenario(DEMO.presets[Number(e.key) - 1]); }
+    else if(e.key === 'a' || e.key === 'A'){ toggleAnno(); }
+    else if(e.key === '?'){ mini = false; ctl.classList.remove('mini'); }
+    else if(e.key === 'Escape'){ qsa('.cfm').forEach(function(n){ n.remove(); }); if(!mini) toggleCtl(); }
+  });
+
+  /* 初始：仅设定角色/数据态与场景高亮，**不导航不展开**（页面默认停在列表，评审点场景包再进） */
+  setRole('superadmin');
+  setState('normal');
+  qsa('[data-dc-preset]').forEach(function(b){ b.classList.toggle('on', b.dataset.dcPreset === 'p1'); });
+  $('dc-why').textContent = DEMO.presets[0].why;
+  var c0 = document.querySelector('[data-dc-anno-count]');
+  if(c0) c0.textContent = document.querySelectorAll('[data-anno]').length;
+})();
+</script>
+<!-- DEMO-PANEL-END -->
 </body>
 </html>
