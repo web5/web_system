@@ -178,6 +178,7 @@ import {
   thinkingToForm,
   validateTuning,
   buildTuningAuditEntry,
+  pruneTuningAuditEntries,
   type ThinkingFormValue,
   type TuningAuditEntry,
   type TuningFields,
@@ -414,7 +415,8 @@ async function save(): Promise<void> {
         hasTools: hasTools.value,
       });
       if (entry.diffs.length > 0) {
-        auditEntries.value = [entry, ...auditEntries.value];
+        // D4 留存期：写入即 prune 掉超过 7 天的条目（不只是隐藏，内存真收敛）
+        auditEntries.value = pruneTuningAuditEntries([entry, ...auditEntries.value]);
       }
     }
 
