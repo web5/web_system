@@ -387,6 +387,35 @@ const dupInject = SOURCE_DEFS.map((s) => ({
 rec('10b3 每份源稿 CSS/JS 各只注入一次（不是每屏一份）',
   dupInject.map((x) => `${x.file}:${x.n}`).join('|'), '');
 
+// 10b4 id 隔离**不得**靠「全局覆写 document.getElementById」（2026-10-29 修复 + 防复发）
+//  背景：旧实现在抽取 prelude 里写 `document.getElementById = function(id){…}`，两个模块各装一次 →
+//   后装的劫持**同页所有代码**：admin-agent-def-detail.html 的 getElementById('toast') 被映射到
+//   'zm-toast'，hub 内 toast 完全不显示；且 querySelector('#id') 完全不受 shim 保护 →
+//   试采状态分段 / 手动触发弹窗状态分段在 hub 内静默失效。
+//  现状：改成 IIFE 局部的 byId/qs/qsa（见 scripts/lib/proto-registry.mjs 3a 段）。
+rec('10b4-1 生成稿无全局 getElementById 覆写（id 隔离只走 IIFE 局部 byId）',
+  (hubHtml.match(/document\.getElementById\s*=[^=]/g) || []).length, 0);
+const shimState = await page.evaluate(() => ({
+  hijacked: /SELF_IDS|RAW_BY_ID|SELF\[/.test(String(document.getElementById)),
+  toastId: (document.getElementById('toast') || {}).id ?? null,
+}));
+rec('10b4-2 运行时 document.getElementById 仍是原生（未被任何模块 shim 劫持）', shimState.hijacked, false);
+rec('10b4-3 运行时 getElementById("toast") 命中的是本稿 toast（不是别的模块的 zm-/dm- 前缀件）',
+  shimState.toastId, 'toast');
+// 10b5 querySelector('#id') 必须同样吃到前缀 —— 旧 shim 只管 getElementById，这类选择器
+//      在 hub 内会静默返回空（不报错，只是控件不联动），是最难发现的一类。
+const segLive = await page.evaluate(() => {
+  const seg = document.getElementById('zm-testStateSeg');
+  if (!seg) return { found: false };
+  const btns = [...seg.querySelectorAll('button')];
+  if (btns.length < 2) return { found: true, total: btns.length };
+  btns[btns.length - 1].click();
+  return { found: true, total: btns.length, onIdx: btns.findIndex((b) => b.classList.contains('on')) };
+});
+rec('10b5 模块 querySelector("#id") 前缀生效：点试采状态末档，.on 跟到末档（旧 shim 下恒停在首档）',
+  segLive.found ? `${segLive.onIdx}/${segLive.total}` : 'not-found',
+  `${(segLive.total ?? 0) - 1}/${segLive.total}`);
+
 // 10c 作用域隔离：合入稿的 CSS 规则必须条条带作用域（裸规则会污染全站 —— v2 事故同型）
 const SEC = '/* ===== 来自 ';
 const from = hubHtml.indexOf(SEC + 'dict-module.html');
