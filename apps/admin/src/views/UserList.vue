@@ -362,6 +362,10 @@ async function fetchRoleOptions() {
         value: r.code,
         label: roleLabelOf(r.code, roleNameMap.value),
       }));
+      // 存量账号 roles 多为 ['user']（注册默认值，不在 roles 表），缺它会显示裸 code
+      if (!roleOptions.value.some((o) => o.value === 'user')) {
+        roleOptions.value.push({ value: 'user', label: roleLabelOf('user', roleNameMap.value) });
+      }
     }
   } catch {
     /* 无 roles:view 权限或接口异常：保持兜底四项 */
