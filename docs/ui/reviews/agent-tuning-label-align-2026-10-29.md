@@ -139,3 +139,114 @@ thinking=enabled 态「上方 form-item 底 → 预览框顶」：
 - **label 文案未动**：「输出上限 maxTokens」「最大步数 max_steps」在 84px 内换行两行、无溢出（§四），但 §3.2:125 要求业务词命名——待主理人拍板后另行改文案（改完可能变单行）。
 - 26a/26b 是结构断言；纯 CSS 层面的对齐回归仍需可视回归/人工量测（`/tmp/measure-label3.mjs` 可复跑）。
 - 未触碰：D4 七天留存、`canAccessTuning` 门禁、策略预览整宽、hub/原型文件、主工作区。
+
+---
+
+## 八、thinking 行折行（2026-10-29 二次修正，dev 复测抓到）
+
+#489 合并并发布 dev（master `ac8dc94e`）后，主理人在 dev 复测发现：**四个数值控件对齐了，但 thinking 那一行的整块 control 折到了 label 下方、左缘退回行首**。
+
+### 8.1 症状（dev 实测，1440）
+
+| 行 | label 左 | `.ant-form-item-control` 左 |
+|---|---|---|
+| Temperature | 253 | **337** |
+| 输出上限 maxTokens | 253 | **337** |
+| Top P | 253 | **337** |
+| **thinking** | 253 | **253**（折到下一行，从行首排） |
+| 最大步数 max_steps | 253 | **337** |
+
+是「label 左置 84px」这次改动带来的新问题（control 列可用宽从 569 收到 485）。
+
+### 8.2 根因（定量，含一次错误假设的排除）
+
+主理人初判「radio 组三按钮 ≈550px > 483，组太宽把 control 挤下去」。实测**否定**了它：
+
+| 行 | extra 文案 max-content | radio 组 max-content | 可用宽（1440/1280） |
+|---|---|---|---|
+| Temperature | 287 | — | 485 / 405 |
+| 输出上限 maxTokens | 237 | — | 485 / 405 |
+| Top P | 352 | — | 485 / 405 |
+| **thinking** | **535** ← 超预算 | **292** ← 放得下 | 485 / 405 |
+| 最大步数 max_steps | 182 | — | 485 / 405 |
+
+真因链条：`wrapper-col` 用 `flex: 1 1 auto` → **flex-basis:auto 时基线尺寸取内容 max-content**；antd `.ant-form-item-row` 默认 `flex-wrap: wrap`；thinking 行的 control max-content = max(extra 535, radio 292) = **535 > 485** → 整块 control 折行。其余四行 extra 182–352 均 < 485，故只有 thinking 折。
+
+**对照实验（先证伪再动手）**：
+
+| 变体 | 改动 | 结果 |
+|---|---|---|
+| A（主理人初判方案） | 只加 `.ant-radio-group{display:flex;flex-wrap:wrap;gap:8px}` | **仍折行**：control 左缘 337/337/337/**253**/337，`foldedRows=[thinking]` |
+| B（真修法） | A + `wrapper-col flex:'1 1 0'`（basis 归 0） | **不折行**：337×5，`foldedRows=[]` |
+
+→ 「只让 radio 换行」治不了这个病；必须让 control 的**基线尺寸**不再取 max-content。
+
+### 8.3 最终实现
+
+```vue
+:label-col="{ style: { width: '84px' } }"
+:wrapper-col="{ style: { flex: '1 1 0', minWidth: 0 } }"   ← basis 0：control 恒占 label 之外剩余宽
+```
+
+```css
+/* 防御：更窄容器（侧栏展开/更小视口）下按钮组内部换行，最小占宽降到单按钮 ≈124px */
+.b3-tuning :deep(.ant-radio-group) { display: flex; flex-wrap: wrap; gap: 8px; }
+```
+
+- `:deep()` 是必要的（antd 子组件内部类，scoped 样式够不到）；
+- 按钮间隙统一走 `gap`，不靠 margin；
+- **不缩字号、不压 padding 硬塞一行**——1280 下三按钮仍一行，1024 下自然换两行（见 8.4）。
+
+### 8.4 几何实测（三视口）
+
+| 视口 | 五行 control 左缘 | 折行行 | radio flex-wrap | 组右溢 control | radio 底 − extra 顶 | 横向滚动 |
+|---|---|---|---|---|---|---|
+| 1440 | **337 / 337 / 337 / 337 / 337** | 无 | wrap | 0 | 0 | 无 |
+| 1280 | **337 / 337 / 337 / 337 / 337** | 无 | wrap | 0 | 0 | 无 |
+| 1024（窄容器验证） | **337 / 337 / 337 / 337 / 337** | 无 | wrap | 0 | 0 | 无 |
+
+1024 下 control 宽 277 < radio 292 → 按钮组自然换行：第 1 行「未配置 (NULL)」(337–461) +「enabled」(469–552)、第 2 行「disabled」(337–423)，组高 72（两行×32+8 gap），**不溢出 control（右缘 614 = control 右缘）、不与 extra 重叠（组底 1295 = extra 顶 1295）**。
+
+截图：`/tmp/final-1440-panel.png`、`/tmp/final-1280-panel.png`、`/tmp/final-1024-panel.png`。
+
+### 8.5 机检补洞（26c/26d）与「判据有效性」
+
+上一版 26a/26b 只覆盖 label 列与数值 input，**等于把 thinking 整行排除在外**——这才是缺陷绿着过关的原因。
+
+- **26c**：`wrapper-col` 的 flex 必须是 `'1 1 0'`，且不得残留 `'1 1 auto'`（防回退到 max-content 基线）；
+- **26d**：源码中 `.ant-radio-group` 规则必须含 `flex-wrap: wrap`（防窄容器下按钮溢出）。
+
+**判据为什么必须从「数 input 左缘」改成「数 control 左缘」**（同一构建、同一页面实测，注入 basis:auto 缺陷）：
+
+| 判据 | 实测值 | 结论 |
+|---|---|---|
+| 旧：四个数值 input 左缘 | `337 / 337 / 337 / 337` | **全等 → 绿（瞎）** |
+| 新：五行 control 左缘 | `337 / 337 / 337 / 253 / 337` | **不等 → 红（有效）** |
+
+折行时 input 在折下来的 control **内部**，input 左缘只能是 337——这就是旧判据结构性看不见该缺陷的原因。
+
+### 8.6 变异验证
+
+| 变异体 | 注入 | 结果 |
+|---|---|---|
+| ① 删掉 `.ant-radio-group` 的 `flex-wrap: wrap` | python 替换 | **仅 26d FAIL**（❌ 失败 1 项） |
+| ② `wrapper-col` flex `'1 1 0'` → `'1 1 auto'` | python 替换 | **仅 26c FAIL**（❌ 失败 1 项）；真实页面同步复现 `ctrlLefts=[337,337,337,253,337]`、`foldedRows=[thinking]` |
+
+还原后 diff 仅本任务两文件。
+
+### 8.7 验证门（本次）
+
+| 门 | 结果 |
+|---|---|
+| `vue-tsc --noEmit` | exit 0 |
+| `eslint src/views/Agents/AgentTuningPanel.vue` | exit 0 |
+| `npm test`（apps/admin） | 9 suites / 115 tests 全过 |
+| `verify-agent-def-detail.mjs` | **149 项全过**（26a/26b/26c/26d） |
+| `build-agents-hub.mjs` 重生成 | hub diff = 0（本次纯实现，hub 不改） |
+| `verify-agents-hub.mjs` | 243/246——同上 3 条既有菜单漂移 |
+
+### 8.8 遗留 / 风险
+
+- 26c/26d 仍是结构断言（file:// 机检量不到 app 几何）；真实几何靠 `/tmp/measure-label4.mjs`（数 control 左缘，含 radio 行）复跑——**后续量测请用它，不要再用只数 input 的旧脚本**。
+- thinking 行 extra 文案 max-content 535px 是折行的触发源；若后续按 §3.2:125 改成业务词短文案，max-content 会缩短（basis 0 仍然是对的，不必回退）。
+- 未触碰：D4 七天留存、`canAccessTuning` 门禁、策略预览整宽、hub/原型、主工作区。

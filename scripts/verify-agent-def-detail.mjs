@@ -672,6 +672,25 @@ const badLabelWidths = [...panelSrc.matchAll(/label-col="[^"]*?width:\s*'(\d+)px
 rec('26b label-col 固定宽度只允许 84px',
   badLabelWidths.join('|') || '(无非 84px 固定值)', '(无非 84px 固定值)',
   badLabelWidths.length === 0);
+// —— 26c/26d：thinking 行折行（2026-10-29 dev 复测抓到的偏差，属「label 左置」的副作用）——
+// 症状：label 左置后 control 列可用宽 485（1440）/405（1280）。antd .ant-form-item-row 是
+// flex-wrap:wrap，control 用 flex-basis:auto 时基线尺寸取内容 max-content——
+// thinking 行 extra 文案实测 max-content **535px > 485**，整块 control 被折到下一行、
+// 左缘从 337 退回行首 253（其余四行 extra 182–352 均 < 485，故不折）。
+// ⚠️ 判据要从「数 input 左缘」改成「数 control 左缘」：折行时 input 左缘仍是 337×4
+// （input 在折下来的 control 内部），旧判据完全看不见这个缺陷（见评审文档「判据有效性」）。
+// 本脚本量不到 app 几何 → 断言成因：control 基线尺寸必须归 0（flex '1 1 0'）。
+// 26c（静态）：wrapper-col 的 flex 必须是 '1 1 0'（basis 0），不得回退 '1 1 auto'
+const wrapperFlexBasis0 = /wrapper-col="[^"]*flex:\s*'1 1 0'/.test(panelCode);
+const wrapperFlexAuto = /wrapper-col="[^"]*flex:\s*'1 1 auto'/.test(panelCode);
+rec('26c control 基线尺寸归 0（wrapper-col flex 1 1 0，防整块折行）',
+  `basis0=${wrapperFlexBasis0 ? '有' : '无'} / 1-1-auto 残留=${wrapperFlexAuto ? '有' : '无'}`,
+  'basis0=有 / 残留=无', wrapperFlexBasis0 && !wrapperFlexAuto);
+// 26d（静态）：radio 组必须可内部换行（窄容器下最小占宽降到单按钮 ≈124px，禁缩字号硬塞）
+const radioRule = (panelCode.match(/\.ant-radio-group\)\s*\{[\s\S]*?\}/) || [''])[0];
+rec('26d radio 组内部可换行（flex-wrap: wrap）',
+  radioRule ? (/flex-wrap:\s*wrap/.test(radioRule) ? 'flex-wrap: wrap ✓' : '缺 flex-wrap: wrap') : '未找到 .ant-radio-group 规则',
+  'flex-wrap: wrap ✓', /flex-wrap:\s*wrap/.test(radioRule) && radioRule !== '');
 
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
