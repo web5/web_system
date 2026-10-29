@@ -4,8 +4,9 @@
   视觉：D5 口径 —— 跟 admin 现行 --ws-* 工程端 token，不引入原型 Claymorphism 暗色
   2026-10-29 拍板（A）：内部改单列顺序堆叠——原在外层 a-col span=12（505px）里再嵌
   a-row 12/12 双重挤压，输入框仅 235px；生效策略预览已抽至 AgentStrategyPreview.vue 整宽。
-  2026-10-29 拍板（label 对齐）：五个 a-form-item 包回 <a-form layout="vertical">——
-  游离在 form 上下文外时 antd 回落 horizontal、label 列宽自适应文字宽，四控件左缘参差。
+  2026-10-29 拍板（label 对齐）：五个 a-form-item 曾游离在 form 上下文外，antd 回落
+  horizontal 且 label 列宽自适应文字宽 → 四控件左缘参差。按 page-spec §3.2 落地
+  label 左置 + 固定 84px（原型 :215-216 口径）；曾试 layout="vertical"，属被否掉的上一版。
 -->
 <template>
   <div class="b3-tuning">
@@ -16,12 +17,21 @@
       <a-tag class="b3-role-tag">仅管理员及以上可编辑</a-tag>
     </div>
 
-    <!-- 2026-10-29 拍板（label 对齐）：五个 a-form-item 曾游离在 form 上下文外，
-         antd 回落 horizontal 且 label 列宽自适应文字宽 → 四个数值输入左缘参差
-         （实测 349/398/303/397，最大差 95px）。放回 vertical 上下文后控件左缘全部对齐，
-         与同页基础配置卡（AgentDefDetail.vue 的 <a-form layout="vertical">）同一约定。
+    <!-- 2026-10-29 拍板（口径修正）：五个 a-form-item 曾游离在 form 上下文外，
+         antd 回落 horizontal 且 label 列宽**自适应文字宽** → 四个数值输入左缘参差
+         （实测 349/398/303/397，最大差 95px）。按 page-spec §3.2 定稿口径落地：
+         label 左置、**固定 84px**、控件左缘对齐（原型 :215-216 / :221 .flb{flex:0 0 84px}）。
+         曾试过 layout="vertical"，属**被否掉的上一版**（原型注释明写「上一版 label 上置…
+         每字段 3 行、一堆小字」），已回退，勿再改回。
          :model="{}" 仅为补齐 form 上下文；字段值仍走 defineModel 直连父组件，不经 model。 -->
-    <a-form layout="vertical" :model="{}">
+    <a-form
+      layout="horizontal"
+      label-align="left"
+      :colon="false"
+      :label-col="{ style: { width: '84px' } }"
+      :wrapper-col="{ style: { flex: '1 1 auto', minWidth: 0 } }"
+      :model="{}"
+    >
       <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填） -->
       <a-form-item
         label="Temperature"
@@ -206,6 +216,16 @@ const preview = computed(() =>
 }
 .b3-role-tag {
   margin-left: auto;
+}
+/* label 列：规格 page-spec §3.2 —— 固定 84px、左对齐（label-align="left"）、无冒号
+   （:colon="false"，原型 .flb 无冒号）。antd horizontal 默认 nowrap，84px 里长 label
+   会被截断 → 这里纠正为可换行：行高 20px + 上内距 6px，单行时文字在 32px 控件高度内
+   视觉居中，换代后自然向下撑开（实测两行 46px < 行高 56px，不溢出、不压控件）。 */
+.b3-tuning :deep(.ant-form-item-label > label) {
+  height: auto;
+  white-space: normal;
+  line-height: 20px;
+  padding-top: 6px;
 }
 /* -8px 上边距已实测（2026-10-29，vertical 上下文）：与上方 form-item 的视觉间距
    = 24（form-item margin-bottom）− 8 = 16px，与改前完全一致 → 维持不变，不照搬调整 */
