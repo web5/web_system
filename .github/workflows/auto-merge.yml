@@ -13,6 +13,9 @@
 #   - 只处理**同仓库**分支的 PR（fork PR 直接跳过），因为要读 Secret；
 #     事件用 `pull_request`（不是 pull_request_target），不 checkout 任何被改代码，只调 API。
 #   - draft PR 不挂自动合入（避免草稿被自动合）。
+#   - **给 PR 打 `no-automerge` 标签即跳过**（人工逃生口，2026-10-29 加）。默认行为不变，
+#     只在「还需要人看一眼」时用：如同一个 PR 之后还要推修正提交、或改动涉及流程本身。
+#     不用这个标签就得每次 `gh pr merge <n> --disable-auto` 跟本 workflow 抢跑（2026-10-29 实测抢了两次）。
 #   - 合并仍需分支保护放行（checks 全绿 + 与 master 同步），本 workflow **不绕过任何门禁**：
 #     它只是把「等绿了自动合」这件事挂上，绿灯之前不会合。
 #
@@ -38,10 +41,17 @@ jobs:
   enable-auto-merge:
     runs-on: ubuntu-latest
     # 同仓库分支 + 非草稿：fork PR 拿不到 Secret，跳过即可（不失败、不误合）
+    # no-automerge 标签 = **人工逃生口**（2026-10-29 加）：
+    #   默认仍是「挂上自动合入」，不改既有承诺；给需要人先看一眼的 PR 一个开关，
+    #   避免每次都靠 `gh pr merge <n> --disable-auto` 跟本 workflow 抢跑。
+    #   加它的场景（实测踩过）：① 同一 PR 上还会继续推修正提交，过早合入会让后续提交变孤儿
+    #   （2026-10-29 #487：CI 一绿自动合并了错误方向的版本，修正 `cada3806` 只能 cherry-pick
+    #   另开 #489 补救）② PR 内容涉及流程本身 / 需要人复核语义，而不只是"机器能验过"。
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.draft == false
       && !startsWith(github.event.pull_request.head.ref, 'feature/manual-review/')
+      && !contains(github.event.pull_request.labels.*.name, 'no-automerge')
     steps:
       - name: 校验 AUTO_PR_TOKEN
         env:
