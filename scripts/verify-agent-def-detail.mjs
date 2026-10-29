@@ -617,6 +617,39 @@ rec('24d 查看者：调参卡+审计卡不可见', JSON.stringify(r24d), 'adv/a
 rec('24e editor 下 role-fallback 兜底文案可见', await vis('.role-fallback'), true);
 await clickEl('[data-dc-role="superadmin"]');
 
+// —— 25 布局单列化 + 占位统一（2026-10-29 拍板 A + B1）——
+// 仓库根从脚本位置推导（worktree 通用，不写死绝对路径）
+const REPO = new URL('../', import.meta.url).pathname;
+// A-1a（静态）：面板单列契约 —— AgentTuningPanel.vue 不得再出现 a-col（嵌套 12/12 是本次双重挤压根因）
+const PANEL_SRC = REPO + 'apps/admin/src/views/Agents/AgentTuningPanel.vue';
+const panelSrc = (await import('node:fs')).readFileSync(PANEL_SRC, 'utf-8');
+const colHits = panelSrc.match(/<a-col\b/g) || [];
+rec('25a 调参面板单列契约：AgentTuningPanel.vue 无 <a-col>', colHits.length + ' 个 a-col', '0 个',
+  colHits.length === 0);
+
+// A-1b（运行时）：策略预览整宽 —— 不得困在参数列内（改前 403px / 容器 980px）
+const stratW = await page.$eval('.strat', (e) => e.getBoundingClientRect().width);
+const advW = await page.$eval('#adv-body', (e) => e.getBoundingClientRect().width);
+rec('25b 策略预览整宽（≥ adv-body 90%）', Math.round(stratW) + '/' + Math.round(advW),
+  '≥ ' + Math.round(advW * 0.9), stratW >= advW * 0.9);
+
+// B-1（运行时）：三个数值控件占位统一「未配置」
+const phs = await page.evaluate(() => ({
+  temp: document.querySelector('#in-temp')?.placeholder ?? null,
+  max: document.querySelector('#in-max')?.placeholder ?? null,
+  topP: document.querySelector('#in-topP')?.placeholder ?? null,
+}));
+rec('25c 三个数值控件占位统一「未配置」', JSON.stringify(phs),
+  'temp/max/topP 均未配置',
+  phs.temp === '未配置' && phs.max === '未配置' && phs.topP === '未配置');
+
+// A-2（静态）：debug-slot 技术文案不得回潮（写给开发的文档不进产品页面）
+const DETAIL_SRC = REPO + 'apps/admin/src/views/Agents/AgentDefDetail.vue';
+const detailSrc = (await import('node:fs')).readFileSync(DETAIL_SRC, 'utf-8');
+const leakWords = ['落地契约', 'AnswerBlocks', 'debug-slot-note'].filter((k) => detailSrc.includes(k));
+rec('25d AppDefDetail.vue 无技术文案泄漏（debug-slot 瘦身）',
+  leakWords.join('|') || '(无)', '(无)', leakWords.length === 0);
+
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
 console.log(fail.length ? `\n❌ 失败 ${fail.length} 项` : `\n✅ 全部通过（${out.length} 项）`);

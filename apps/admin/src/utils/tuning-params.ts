@@ -94,14 +94,11 @@ export function isThinkingMisconfig(hasTools: boolean, thinking: ThinkingFormVal
   return hasTools && thinking === 'disabled';
 }
 
-// ===== 联动②：maxTokens 空值占位与有效值 =====
+// ===== 联动②：maxTokens 空值语义 =====
 
-/** 占位文案随工具联动（D1 §6.3 联动2） */
-export function maxTokensPlaceholder(hasTools: boolean): string {
-  return hasTools
-    ? `空 = 模型上限（${MODEL_MAX_TOKENS}）`
-    : '空 = 系统默认（非工具）';
-}
+// 2026-10-29 拍板（B1）：占位文案统一「未配置」（与 Temperature / Top P 一致），
+// 原 maxTokensPlaceholder(hasTools) 删除——它唯一用途就是切占位，三种字段两种写法观感不一致，
+// 且与 extra 重复表达。留空的上限语义只在 extra 表达（组件用 MODEL_MAX_TOKENS 插值）。
 
 /** 有效 maxTokens（D1 §4.3 默认解析）：配了用配置值；空 + 带工具 = 模型上限；空 + 非工具 = 客户端现状默认 */
 export function effectiveMaxTokens(

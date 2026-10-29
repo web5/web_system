@@ -20,7 +20,6 @@ import {
   hasToolsOf,
   defaultThinkingForm,
   isThinkingMisconfig,
-  maxTokensPlaceholder,
   effectiveMaxTokens,
   resolveBudgetTokens,
   validateTuning,
@@ -37,6 +36,7 @@ import {
   type TuningAuditEntry,
   type ThinkingFormValue,
 } from './tuning-params';
+import * as mod from './tuning-params';
 
 describe('thinking 三态映射（B3 §2 控件4 ↔ json 值域）', () => {
   it('NULL ↔ 未配置：api null → form "null"，form "null" → api null', () => {
@@ -106,14 +106,10 @@ describe('联动①：挂工具默认 enabled + 误配 disabled 判定（D2 可�
   });
 });
 
-describe('联动②：maxTokens 空值占位与有效值（D1 §4.3 默认解析）', () => {
-  it('带工具占位 = 模型上限（8192 占位，W5 待核定）', () => {
-    expect(maxTokensPlaceholder(true)).toContain('模型上限');
-    expect(maxTokensPlaceholder(true)).toContain(String(MODEL_MAX_TOKENS));
-  });
-  it('非工具占位 = 系统默认', () => {
-    expect(maxTokensPlaceholder(false)).toContain('系统默认');
-    expect(maxTokensPlaceholder(false)).not.toContain(String(MODEL_MAX_TOKENS));
+describe('联动②：maxTokens 空值语义（D1 §4.3 默认解析；占位口径 2026-10-29 拍板）', () => {
+  it('占位已统一「未配置」：maxTokensPlaceholder 已删除（B1 拍板）', () => {
+    // 防回潮：若有人把切占位的函数加回来，这条会红
+    expect('maxTokensPlaceholder' in mod).toBe(false);
   });
   it('有效值：配置了就用配置值', () => {
     expect(effectiveMaxTokens(2000, true)).toBe(2000);
