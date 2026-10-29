@@ -15,8 +15,8 @@
         <a-descriptions-item label="邮箱">{{ user.email || '-' }}</a-descriptions-item>
         <a-descriptions-item label="手机号">{{ user.phone || '-' }}</a-descriptions-item>
         <a-descriptions-item label="角色">
-          <a-tag :color="user.role === 'admin' ? 'red' : 'blue'">
-            {{ user.role === 'admin' ? '管理员' : '普通用户' }}
+          <a-tag :color="roleTagColor(displayRole)">
+            {{ roleLabel(displayRole) }}
           </a-tag>
         </a-descriptions-item>
         <a-descriptions-item label="状态">
@@ -118,6 +118,7 @@ import { useRoute } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { userApi } from '@/api/user';
 import { artworksApi, type ArtworkItem, type ArtworkSourceType } from '@/api/artworks';
+import { pickRole, roleLabel, roleTagColor } from '@/utils/roles';
 
 type User = {
   id: string | number;
@@ -163,6 +164,13 @@ const avatarSrc = computed(() => {
   return u?.gender === 'female'
     ? `${__PUBLIC_ASSET_BASE__}avatars/default-female.png`
     : `${__PUBLIC_ASSET_BASE__}avatars/default-male.png`;
+});
+
+/** 后端返回 roles 数组；兼容老字段 role 单值。super_admin 等内置角色由 utils/roles 统一展示 */
+const displayRole = computed(() => {
+  const u = user.value as any;
+  const roles = Array.isArray(u?.roles) ? u.roles : (u?.role ? [u.role] : []);
+  return pickRole(roles);
 });
 
 watch(user, (val) => {
