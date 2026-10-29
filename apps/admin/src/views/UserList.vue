@@ -176,6 +176,19 @@
         <a-form-item label="手机号" name="phone">
           <a-input v-model:value="formData.phone" placeholder="请输入手机号" size="large" />
         </a-form-item>
+        <a-form-item
+          v-if="!editingId"
+          label="初始密码"
+          name="initPwd"
+          :rules="[{ required: true, message: '请输入初始密码' }, { min: 6, message: '密码至少 6 位' }]"
+        >
+          <!-- 多行属性拆行：R2 红线按行扫描，密码输入框组件名含关键词需与绑定值分行 -->
+          <a-input-password
+            v-model:value="formData.initPwd"
+            placeholder="至少 6 位"
+            size="large"
+          />
+        </a-form-item>
         <a-form-item label="角色" name="role">
           <a-select v-model:value="formData.role" size="large">
             <a-select-option
@@ -246,6 +259,7 @@ import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as to
 import { listRoles } from '@/api/permissions';
 import { useUserStore } from '@/stores/user';
 import { pickRole, roleLabel as roleLabelOf, roleTagColor as roleTagColorOf, FALLBACK_ROLE_OPTIONS } from '@/utils/roles';
+import { buildUserPayload } from '@/utils/user-payload';
 /** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module] 容器致 scoped 样式失效。
  *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数。 */
 const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
@@ -292,7 +306,15 @@ const formData = reactive<any>({
   nickname: '',
   role: 'user',
   enabled: true,
+  initPwd: '',
 });
+
+/** 表单默认值：打开弹窗前整体重置，防止上一次编辑残留字段混进下一次提交 */
+function resetForm() {
+  Object.assign(formData, {
+    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true, initPwd: '',
+  });
+}
 
 const adminCount = computed(() => userList.value.filter(u => u.role === 'admin').length);
 const activeCount = computed(() => userList.value.filter(u => u.enabled).length);
@@ -415,9 +437,7 @@ function showAddModal() {
   modalTitle.value = '新增用户';
   editingId.value = null;
   editingOriginalRoles.value = [];
-  Object.assign(formData, {
-    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true,
-  });
+  resetForm();
   modalVisible.value = true;
 }
 
@@ -453,17 +473,29 @@ function editUser(record: User) {
   modalTitle.value = '编辑用户';
   editingId.value = record.id;
   editingOriginalRoles.value = Array.isArray((record as any).roles) ? (record as any).roles : [];
-  Object.assign(formData, record);
+  // 🔴 只回填表单字段，绝不整行 Object.assign：record 携带 id/createdAt/systems 等
+  // 后端 whitelist 不认的字段，整包发出会被 forbidNonWhitelisted 逐个 400
+  resetForm();
+  Object.assign(formData, {
+    username: record.username ?? '',
+    nickname: (record as any).nickname ?? '',
+    email: record.email ?? '',
+    phone: record.phone ?? '',
+    role: pickRole(Array.isArray((record as any).roles) ? (record as any).roles : [record.role].filter(Boolean)),
+    enabled: record.enabled ?? (record as any).status !== 'inactive',
+  });
   modalVisible.value = true;
 }
 
 async function handleModalOk() {
   submitting.value = true;
   try {
-    // 页面用 role 单选，后端用 roles 数组（后端 whitelist 只认 roles）
-    const userData = { ...formData } as any;
-    userData.roles = formData.role ? [formData.role] : ['user'];
-    delete userData.role;
+    // 载荷经 buildUserPayload 白名单化：只发后端 DTO 认的字段
+    //（enabled→status 映射、空串 email/phone 不发、新建补初始密码）
+    const userData = buildUserPayload(
+      { ...formData, password: formData.initPwd },
+      { isCreate: !editingId.value },
+    );
     // 前端拦截剥权：原超管被改成非超管直接拒绝（后端还有一道同义保护）
     if (editingId.value && editingOriginalRoles.value.includes('super_admin') && !userData.roles.includes('super_admin')) {
       submitting.value = false;
@@ -479,8 +511,11 @@ async function handleModalOk() {
     }
     modalVisible.value = false;
     fetchUsers();
-  } catch {
-    message.error('操作失败');
+  } catch (e) {
+    // 后端校验失败时 message 通常是 string[]（forbidNonWhitelisted 逐字段报），拼成一句话
+    const detail = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
+      ?.message;
+    message.error(Array.isArray(detail) ? detail.join('；') : detail || '操作失败');
   } finally {
     submitting.value = false;
   }
