@@ -122,10 +122,11 @@
         </a-form>
       </a-collapse-panel>
 
-      <!-- 卡片二 · 高级（默认折叠）：模型参数调试工作台（管理员及以上，S5 门禁） -->
+      <!-- 卡片二 · 高级（默认折叠）：模型参数调试工作台（管理员及以上，S5 门禁）
+           2026-10-29 拍板（A）：参数面板单列、策略预览整宽（不再困在半宽列内被双重挤压） -->
       <a-collapse-panel v-if="canTune" key="advanced" header="高级 · 模型参数调试">
         <a-row :gutter="16">
-          <!-- 左：生成参数面板（五控件 + 三条联动 + 策略预览） -->
+          <!-- 左：生成参数面板（五控件 + 三条联动，内部单列） -->
           <a-col :span="12">
             <AgentTuningPanel
               v-model:temperature="form.temperature"
@@ -137,7 +138,7 @@
               :errors="tuningErrors"
             />
           </a-col>
-          <!-- 右：调试台（分期：本期占位，消息组件契约见 page-spec v2 §2.1） -->
+          <!-- 右：调试台（分期：本期占位；消息组件契约见 page-spec v2 §2.1，不进产品页面） -->
           <a-col :span="12">
             <div class="debug-slot">
               <div class="debug-slot-title">调试台</div>
@@ -146,13 +147,15 @@
                   <span>对话试跑 / 调参测试用例表 · 分期建设中</span>
                 </template>
               </a-empty>
-              <div class="debug-slot-note">
-                落地契约（page-spec v2 §2.1）：Turn / Bubble / AnswerBlocks / ProcCard 与 Playground 同构，
-                回答体只出 blocks，禁止 <code>&lt;br&gt;</code> 拼串；差异只通过 props（compact / 可切换 Agent / 运行状态）与 slots 表达。
-              </div>
             </div>
           </a-col>
         </a-row>
+        <!-- 生效策略预览（整宽，2026-10-29 拍板）：thinking/maxTokens 与面板同源 -->
+        <AgentStrategyPreview
+          :has-tools="hasTools"
+          :thinking="thinkingForm"
+          :max-tokens="form.maxTokens ?? null"
+        />
         <!-- 审计 diff 展示（本次会话保存的调参记录） -->
         <TuningAuditList :visible="true" :entries="auditEntries" />
       </a-collapse-panel>
@@ -188,6 +191,7 @@ import { useUserStore } from '@/stores/user';
 import CapabilityConfigurator from './CapabilityConfigurator.vue';
 import AgentTuningPanel from './AgentTuningPanel.vue';
 import TuningAuditList from './TuningAuditList.vue';
+import AgentStrategyPreview from './AgentStrategyPreview.vue';
 import { fetchDictItems } from '@/api/dict';
 
 const route = useRoute();
@@ -490,17 +494,5 @@ onMounted(() => {
   font-size: 13px;
   margin-bottom: 8px;
   color: var(--ws-text-primary, #1a1a1a);
-}
-.debug-slot-note {
-  margin-top: auto;
-  padding: 8px 12px;
-  background: var(--ws-bg-subtle, #f2f2f2);
-  border-radius: var(--ws-radius-sm, 6px);
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--ws-text-secondary, #525252);
-}
-.debug-slot-note code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 </style>

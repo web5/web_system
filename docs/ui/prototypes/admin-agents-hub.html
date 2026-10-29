@@ -530,6 +530,8 @@
   .strat{margin-top:14px;padding:12px 14px;background:var(--ws-bg-subtle);
     border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);}
   .strat-t{font-size:13px;font-weight:600;color:var(--ws-text-primary);margin-bottom:8px;}
+  /* 整宽区域内部左右分栏：左 P1–P5 链 / 右三值输出；窄时自动堆叠（无需媒体查询） */
+  .strat-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start;}
   .strat-chain{list-style:none;margin:0 0 8px;padding:0;}
   .strat-chain li{display:flex;gap:8px;font-size:12px;line-height:22px;color:var(--ws-text-secondary);}
   .strat-chain li.hit{color:var(--ws-text-primary);}
@@ -3378,7 +3380,7 @@
                     <div class="flb">Temperature</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-temp" data-dr="gen-params-temperature">
-                        <input id="in-temp" inputmode="decimal" />
+                        <input id="in-temp" placeholder="未配置" inputmode="decimal" />
                         <span class="clear" data-clear="temp">留空=默认</span>
                       </div>
                       <div class="fhint hintrow"><span class="f-tag fix">?? 0.7 修正</span>留空=不覆盖，回落 0.7<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
@@ -3472,13 +3474,6 @@
                 <div class="fhint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ws-border-subtle);">
                   留空的项保存为 null，由服务端默认兜底；改动会立刻反映到右侧「生效参数」与用例对比。
                 </div>
-
-                <!-- 生效策略预览：P1–P5 优先级链 + 三值输出（D1） -->
-                <div class="strat" data-dr="strategy-preview" data-anno="D3">
-                  <div class="strat-t">生效策略预览</div>
-                  <ol class="strat-chain" id="strat-chain"></ol>
-                  <div class="strat-out" id="strat-out"></div>
-                </div>
               </div>
 
               <!-- 右：调试台 -->
@@ -3537,6 +3532,16 @@
                   </div>
                   <div id="case-list"></div>
                 </div>
+              </div>
+            </div>
+
+            <!-- 生效策略预览：P1–P5 优先级链 + 三值输出（D1）
+                 2026-10-29 拍板：整宽置于参数面板+调试台之下（原困在 420px .params 内被折断） -->
+            <div class="strat" data-dr="strategy-preview" data-anno="D3">
+              <div class="strat-t">生效策略预览</div>
+              <div class="strat-cols">
+                <ol class="strat-chain" id="strat-chain"></ol>
+                <div class="strat-out" id="strat-out"></div>
               </div>
             </div>
           </div>
@@ -5120,10 +5125,10 @@ qsa('.mask, .drawer-mask').forEach(m =>
     $('ctrl-topP').classList.toggle('err', conflict);
     $('conflict-hint').classList.toggle('hidden', !conflict);
 
-    // 联动二：maxTokens 占位随工具语义切换（留空语义不同）
+    // 联动二：占位统一「未配置」（2026-10-29 拍板）；留空的上限语义只在 extra 表达
     var hasT = !!(DEFS[current] && DEFS[current].hasTools);
-    $('in-max').placeholder = hasT ? '空 = 模型上限（8192）' : '空 = 系统默认';
-    $('extra-max').textContent = hasT ? '带工具留空 = 模型上限，不人为压小' : '留空 = 系统默认';
+    $('in-max').placeholder = '未配置';
+    $('extra-max').textContent = hasT ? '留空 = 模型上限（8192），不人为压小' : '留空 = 系统默认';
 
     qsa('#seg-thinking button').forEach(function(b){ b.classList.toggle('on', b.dataset.thinking===draft.thinking); });
     $('seg-thinking').classList.toggle('locked', thinkingLocked);
