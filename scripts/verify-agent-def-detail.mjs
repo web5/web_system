@@ -6,7 +6,7 @@ const puppeteer = require('puppeteer-core');
 // 目的：原型「看着对」不算过。本稿六条产品意见（新页面 / 高级区 / 调试台 / 用例表 / 不用弹窗 / 参数对比）
 //       必须真点一遍才算验证过。
 const FILE = 'file://' + (process.argv[2] ||
-  '/Users/geekwen/workspace/web_system-llm-tuning/docs/ui/prototypes/admin-agent-def-detail.html');
+  '/Users/geekwen/workspace/web_system/docs/ui/prototypes/admin-agent-def-detail.html');
 const browser = await puppeteer.launch({
   executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: 'new',
@@ -223,9 +223,9 @@ await page.select('#preset', 'classify');
 await wait(250);
 rec('14a thinking 段锁定', await page.$eval('#seg-thinking', (e) => e.classList.contains('locked')), true);
 // 锁定后：① 指针事件被禁（点不到）② 即便绕过派发也被 handler 拦住
-rec('14b 锁定后不可点', await page.$eval('#seg-thinking [data-thinking="inherit"]',
+rec('14b 锁定后不可点', await page.$eval('#seg-thinking [data-thinking="null"]',
   (e) => getComputedStyle(e).pointerEvents), 'none');
-await page.$eval('#seg-thinking [data-thinking="inherit"]', (e) => e.click());
+await page.$eval('#seg-thinking [data-thinking="null"]', (e) => e.click());
 await wait(150);
 rec('14c 绕过派发仍无效', await page.$eval('#seg-thinking .on', (e) => e.dataset.thinking), 'disabled');
 rec('14d 锁定原因可见', await txt('#extra-thinking'), (t) => /C7-d/.test(t), true);
@@ -310,7 +310,7 @@ rec('18g 开思考后预算行出现', await (async () => {
   await page.$eval('#seg-thinking [data-thinking="enabled"]', (e) => e.click());
   await wait(200);
   const shown = await vis('#row-budget');
-  await page.$eval('#seg-thinking [data-thinking="inherit"]', (e) => e.click());
+  await page.$eval('#seg-thinking [data-thinking="null"]', (e) => e.click());
   await wait(150);
   return shown;
 })(), true);
@@ -394,7 +394,7 @@ await clickEl('[data-act="edit"][data-id="report-helper"]');
 await wait(250);
 await ensureAdvOpen();
 await wait(150);
-await clickEl('#seg-thinking button[data-thinking="inherit"]');
+await clickEl('#seg-thinking button[data-thinking="null"]');
 await wait(150);
 await clickEl('.bench-tabs .tb[data-tab="chat"]');
 await wait(150);
@@ -443,6 +443,158 @@ await page.$eval('#chat-input', (e) => { e.value = '预测一下 2025 年营收'
 await clickEl('#btn-send');
 await wait(1800);
 rec('21k 越界提示为 law 块', await page.$eval('#chatbox .turn:last-child .law b', (e) => e.textContent.trim()), '越界提示');
+
+// —— ㉒ 状态 CTA 真行为（2026-10-28 用户报「返回修改」死按钮） ——
+// 三个 CTA（empty-cta / error-cta / forbidden-cta）绑定必须在主脚本段（hub 内演示控件脚本被
+// jsDrop 丢掉，绑定放错段 = hub 内死按钮）。变异测试：删掉绑定 → 下列断言立即 FAIL。
+await page.evaluate(() => {
+  const sd = document.querySelector('#screen-detail');
+  if (sd) sd.setAttribute('data-demo-state', 'error');
+});
+await wait(80);
+rec('22a S4 前置：error 态可见、返回修改按钮在', await vis('[data-dr="error-cta"]'), true);
+// 先制造「temp+topP 同填」（S4 同款），验证错误态文案承诺「字段值已保留」
+await page.evaluate(() => {
+  const t = document.getElementById('in-temp');
+  const p = document.getElementById('in-topP');
+  t.value = '1'; t.dispatchEvent(new Event('input'));
+  p.disabled = false; p.value = '0.9'; p.dispatchEvent(new Event('input'));
+});
+await wait(120);
+const beforeVals = [await val('#in-temp'), await val('#in-topP')].join('|');
+rec('22b 同填前置：temp=1|topP=0.9', beforeVals, '1|0.9');
+// 点「返回修改」
+await clickEl('[data-dr="error-cta"]');
+await wait(200);
+rec('22c error-cta → data-demo-state=normal',
+  await page.$eval('#screen-detail', (e) => e.getAttribute('data-demo-state')), 'normal');
+rec('22d 返回后字段值不丢（文案承诺兑现）',
+  [await val('#in-temp'), await val('#in-topP')].join('|'), '1|0.9');
+rec('22e 互斥红字提示仍在（同填常驻）',
+  [await vis('#conflict-hint'), await page.$eval('#ctrl-temp', (e) => e.classList.contains('err')),
+   await page.$eval('#ctrl-topP', (e) => e.classList.contains('err'))].join('|'), 'true|true|true');
+// 真点保存 → 后端互斥校验拒收（不是只靠演示态演戏）
+await clickEl('#btn-save');
+await wait(200);
+rec('22f 同填点保存被拒（C7-b 互斥，toast 报错）',
+  await page.$eval('#toast', (e) => e.classList.contains('hidden') ? '' : e.textContent.trim()).then((t) => /只能填一个/.test(t)), true);
+// 清空一项后红字消失
+await page.$eval('#in-topP', (e) => {
+  e.disabled = false; e.value = ''; e.dispatchEvent(new Event('input'));
+});
+await wait(120);
+rec('22g 清空 topP 后互斥红字消失',
+  [await vis('#conflict-hint'), await page.$eval('#ctrl-temp', (e) => e.classList.contains('err'))].join('|'), 'false|false');
+
+// empty-cta「开始配置」→ normal + 高级卡展开
+await page.evaluate(() => {
+  const sd = document.querySelector('#screen-detail');
+  if (sd) sd.setAttribute('data-demo-state', 'empty');
+});
+await wait(80);
+rec('22h 空态可见、开始配置按钮在', await vis('[data-dr="empty-cta"]'), true);
+await clickEl('[data-dr="empty-cta"]');
+await wait(250);
+rec('22i empty-cta → normal 态',
+  await page.$eval('#screen-detail', (e) => e.getAttribute('data-demo-state')), 'normal');
+rec('22j empty-cta → 高级卡展开（「开始配置」名副其实）',
+  [await page.$eval('#card-adv', (e) => e.classList.contains('open')),
+   await vis('#adv-body-wrap')].join('|'), 'true|true');
+
+// forbidden-cta「返回列表」→ 回列表屏（同 btn-back 路径）
+await page.evaluate(() => {
+  const sd = document.querySelector('#screen-detail');
+  if (sd) sd.setAttribute('data-demo-state', 'forbidden');
+});
+await wait(80);
+rec('22k 无权限态可见、返回列表按钮在', await vis('[data-dr="forbidden-cta"]'), true);
+await clickEl('[data-dr="forbidden-cta"]');
+await wait(300);
+rec('22l forbidden-cta → 回列表屏（screen-list 可见 / detail 隐藏）',
+  [await vis('#screen-list'), await vis('#screen-detail')].join('|'), 'true|false');
+
+// 代码块「复制」与主题按钮不再是死点击（.cp 动态生成，走委托）
+await page.evaluate(() => {
+  // 回详情，跑一个带代码块的对话
+  const b = document.querySelector('[data-act="edit"][data-id="report-helper"]');
+  if (b) b.click();
+});
+await wait(300);
+await page.$eval('#chat-input', (e) => { e.value = '算一下复合增速'; });
+await clickEl('#btn-send');
+await wait(1800);
+rec('22m 对话生成代码块复制按钮', await page.$$eval('#chatbox .turn:last-child .cp', (n) => n.length) > 0, true);
+await page.$eval('#chatbox .turn:last-child .cp', (e) => e.click());
+await wait(80);
+rec('22n 点复制按钮有反馈（文案变「已复制」，非死按钮）',
+  await page.$eval('#chatbox .turn:last-child .cp', (e) => e.textContent.trim()), '已复制');
+await clickEl('.ad-theme');
+await wait(80);
+rec('22o 主题按钮有反馈（toast，非死点击）',
+  await page.$eval('#toast', (e) => e.classList.contains('hidden') ? '' : e.textContent.trim()).then((t) => /主题/.test(t)), true);
+
+// —— ㉓ 屏② 可点元素绑定完备性（死按钮枚举式断言，新增未绑按钮即 FAIL） ——
+// 背景：2026-10-28 用户两次报死按钮（返回修改 CTA）。单点修复不够，必须有一条**枚举式**
+// 断言兜底：屏② 内所有可点元素要么 disabled，要么命中「已绑定清单」（id / data-* / class 任一）。
+// 变异测试：往屏② 塞一个无绑定 button → 本条立即 FAIL。
+const BOUND_TOKENS = [
+  // 状态 CTA（主脚本段绑定）
+  'empty-cta', 'error-cta', 'forbidden-cta',
+  // 导航 / 保存 / diff
+  'btn-back', 'crumb-main', 'btn-discard', 'btn-save', 'btn-diff-toggle', 'btn-revert', 'data-act',
+  // 采样 / 思考 seg
+  'data-sampler', 'data-thinking',
+  // 调试台 tab / 排布 / 运行
+  'data-tab', 'btn-layout', 'btn-send', 'btn-compare',
+  // 用例表
+  'btn-run-cases', 'btn-sel-all', 'btn-add-case', 'data-check', 'data-case',
+  // 卡头折叠（role=button）
+  'data-toggle',
+  // 清除图标
+  'data-clear',
+  // 表单控件（bindBasic / bindNum / change）
+  'in-model', 'in-temp', 'in-topP', 'in-max', 'in-steps', 'in-purpose', 'in-keywords', 'in-prompt', 'preset',
+  // 动态元素（委托/局部绑定）
+  'data-try', 'data-retry', 'data-y', 'data-n', 'cp',
+  // 壳件（proto-shell JS）
+  'btn-collapse', 'ad-theme',
+];
+const unbound = await page.$$eval(
+  '#screen-detail button, #screen-detail [role="button"], #screen-detail [role="checkbox"], #screen-detail select, #screen-detail .clear, #screen-detail .lnk-btn, #screen-detail a',
+  (els, tokens) => els
+    .filter((e) => {
+      if (e.disabled) return false;                    // 显式禁用 = 合规
+      if (e.closest('[data-demo-ctl]')) return false;  // 演示控件不在产品口径
+      const hay = [e.id, e.className, e.tagName, ...[...e.attributes].map((a) => a.name + '=' + a.value)].join(' ');
+      return !tokens.some((t) => hay.includes(t));
+    })
+    .map((e) => e.outerHTML.slice(0, 110)),
+  BOUND_TOKENS,
+);
+rec('23a 屏② 可点元素全部命中绑定清单或 disabled（新增死按钮即 FAIL）',
+  unbound.length + ' 个未绑：' + (unbound.slice(0, 3).join(' || ') || '(空)'), '0 个未绑：(空)', unbound.length === 0);
+
+// 23b 清单反向核对：BOUND 里声明的关键锚点在 DOM 里真实存在（防清单空转）
+const anchors = ['empty-cta', 'error-cta', 'forbidden-cta', 'btn-save', 'btn-back', 'btn-diff-toggle', 'data-clear', 'data-toggle', 'data-sampler', 'data-thinking', 'preset'];
+const missingAnchors = await page.$$eval('#screen-detail', (roots, keys) => {
+  const html = roots[0].innerHTML;
+  return keys.filter((k) => !html.includes(k));
+}, anchors);
+rec('23b 绑定清单关键锚点都在屏② DOM 里（防清单空转）', missingAnchors.join('|'), '');
+
+// 23c 动态元素也在清单内（trybtn / cp / 确认框按钮 —— 前序步骤已生成）
+const dynUnbound = await page.$$eval(
+  '#screen-detail button[data-try], #screen-detail button.cp, #screen-detail button[data-retry], #screen-detail button[data-y], #screen-detail button[data-n]',
+  (els, tokens) => els
+    .filter((e) => {
+      const hay = [e.id, e.className, ...[...e.attributes].map((a) => a.name + '=' + a.value)].join(' ');
+      return !tokens.some((t) => hay.includes(t));
+    })
+    .map((e) => e.outerHTML.slice(0, 110)),
+  BOUND_TOKENS,
+);
+rec('23c 动态元素（try/cp/retry/确认框）也命中绑定清单',
+  dynUnbound.length + ' 个未绑：' + (dynUnbound.slice(0, 3).join(' || ') || '(空)'), '0 个未绑：(空)', dynUnbound.length === 0);
 
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);

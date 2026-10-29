@@ -506,6 +506,109 @@
   .retry{margin-left:8px;}
   .inj{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ws-text-secondary);cursor:pointer;}
   .inj input{margin:0;}
+  /* ===== v2.4 B3 五控件 + 联动 + 策略预览 + 审计（亮色 --ws-*） ===== */
+  .f-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:400;padding:1px 6px;
+    border-radius:var(--ws-radius-sm);background:var(--ws-bg-subtle);color:var(--ws-text-secondary);
+    letter-spacing:.02em;margin-right:4px;vertical-align:middle;}
+  .f-tag.fix{background:var(--ws-ok-soft);color:var(--ws-ok-700);}
+  .f-tag.gate{background:var(--ws-danger-soft);color:var(--ws-danger);}
+  .tagline{display:flex;align-items:center;gap:6px;margin-top:2px;}
+  .tagline .muted{font-size:12px;color:var(--ws-text-secondary);}
+
+  .warn-tool{display:flex;gap:10px;align-items:flex-start;margin:10px 0 2px;padding:12px 14px;
+    background:var(--ws-danger-soft);border:1px solid var(--ws-danger);border-radius:var(--ws-radius-md);}
+  .warn-tool svg{width:18px;height:18px;flex:none;color:var(--ws-danger);margin-top:1px;}
+  .warn-tool b{display:block;font-size:13px;color:var(--ws-danger);margin-bottom:2px;}
+  .warn-tool .wd{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-snug);}
+
+  .budget-ro{display:flex;align-items:center;gap:10px;height:var(--ws-control-md);padding:0 12px;
+    background:var(--ws-bg-subtle);border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);
+    font-size:13px;color:var(--ws-text-primary);}
+  .budget-ro b{font-family:var(--ws-font-mono);font-weight:600;}
+  .budget-ro .bp-formula{font-size:12px;color:var(--ws-text-secondary);font-family:var(--ws-font-mono);}
+
+  .strat{margin-top:14px;padding:12px 14px;background:var(--ws-bg-subtle);
+    border:1px solid var(--ws-border-subtle);border-radius:var(--ws-radius-md);}
+  .strat-t{font-size:13px;font-weight:600;color:var(--ws-text-primary);margin-bottom:8px;}
+  .strat-chain{list-style:none;margin:0 0 8px;padding:0;}
+  .strat-chain li{display:flex;gap:8px;font-size:12px;line-height:22px;color:var(--ws-text-secondary);}
+  .strat-chain li.hit{color:var(--ws-text-primary);}
+  .strat-chain .pno{font-family:var(--ws-font-mono);width:22px;flex:none;}
+  .strat-chain .plb{flex:1;}
+  .strat-chain .pst{color:var(--ws-text-secondary);}
+  .strat-chain li.hit .pst{color:var(--ws-brand-600);font-weight:600;}
+  .strat-out{font-size:12px;line-height:22px;color:var(--ws-text-secondary);border-top:1px dashed var(--ws-border);padding-top:8px;}
+  .strat-out b{font-family:var(--ws-font-mono);color:var(--ws-text-primary);font-weight:600;}
+  .strat-out .why{color:var(--ws-text-secondary);font-family:var(--ws-font-mono);}
+
+  /* 调参审计（TuningAuditList.vue 口径） */
+  .audit-item{padding:12px 0;border-bottom:1px solid var(--ws-border-subtle);}
+  .audit-item:last-child{border-bottom:none;}
+  .audit-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;}
+  .audit-time{font-family:var(--ws-font-mono);font-size:12px;color:var(--ws-text-secondary);}
+  .audit-op{color:var(--ws-text-secondary);font-size:12px;}
+  .audit-diff{display:flex;gap:8px;font-size:12px;line-height:22px;}
+  .audit-diff .fld-n{width:96px;flex:none;color:var(--ws-text-secondary);}
+  .audit-diff .before{text-decoration:line-through;color:var(--ws-text-secondary);}
+  .audit-diff .arw{color:var(--ws-text-secondary);}
+  .audit-diff .after{font-weight:600;color:var(--ws-text-primary);}
+  .audit-runtime{margin-top:4px;font-size:12px;color:var(--ws-text-secondary);}
+
+  /* 演示状态矩阵（demo-control-panel.md §5.2，分支块） */
+  .only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}
+  [data-demo-state="loading"] .only-loading,
+  [data-demo-state="empty"] .only-empty,
+  [data-demo-state="error"] .only-error,
+  [data-demo-state="forbidden"] .only-forbidden,
+  [data-demo-state="misconfig"] .only-misconfig{display:block;}
+  [data-demo-state="loading"] .only-normal,
+  [data-demo-state="empty"] .only-normal,
+  [data-demo-state="error"] .only-normal,
+  [data-demo-state="forbidden"] .only-normal{display:none;}
+  [data-demo-state="normal"] .only-normal{display:block;}
+  .state-box{padding:40px 20px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
+  .state-box b{display:block;color:var(--ws-text-primary);font-size:14px;margin-bottom:6px;}
+  .state-box .skel{height:12px;background:var(--ws-bg-subtle);border-radius:var(--ws-radius-sm);margin:10px auto;max-width:320px;}
+
+  /* 角色可见性（≤2 角色纯 CSS，机检可见） */
+  html[data-demo-role="admin"] [data-need-role="superadmin"]{display:none;}
+  .role-fallback{display:none;padding:16px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
+  html[data-demo-role="admin"] .role-fallback{display:block;}
+
+  /* 标注层（data-anno 待确认项） */
+  [data-demo-anno="on"] [data-anno]{outline:1px dashed var(--ws-brand-500);position:relative;}
+  [data-demo-anno="on"] [data-anno]::after{content:attr(data-anno);position:absolute;top:-10px;left:-4px;
+    font-size:10px;padding:0 4px;background:var(--ws-brand-600);color:var(--ws-on-brand);border-radius:3px;z-index:5;}
+
+  /* ===== 原型演示控件（外来者 · 虚线白底，不是产品 UI） ===== */
+  .demo-ctl{position:fixed;right:16px;bottom:16px;width:300px;z-index:999;
+    background:#FFFFFF;border:1px dashed var(--ws-brand-500);border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,.16);font-size:12px;color:var(--ws-text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;}
+  .demo-ctl .dc-hd{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--ws-border-subtle);}
+  .demo-ctl .dc-hd .dc-t{font-weight:600;font-size:12px;}
+  .demo-ctl .dc-hd .dc-x{margin-left:auto;cursor:pointer;background:none;border:none;font-size:12px;
+    color:var(--ws-brand-600);padding:0 4px;}
+  .demo-ctl .dc-bd{padding:10px 12px;max-height:56vh;overflow:auto;}
+  .demo-ctl .dc-sec{margin-bottom:10px;}
+  .demo-ctl .dc-lb{font-size:11px;color:var(--ws-text-secondary);margin-bottom:4px;letter-spacing:.04em;}
+  .demo-ctl .dc-chips{display:flex;flex-wrap:wrap;gap:4px;}
+  .demo-ctl .dc-btn{border:1px solid var(--ws-border);background:#FFFFFF;color:var(--ws-text-primary);
+    border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;line-height:1.5;}
+  .demo-ctl .dc-btn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .demo-ctl .dc-btn.on{background:var(--ws-brand-soft);color:var(--ws-brand-600);border-color:var(--ws-brand-400);}
+  .demo-ctl .dc-btn.preset{text-align:left;}
+  .demo-ctl .dc-why{font-size:11px;color:var(--ws-text-secondary);line-height:1.5;margin-top:4px;}
+  .demo-ctl .dc-keys{border-top:1px dashed var(--ws-border-subtle);padding-top:6px;margin-top:6px;
+    font-size:11px;color:var(--ws-text-secondary);}
+  .demo-ctl .dc-keys kbd{font-family:var(--ws-font-mono);background:var(--ws-bg-subtle);padding:0 4px;
+    border-radius:3px;font-size:10px;}
+  .demo-ctl.mini{width:44px;height:44px;overflow:hidden;border-radius:22px;}
+  .demo-ctl.mini .dc-bd{display:none;}
+  .demo-ctl.mini .dc-hd{padding:0;justify-content:center;height:100%;border:none;}
+  .demo-ctl.mini .dc-hd .dc-t{display:none;}
+  .demo-ctl.mini .dc-hd .dc-x{margin:0;}
+  @media print{ [data-demo-ctl]{display:none;} }
 
 
   /* ===== hub 专属：页面框架（每屏一个「页」：页头 + 内容，点击菜单即进入） ===== */
@@ -1466,6 +1569,84 @@
   .zm-scope .switch-row .t{
   font-size: 13px; color: var(--t3);
   }
+  .zm-scope .pipe-edit-layout{
+  display: flex; gap: 16px; align-items: flex-start;
+  }
+  .zm-scope .pipe-form-col{
+  flex: 1; min-width: 0; padding: 20px;
+  }
+  .zm-scope .pipe-form-col .form-grid{
+  gap: 0 16px;
+  }
+  .zm-scope .preview-panel{
+  width: 360px; flex: none; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .zm-scope .preview-card{
+  background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: 14px 16px; box-shadow: var(--shadow-card);
+  }
+  .zm-scope .preview-title{
+  font-size: 11px; font-weight: 600; color: var(--t4); letter-spacing: .08em; margin-bottom: 10px; text-transform: uppercase;
+  }
+  .zm-scope .cover-stage{
+  width: 100%; aspect-ratio: 2.35 / 1; border-radius: var(--r-control); overflow: hidden; border: 1px solid var(--border-subtle); position: relative; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center;
+  }
+  .zm-scope .cover-stage img{
+  width: 100%; height: 100%; object-fit: cover;
+  }
+  .zm-scope .cover-stage-empty{
+  font-size: 12px; color: var(--t4);
+  }
+  .zm-scope .cover-stage-meta{
+  margin-top: 8px; font-size: 12px; color: var(--t4); word-break: break-all;
+  }
+  .zm-scope .title-preview{
+  font-size: 15px; font-weight: 600; line-height: 1.55; color: var(--t1); word-break: break-word;
+  }
+  .zm-scope .title-preview--empty{
+  color: var(--t4); font-weight: 400; font-style: italic;
+  }
+  .zm-scope .preview-sub{
+  margin-top: 8px; font-size: 12px; color: var(--t4); word-break: break-all;
+  }
+  .zm-scope .summary-list{
+  list-style: none; display: flex; flex-direction: column; gap: 8px;
+  }
+  .zm-scope .summary-list li{
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;
+  }
+  .zm-scope .summary-key{
+  color: var(--t4); flex: none;
+  }
+  .zm-scope .summary-val{
+  color: var(--t2); text-align: right; word-break: break-all;
+  }
+  .zm-scope .seg{
+  display: inline-flex; background: var(--bg-subtle); border-radius: var(--r-control); padding: 2px; margin-bottom: 8px;
+  }
+  .zm-scope .seg span{
+  padding: 4px 12px; font-size: 12px; border-radius: var(--r-chip); cursor: pointer; color: var(--t3); transition: all .15s;
+  }
+  .zm-scope .seg span.on{
+  background: var(--bg-surface); color: var(--t1); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  .zm-scope .cover-option{
+  display: flex; align-items: center; gap: 8px; padding: 2px 0;
+  }
+  .zm-scope .cover-option-thumb{
+  width: 56px; height: 24px; object-fit: cover; border-radius: 3px; background: var(--bg-subtle); flex: none;
+  }
+  .zm-scope .cover-option-thumb--empty{
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--t4);
+  }
+  .zm-scope .cover-option-name{
+  font-size: 13px;
+  }
+  .zm-scope .field-hint{
+  margin-top: 4px; font-size: 12px; color: var(--t4); line-height: 1.6;
+  }
+  .zm-scope .field-hint .mono{
+  font-family: var(--mono); font-size: 11px; background: var(--bg-subtle); padding: 0 4px; border-radius: 3px;
+  }
   .zm-scope .back-link{
   display: inline-flex; align-items: center; gap: 4px; color: var(--t4); font-size: 13px; background: none; border: none; padding: 4px 8px 4px 0; margin-bottom: 8px;
   }
@@ -1816,6 +1997,7 @@
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></symbol>
   <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3 3 0 0 1 3 3v4"/></symbol>
   <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
@@ -1881,12 +2063,13 @@
         <div class="ad-item" data-screen="dicts" data-route="#/settings/dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" data-route="#/mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" data-route="#/database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor,content-accounts">
+      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-media,content-pipelines,content-monitor,content-accounts">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></svg></span><span class="ad-t">自媒体运营</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="content-sources" data-route="#/content" title="采集源管理"><span class="ad-t">采集源管理</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-items" data-route="#/content/items" title="采集明细"><span class="ad-t">采集明细</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-publications" data-route="#/content/publications" title="公众号成文"><span class="ad-t">公众号成文</span></div>
+        <div class="ad-item ad-item-sub" data-screen="content-media" data-route="#/content/media" title="封面素材"><span class="ad-t">封面素材</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-pipelines" data-route="#/content/pipelines" title="发布管线"><span class="ad-t">发布管线</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-monitor" data-route="#/content/monitor" title="采集监控"><span class="ad-t">采集监控</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-accounts" data-route="#/content/accounts" title="账号管理"><span class="ad-t">账号管理</span></div>
@@ -2603,6 +2786,91 @@
         </div>
       </section>
 
+      <!-- ═══════════ S6.5 封面素材（2026-10-26 并行合入） ═══════════ -->
+      <section class="screen" id="zm-screen-media">
+        <div class="page-head">
+          <div>
+            <div class="page-title">封面素材</div>
+            <div class="page-desc">共 6 张 · 已同步微信 4 张 · AI 生成 2 张；上传或按标题生成 → 打标签 → 同步微信永久素材 → 绑到管线当默认封面。</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn"><svg class="ic"><use href="#i-plus"/></svg>上传封面</button>
+            <button class="btn primary">按标题生成</button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input class="input" placeholder="搜名称 / 生成提示词" style="min-width:220px" />
+          <select class="select"><option>全部标签</option><option>论文</option><option>热点</option></select>
+          <select class="select"><option>全部来源</option><option>人工上传</option><option>AI 生成</option></select>
+          <button class="btn" onclick="ZM.toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>查询</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+          <!-- 卡 1：已同步 -->
+          <div class="card" style="overflow:hidden">
+            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
+              <div style="font-size:12px;color:var(--t4)">论文速报封面.png</div>
+              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+                <span class="tag sub">上传</span><span class="tag ok sub">已同步微信</span>
+              </div>
+            </div>
+            <div style="padding:12px">
+              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">论文速报封面.png</div>
+              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.42MB</div>
+              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">论文</span><span class="tag sub">用过 12 次</span></div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn text sm">编辑</button>
+                <button class="btn text sm">设为默认</button>
+                <button class="btn text sm">重传</button>
+                <button class="btn text sm" style="color:var(--err)">删除</button>
+                <button class="switch on" onclick="this.classList.toggle('on')"></button>
+              </div>
+            </div>
+          </div>
+          <!-- 卡 2：AI 生成 -->
+          <div class="card" style="overflow:hidden">
+            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
+              <div style="font-size:12px;color:var(--t4)">热点资讯封面.png</div>
+              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+                <span class="tag info sub">AI</span><span class="tag ok sub">已同步微信</span>
+              </div>
+            </div>
+            <div style="padding:12px">
+              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">热点资讯封面.png</div>
+              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.38MB</div>
+              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">热点</span><span class="tag sub">用过 8 次</span></div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn text sm">编辑</button>
+                <button class="btn text sm">设为默认</button>
+                <button class="btn text sm">重传</button>
+                <button class="btn text sm" style="color:var(--err)">删除</button>
+                <button class="switch on" onclick="this.classList.toggle('on')"></button>
+              </div>
+            </div>
+          </div>
+          <!-- 卡 3：未同步 -->
+          <div class="card" style="overflow:hidden">
+            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
+              <div style="font-size:12px;color:var(--t4)">财经早报封面.png</div>
+              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
+                <span class="tag sub">上传</span><span class="tag warn sub">未同步</span>
+              </div>
+            </div>
+            <div style="padding:12px">
+              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">财经早报封面.png</div>
+              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.51MB</div>
+              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">财经</span><span class="tag sub">用过 0 次</span></div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn text sm">编辑</button>
+                <button class="btn text sm">设为默认</button>
+                <button class="btn text sm">同步微信</button>
+                <button class="btn text sm" style="color:var(--err)">删除</button>
+                <button class="switch on" onclick="this.classList.toggle('on')"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ═══════════ S7 发布管线 ═══════════ -->
       <section class="screen" id="zm-screen-pipelines">
         <div class="page-head">
@@ -2642,7 +2910,7 @@
         </div>
       </section>
 
-      <!-- ═══════════ S8 管线编辑（新页面） ═══════════ -->
+      <!-- ═══════════ S8 管线编辑（新页面 · 双栏 + 预览面板） ═══════════ -->
       <section class="screen" id="zm-screen-pipeline-edit">
         <button class="back-link" onclick="ZM.go('pipelines')"><svg class="ic"><use href="#i-back"/></svg>返回发布管线</button>
         <div class="page-head">
@@ -2651,41 +2919,109 @@
             <div class="page-desc">编码创建后不可修改；LLM prompt 留空走默认模板。</div>
           </div>
         </div>
-        <div class="card card-pad form-card">
-          <div class="form-grid">
-            <div class="form-item">
-              <div class="form-label">编码 code <span class="req">*</span></div>
-              <input class="form-input" value="daily_paper" disabled />
+        <div class="pipe-edit-layout">
+          <!-- 左：表单 -->
+          <div class="card pipe-form-col">
+            <div class="form-grid">
+              <div class="form-item">
+                <div class="form-label">编码 code <span class="req">*</span></div>
+                <input class="form-input" value="daily_paper" disabled />
+              </div>
+              <div class="form-item">
+                <div class="form-label">类型 <span class="req">*</span></div>
+                <select class="form-select">
+                  <option>paper</option><option>ai-news</option><option>hot-news</option>
+                </select>
+              </div>
+              <div class="form-item">
+                <div class="form-label">cron 表达式 <span class="req">*</span></div>
+                <input class="form-input" value="0 9 * * *" style="font-family:var(--mono);font-size:12px" />
+              </div>
+              <div class="form-item">
+                <div class="form-label">标题模板</div>
+                <input class="form-input" value="每日论文速览 ｜ {{date}}" />
+                <div class="field-hint">
+                  支持占位符 <span class="mono">{{date}}</span> / <span class="mono">{{time}}</span> /
+                  <span class="mono">{{datetime}}</span>，右侧实时预览效果。
+                </div>
+              </div>
+              <div class="form-item">
+                <div class="form-label">发布目标</div>
+                <select class="form-select"><option selected>wechat_mp · 公众号</option></select>
+                <div class="field-hint">腾讯文档通道 2026-10-23 下线；历史 target=tencent_docs 仍可在列表查到，但不能再新建。</div>
+              </div>
+              <div class="form-item">
+                <div class="form-label">发布模式</div>
+                <select class="form-select">
+                  <option>直接发布（建草稿后提交）</option>
+                  <option>只建草稿（停在草稿箱待人工发布）</option>
+                </select>
+              </div>
+              <div class="form-item full">
+                <div class="form-label">公众号封面</div>
+                <div class="seg" id="zm-coverModeSeg">
+                  <span class="on" onclick="ZM.setCoverMode('pick', this)">从素材库选</span>
+                  <span onclick="ZM.setCoverMode('custom', this)">手动填 media_id</span>
+                </div>
+                <div id="zm-coverPick">
+                  <select class="form-select">
+                    <option>
+                      论文速报封面.png
+                    </option>
+                    <option>
+                      热点资讯封面.png
+                    </option>
+                  </select>
+                </div>
+                <div id="zm-coverCustom" style="display:none">
+                  <input class="form-input" value="BUSabtk9juW90vSVH4g1Kr…" style="font-family:var(--mono);font-size:12px" />
+                </div>
+                <div class="field-hint">
+                  留空则用默认通用封面（正文有图时优先用正文首图）。右侧显示选中封面的实图。
+                </div>
+              </div>
+              <div class="form-item full">
+                <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
+              </div>
+              <div class="form-item full">
+                <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
+                <textarea class="form-area" rows="8" placeholder="可选，留空走默认。粘贴的 prompt 必须让模型只输出 JSON，且 key 名与代码解析一致"></textarea>
+                <div class="field-hint">
+                  <b>JSON key 契约</b>：paper 类型为 译名 / 核心贡献 / 方法亮点 / 潜在应用（译名会同时作为文章标题）；
+                  其他类型为 标题 / 摘要 / 标签 / 分类。key 名写错 = 该字段走兜底，不会报错。
+                </div>
+              </div>
             </div>
-            <div class="form-item">
-              <div class="form-label">类型 <span class="req">*</span></div>
-              <select class="form-select"><option>paper</option><option>ai-news</option></select>
-            </div>
-            <div class="form-item">
-              <div class="form-label">cron 表达式 <span class="req">*</span></div>
-              <input class="form-input" value="0 9 * * *" />
-            </div>
-            <div class="form-item">
-              <div class="form-label">标题模板</div>
-              <input class="form-input" value="每日论文速览 ｜ {{date}}" />
-            </div>
-            <div class="form-item full">
-              <div class="form-label">发布目标</div>
-              <select class="form-select" multiple size="2"><option selected>wechat_mp · 公众号</option></select>
-              <div class="tip" style="margin-top:6px">腾讯文档通道 2026-10-23 下线；历史 target=tencent_docs 的记录仍可在列表查到，但不能再新建。</div>
-            </div>
-            <div class="form-item">
-              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
-            </div>
-            <div class="form-item full">
-              <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
-              <textarea class="form-area">你是「大橙子社区」的论文编辑。把下面 N 篇 arXiv 论文各压缩成四字段：中文译名 / 一句话核心贡献 / 方法亮点 / 潜在应用。语气克制，不堆形容词。</textarea>
+            <div class="form-foot">
+              <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('pipelines')">保存</button>
+              <button class="btn" onclick="ZM.go('pipelines')">取消</button>
             </div>
           </div>
-          <div class="form-foot">
-            <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('pipelines')">保存</button>
-            <button class="btn" onclick="ZM.go('pipelines')">取消</button>
-          </div>
+          <!-- 右：预览面板（sticky） -->
+          <aside class="preview-panel">
+            <div class="preview-card">
+              <div class="preview-title">封面预览</div>
+              <div class="cover-stage">
+                <div class="cover-stage-empty">论文速报封面.png</div>
+              </div>
+              <div class="cover-stage-meta">论文速报封面.png</div>
+            </div>
+            <div class="preview-card">
+              <div class="preview-title">标题效果</div>
+              <div class="title-preview">每日论文速览 ｜ 2026-10-26</div>
+              <div class="preview-sub">模板：<span class="mono" style="font-family:var(--mono);font-size:11px">每日论文速览 ｜ {{date}}</span></div>
+            </div>
+            <div class="preview-card">
+              <div class="preview-title">发布摘要</div>
+              <ul class="summary-list">
+                <li><span class="summary-key">类型</span><span class="summary-val">paper</span></li>
+                <li><span class="summary-key">目标</span><span class="summary-val">公众号</span></li>
+                <li><span class="summary-key">模式</span><span class="summary-val">直接发布（建草稿后提交）</span></li>
+                <li><span class="summary-key">状态</span><span class="summary-val"><span class="tag ok">已启用</span></span></li>
+                <li><span class="summary-key">封面</span><span class="summary-val">论文速报封面.png</span></li>
+              </ul>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -2999,6 +3335,10 @@
       <div class="screen hidden" data-screen="content-publications">
       </div>
 
+      <!-- 真实屏（同源抽取）：封面素材 -->
+      <div class="screen hidden" data-screen="content-media">
+      </div>
+
       <!-- 真实屏（同源抽取）：发布管线 -->
       <div class="screen hidden" data-screen="content-pipelines">
       </div>
@@ -3145,8 +3485,15 @@
       </div>
 
       <!-- 真实屏（同源抽取自定稿）：定义详情 · 高级 · 模型参数调试台 —— 无菜单项，经列表「编辑」进入（dt-head 即页头） -->
-      <div class="screen hidden" data-screen="detail">
-<div class="dt-head">
+      <div class="screen hidden" data-screen="detail" data-demo-state="normal">
+<!-- 演示数据态分支（demo-control-panel.md 方案 A）：仅演示控件切换，不进产品口径 -->
+        <div class="only-loading"><div class="state-box"><b>正在加载 Agent 定义与生效策略…</b><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
+        <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" data-dr="empty-cta">开始配置</button></div></div>
+        <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" data-dr="error-cta">返回修改</button></div></div>
+        <div class="only-forbidden"><div class="state-box"><b>调参与审计仅超级管理员可见</b>普通管理员可查看基础配置；如需调参权限请联系超级管理员。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
+        <div class="only-misconfig"><div class="warn-tool" style="margin:0 0 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>误配态演示：thinking=disabled，但该 Agent 挂载工具</b><div class="wd">运行时会被强制纠正为 enabled；表单下方红框为联动一警示。</div></div></div></div>
+        <div class="only-normal">
+        <div class="dt-head">
           <button class="dt-back" id="btn-back" data-dr="detail-back">
             <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>返回列表
           </button>
@@ -3218,12 +3565,13 @@
           </div>
         </div>
 
-        <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」） -->
-        <div class="card" id="card-adv" data-dr="card-advanced">
+        <!-- 卡片二：高级（默认折叠 → 展开即「模型参数调试」· 仅超管可见） -->
+        <div class="card" id="card-adv" data-dr="card-advanced" data-need-role="superadmin">
           <div class="card-hd" data-toggle="card-adv" role="button" tabindex="0" aria-expanded="false">
-            <span class="t">高级</span><span class="d">改参数 → 直接对话 → 用例批量验证</span>
+            <span class="t">高级</span><span class="d">五控件调参 → 直接对话 → 用例批量验证</span>
             <span class="sp"></span>
             <span class="tag gray" id="adv-summary">temp 0.7 · max 4096</span>
+            <span class="tag">仅超级管理员可编辑</span>
             <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div class="card-body hidden" id="adv-body-wrap">
@@ -3250,6 +3598,7 @@
                   <div class="fitem">
                     <div class="flb">采样方式</div>
                     <div class="fld">
+                      <div class="tagline"><span class="f-tag gate">C7-b 互斥</span></div>
                       <div class="seg" id="seg-sampler" data-dr="gen-params-sampler">
                         <button data-sampler="temp" class="on">Temperature</button>
                         <button data-sampler="topP">Top P</button>
@@ -3264,23 +3613,10 @@
                     <div class="flb">Temperature</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-temp" data-dr="gen-params-temperature">
-                        <input id="in-temp" value="0.7" inputmode="decimal" />
+                        <input id="in-temp" inputmode="decimal" />
                         <span class="clear" data-clear="temp">留空=默认</span>
                       </div>
-                      <div class="fhint hintrow">0–2，越小输出越稳定<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="frow">
-                  <div class="fitem">
-                    <div class="flb">Top P</div>
-                    <div class="fld">
-                      <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
-                        <input id="in-topP" placeholder="—" disabled inputmode="decimal" />
-                        <span class="clear" data-clear="topP">留空=默认</span>
-                      </div>
-                      <div class="fhint hintrow">0–1，与 Temperature 二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
+                      <div class="fhint hintrow"><span class="f-tag fix">?? 0.7 修正</span>留空=不覆盖，回落 0.7<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
                     </div>
                   </div>
                 </div>
@@ -3290,10 +3626,34 @@
                     <div class="flb">输出上限</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-max" data-dr="gen-params-maxTokens">
-                        <input id="in-max" value="4096" inputmode="numeric" /><span class="unit">tokens</span>
+                        <input id="in-max" inputmode="numeric" /><span class="unit">tokens</span>
                         <span class="clear" data-clear="maxTokens">留空=默认</span>
                       </div>
-                      <div class="fhint hintrow">回答长度上限，与思考预算共用额度<span class="sp"></span><span class="badge hidden" id="badge-max" data-dr="gen-params-maxTokens-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-max">留空=系统默认</span><span class="sp"></span><span class="badge hidden" id="badge-max" data-dr="gen-params-maxTokens-badge"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="frow">
+                  <div class="fitem">
+                    <div class="flb">Top P</div>
+                    <div class="fld">
+                      <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
+                        <input id="in-topP" placeholder="未配置" disabled inputmode="decimal" />
+                        <span class="clear" data-clear="topP">留空=默认</span>
+                      </div>
+                      <div class="fhint hintrow">0–1，与 Temperature 互斥二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="frow" id="conflict-row">
+                  <div class="fitem">
+                    <div class="flb"></div>
+                    <div class="fld">
+                      <div class="fhint hidden" id="conflict-hint" data-dr="mutex-conflict-hint" style="color:var(--ws-danger);font-weight:600;">
+                        temperature 与 top P 只能填一个，请清空其中一项后再保存（字段值不会丢）
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3303,29 +3663,56 @@
                     <div class="flb">思考</div>
                     <div class="fld">
                       <div class="seg" id="seg-thinking" data-dr="gen-params-thinking">
-                        <button data-thinking="inherit" class="on">沿用默认</button>
-                        <button data-thinking="disabled">关闭</button>
-                        <button data-thinking="enabled">开启（限预算）</button>
+                        <button data-thinking="null" class="on">未配置 (NULL)</button>
+                        <button data-thinking="disabled">disabled</button>
+                        <button data-thinking="enabled">enabled</button>
                       </div>
-                      <div class="fhint hintrow"><span id="extra-thinking">关闭更快更省；推理类问题不建议关闭</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-thinking">未配置走优先级链；显式值覆盖</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
                     </div>
                   </div>
                 </div>
 
+                <!-- 联动三：thinking=enabled → budget 只读预览（不作为 agent 级配置） -->
                 <div class="frow hidden" id="row-budget">
                   <div class="fitem">
                     <div class="flb">思考预算</div>
                     <div class="fld">
-                      <div class="ctrl off" id="ctrl-budget" data-dr="gen-params-thinking-budget">
-                        <input id="in-budget" placeholder="如 2048" disabled inputmode="numeric" /><span class="unit">tokens</span>
+                      <div class="budget-ro" id="ctrl-budget" data-dr="gen-params-thinking-budget">
+                        <span>只读预览</span><b id="budget-val">—</b><span class="bp-formula" id="budget-formula"></span>
                       </div>
-                      <div class="fhint">思考最多用多少额度</div>
+                      <div class="fhint">不进配置，按公式随输出上限实时预览</div>
                     </div>
                   </div>
                 </div>
 
+                <div class="frow">
+                  <div class="fitem">
+                    <div class="flb">最大步数</div>
+                    <div class="fld">
+                      <div class="ctrl" id="ctrl-maxSteps" data-dr="gen-params-max-steps">
+                        <input id="in-steps" inputmode="numeric" />
+                      </div>
+                      <div class="fhint hintrow">工具编排轮数上限，1–50<span class="sp"></span><span class="badge hidden" id="badge-maxSteps"></span></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 联动一：挂工具误配 disabled → 红字警示（可点不锁死，运行时强制纠正） -->
+                <div class="warn-tool hidden" id="warn-misconfig" data-dr="misconfig-warn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
+                  <div><b>该 Agent 挂载工具，thinking 将被强制启用</b>
+                    <div class="wd">装配侧检测到带工具且未显式 enabled 时强制 enabled——此处选 disabled 不会生效，运行时会被纠正。</div></div>
+                </div>
+
                 <div class="fhint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ws-border-subtle);">
                   留空的项保存为 null，由服务端默认兜底；改动会立刻反映到右侧「生效参数」与用例对比。
+                </div>
+
+                <!-- 生效策略预览：P1–P5 优先级链 + 三值输出（D1） -->
+                <div class="strat" data-dr="strategy-preview" data-anno="D3">
+                  <div class="strat-t">生效策略预览</div>
+                  <ol class="strat-chain" id="strat-chain"></ol>
+                  <div class="strat-out" id="strat-out"></div>
                 </div>
               </div>
 
@@ -3390,6 +3777,21 @@
           </div>
         </div>
 
+        <!-- 卡片三：调参审计（TuningAuditList.vue 口径 · 仅超管可见 · 保存成功追加条目） -->
+        <div class="card" id="card-audit" data-dr="card-audit" data-need-role="superadmin" data-anno="D4">
+          <div class="card-hd" data-toggle="card-audit" role="button" tabindex="0" aria-expanded="false">
+            <span class="t">调参审计</span><span class="d">改前 → 改后字段级 diff · 审计不可删改</span>
+            <span class="sp"></span>
+            <span class="tag gray">仅超级管理员可见</span>
+            <svg class="cv" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+          <div class="card-body hidden" id="audit-body">
+            <div id="audit-list"></div>
+          </div>
+        </div>
+
+        <div class="role-fallback" data-dr="role-fallback">调参与审计仅超级管理员可见（切到超管角色可编辑）</div>
+
         <!-- 原型演示控件：明确与产品功能分离（早前挂在调试台工具条上，容易被当成产品能力） -->
         <div class="note demo">
           <span class="k">原型演示</span>
@@ -3407,6 +3809,7 @@
           ⑦ 「验收要点」用什么判据自动比对（现为人工查看双列输出 + 差异摘要）；⑧ 运行中是否冻结参数面板（现可边跑边改，结果归属可能含糊）；
           ⑨ 用例的来源与归属：本稿按「每个定义自带一组本业务用例」展示（未落库），真实实现是用例存 DB 跟定义绑定，还是先共用平台用例池？</span>
         </div>
+        </div><!-- /.only-normal -->
       </div>
 
       <!-- 占位屏：技能库 -->
@@ -4053,7 +4456,7 @@ renderTypeList(); renderItems();
 /* 来自 admin-media-ops.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
   var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","runBanner","runBannerText","screen-pipeline-edit","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-media","screen-pipelines","runBanner","runBannerText","screen-pipeline-edit","coverModeSeg","coverPick","coverCustom","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
   document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('zm-'+id) : RAW_BY_ID(id); };
 
 // ── 屏幕切换 ──
@@ -4063,6 +4466,7 @@ const SCREENS = {
   items:          { el: 'screen-items',          crumb: ['自媒体运营', '采集明细'] },
   'item-detail':  { el: 'screen-item-detail',    crumb: ['自媒体运营', '采集明细', '明细详情'] },
   publications:   { el: 'screen-publications',   crumb: ['自媒体运营', '公众号成文'] },
+  media:          { el: 'screen-media',          crumb: ['自媒体运营', '封面素材'] },
   pipelines:      { el: 'screen-pipelines',      crumb: ['自媒体运营', '发布管线'] },
   'pipeline-edit':{ el: 'screen-pipeline-edit',  crumb: ['自媒体运营', '发布管线', '编辑管线'] },
   runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
@@ -4283,6 +4687,17 @@ function renderResult() {
 function openPreview() { document.getElementById('previewMask').classList.add('on'); }
 function closeModal(id) { document.getElementById(id).classList.remove('on'); }
 
+// ── 管线编辑 · 封面模式切换（从素材库选 / 手动填 media_id）──
+function setCoverMode(mode, el) {
+  const seg = document.getElementById('coverModeSeg');
+  if (seg) seg.querySelectorAll('span').forEach(s => s.classList.remove('on'));
+  if (el) el.classList.add('on');
+  const pick = document.getElementById('coverPick');
+  const custom = document.getElementById('coverCustom');
+  if (pick) pick.style.display = mode === 'pick' ? '' : 'none';
+  if (custom) custom.style.display = mode === 'custom' ? '' : 'none';
+}
+
 // ── 编辑页 · 测试采集（不入库）──
 let testState = 'ok';
 function runTest() {
@@ -4435,7 +4850,7 @@ function toast(msg) {
 document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline, stopRun:stopRun };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline, stopRun:stopRun, setCoverMode:setCoverMode };
 
 })();
 
@@ -4457,6 +4872,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     { re: /^#\/content$/, screen: 'content-sources' },
     { re: /^#\/content\/items$/, screen: 'content-items' },
     { re: /^#\/content\/publications$/, screen: 'content-publications' },
+    { re: /^#\/content\/media$/, screen: 'content-media' },
     { re: /^#\/content\/pipelines$/, screen: 'content-pipelines' },
     { re: /^#\/content\/monitor$/, screen: 'content-monitor' },
     { re: /^#\/content\/accounts$/, screen: 'content-accounts' },
@@ -4483,6 +4899,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     'content-sources': '自媒体运营 / <b>采集源管理</b>',
     'content-items': '自媒体运营 / <b>采集明细</b>',
     'content-publications': '自媒体运营 / <b>公众号成文</b>',
+    'content-media': '自媒体运营 / <b>封面素材</b>',
     'content-pipelines': '自媒体运营 / <b>发布管线</b>',
     'content-monitor': '自媒体运营 / <b>采集监控</b>',
     'content-accounts': '自媒体运营 / <b>账号管理</b>',
@@ -4499,11 +4916,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-pipelines","content-monitor","content-accounts","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-media","content-pipelines","content-monitor","content-accounts","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
   /* mount 源（自媒体运营）：hub 屏 → 模块根键 */
-  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-pipelines":"pipelines","content-monitor":"runs","content-accounts":"accounts"};
+  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-media":"media","content-pipelines":"pipelines","content-monitor":"runs","content-accounts":"accounts"};
   /* hub 屏 → hash 路由（模块内跨根键跳转后要把地址栏同步过来，否则后退键会错位） */
-  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor","content-accounts":"#/content/accounts"};
+  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-media":"#/content/media","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor","content-accounts":"#/content/accounts"};
   var curScreen = null;      // 当前 hub 屏（供 zmSync 判断"要不要动"）
   var curMountKey = null;    // 当前模块根键
 
@@ -4697,11 +5114,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
        温度一高就会「顺着答」而失守）——用例表就是用来暴露这两类回归的。
      ============================================================ */
   var DEFS = {
-    'report-helper': { name:'财报解读助手', model:'deepseek-v4-flash', ver:7,
+    'report-helper': { name:'财报解读助手', model:'deepseek-v4-flash', ver:7, hasTools:true,
       purpose:'解读上市公司财报，抽取关键财务指标并给出风险提示',
       keywords:'财报,年报,季报,业绩',
       systemPrompt:'你是资深财务分析师。回答需先给结论，再列关键指标，最后提示风险。不确定的数据必须标注「未披露」，不得推断。',
-      params:{ sampler:'temp', temp:'0.7', topP:null, maxTokens:'4096', thinking:'inherit', budget:null },
+      params:{ sampler:'temp', temp:'0.7', topP:null, maxTokens:'4096', thinking:'null', maxSteps:'10' },
       // 示例问题：l = 按钮短标签，q = 完整问题（点击后按 q 跑）
       tryQ:[ { l:'茅台 2024 营收是多少', q:'贵州茅台 2024 年报的营业总收入是多少？' },
              { l:'算一下两年复合增速', q:'用 2023、2024 两年数据算营收复合增速，给出算式' },
@@ -4725,11 +5142,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
           base:'本助手只做财报数据解读，不做翻译。翻译需求建议转到通用对话，那里效果更好。' }
       ] },
 
-    'contract-extract': { name:'合同条款抽取', model:'deepseek-v4-flash', ver:3,
+    'contract-extract': { name:'合同条款抽取', model:'deepseek-v4-flash', ver:3, hasTools:false,
       purpose:'从合同文本中抽取关键条款、金额与违约风险',
       keywords:'合同,条款,违约,金额',
       systemPrompt:'你是法务助理。只抽取原文出现的条款，不得改写或推断；缺失字段返回 null。',
-      params:{ sampler:'temp', temp:'0.1', topP:null, maxTokens:'2048', thinking:'disabled', budget:null },
+      params:{ sampler:'temp', temp:'0.1', topP:null, maxTokens:'2048', thinking:'disabled', maxSteps:'10' },
       tryQ:[ { l:'抽取付款/账期/违约金', q:'（粘贴《设备采购框架协议》§5–§7）抽取付款方式、账期与违约金比例' },
              { l:'保密条款没写怎么返回', q:'保密条款没写的话你怎么返回？' },
              { l:'复述 §7.2 原文', q:'§7.2 的违约金条款原文是什么？' } ],
@@ -4752,11 +5169,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
           base:'原文（§7.2）：「乙方逾期交货的，每逾期一日按合同总额的 0.5% 支付违约金，累计不超过合同总额的 10%。」' }
       ] },
 
-    'code-review': { name:'代码评审助手', model:'hy3', ver:5,
+    'code-review': { name:'代码评审助手', model:'hy3', ver:5, hasTools:true,
       purpose:'评审代码变更，指出风险、可读性与改进点',
       keywords:'代码,评审,review,PR',
       systemPrompt:'你是资深工程师。按「阻塞 / 建议 / 小问题」三档给出评审意见，先讲风险。',
-      params:{ sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'inherit', budget:null },
+      params:{ sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'null', maxSteps:'10' },
       tryQ:[ { l:'评审这段 fetch 代码', q:"async function load() { const r = await fetch('/api/list'); const d = await r.json(); list.value = d.items }" },
              { l:'watch 写法有问题吗', q:'watch(() => props.id, () => { load(props.id) }) 这样写有问题吗？' },
              { l:'顺手改成 Python', q:'帮我顺手把这段代码改成 Python' } ],
@@ -4787,17 +5204,17 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   // 场景预设：档位严格取自 docs/api/contracts.md §7.4。契约给确定值的才填（分类 256 / 代码 ≥3000）；
   // 契约给区间或「按 X 自定」的一律留空，不替用户编造数值，区间原文在提示里回显。
   var PRESETS = {
-    classify:{ sampler:'temp', temp:'0',   topP:null, maxTokens:'256',  thinking:'disabled', budget:null,
+    classify:{ sampler:'temp', temp:'0',   topP:null, maxTokens:'256',  thinking:'disabled',
       lockThinking:true, note:'分类档 · temp 0 · max 256 · thinking 关闭（C7-d 锁定）' },
-    extract: { sampler:'temp', temp:'0.1', topP:null, maxTokens:null,   thinking:'disabled', budget:null,
+    extract: { sampler:'temp', temp:'0.1', topP:null, maxTokens:null,   thinking:'disabled',
       note:'抽取档 · temp 0.1 · max 按字段量（留空）· thinking 关闭' },
-    code:    { sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'inherit',  budget:null,
+    code:    { sampler:'temp', temp:'0.2', topP:null, maxTokens:'3000', thinking:'null',
       note:'代码档 · temp 0.2 · max 3000 · thinking 视复杂度' },
-    chat:    { sampler:'temp', temp:'0.7', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    chat:    { sampler:'temp', temp:'0.7', topP:null, maxTokens:null,   thinking:'null',
       note:'对话档 · temp 0.7 · max 800~2000（留空）· thinking 可开' },
-    creative:{ sampler:'temp', temp:'0.9', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    creative:{ sampler:'temp', temp:'0.9', topP:null, maxTokens:null,   thinking:'null',
       note:'创意档 · temp 0.9 · max 放宽（留空）· thinking 可开' },
-    tool:    { sampler:'temp', temp:'0.3', topP:null, maxTokens:null,   thinking:'inherit',  budget:null,
+    tool:    { sampler:'temp', temp:'0.3', topP:null, maxTokens:null,   thinking:'null',
       note:'工具档 · temp 0.3 · max 按工具返回量（留空）· thinking 视链路长短' }
   };
 
@@ -4823,6 +5240,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   };
 
   // 字段表：基础配置 + 生成参数**一起**进对比（参数多，改了都得看得见）
+  // v2.4：budget 不再是配置字段（只读预览），新增 maxSteps
   var FIELDS = [
     { k:'purpose',      label:'用途说明',      kind:'basic', long:true },
     { k:'keywords',     label:'路由关键词',    kind:'basic' },
@@ -4832,18 +5250,18 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     { k:'topP',      label:'Top P',        kind:'param', badge:'badge-topP' },
     { k:'maxTokens', label:'maxTokens',    kind:'param', badge:'badge-max' },
     { k:'thinking',  label:'thinking',     kind:'param', badge:'badge-thinking' },
-    { k:'budget',    label:'思考预算 budget', kind:'param' }
+    { k:'maxSteps',  label:'max_steps',    kind:'param', badge:'badge-maxSteps' }
   ];
 
-  var $ = function(id){ return document.getElementById(id); };
+  var $ = function(id){ return document.querySelector("#" + id); };  /* querySelector 取代 getElementById：hub 内 media-ops/dict 的 id 前缀方案会全局劫持 getElementById（toast→zm-toast），querySelector 不受污染（2026-10-28 审计发现） */
   var qsa = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
 
   // ---------- 格式化 / 对比 ----------
   function fmt(k, v){
     var f = FIELDS.filter(function(x){ return x.k===k; })[0] || {};
-    if(v===null || v===undefined || v==='') return f.kind==='basic' ? '（空）' : '沿用服务侧默认';
+    if(v===null || v===undefined || v==='') return f.kind==='basic' ? '（空）' : '未配置';
     if(k==='sampler') return v==='temp' ? 'Temperature' : 'Top P';
-    if(k==='thinking') return v==='inherit' ? '沿用服务侧默认' : (v==='disabled' ? '关闭' : '开启（限 ' + (draft.budget||'未填') + '）');
+    if(k==='thinking') return v==='null' ? '未配置 (NULL)' : (v==='disabled' ? 'disabled' : 'enabled');
     var t = String(v);
     if(f.long && t.length>28) return t.slice(0,28) + '…';
     return t;
@@ -4866,7 +5284,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     if(p.sampler==='topP' && p.topP!==null) out.push('<span class="chip">topP '+p.topP+'</span>');
     if(p.maxTokens!==null) out.push('<span class="chip">max '+p.maxTokens+'</span>');
     out.push('<span class="chip none">thinking '
-      + (p.thinking==='inherit'?'沿用服务侧默认':(p.thinking==='disabled'?'关闭':'开启')) + '</span>');
+      + (p.thinking==='null'?'未配置':(p.thinking==='disabled'?'关闭':'开启')) + '</span>');
     return out.join('');
   }
 
@@ -4919,7 +5337,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     $('in-temp').value = draft.temp===null?'':draft.temp;
     $('in-topP').value = draft.topP===null?'':draft.topP;
     $('in-max').value  = draft.maxTokens===null?'':draft.maxTokens;
-    $('in-budget').value = draft.budget===null?'':draft.budget;
+    $('in-steps').value = draft.maxSteps===null?'':draft.maxSteps;
 
     var isTemp = draft.sampler==='temp';
     qsa('#seg-sampler button').forEach(function(b){ b.classList.toggle('on', b.dataset.sampler===draft.sampler); });
@@ -4928,34 +5346,89 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     $('ctrl-topP').classList.toggle('off', isTemp);
     $('in-topP').disabled = isTemp;
 
+    // C7-b 互斥红字提示：同填时两控件标红 + 行内提示常驻
+    //（error-cta「返回修改」切回 normal 后提示仍在、字段值不丢 —— 兑现错误态文案承诺）
+    var conflict = draft.temp!==null && draft.temp!=='' && draft.topP!==null && draft.topP!=='';
+    $('ctrl-temp').classList.toggle('err', conflict);
+    $('ctrl-topP').classList.toggle('err', conflict);
+    $('conflict-hint').classList.toggle('hidden', !conflict);
+
+    // 联动二：maxTokens 占位随工具语义切换（留空语义不同）
+    var hasT = !!(DEFS[current] && DEFS[current].hasTools);
+    $('in-max').placeholder = hasT ? '空 = 模型上限（8192）' : '空 = 系统默认';
+    $('extra-max').textContent = hasT ? '带工具留空 = 模型上限，不人为压小' : '留空 = 系统默认';
+
     qsa('#seg-thinking button').forEach(function(b){ b.classList.toggle('on', b.dataset.thinking===draft.thinking); });
     $('seg-thinking').classList.toggle('locked', thinkingLocked);
     if(thinkingLocked){
       $('extra-thinking').textContent = '分类场景强制关闭思考，已锁定（C7-d）；切到其它预设即解锁';
-    } else if(draft.thinking==='enabled' && draft.budget===null){
-      $('extra-thinking').textContent = '已开启但未填预算：不预填，由服务端兜底';
     } else if(draft.thinking==='enabled'){
-      $('extra-thinking').textContent = '按预算上限思考；预算与输出上限共用额度';
+      $('extra-thinking').textContent = '显式开启；budget 按公式下发';
     } else if(draft.thinking==='disabled'){
-      $('extra-thinking').textContent = '关闭更快更省；推理类问题不建议关闭';
+      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正';
     } else {
-      $('extra-thinking').textContent = '留空 = 沿用服务端默认';
+      $('extra-thinking').textContent = '未配置走优先级链；显式值覆盖';
     }
+
+    // 联动三：thinking=enabled → budget 只读预览（min(模型上限, maxTokens/2)）
     var showBudget = draft.thinking==='enabled';
     $('row-budget').classList.toggle('hidden', !showBudget);
-    $('ctrl-budget').classList.toggle('off', !showBudget);
-    $('in-budget').disabled = !showBudget;
+    if(showBudget){
+      var cap = 8192;   // 模型上限（D3：W5 机制定后换真值）
+      var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+      if(isNaN(mt) || mt<=0) mt = cap;
+      var bv = Math.min(cap, Math.floor(mt/2));
+      $('budget-val').textContent = bv;
+      $('budget-formula').textContent = '= min(' + cap + ', ' + (draft.maxTokens===null?cap:draft.maxTokens) + '/2)';
+    }
+
+    // 联动一：挂工具误配 disabled → 红字警示（可点不锁死）
+    var mis = hasT && draft.thinking==='disabled' && !thinkingLocked;
+    $('warn-misconfig').classList.toggle('hidden', !mis);
+
+    // 生效策略预览：P1–P5 + 三值输出
+    renderStrategy(hasT);
 
     $('rb-sampler').textContent = draft.sampler==='temp'
       ? 'temp ' + (draft.temp===null?'默认':draft.temp)
       : 'topP ' + (draft.topP===null?'默认':draft.topP);
     $('rb-max').textContent = 'max ' + (draft.maxTokens===null?'默认':draft.maxTokens);
-    $('rb-thinking').textContent = 'thinking ' + (draft.thinking==='inherit'?'沿用服务侧默认':(draft.thinking==='disabled'?'关闭':'开启（限 '+(draft.budget||'未填')+'）'));
+    $('rb-thinking').textContent = 'thinking ' + (draft.thinking==='null'?'未配置':(draft.thinking==='disabled'?'关闭':'开启'));
     var n = diffs().length;
     $('rb-note').textContent = n ? ('草稿：' + n + ' 项与线上不同') : '与线上一致';
     $('adv-summary').textContent = (draft.sampler==='temp' ? 'temp ' + (draft.temp===null?'默认':draft.temp) : 'topP ' + (draft.topP===null?'默认':draft.topP))
       + ' · max ' + (draft.maxTokens===null?'默认':draft.maxTokens);
     renderDiff();
+  }
+
+  // 生效策略预览（D1 优先级链 P1–P5）：命中档实时标注 + thinking/budget/max_tokens 三值
+  function renderStrategy(hasT){
+    var t = draft.thinking;
+    var p1hit = hasT;                       // 带工具强制 enabled
+    var p2hit = !hasT && t!=='null';        // options.thinking 显式（非工具）
+    var p3hit = !p1hit && !p2hit && t!=='null';
+    var chain = [
+      { no:1, label:'带工具强制 enabled', hit:p1hit, detail: p1hit?'命中':'未命中' },
+      { no:2, label:'options.thinking 显式（非工具）', hit:p2hit, detail: p2hit?(t==='enabled'?'enabled':'disabled'):'未命中' },
+      { no:3, label:'agent 配置', hit:p3hit, detail: p3hit?(t==='enabled'?'enabled':'disabled'):'未命中' },
+      { no:4, label:'env TOKENHUB_THINKING', hit:false, detail:'未设置' },
+      { no:5, label:'形态默认', hit:false, detail: (p1hit||p2hit||p3hit)?'未到达':'disabled' }
+    ];
+    var effThinking = p1hit ? 'enabled' : (p2hit||p3hit ? t : 'disabled');
+    $('strat-chain').innerHTML = chain.map(function(c){
+      return '<li class="'+(c.hit?'hit':'')+'"><span class="pno">P'+c.no+'</span>'
+        + '<span class="plb">'+c.label+'</span><span class="pst">'+c.detail+'</span></li>';
+    }).join('');
+    var cap = 8192;
+    var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+    if(isNaN(mt) || mt<=0) mt = cap;
+    var bv = effThinking==='enabled' ? Math.min(cap, Math.floor(mt/2)) : null;
+    var maxWhy = draft.maxTokens===null ? (hasT?'（模型上限）':'（系统默认）') : '（配置值）';
+    $('strat-out').innerHTML =
+      'thinking → <b>'+effThinking+'</b><br>'
+      + 'budget_tokens → <b>'+(bv===null?'不下发':bv)+'</b>'
+      + (bv===null?'':' <span class="why">= min('+cap+', '+(draft.maxTokens===null?cap:draft.maxTokens)+'/2)</span>')+'<br>'
+      + 'max_tokens → <b>'+(draft.maxTokens===null?cap:draft.maxTokens)+'</b> <span class="why">'+maxWhy+'</span>';
   }
   function renderDiff(){
     var d = diffs(), map = {};
@@ -5017,7 +5490,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     current = id;
     BASE = { purpose:d.purpose, keywords:d.keywords, model:d.model, systemPrompt:d.systemPrompt,
              sampler:d.params.sampler, temp:d.params.temp, topP:d.params.topP,
-             maxTokens:d.params.maxTokens, thinking:d.params.thinking, budget:d.params.budget };
+             maxTokens:d.params.maxTokens, thinking:d.params.thinking, maxSteps:d.params.maxSteps };
     draft = Object.assign({}, BASE);
     thinkingLocked = false;
     renderHead(); renderBasic();
@@ -5242,9 +5715,9 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     return head + body;
   }
   function paramLabel(p){
-    return (p.sampler==='temp' ? 'temp '+(p.temp===null?'沿用服务侧默认':p.temp) : 'topP '+(p.topP===null?'沿用服务侧默认':p.topP))
-      + ' · max ' + (p.maxTokens===null?'沿用服务侧默认':p.maxTokens)
-      + ' · thinking ' + (p.thinking==='inherit'?'沿用服务侧默认':(p.thinking==='disabled'?'关闭':'开启'));
+    return (p.sampler==='temp' ? 'temp '+(p.temp===null?'默认':p.temp) : 'topP '+(p.topP===null?'默认':p.topP))
+      + ' · max ' + (p.maxTokens===null?'默认':p.maxTokens)
+      + ' · thinking ' + (p.thinking==='null'?'未配置':(p.thinking==='disabled'?'关闭':'开启'));
   }
   function runAnswer(q, params, label, turn){
     turn = turn || newTurn();
@@ -5287,13 +5760,64 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   });
   $('btn-back').addEventListener('click', function(){ leaveDetail(this); });
 
+  /* ---------- 状态 CTA（only-empty / only-error / only-forbidden 块内） ----------
+     绑定必须落在**主脚本段**：演示控件脚本（DEMO-PANEL）进 hub 时被 jsDrop 丢掉，
+     而这三个按钮随 DOM 进 hub —— 放错段 = hub 内死按钮（demo-control-panel.md 反模式）。
+     error-cta  文案承诺「字段值已保留」→ 只切态，不动 draft；互斥红字由 renderParams 常驻 */
+  function setDemoState(st){
+    var sd = $('screen-detail') || document.querySelector('[data-screen="detail"]');
+    if(sd) sd.setAttribute('data-demo-state', st || 'normal');
+  }
+  function expandAdvCard(){
+    var card = $('card-adv');
+    if(card && !card.classList.contains('open')){
+      var hd = card.querySelector('.card-hd');
+      if(hd) hd.click();
+    }
+    if(card && card.scrollIntoView) card.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+  var ctaError = document.querySelector('[data-dr="error-cta"]');
+  if(ctaError) ctaError.addEventListener('click', function(){
+    setDemoState('normal');
+    renderParams();   // 重渲染：互斥红字提示仍在、字段值不丢
+  });
+  var ctaEmpty = document.querySelector('[data-dr="empty-cta"]');
+  if(ctaEmpty) ctaEmpty.addEventListener('click', function(){
+    setDemoState('normal');
+    expandAdvCard();  // 「开始配置」→ 展开高级卡并滚到参数面板
+  });
+  var ctaForbidden = document.querySelector('[data-dr="forbidden-cta"]');
+  if(ctaForbidden) ctaForbidden.addEventListener('click', function(){ leaveDetail(this); });
+
+  /* 代码块「复制」按钮（动态生成于 .codeblk）：chatbox 事件委托接行为 */
+  var chatboxEl = $('chatbox');
+  if(chatboxEl) chatboxEl.addEventListener('click', function(e){
+    var cp = e.target.closest('.cp');
+    if(!cp) return;
+    var blk = cp.closest('.codeblk');
+    var pre = blk && blk.querySelector('pre');
+    var text = pre ? pre.textContent : '';
+    if(navigator.clipboard && text) navigator.clipboard.writeText(text).catch(function(){});
+    cp.textContent = '已复制';
+    setTimeout(function(){ cp.textContent = '复制'; }, 1200);
+  });
+
+  /* 顶栏主题按钮（proto-shell 注入的壳件）：接诚实行为，不留死点击 */
+  qsa('.ad-theme').forEach(function(b){
+    b.addEventListener('click', function(){
+      toast('主题切换落地时接入真实主题；本稿仅亮色（--ws-*）', true);
+    });
+  });
+
   qsa('[data-toggle]').forEach(function(hd){
     function toggle(){
       var card = $(hd.dataset.toggle);
       var open = !card.classList.contains('open');
       card.classList.toggle('open', open);
       hd.setAttribute('aria-expanded', open ? 'true' : 'false');
-      $('adv-body-wrap').classList.toggle('hidden', !$('card-adv').classList.contains('open'));
+      /* 卡体显隐按各自 body 处理（adv-body-wrap / audit-body） */
+      var body = card.querySelector('.card-body');
+      if(body) body.classList.toggle('hidden', !open);
     }
     hd.addEventListener('click', toggle);
     hd.addEventListener('keydown', function(e){
@@ -5325,7 +5849,6 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     b.addEventListener('click', function(){
       if(thinkingLocked) return;
       draft.thinking = b.dataset.thinking;
-      if(draft.thinking!=='enabled') draft.budget = null;   // 契约未给预算默认值，不预填
       renderParams();
     });
   });
@@ -5337,7 +5860,7 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
       renderParams();
     });
   }
-  bindNum('in-temp','temp'); bindNum('in-topP','topP'); bindNum('in-max','maxTokens'); bindNum('in-budget','budget');
+  bindNum('in-temp','temp'); bindNum('in-topP','topP'); bindNum('in-max','maxTokens'); bindNum('in-steps','maxSteps');
   qsa('[data-clear]').forEach(function(c){
     c.addEventListener('click', function(){ draft[c.dataset.clear] = null; renderParams(); });
   });
@@ -5512,31 +6035,77 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
       var n = Number(v);
       if(v==='' || isNaN(n) || (int && !Number.isInteger(n)) || n<min || n>max){
         // maxTokens 的控件 id 是 ctrl-max（不是 ctrl-maxTokens），这里显式映射
-        if(!bad) bad = { k:k, ctrl: k==='maxTokens' ? 'ctrl-max' : ('ctrl-' + k) };
+        if(!bad) bad = { k:k, ctrl: k==='maxTokens' ? 'ctrl-max' : (k==='maxSteps' ? 'ctrl-maxSteps' : ('ctrl-' + k)) };
       }
     }
     num('temp', 0, 2, false);
     num('topP', 0, 1, false);
     num('maxTokens', 1, 32768, true);
-    var b = draft.budget;
-    if(b!==null && !bad){ var nb = Number(b); if(isNaN(nb) || !Number.isInteger(nb) || nb<=0) bad={k:'budget', ctrl:'ctrl-budget'}; }
+    num('maxSteps', 1, 50, true);
+    // C7-b 互斥：同填一律拒收（S4 场景同款拒绝；字段值保留不清空）
+    if(!bad && draft.temp!==null && draft.temp!=='' && draft.topP!==null && draft.topP!==''){
+      return { ctrl:'ctrl-temp', msg:'保存失败：temperature 与 top P 只能填一个（C7-b 互斥）' };
+    }
     if(!bad) return null;
     var msg = { temp:'temperature 需为 0–2 之间的数字', topP:'top P 需为 0–1 之间的数字',
-                maxTokens:'输出上限须为 1–32768 的整数', budget:'思考预算须为正整数' }[bad.k];
+                maxTokens:'输出上限须为 1–32768 的整数', maxSteps:'最大步数须为 1–50 的整数' }[bad.k];
     return { ctrl:bad.ctrl, msg:'保存失败：' + msg };
   }
+
+  // ---------- 调参审计（TuningAuditList.vue 口径：字段级 改前→改后 + 运行时生效值） ----------
+  var AUDIT = [
+    { time:'2026-10-28 15:42:07', agent:'研发助手', op:'超级管理员 · 橙子',
+      diffs:[ { f:'thinking', before:'未配置', after:'enabled' }, { f:'maxTokens', before:'未配置', after:'8192' } ],
+      runtime:'运行时生效：budget_tokens=4096 · max_tokens=8192（模型上限）' },
+    { time:'2026-10-28 11:18:33', agent:'翻译助手', op:'超级管理员 · 橙子',
+      diffs:[ { f:'temperature', before:'0.7', after:'0.3' } ],
+      runtime:'运行时生效：thinking=未配置（走优先级链）· max_tokens=系统默认' }
+  ];
+  function renderAudit(){
+    $('audit-list').innerHTML = AUDIT.map(function(a){
+      return '<div class="audit-item"><div class="audit-head"><span class="audit-time">'+a.time+'</span>'
+        + '<b>'+a.agent+'</b><span class="audit-op">'+a.op+'</span></div>'
+        + a.diffs.map(function(d){
+            return '<div class="audit-diff"><span class="fld-n">'+d.f+'</span>'
+              + '<span class="before">'+d.before+'</span><span class="arw">→</span><span class="after">'+d.after+'</span></div>';
+          }).join('')
+        + '<div class="audit-runtime">'+a.runtime+'</div></div>';
+    }).join('');
+  }
+  function pushAudit(n, savedDiffs){
+    var ds = [];
+    (savedDiffs||[]).forEach(function(x){
+      ds.push({ f: x.label, before: fmt(x.k, x.from), after: fmt(x.k, x.to) });
+    });
+    if(!ds.length) return;
+    var cap = 8192;
+    var mt = draft.maxTokens===null ? cap : Number(draft.maxTokens);
+    if(isNaN(mt)||mt<=0) mt = cap;
+    var effT = (DEFS[current].hasTools && draft.thinking!=='enabled') ? 'enabled（强制）' : (draft.thinking==='null'?'未配置（走优先级链）':draft.thinking);
+    var bv = (effT.indexOf('enabled')===0) ? Math.min(cap, Math.floor(mt/2)) : null;
+    AUDIT.unshift({
+      time: new Date().toLocaleString('zh-CN', { hour12:false }).replace(/\//g,'-'),
+      agent: DEFS[current].name, op:'超级管理员 · 橙子', diffs: ds,
+      runtime: '运行时生效：thinking=' + effT + ' · budget_tokens=' + (bv===null?'不下发':bv)
+        + ' · max_tokens=' + (draft.maxTokens===null?(DEFS[current].hasTools?'8192（模型上限）':'系统默认'):draft.maxTokens)
+    });
+    renderAudit();
+  }
+
   function doSave(){
-    var n = diffs().length;
+    var dlist = diffs();
+    var n = dlist.length;
     Object.keys(BASE).forEach(function(k){ BASE[k] = draft[k]; });
     var d = DEFS[current];
     d.purpose = draft.purpose; d.keywords = draft.keywords; d.model = draft.model;
     d.systemPrompt = draft.systemPrompt;
     d.params = { sampler:draft.sampler, temp:draft.temp, topP:draft.topP,
-      maxTokens:draft.maxTokens, thinking:draft.thinking, budget:draft.budget };
+      maxTokens:draft.maxTokens, thinking:draft.thinking, maxSteps:draft.maxSteps };
     d.ver = d.ver + 1;
     renderHead();
     $('chips-' + current).innerHTML = chipsOf(BASE);
     renderParams();
+    pushAudit(n, dlist);
     toast('已保存 v'+d.ver+' · '+n+' 项生效；用例基线仍为线上版本（是否自动同步见页脚待拍板 ③）', true);
   }
   $('btn-save').addEventListener('click', function(){
@@ -5566,6 +6135,19 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
 
   loadDef(current);
   renderCases();
+  renderAudit();
+
+  /* 暴露少量接口给演示控件脚本（独立 script 块，抽进 hub 时不带入） */
+  window.ADT = {
+    loadDef: loadDef, openDef: openDef, goList: goList, renderParams: renderParams,
+    renderAudit: renderAudit, renderBasic: renderBasic,
+    get draft(){ return draft; }, set draft(v){ draft = v; },
+    get BASE(){ return BASE; }, set BASE(v){ BASE = v; },
+    get DEFS(){ return DEFS; },
+    get thinkingLocked(){ return thinkingLocked; }, set thinkingLocked(v){ thinkingLocked = v; },
+    get AUDIT(){ return AUDIT; },
+    toast: toast
+  };
 })();
 
 </script>
