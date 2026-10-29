@@ -455,13 +455,41 @@ export function loadSource(src) {
     js = js.slice(0, lineStart) + js.slice(lineEnd < 0 ? js.length : lineEnd + 1);
   }
 
-  /*  3a) getElementById shim —— **只映射本源自己的 id**，其它 id 一律走原生。
-       inline handler 之后还会被调用，所以 shim 必须长期有效，不能探完即恢复。 */
+  /*  3a) id 前缀映射 —— **作用域只到本源自己的 IIFE**，不碰全局 document。
+       ⚠️ 历史实现是**全局覆写** document.getElementById（RAW_BY_ID + SELF_IDS +
+          document.getElementById = function(id){…}）。多个模块同时抽进 hub 时，后装的
+          shim 会劫持**同页所有代码**：admin-agent-def-detail.html 的 getElementById('toast')
+          被映射到 'zm-toast'，hub 内 toast 完全不显示（2026-10-28 实测）。
+          全局覆写对 inline handler / 后续脚本块长期有效，靠「防御性改成 querySelector」
+          只能救一处、救不了下一处新稿。
+       现在改为：prelude 里定义**局部**的 byId/qs/qsa，再把本源抽取出的 js 里的
+       document.getElementById( / querySelector( / querySelectorAll( 机械替换成它们。
+       为什么**不**改成「构建期把 getElementById('x') 直接改写成 getElementById('pfx-x')」：
+       本源有 7 处是**运行时变量**（getElementById(SCREENS[k].el) / getElementById(tableId) /
+       closeModal(id) 的形参），静态字面量改写覆盖不到 —— 必须保留运行时映射。 */
   let prelude = '';
-  if (src.idPrefix && ids.size) {
-    prelude = `  var RAW_BY_ID = document.getElementById.bind(document);\n`
-      + `  var SELF_IDS = ${JSON.stringify([...ids])}.reduce(function(a,i){a[i]=1;return a;},{});\n`
-      + `  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('${src.idPrefix}'+id) : RAW_BY_ID(id); };\n`;
+  const pfx = src.idPrefix;
+  if (pfx && ids.size) {
+    prelude = `  var RAW = document.getElementById.bind(document);\n`
+      + `  var SELF = ${JSON.stringify([...ids])}.reduce(function(a,i){a[i]=1;return a;},{});\n`
+      + `  var byId = function(id){ return RAW(SELF[id] ? '${pfx}'+id : id); };\n`
+      /* 选择器里的 #id 也要加前缀：抽取时只改了 HTML 的 id="x"，JS 里的
+         querySelectorAll('#testStateSeg button') 不会被 getElementById 的映射覆盖
+         → hub 内实测返回空（试采状态分段 / 手动触发弹窗状态分段不联动）。 */
+      + `  var pfxSel = function(s){ return String(s).replace(/#([A-Za-z][-\\w]*)/g, function(m, i, off, str){\n`
+      + `    var before = str.slice(0, off);\n`
+      + `    var open = before.lastIndexOf('['), close = before.lastIndexOf(']');\n`
+      + `    if (open > close) return m;   /* 处于 [href="#x"] 属性选择器内部 → 原样返回，不改写属性值 */\n`
+      + `    return '#' + (SELF[i] ? '${pfx}'+i : i);\n`
+      + `  }); };\n`
+      + `  var qs = function(s){ return document.querySelector(pfxSel(s)); };\n`
+      + `  var qsa = function(s){ return document.querySelectorAll(pfxSel(s)); };\n`;
+    /*  3a-2) 机械串替换：只作用在**本源抽取出的 js 串**上，作用域 = 该 IIFE，不外溢到同页其它模块。
+          （prelude 在下方 `prelude + js` 时才拼进去，所以 prelude 里的原生 document.* 不受影响） */
+    js = js
+      .split('document.getElementById(').join('byId(')
+      .split('document.querySelectorAll(').join('qsa(')
+      .split('document.querySelector(').join('qs(');
   }
   /*  3b) 命名空间导出：把顶层函数挂到 window[ns]，并改写 inline handler 里的调用
        —— 把改写范围限制在 **inline 属性值内**（不限就是全局词替换，会误伤普通代码里的

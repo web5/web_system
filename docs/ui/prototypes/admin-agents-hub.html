@@ -1569,84 +1569,6 @@
   .zm-scope .switch-row .t{
   font-size: 13px; color: var(--t3);
   }
-  .zm-scope .pipe-edit-layout{
-  display: flex; gap: 16px; align-items: flex-start;
-  }
-  .zm-scope .pipe-form-col{
-  flex: 1; min-width: 0; padding: 20px;
-  }
-  .zm-scope .pipe-form-col .form-grid{
-  gap: 0 16px;
-  }
-  .zm-scope .preview-panel{
-  width: 360px; flex: none; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 12px;
-  }
-  .zm-scope .preview-card{
-  background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: 14px 16px; box-shadow: var(--shadow-card);
-  }
-  .zm-scope .preview-title{
-  font-size: 11px; font-weight: 600; color: var(--t4); letter-spacing: .08em; margin-bottom: 10px; text-transform: uppercase;
-  }
-  .zm-scope .cover-stage{
-  width: 100%; aspect-ratio: 2.35 / 1; border-radius: var(--r-control); overflow: hidden; border: 1px solid var(--border-subtle); position: relative; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center;
-  }
-  .zm-scope .cover-stage img{
-  width: 100%; height: 100%; object-fit: cover;
-  }
-  .zm-scope .cover-stage-empty{
-  font-size: 12px; color: var(--t4);
-  }
-  .zm-scope .cover-stage-meta{
-  margin-top: 8px; font-size: 12px; color: var(--t4); word-break: break-all;
-  }
-  .zm-scope .title-preview{
-  font-size: 15px; font-weight: 600; line-height: 1.55; color: var(--t1); word-break: break-word;
-  }
-  .zm-scope .title-preview--empty{
-  color: var(--t4); font-weight: 400; font-style: italic;
-  }
-  .zm-scope .preview-sub{
-  margin-top: 8px; font-size: 12px; color: var(--t4); word-break: break-all;
-  }
-  .zm-scope .summary-list{
-  list-style: none; display: flex; flex-direction: column; gap: 8px;
-  }
-  .zm-scope .summary-list li{
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;
-  }
-  .zm-scope .summary-key{
-  color: var(--t4); flex: none;
-  }
-  .zm-scope .summary-val{
-  color: var(--t2); text-align: right; word-break: break-all;
-  }
-  .zm-scope .seg{
-  display: inline-flex; background: var(--bg-subtle); border-radius: var(--r-control); padding: 2px; margin-bottom: 8px;
-  }
-  .zm-scope .seg span{
-  padding: 4px 12px; font-size: 12px; border-radius: var(--r-chip); cursor: pointer; color: var(--t3); transition: all .15s;
-  }
-  .zm-scope .seg span.on{
-  background: var(--bg-surface); color: var(--t1); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.06);
-  }
-  .zm-scope .cover-option{
-  display: flex; align-items: center; gap: 8px; padding: 2px 0;
-  }
-  .zm-scope .cover-option-thumb{
-  width: 56px; height: 24px; object-fit: cover; border-radius: 3px; background: var(--bg-subtle); flex: none;
-  }
-  .zm-scope .cover-option-thumb--empty{
-  display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--t4);
-  }
-  .zm-scope .cover-option-name{
-  font-size: 13px;
-  }
-  .zm-scope .field-hint{
-  margin-top: 4px; font-size: 12px; color: var(--t4); line-height: 1.6;
-  }
-  .zm-scope .field-hint .mono{
-  font-family: var(--mono); font-size: 11px; background: var(--bg-subtle); padding: 0 4px; border-radius: 3px;
-  }
   .zm-scope .back-link{
   display: inline-flex; align-items: center; gap: 4px; color: var(--t4); font-size: 13px; background: none; border: none; padding: 4px 8px 4px 0; margin-bottom: 8px;
   }
@@ -1997,7 +1919,6 @@
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
   <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
-  <symbol id="i-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></symbol>
   <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4a3 3 0 0 1 3 3v4"/></symbol>
   <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
@@ -2063,13 +1984,12 @@
         <div class="ad-item" data-screen="dicts" data-route="#/settings/dicts" title="字典管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">字典管理</span></div>
         <div class="ad-item" data-screen="mcp" data-route="#/mcp" title="MCP 管理"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1"/><path d="M16 3h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-1"/></svg></span><span class="ad-t">MCP 管理</span></div>
         <div class="ad-item" data-screen="database" data-route="#/database" title="数据浏览"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/></svg></span><span class="ad-t">数据浏览</span></div>
-      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-media,content-pipelines,content-monitor,content-accounts">
+      <div class="ad-sub open" data-sub="content" data-screens="content-sources,content-items,content-publications,content-pipelines,content-monitor,content-accounts">
         <div class="ad-sub-t" role="button" tabindex="0" aria-expanded="true"><span class="ad-ic"><svg class="ad-ic-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 13v8"/><path d="m9 18 3 3 3-3"/><path d="M20 16.6A4.5 4.5 0 0 0 17.5 8h-1.8A7 7 0 1 0 4 14.9"/></svg></span><span class="ad-t">自媒体运营</span><span class="ad-arrow"><svg class="ad-arrow-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div>
         <div class="ad-sub-bd">
         <div class="ad-item ad-item-sub" data-screen="content-sources" data-route="#/content" title="采集源管理"><span class="ad-t">采集源管理</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-items" data-route="#/content/items" title="采集明细"><span class="ad-t">采集明细</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-publications" data-route="#/content/publications" title="公众号成文"><span class="ad-t">公众号成文</span></div>
-        <div class="ad-item ad-item-sub" data-screen="content-media" data-route="#/content/media" title="封面素材"><span class="ad-t">封面素材</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-pipelines" data-route="#/content/pipelines" title="发布管线"><span class="ad-t">发布管线</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-monitor" data-route="#/content/monitor" title="采集监控"><span class="ad-t">采集监控</span></div>
         <div class="ad-item ad-item-sub" data-screen="content-accounts" data-route="#/content/accounts" title="账号管理"><span class="ad-t">账号管理</span></div>
@@ -2786,91 +2706,6 @@
         </div>
       </section>
 
-      <!-- ═══════════ S6.5 封面素材（2026-10-26 并行合入） ═══════════ -->
-      <section class="screen" id="zm-screen-media">
-        <div class="page-head">
-          <div>
-            <div class="page-title">封面素材</div>
-            <div class="page-desc">共 6 张 · 已同步微信 4 张 · AI 生成 2 张；上传或按标题生成 → 打标签 → 同步微信永久素材 → 绑到管线当默认封面。</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn"><svg class="ic"><use href="#i-plus"/></svg>上传封面</button>
-            <button class="btn primary">按标题生成</button>
-          </div>
-        </div>
-        <div class="filter-bar">
-          <input class="input" placeholder="搜名称 / 生成提示词" style="min-width:220px" />
-          <select class="select"><option>全部标签</option><option>论文</option><option>热点</option></select>
-          <select class="select"><option>全部来源</option><option>人工上传</option><option>AI 生成</option></select>
-          <button class="btn" onclick="ZM.toast('已刷新（原型演示）')"><svg class="ic"><use href="#i-refresh"/></svg>查询</button>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
-          <!-- 卡 1：已同步 -->
-          <div class="card" style="overflow:hidden">
-            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
-              <div style="font-size:12px;color:var(--t4)">论文速报封面.png</div>
-              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
-                <span class="tag sub">上传</span><span class="tag ok sub">已同步微信</span>
-              </div>
-            </div>
-            <div style="padding:12px">
-              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">论文速报封面.png</div>
-              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.42MB</div>
-              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">论文</span><span class="tag sub">用过 12 次</span></div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                <button class="btn text sm">编辑</button>
-                <button class="btn text sm">设为默认</button>
-                <button class="btn text sm">重传</button>
-                <button class="btn text sm" style="color:var(--err)">删除</button>
-                <button class="switch on" onclick="this.classList.toggle('on')"></button>
-              </div>
-            </div>
-          </div>
-          <!-- 卡 2：AI 生成 -->
-          <div class="card" style="overflow:hidden">
-            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
-              <div style="font-size:12px;color:var(--t4)">热点资讯封面.png</div>
-              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
-                <span class="tag info sub">AI</span><span class="tag ok sub">已同步微信</span>
-              </div>
-            </div>
-            <div style="padding:12px">
-              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">热点资讯封面.png</div>
-              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.38MB</div>
-              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">热点</span><span class="tag sub">用过 8 次</span></div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                <button class="btn text sm">编辑</button>
-                <button class="btn text sm">设为默认</button>
-                <button class="btn text sm">重传</button>
-                <button class="btn text sm" style="color:var(--err)">删除</button>
-                <button class="switch on" onclick="this.classList.toggle('on')"></button>
-              </div>
-            </div>
-          </div>
-          <!-- 卡 3：未同步 -->
-          <div class="card" style="overflow:hidden">
-            <div style="aspect-ratio:2.35/1;background:var(--bg-subtle);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border-subtle);position:relative">
-              <div style="font-size:12px;color:var(--t4)">财经早报封面.png</div>
-              <div style="position:absolute;top:8px;left:8px;display:flex;gap:4px">
-                <span class="tag sub">上传</span><span class="tag warn sub">未同步</span>
-              </div>
-            </div>
-            <div style="padding:12px">
-              <div style="font-size:13px;font-weight:500;color:var(--t1);margin-bottom:4px">财经早报封面.png</div>
-              <div style="font-size:12px;color:var(--t4);margin-bottom:4px">900×383 · 0.51MB</div>
-              <div style="display:flex;gap:4px;margin-bottom:8px"><span class="tag ok sub">2.35:1</span><span class="tag sub">财经</span><span class="tag sub">用过 0 次</span></div>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                <button class="btn text sm">编辑</button>
-                <button class="btn text sm">设为默认</button>
-                <button class="btn text sm">同步微信</button>
-                <button class="btn text sm" style="color:var(--err)">删除</button>
-                <button class="switch on" onclick="this.classList.toggle('on')"></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- ═══════════ S7 发布管线 ═══════════ -->
       <section class="screen" id="zm-screen-pipelines">
         <div class="page-head">
@@ -2910,7 +2745,7 @@
         </div>
       </section>
 
-      <!-- ═══════════ S8 管线编辑（新页面 · 双栏 + 预览面板） ═══════════ -->
+      <!-- ═══════════ S8 管线编辑（新页面） ═══════════ -->
       <section class="screen" id="zm-screen-pipeline-edit">
         <button class="back-link" onclick="ZM.go('pipelines')"><svg class="ic"><use href="#i-back"/></svg>返回发布管线</button>
         <div class="page-head">
@@ -2919,109 +2754,41 @@
             <div class="page-desc">编码创建后不可修改；LLM prompt 留空走默认模板。</div>
           </div>
         </div>
-        <div class="pipe-edit-layout">
-          <!-- 左：表单 -->
-          <div class="card pipe-form-col">
-            <div class="form-grid">
-              <div class="form-item">
-                <div class="form-label">编码 code <span class="req">*</span></div>
-                <input class="form-input" value="daily_paper" disabled />
-              </div>
-              <div class="form-item">
-                <div class="form-label">类型 <span class="req">*</span></div>
-                <select class="form-select">
-                  <option>paper</option><option>ai-news</option><option>hot-news</option>
-                </select>
-              </div>
-              <div class="form-item">
-                <div class="form-label">cron 表达式 <span class="req">*</span></div>
-                <input class="form-input" value="0 9 * * *" style="font-family:var(--mono);font-size:12px" />
-              </div>
-              <div class="form-item">
-                <div class="form-label">标题模板</div>
-                <input class="form-input" value="每日论文速览 ｜ {{date}}" />
-                <div class="field-hint">
-                  支持占位符 <span class="mono">{{date}}</span> / <span class="mono">{{time}}</span> /
-                  <span class="mono">{{datetime}}</span>，右侧实时预览效果。
-                </div>
-              </div>
-              <div class="form-item">
-                <div class="form-label">发布目标</div>
-                <select class="form-select"><option selected>wechat_mp · 公众号</option></select>
-                <div class="field-hint">腾讯文档通道 2026-10-23 下线；历史 target=tencent_docs 仍可在列表查到，但不能再新建。</div>
-              </div>
-              <div class="form-item">
-                <div class="form-label">发布模式</div>
-                <select class="form-select">
-                  <option>直接发布（建草稿后提交）</option>
-                  <option>只建草稿（停在草稿箱待人工发布）</option>
-                </select>
-              </div>
-              <div class="form-item full">
-                <div class="form-label">公众号封面</div>
-                <div class="seg" id="zm-coverModeSeg">
-                  <span class="on" onclick="ZM.setCoverMode('pick', this)">从素材库选</span>
-                  <span onclick="ZM.setCoverMode('custom', this)">手动填 media_id</span>
-                </div>
-                <div id="zm-coverPick">
-                  <select class="form-select">
-                    <option>
-                      论文速报封面.png
-                    </option>
-                    <option>
-                      热点资讯封面.png
-                    </option>
-                  </select>
-                </div>
-                <div id="zm-coverCustom" style="display:none">
-                  <input class="form-input" value="BUSabtk9juW90vSVH4g1Kr…" style="font-family:var(--mono);font-size:12px" />
-                </div>
-                <div class="field-hint">
-                  留空则用默认通用封面（正文有图时优先用正文首图）。右侧显示选中封面的实图。
-                </div>
-              </div>
-              <div class="form-item full">
-                <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
-              </div>
-              <div class="form-item full">
-                <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
-                <textarea class="form-area" rows="8" placeholder="可选，留空走默认。粘贴的 prompt 必须让模型只输出 JSON，且 key 名与代码解析一致"></textarea>
-                <div class="field-hint">
-                  <b>JSON key 契约</b>：paper 类型为 译名 / 核心贡献 / 方法亮点 / 潜在应用（译名会同时作为文章标题）；
-                  其他类型为 标题 / 摘要 / 标签 / 分类。key 名写错 = 该字段走兜底，不会报错。
-                </div>
-              </div>
+        <div class="card card-pad form-card">
+          <div class="form-grid">
+            <div class="form-item">
+              <div class="form-label">编码 code <span class="req">*</span></div>
+              <input class="form-input" value="daily_paper" disabled />
             </div>
-            <div class="form-foot">
-              <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('pipelines')">保存</button>
-              <button class="btn" onclick="ZM.go('pipelines')">取消</button>
+            <div class="form-item">
+              <div class="form-label">类型 <span class="req">*</span></div>
+              <select class="form-select"><option>paper</option><option>ai-news</option></select>
+            </div>
+            <div class="form-item">
+              <div class="form-label">cron 表达式 <span class="req">*</span></div>
+              <input class="form-input" value="0 9 * * *" />
+            </div>
+            <div class="form-item">
+              <div class="form-label">标题模板</div>
+              <input class="form-input" value="每日论文速览 ｜ {{date}}" />
+            </div>
+            <div class="form-item full">
+              <div class="form-label">发布目标</div>
+              <select class="form-select" multiple size="2"><option selected>wechat_mp · 公众号</option></select>
+              <div class="tip" style="margin-top:6px">腾讯文档通道 2026-10-23 下线；历史 target=tencent_docs 的记录仍可在列表查到，但不能再新建。</div>
+            </div>
+            <div class="form-item">
+              <div class="switch-row"><button class="switch on" onclick="this.classList.toggle('on')"></button><span class="t">启用</span></div>
+            </div>
+            <div class="form-item full">
+              <div class="form-label">LLM prompt 模板 <span class="tip">留空走默认</span></div>
+              <textarea class="form-area">你是「大橙子社区」的论文编辑。把下面 N 篇 arXiv 论文各压缩成四字段：中文译名 / 一句话核心贡献 / 方法亮点 / 潜在应用。语气克制，不堆形容词。</textarea>
             </div>
           </div>
-          <!-- 右：预览面板（sticky） -->
-          <aside class="preview-panel">
-            <div class="preview-card">
-              <div class="preview-title">封面预览</div>
-              <div class="cover-stage">
-                <div class="cover-stage-empty">论文速报封面.png</div>
-              </div>
-              <div class="cover-stage-meta">论文速报封面.png</div>
-            </div>
-            <div class="preview-card">
-              <div class="preview-title">标题效果</div>
-              <div class="title-preview">每日论文速览 ｜ 2026-10-26</div>
-              <div class="preview-sub">模板：<span class="mono" style="font-family:var(--mono);font-size:11px">每日论文速览 ｜ {{date}}</span></div>
-            </div>
-            <div class="preview-card">
-              <div class="preview-title">发布摘要</div>
-              <ul class="summary-list">
-                <li><span class="summary-key">类型</span><span class="summary-val">paper</span></li>
-                <li><span class="summary-key">目标</span><span class="summary-val">公众号</span></li>
-                <li><span class="summary-key">模式</span><span class="summary-val">直接发布（建草稿后提交）</span></li>
-                <li><span class="summary-key">状态</span><span class="summary-val"><span class="tag ok">已启用</span></span></li>
-                <li><span class="summary-key">封面</span><span class="summary-val">论文速报封面.png</span></li>
-              </ul>
-            </div>
-          </aside>
+          <div class="form-foot">
+            <button class="btn primary" onclick="ZM.toast('已保存（原型演示）'); ZM.go('pipelines')">保存</button>
+            <button class="btn" onclick="ZM.go('pipelines')">取消</button>
+          </div>
         </div>
       </section>
 
@@ -3333,10 +3100,6 @@
 
       <!-- 真实屏（同源抽取）：公众号成文 -->
       <div class="screen hidden" data-screen="content-publications">
-      </div>
-
-      <!-- 真实屏（同源抽取）：封面素材 -->
-      <div class="screen hidden" data-screen="content-media">
       </div>
 
       <!-- 真实屏（同源抽取）：发布管线 -->
@@ -4242,9 +4005,17 @@
 
 /* 来自 dict-module.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
-  var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["view-list","errBar","errMsg","typeCount","typeSearch","typeList","itemTitle","itemSearch","itemEnabled","itemBody","view-edit","crumbName","editTitle","fCode","iCode","iName","iDesc","fieldRows","fieldEmpty","dangerZone","dMask","dItem","diTitle","fValue","iValue","iLabel","dynFields","iSort","iEnabled","mDelType","delTitle","delDesc","toast"].reduce(function(a,i){a[i]=1;return a;},{});
-  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('dm-'+id) : RAW_BY_ID(id); };
+  var RAW = document.getElementById.bind(document);
+  var SELF = ["view-list","errBar","errMsg","typeCount","typeSearch","typeList","itemTitle","itemSearch","itemEnabled","itemBody","view-edit","crumbName","editTitle","fCode","iCode","iName","iDesc","fieldRows","fieldEmpty","dangerZone","dMask","dItem","diTitle","fValue","iValue","iLabel","dynFields","iSort","iEnabled","mDelType","delTitle","delDesc","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  var byId = function(id){ return RAW(SELF[id] ? 'dm-'+id : id); };
+  var pfxSel = function(s){ return String(s).replace(/#([A-Za-z][-\w]*)/g, function(m, i, off, str){
+    var before = str.slice(0, off);
+    var open = before.lastIndexOf('['), close = before.lastIndexOf(']');
+    if (open > close) return m;   /* 处于 [href="#x"] 属性选择器内部 → 原样返回，不改写属性值 */
+    return '#' + (SELF[i] ? 'dm-'+i : i);
+  }); };
+  var qs = function(s){ return document.querySelector(pfxSel(s)); };
+  var qsa = function(s){ return document.querySelectorAll(pfxSel(s)); };
 
 const FIELDS = {
   llm_models: [
@@ -4279,10 +4050,10 @@ let cur='llm_models', page=1, pageSize=5, draft=[], editingCode=null;
 
 /* ===== 左：字典列表 ===== */
 function renderTypeList(){
-  const kw=document.getElementById('typeSearch').value.trim().toLowerCase();
+  const kw=byId('typeSearch').value.trim().toLowerCase();
   const codes=Object.keys(DATA).filter(c=>!kw||c.includes(kw)||DATA[c].name.toLowerCase().includes(kw));
-  const box=document.getElementById('typeList');
-  document.getElementById('typeCount').textContent=codes.length;
+  const box=byId('typeList');
+  byId('typeCount').textContent=codes.length;
   if(!codes.length){box.innerHTML='<div class="empty" style="padding:24px"><div>未匹配「'+kw+'」</div><div class="hint">换个关键词，或点右上「新建字典」</div></div>';return;}
   box.innerHTML=codes.map(code=>{const d=DATA[code];
     return '<div class="dict-item '+(code===cur?'active':'')+'" onclick="DM.pick(\''+code+'\')">'+
@@ -4296,12 +4067,12 @@ function onItemSearch(){page=1;renderItems();}
 /* ===== 右：明细（动态列全展示 + 横向滚动 + 分页） ===== */
 function renderItems(loading){
   const d=DATA[cur], fields=FIELDS[cur]||[];
-  document.getElementById('itemTitle').innerHTML=d.name+(d.builtin?'<span class="tag brand" style="margin-left:6px">内置</span>':'')+
+  byId('itemTitle').innerHTML=d.name+(d.builtin?'<span class="tag brand" style="margin-left:6px">内置</span>':'')+
     ' <span style="font-family:var(--mono);color:var(--text-3);font-weight:400">'+cur+'</span>';
-  const body=document.getElementById('itemBody');
+  const body=byId('itemBody');
   if(loading){body.innerHTML='<div class="skeleton"></div>'.repeat(5);return;}
-  const kw=document.getElementById('itemSearch').value.trim().toLowerCase();
-  const en=document.getElementById('itemEnabled').value;
+  const kw=byId('itemSearch').value.trim().toLowerCase();
+  const en=byId('itemEnabled').value;
   let rows=d.items.filter(it=>(!kw||it.v.toLowerCase().includes(kw)||it.l.toLowerCase().includes(kw))&&(en===''||String(it.on)===en));
   if(!rows.length){
     body.innerHTML='<div class="empty"><svg class="em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">'+
@@ -4337,32 +4108,32 @@ function toggleRow(el,v){el.classList.toggle('on');const it=DATA[cur].items.find
 
 /* ===== 视图切换：列表 <-> 字典编辑页 ===== */
 function showView(name){
-  document.getElementById('view-list').classList.toggle('active',name==='list');
-  document.getElementById('view-edit').classList.toggle('active',name==='edit');
-  document.getElementById('topTitle').textContent=name==='list'?'字典管理':'字典编辑';
-  document.querySelector('.content').scrollTop=0;
+  byId('view-list').classList.toggle('active',name==='list');
+  byId('view-edit').classList.toggle('active',name==='edit');
+  byId('topTitle').textContent=name==='list'?'字典管理':'字典编辑';
+  qs('.content').scrollTop=0;
 }
 /* ===== 字典编辑页（独立页面） ===== */
 function openEdit(code){
   editingCode=code;
   const isNew=!code;
-  document.getElementById('editTitle').textContent=isNew?'新建字典':'编辑字典';
-  const el=document.getElementById('iCode');
+  byId('editTitle').textContent=isNew?'新建字典':'编辑字典';
+  const el=byId('iCode');
   el.value=isNew?'':code; el.disabled=!isNew;
-  document.getElementById('iName').value=isNew?'':DATA[code].name;
-  document.getElementById('iDesc').value='';
+  byId('iName').value=isNew?'':DATA[code].name;
+  byId('iDesc').value='';
   draft=isNew?[]:JSON.parse(JSON.stringify(FIELDS[code]||[]));
-  document.getElementById('dangerZone').style.display=isNew?'none':'';
-  document.getElementById('fCode').classList.remove('err');
+  byId('dangerZone').style.display=isNew?'none':'';
+  byId('fCode').classList.remove('err');
   syncCrumb(); renderFieldTable(); showView('edit');
 }
 function syncCrumb(){
-  document.getElementById('crumbName').textContent=
-    document.getElementById('iName').value||document.getElementById('iCode').value||'新建字典';
+  byId('crumbName').textContent=
+    byId('iName').value||byId('iCode').value||'新建字典';
 }
 function renderFieldTable(){
-  const tb=document.getElementById('fieldRows');
-  document.getElementById('fieldEmpty').style.display=draft.length?'none':'';
+  const tb=byId('fieldRows');
+  byId('fieldEmpty').style.display=draft.length?'none':'';
   tb.innerHTML=draft.map((f,i)=>'<tr>'+
     '<td style="color:var(--text-3);font-size:12px">'+(i+1)+'</td>'+
     '<td><input class="mono" value="'+f.name+'" oninput="draft['+i+'].name=this.value" /></td>'+
@@ -4383,14 +4154,14 @@ function addField(){draft.push({name:'',label:'',type:'string',length:'',require
 function delField(i){draft.splice(i,1);renderFieldTable();}
 function moveField(i,delta){const j=i+delta;if(j<0||j>=draft.length)return;[draft[i],draft[j]]=[draft[j],draft[i]];renderFieldTable();}
 function saveType(){
-  const code=document.getElementById('iCode').value.trim();
-  if(!/^[a-z][a-z0-9_]*$/.test(code)){document.getElementById('fCode').classList.add('err');return;}
+  const code=byId('iCode').value.trim();
+  if(!/^[a-z][a-z0-9_]*$/.test(code)){byId('fCode').classList.add('err');return;}
   const names=draft.map(f=>f.name.trim());
   if(names.some(n=>!/^[a-z][a-z0-9_]*$/.test(n))){toast('字段名只能包含小写字母、数字和下划线');return;}
   if(new Set(names).size!==names.length){toast('字段名不可重复');return;}
   FIELDS[code]=draft;
-  if(!DATA[code])DATA[code]={name:document.getElementById('iName').value.trim()||code,builtin:false,enabled:true,items:[]};
-  else if(document.getElementById('iName').value.trim())DATA[code].name=document.getElementById('iName').value.trim();
+  if(!DATA[code])DATA[code]={name:byId('iName').value.trim()||code,builtin:false,enabled:true,items:[]};
+  else if(byId('iName').value.trim())DATA[code].name=byId('iName').value.trim();
   cur=code; renderTypeList(); showView('list'); renderItems();
   toast('字典已保存（字段 '+draft.length+' 个）');
 }
@@ -4398,14 +4169,14 @@ function saveType(){
 function openItemDrawer(value){
   const fields=FIELDS[cur]||[];
   const it=value?DATA[cur].items.find(x=>x.v===value):null;
-  document.getElementById('diTitle').textContent=(it?'编辑记录：':'新增记录 · ')+cur;
-  document.getElementById('fValue').classList.remove('err');
-  const v=document.getElementById('iValue');
+  byId('diTitle').textContent=(it?'编辑记录：':'新增记录 · ')+cur;
+  byId('fValue').classList.remove('err');
+  const v=byId('iValue');
   v.value=it?it.v:''; v.disabled=!!it;
-  document.getElementById('iLabel').value=it?it.l:'';
-  document.getElementById('iSort').value=it?it.sort:10;
-  document.getElementById('iEnabled').classList.toggle('on',it?it.on:true);
-  document.getElementById('dynFields').innerHTML=fields.map(f=>{
+  byId('iLabel').value=it?it.l:'';
+  byId('iSort').value=it?it.sort:10;
+  byId('iEnabled').classList.toggle('on',it?it.on:true);
+  byId('dynFields').innerHTML=fields.map(f=>{
     const val=it&&it.attrs?it.attrs[f.name]:(f.defaultValue||'');
     const req=f.required?' <span style="color:var(--danger)">*</span>':'';
     const tip=f.length?'<div class="tip">最多 '+f.length+(f.type==='number'?' 位':' 字符')+'</div>':'';
@@ -4419,33 +4190,33 @@ function openItemDrawer(value){
     else c='<input value="'+(val||'')+'" maxlength="'+(f.length||1024)+'" />';
     return '<div class="field"><label>'+f.label+req+'</label>'+c+tip+'</div>';
   }).join('')||'<div class="tip">该字典未定义字段，记录只有 Value / 名称。</div>';
-  document.getElementById('dMask').classList.add('show');
-  document.getElementById('dItem').classList.add('show');
+  byId('dMask').classList.add('show');
+  byId('dItem').classList.add('show');
 }
 function closeDrawer(){
-  document.getElementById('dMask').classList.remove('show');
-  document.getElementById('dItem').classList.remove('show');
+  byId('dMask').classList.remove('show');
+  byId('dItem').classList.remove('show');
 }
 function saveItem(){
-  const v=document.getElementById('iValue').value.trim();
-  if(!v){document.getElementById('fValue').classList.add('err');return;}
+  const v=byId('iValue').value.trim();
+  if(!v){byId('fValue').classList.add('err');return;}
   closeDrawer(); toast('记录已保存（原型演示）'); renderItems();
 }
 /* ===== 删除 / 状态演示 / 工具 ===== */
 function openDeleteType(){
   const d=DATA[cur];
   if(d.builtin){toast('内置字典不可删除');return;}
-  document.getElementById('delTitle').textContent='删除「'+d.name+'」？';
-  document.getElementById('delDesc').innerHTML='将同时删除其字段定义与 <b>'+d.items.length+
+  byId('delTitle').textContent='删除「'+d.name+'」？';
+  byId('delDesc').innerHTML='将同时删除其字段定义与 <b>'+d.items.length+
     '</b> 条记录，<b>不可恢复</b>。<br>已引用该字典的服务会回落至环境变量 / 内置默认值（Agent 仍可用，但界面不可再维护）。<br>若只是暂时不用，建议改为<b>停用</b>。';
-  document.getElementById('mDelType').classList.add('show');
+  byId('mDelType').classList.add('show');
 }
-function showError(){document.getElementById('errBar').style.display='flex';}
-function reload(){document.getElementById('errBar').style.display='none';renderItems(true);setTimeout(()=>renderItems(),400);}
+function showError(){byId('errBar').style.display='flex';}
+function reload(){byId('errBar').style.display='none';renderItems(true);setTimeout(()=>renderItems(),400);}
 function toggleSw(el){el.classList.toggle('on');}
-function closeM(id){document.getElementById(id).classList.remove('show');}
+function closeM(id){byId(id).classList.remove('show');}
 let timer;
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
+function toast(msg){const el=byId('toast');el.textContent=msg;el.classList.add('show');
   clearTimeout(timer);timer=setTimeout(()=>el.classList.remove('show'),1700);}
 renderTypeList(); renderItems();
 
@@ -4455,9 +4226,17 @@ renderTypeList(); renderItems();
 
 /* 来自 admin-media-ops.html（IIFE 包裹，符号不泄漏到全局） */
 (function(){
-  var RAW_BY_ID = document.getElementById.bind(document);
-  var SELF_IDS = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-media","screen-pipelines","runBanner","runBannerText","screen-pipeline-edit","coverModeSeg","coverPick","coverCustom","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
-  document.getElementById = function(id){ return SELF_IDS[id] ? RAW_BY_ID('zm-'+id) : RAW_BY_ID(id); };
+  var RAW = document.getElementById.bind(document);
+  var SELF = ["screen-sources","screen-source-edit","srcTypeAlert","testBtn","testPanel","testLoading","testResult","testSummaryLine","testSummaryText","testSampleList","testResultNote","testStateSeg","screen-items","itemsTableWrap","itemsEmpty","screen-item-detail","screen-publications","pubTableWrap","pubEmpty","screen-pipelines","runBanner","runBannerText","screen-pipeline-edit","screen-runs","screen-accounts","screen-account-edit","accEditTitle","accName","accCode","accEncTag","accAppId","accSecretMask","accSecretVal","accSecretInput","accPanel","accPHead","accPBody","accCheckHint","accDelMask","triggerMask","triggerTitle","triggerRunBtn","triggerResultZone","rcCard","rcTitle","rcDesc","rcMetrics","rcActions","rcRaw","rcStateSeg","previewMask","toast"].reduce(function(a,i){a[i]=1;return a;},{});
+  var byId = function(id){ return RAW(SELF[id] ? 'zm-'+id : id); };
+  var pfxSel = function(s){ return String(s).replace(/#([A-Za-z][-\w]*)/g, function(m, i, off, str){
+    var before = str.slice(0, off);
+    var open = before.lastIndexOf('['), close = before.lastIndexOf(']');
+    if (open > close) return m;   /* 处于 [href="#x"] 属性选择器内部 → 原样返回，不改写属性值 */
+    return '#' + (SELF[i] ? 'zm-'+i : i);
+  }); };
+  var qs = function(s){ return document.querySelector(pfxSel(s)); };
+  var qsa = function(s){ return document.querySelectorAll(pfxSel(s)); };
 
 // ── 屏幕切换 ──
 const SCREENS = {
@@ -4466,7 +4245,6 @@ const SCREENS = {
   items:          { el: 'screen-items',          crumb: ['自媒体运营', '采集明细'] },
   'item-detail':  { el: 'screen-item-detail',    crumb: ['自媒体运营', '采集明细', '明细详情'] },
   publications:   { el: 'screen-publications',   crumb: ['自媒体运营', '公众号成文'] },
-  media:          { el: 'screen-media',          crumb: ['自媒体运营', '封面素材'] },
   pipelines:      { el: 'screen-pipelines',      crumb: ['自媒体运营', '发布管线'] },
   'pipeline-edit':{ el: 'screen-pipeline-edit',  crumb: ['自媒体运营', '发布管线', '编辑管线'] },
   runs:           { el: 'screen-runs',           crumb: ['自媒体运营', '采集监控'] },
@@ -4477,20 +4255,20 @@ function go(key) {
   /* 屏显隐**按 id 精确操作**，不按 `.screen` 类选择器：本稿会被同源抽取进 admin 整合稿
      （docs/ui/prototypes/admin-agents-hub.html），那边的屏容器也叫 .screen —— 用类选择器
      会连带把 hub 自己的屏一起摘掉 / 隐藏。id 是本稿私有的，不会误伤。 */
-  Object.keys(SCREENS).forEach(k => document.getElementById(SCREENS[k].el).classList.remove('on'));
+  Object.keys(SCREENS).forEach(k => byId(SCREENS[k].el).classList.remove('on'));
   const s = SCREENS[key];
-  document.getElementById(s.el).classList.add('on');
-  document.getElementById('crumb').innerHTML = s.crumb.map((c, i) =>
+  byId(s.el).classList.add('on');
+  byId('crumb').innerHTML = s.crumb.map((c, i) =>
     i === s.crumb.length - 1 ? '<b>' + c + '</b>' : c + ' <span class="sep">/</span> ').join('');
-  document.querySelectorAll('#contentGroupChildren .menu-item').forEach(m =>
+  qsa('#contentGroupChildren .menu-item').forEach(m =>
     m.classList.toggle('active', m.dataset.screen === key));
   /* 滚动容器：独立打开时是 .content，被抽进整合稿后壳换成 .ad-content —— 两者都兜住，
      都没有就跳过（否则 null.scrollTop 会让整个切屏挂掉） */
-  const sc = document.querySelector('.content, .ad-content');
+  const sc = qs('.content, .ad-content');
   if (sc) sc.scrollTop = 0;
   // 离开编辑页时重置试采面板（下次进入重新开始）
-  const tp = document.getElementById('testPanel');
-  if (tp) { tp.style.display = 'none'; document.getElementById('testLoading').style.display = 'none'; document.getElementById('testResult').style.display = 'none'; }
+  const tp = byId('testPanel');
+  if (tp) { tp.style.display = 'none'; byId('testLoading').style.display = 'none'; byId('testResult').style.display = 'none'; }
   // 明细/成文进入时模拟加载
   if (key === 'items') simulateLoading('itemsTableWrap', 'itemsEmpty');
   if (key === 'publications') simulateLoading('pubTableWrap', 'pubEmpty');
@@ -4503,13 +4281,13 @@ function go(key) {
 }
 function toggleGroup(btn) {
   btn.classList.toggle('menu-open');
-  document.getElementById('contentGroupChildren').style.display =
+  byId('contentGroupChildren').style.display =
     btn.classList.contains('menu-open') ? '' : 'none';
 }
 
 // ── 加载态模拟 ──
 function simulateLoading(tableId, emptyId) {
-  const wrap = document.getElementById(tableId);
+  const wrap = byId(tableId);
   if (wrap.dataset.state === 'empty') return;
   wrap.style.opacity = '.5';
   setTimeout(() => { wrap.style.opacity = '1'; }, 400);
@@ -4518,8 +4296,8 @@ function simulateLoading(tableId, emptyId) {
 /* 采集明细空态里的「重置筛选」：清掉筛选输入 + 分段回到第一档 + 演示态回正常。
    此前这里写的是 demoState(...) —— 那个函数在控件改造时已删掉，点了会报 is not defined。 */
 function resetFilter() {
-  document.querySelectorAll('#screen-items .seg button').forEach((b, i) => b.classList.toggle('on', i === 0));
-  const q = document.querySelector('#screen-items .filter-bar input');
+  qsa('#screen-items .seg button').forEach((b, i) => b.classList.toggle('on', i === 0));
+  const q = qs('#screen-items .filter-bar input');
   if (q) q.value = '';
   if (typeof applyState === 'function') applyState('normal');
 }
@@ -4531,35 +4309,35 @@ function resetFilter() {
    is not defined（见 proto-registry.mjs 中 SRC_SETTINGS 的注释）。 */
 function accEdit(kind) {
   const isEdit = (kind === 'err');
-  document.getElementById('accEditTitle').textContent = isEdit ? '编辑账号 · 科豆AI' : '新增账号';
-  document.getElementById('accName').value  = isEdit ? '科豆AI' : '大橙子社区';
-  document.getElementById('accCode').value  = isEdit ? 'kedouai' : 'default';
-  document.getElementById('accAppId').value = isEdit ? 'wx1b**************2f' : 'wxc945245618717a06';
-  document.getElementById('accSecretVal').innerHTML = isEdit ? '9076****&nbsp;****1c8e' : '8815****&nbsp;****d39d';
-  document.getElementById('accEncTag').style.display      = isEdit ? '' : 'none';
-  document.getElementById('accSecretMask').style.display  = isEdit ? '' : 'none';
-  document.getElementById('accSecretInput').style.display = isEdit ? 'none' : '';
+  byId('accEditTitle').textContent = isEdit ? '编辑账号 · 科豆AI' : '新增账号';
+  byId('accName').value  = isEdit ? '科豆AI' : '大橙子社区';
+  byId('accCode').value  = isEdit ? 'kedouai' : 'default';
+  byId('accAppId').value = isEdit ? 'wx1b**************2f' : 'wxc945245618717a06';
+  byId('accSecretVal').innerHTML = isEdit ? '9076****&nbsp;****1c8e' : '8815****&nbsp;****d39d';
+  byId('accEncTag').style.display      = isEdit ? '' : 'none';
+  byId('accSecretMask').style.display  = isEdit ? '' : 'none';
+  byId('accSecretInput').style.display = isEdit ? 'none' : '';
   /* 面包屑第三级随形态变（go() 已按 SCREENS 渲染过一次，这里重渲染） */
   SCREENS['account-edit'].crumb[2] = isEdit ? '编辑账号' : '新增账号';
   const c = SCREENS['account-edit'].crumb;
-  document.getElementById('crumb').innerHTML = c.map((x, i) =>
+  byId('crumb').innerHTML = c.map((x, i) =>
     i === c.length - 1 ? '<b>' + x + '</b>' : x + ' <span class="sep">/</span> ').join('');
   accCheckHide();
 }
 
 function accCheckHide() {
-  document.getElementById('accPanel').dataset.show = '0';
-  document.getElementById('accCheckHint').style.display = '';
+  byId('accPanel').dataset.show = '0';
+  byId('accCheckHint').style.display = '';
 }
 
 function accCheck() {
-  const nm = document.getElementById('accName');
+  const nm = byId('accName');
   const isKedou = !!nm && nm.value.indexOf('科豆') >= 0;   // 科豆AI = 未认证订阅号 → 48001
-  const panel = document.getElementById('accPanel');
-  const head  = document.getElementById('accPHead');
-  const body  = document.getElementById('accPBody');
+  const panel = byId('accPanel');
+  const head  = byId('accPHead');
+  const body  = byId('accPBody');
   panel.dataset.show = '1';
-  document.getElementById('accCheckHint').style.display = 'none';
+  byId('accCheckHint').style.display = 'none';
   if (!isKedou) {
     panel.dataset.result = 'ok';
     head.innerHTML = '<svg class="ic"><use href="#i-check"/></svg>连通正常 · 耗时 412ms';
@@ -4582,21 +4360,21 @@ function accCheck() {
 }
 
 function accResetSecret() {
-  document.getElementById('accSecretMask').style.display = 'none';
-  document.getElementById('accSecretInput').style.display = '';
-  document.getElementById('accEncTag').style.display = 'none';
+  byId('accSecretMask').style.display = 'none';
+  byId('accSecretInput').style.display = '';
+  byId('accEncTag').style.display = 'none';
 }
 function accCancelSecret() {
-  document.getElementById('accSecretInput').style.display = 'none';
-  document.getElementById('accSecretMask').style.display = '';
-  document.getElementById('accEncTag').style.display = '';
+  byId('accSecretInput').style.display = 'none';
+  byId('accSecretMask').style.display = '';
+  byId('accEncTag').style.display = '';
 }
 function accDelOpen() {
-  document.getElementById('accDelMask').classList.add('on');
+  byId('accDelMask').classList.add('on');
   document.body.classList.add('modal-open');
 }
 function accDelClose() {
-  document.getElementById('accDelMask').classList.remove('on');
+  byId('accDelMask').classList.remove('on');
   document.body.classList.remove('modal-open');
 }
 
@@ -4604,14 +4382,14 @@ function accDelClose() {
 // ── 触发弹窗 ──
 let rcState = 'unsupported';
 function openTrigger(code, name, type) {
-  document.getElementById('triggerTitle').textContent = '手动触发采集：' + name;
-  document.getElementById('triggerResultZone').style.display = 'none';
-  document.getElementById('triggerMask').classList.add('on');
+  byId('triggerTitle').textContent = '手动触发采集：' + name;
+  byId('triggerResultZone').style.display = 'none';
+  byId('triggerMask').classList.add('on');
   rcState = type === 'sina_news' || type === 'eastmoney_news' || type === 'eastmoney_lhb' ? 'ok' : 'unsupported';
   setSeg('rcStateSeg', rcState);
 }
 function setSeg(segId, st) {
-  document.querySelectorAll('#' + segId + ' button').forEach(b =>
+  qsa('#' + segId + ' button').forEach(b =>
     b.classList.toggle('on', b.dataset.st === st));
 }
 function setRcState(st, btn) {
@@ -4620,7 +4398,7 @@ function setRcState(st, btn) {
   renderResult();
 }
 function runTrigger() {
-  const btn = document.getElementById('triggerRunBtn');
+  const btn = byId('triggerRunBtn');
   btn.disabled = true; btn.innerHTML = '<svg class="ic"><use href="#i-refresh"/></svg>采集中…';
   setTimeout(() => {
     btn.disabled = false; btn.innerHTML = '<svg class="ic"><use href="#i-play"/></svg>开始采集';
@@ -4628,13 +4406,13 @@ function runTrigger() {
   }, 1200);
 }
 function renderResult() {
-  const zone = document.getElementById('triggerResultZone');
-  const card = document.getElementById('rcCard');
+  const zone = byId('triggerResultZone');
+  const card = byId('rcCard');
   const head = card.querySelector('.rc-head');
-  const desc = document.getElementById('rcDesc');
-  const metrics = document.getElementById('rcMetrics');
-  const actions = document.getElementById('rcActions');
-  const raw = document.getElementById('rcRaw');
+  const desc = byId('rcDesc');
+  const metrics = byId('rcMetrics');
+  const actions = byId('rcActions');
+  const raw = byId('rcRaw');
   zone.style.display = '';
 
   const S = {
@@ -4684,48 +4462,37 @@ function renderResult() {
 }
 
 // ── 成文预览 ──
-function openPreview() { document.getElementById('previewMask').classList.add('on'); }
-function closeModal(id) { document.getElementById(id).classList.remove('on'); }
-
-// ── 管线编辑 · 封面模式切换（从素材库选 / 手动填 media_id）──
-function setCoverMode(mode, el) {
-  const seg = document.getElementById('coverModeSeg');
-  if (seg) seg.querySelectorAll('span').forEach(s => s.classList.remove('on'));
-  if (el) el.classList.add('on');
-  const pick = document.getElementById('coverPick');
-  const custom = document.getElementById('coverCustom');
-  if (pick) pick.style.display = mode === 'pick' ? '' : 'none';
-  if (custom) custom.style.display = mode === 'custom' ? '' : 'none';
-}
+function openPreview() { byId('previewMask').classList.add('on'); }
+function closeModal(id) { byId(id).classList.remove('on'); }
 
 // ── 编辑页 · 测试采集（不入库）──
 let testState = 'ok';
 function runTest() {
-  const panel = document.getElementById('testPanel');
+  const panel = byId('testPanel');
   panel.style.display = '';
-  document.getElementById('testResult').style.display = 'none';
-  document.getElementById('testLoading').style.display = '';
-  const btn = document.getElementById('testBtn');
+  byId('testResult').style.display = 'none';
+  byId('testLoading').style.display = '';
+  const btn = byId('testBtn');
   btn.disabled = true;
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   setTimeout(() => {
-    document.getElementById('testLoading').style.display = 'none';
+    byId('testLoading').style.display = 'none';
     btn.disabled = false;
     renderTest();
   }, 1200);
 }
 function setTestState(st, btn) {
   testState = st;
-  document.querySelectorAll('#testStateSeg button').forEach(b => b.classList.toggle('on', b === btn));
+  qsa('#testStateSeg button').forEach(b => b.classList.toggle('on', b === btn));
   renderTest();
 }
 function renderTest() {
-  document.getElementById('testPanel').style.display = '';
-  document.getElementById('testResult').style.display = '';
-  const line = document.getElementById('testSummaryLine');
-  const text = document.getElementById('testSummaryText');
-  const list = document.getElementById('testSampleList');
-  const note = document.getElementById('testResultNote');
+  byId('testPanel').style.display = '';
+  byId('testResult').style.display = '';
+  const line = byId('testSummaryLine');
+  const text = byId('testSummaryText');
+  const list = byId('testSampleList');
+  const note = byId('testResultNote');
 
   const SAMPLES = [
     ['LongZero: Enhancing Long-Context Reasoning in LLMs from Zero Data', '10-21'],
@@ -4804,13 +4571,13 @@ function runPipeline(code) {
   }
   if (!confirm('立即运行「' + code + '」？\n会按该管线的发布目标真实投递内容（草稿或正式发布取决于发布模式）。')) return;
 
-  var btns = document.querySelectorAll('[data-run-code]');
+  var btns = qsa('[data-run-code]');
   btns.forEach(function (b) {
     b.disabled = true;
     if (b.getAttribute('data-run-code') === code) b.textContent = '运行中…';
   });
-  var banner = document.getElementById('runBanner');
-  var text = document.getElementById('runBannerText');
+  var banner = byId('runBanner');
+  var text = byId('runBannerText');
   if (banner) banner.hidden = false;
   runSeconds = 0;
   if (text) text.textContent = '管线 ' + code + ' 已提交，正在后台执行 · 采集多个源 + 逐条 LLM，通常 30-60 秒';
@@ -4825,9 +4592,9 @@ function runPipeline(code) {
 /** 结束运行态：复位按钮与进度条，弹四数结果 */
 function stopRun(code, ok) {
   if (runTimer) { clearInterval(runTimer); runTimer = null; }
-  var banner = document.getElementById('runBanner');
+  var banner = byId('runBanner');
   if (banner) banner.hidden = true;
-  var btns = document.querySelectorAll('[data-run-code]');
+  var btns = qsa('[data-run-code]');
   btns.forEach(function (b) {
     b.disabled = false;
     if (b.getAttribute('data-run-code') === code) b.textContent = '立即运行';
@@ -4840,17 +4607,17 @@ function stopRun(code, ok) {
 // ── Toast ──
 let toastTimer;
 function toast(msg) {
-  const t = document.getElementById('toast');
+  const t = byId('toast');
   t.textContent = msg; t.classList.add('on');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
 }
 
 // 点击遮罩关闭
-document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
+qsa('.mask, .drawer-mask').forEach(m =>
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('on'); }));
 
-  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline, stopRun:stopRun, setCoverMode:setCoverMode };
+  window.ZM = { go:go, toast:toast, openTrigger:openTrigger, setRcState:setRcState, runTrigger:runTrigger, resetFilter:resetFilter, openPreview:openPreview, closeModal:closeModal, runTest:runTest, setTestState:setTestState, confirmDel:confirmDel, accResetSecret:accResetSecret, accCancelSecret:accCancelSecret, accCheck:accCheck, accDelOpen:accDelOpen, accDelClose:accDelClose, runPipeline:runPipeline, stopRun:stopRun };
 
 })();
 
@@ -4872,7 +4639,6 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     { re: /^#\/content$/, screen: 'content-sources' },
     { re: /^#\/content\/items$/, screen: 'content-items' },
     { re: /^#\/content\/publications$/, screen: 'content-publications' },
-    { re: /^#\/content\/media$/, screen: 'content-media' },
     { re: /^#\/content\/pipelines$/, screen: 'content-pipelines' },
     { re: /^#\/content\/monitor$/, screen: 'content-monitor' },
     { re: /^#\/content\/accounts$/, screen: 'content-accounts' },
@@ -4899,7 +4665,6 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
     'content-sources': '自媒体运营 / <b>采集源管理</b>',
     'content-items': '自媒体运营 / <b>采集明细</b>',
     'content-publications': '自媒体运营 / <b>公众号成文</b>',
-    'content-media': '自媒体运营 / <b>封面素材</b>',
     'content-pipelines': '自媒体运营 / <b>发布管线</b>',
     'content-monitor': '自媒体运营 / <b>采集监控</b>',
     'content-accounts': '自媒体运营 / <b>账号管理</b>',
@@ -4916,11 +4681,11 @@ document.querySelectorAll('.mask, .drawer-mask').forEach(m =>
   var qsa = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
 
   /* 二级模块的屏（含 detail：它挂在「定义管理」下）—— 命中则父级 sub-menu 标题高亮 */
-  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-media","content-pipelines","content-monitor","content-accounts","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
+  var SUB_SCREENS = ["content-sources","content-items","content-publications","content-pipelines","content-monitor","content-accounts","overview","observe","records","capabilities","knowledge","retrieval","list","skills","pg","detail"];
   /* mount 源（自媒体运营）：hub 屏 → 模块根键 */
-  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-media":"media","content-pipelines":"pipelines","content-monitor":"runs","content-accounts":"accounts"};
+  var MOUNT_MAP = {"content-sources":"sources","content-items":"items","content-publications":"publications","content-pipelines":"pipelines","content-monitor":"runs","content-accounts":"accounts"};
   /* hub 屏 → hash 路由（模块内跨根键跳转后要把地址栏同步过来，否则后退键会错位） */
-  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-media":"#/content/media","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor","content-accounts":"#/content/accounts"};
+  var MOUNT_ROUTE = {"content-sources":"#/content","content-items":"#/content/items","content-publications":"#/content/publications","content-pipelines":"#/content/pipelines","content-monitor":"#/content/monitor","content-accounts":"#/content/accounts"};
   var curScreen = null;      // 当前 hub 屏（供 zmSync 判断"要不要动"）
   var curMountKey = null;    // 当前模块根键
 
