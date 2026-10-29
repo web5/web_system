@@ -26,7 +26,7 @@
 | 形态一致性 | ✅ 与 page-spec v2 一致：详情页两卡 + 面包屑回列表，非弹窗 |
 | 可点性 | ✅ 屏② 35/35 点击实测全过；hub 抽查 13/13；死按钮枚举式机检（㉓ 段）已防复发 |
 | 整合自洽 | ✅ build 重生成，hub 内调参屏可点达；生成自检 ④b/④c（关键 CSS 锚点缺失即炸） |
-| 演示控件 L1 | ✅ 场景包 / 屏直达 / 真开关 / H 隐没，机检 `check-demo-panel` 通过 |
+| 演示控件 L1 | ✅ 场景包 / 屏直达 / 真开关 / H 隐没；由 build 的 `DEMO-PANEL-START/END` jsDrop 机制保证不进整合稿（**更正 2026-10-29**：不存在独立的 `check-demo-panel.mjs` 脚本，此前引用有误） |
 
 ## 三、机检证据
 
@@ -34,14 +34,14 @@
 |---|---|
 | `verify-agent-def-detail.mjs` | ✅ **136/136**（含 ㉒ CTA 15 条 + ㉓ 死按钮枚举 3 条，变异测试有效） |
 | `verify-agents-hub.mjs` | ✅ **242/243**（唯一 FAIL = 9r 菜单图标数 10 vs 17，系 BasicLayout/proto-shell 并行漂移，**非本轮原型范围**，已转 rd-engineer） |
-| `check-demo-panel` | ✅ 通过 |
+| 演示控件不进整合稿 | ✅ build `DEMO-PANEL-START/END` jsDrop（2026-10-29 更正：无独立 `check-demo-panel.mjs`，此前引用有误） |
 | 单稿点击审计 | ✅ 35/35 |
 
 ## 四、边界声明（不在本次范围）
 
 1. 高级卡内调试台的对话试跑 / 用例表 / 三级参数对比 → 二期（原型内已标注 §2.1 消息组件契约占位）
 2. 9r 菜单图标数漂移 → 属并行会话的 BasicLayout/proto-shell 对齐问题，不在本原型稿整改
-3. `getElementById` 全局覆写的**根因**（media-ops/dict 模块）→ 本稿已做防御（querySelector），根因局部化改造单独立项
+3. `getElementById` 全局覆写的**根因** → 已定位：注入点**不是模块稿**（模块稿零覆写），而是生成器 `scripts/lib/proto-registry.mjs:463-468`（loadSource 拼 prelude），hub 产物仅 2 处（dm-/zm- 两份稿）；影响 dict + media 共 98 处调用（含 7 处运行时变量，纯构建期改写救不了）。本稿已防御（querySelector）；局部化改造方案已出（只改 registry +20/-6，顺带修 2 个 querySelector 越界 bug），**待拍板实施**
 4. 列表页「新建」按钮不可点 → 用户 2026-10-28 提出，本次**未处理**（按用户指示先忽略），留缺口待办
 
 ---
