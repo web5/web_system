@@ -7,7 +7,7 @@
 <template>
   <a-page-header
     :title="isCreate ? '新建 Agent' : `Agent 定义 · ${routeId}`"
-    :sub-title="isCreate ? '配置化建档，保存为草稿后发布生效' : '基础配置与高级调参；调参区仅超级管理员可见'"
+    :sub-title="isCreate ? '配置化建档，保存为草稿后发布生效' : '基础配置与高级调参；调参区仅管理员及以上可见'"
     @back="goBack"
   >
     <template #extra>
@@ -122,8 +122,8 @@
         </a-form>
       </a-collapse-panel>
 
-      <!-- 卡片二 · 高级（默认折叠）：模型参数调试工作台（仅超级管理员，S5 门禁） -->
-      <a-collapse-panel v-if="isSuperAdmin" key="advanced" header="高级 · 模型参数调试">
+      <!-- 卡片二 · 高级（默认折叠）：模型参数调试工作台（管理员及以上，S5 门禁） -->
+      <a-collapse-panel v-if="canTune" key="advanced" header="高级 · 模型参数调试">
         <a-row :gutter="16">
           <!-- 左：生成参数面板（五控件 + 三条联动 + 策略预览） -->
           <a-col :span="12">
@@ -194,8 +194,8 @@ const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('agents:manage');
-/** B3 门禁：调参入口/区块（高级卡）仅超级管理员可见（S5） */
-const isSuperAdmin = computed(() => canAccessTuning(userStore.roles));
+/** B3 门禁：调参入口/区块（高级卡）管理员及以上可见（S5；用户 2026-10-29 拍板放开 admin） */
+const canTune = computed(() => canAccessTuning(userStore.roles));
 
 const routeId = computed(() => String(route.params.id ?? ''));
 const isCreate = computed(() => routeId.value === 'new');
@@ -361,7 +361,7 @@ async function save(): Promise<void> {
     return;
   }
   // C7-b 互斥 + 值域预防性校验（真相源仍在后端）
-  if (isSuperAdmin.value) {
+  if (canTune.value) {
     const v = validateTuning({
       temperature: form.temperature ?? null,
       maxTokens: form.maxTokens ?? null,
@@ -405,7 +405,7 @@ async function save(): Promise<void> {
     }
 
     // S6 审计条目：改前→改后字段 diff + 运行时生效值（高级卡审计区展示）
-    if (isSuperAdmin.value && beforeTuning) {
+    if (canTune.value && beforeTuning) {
       const entry = buildTuningAuditEntry({
         agentId: form.id,
         agentName: form.name,

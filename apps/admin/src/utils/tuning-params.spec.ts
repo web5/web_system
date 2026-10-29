@@ -184,16 +184,25 @@ describe('C7-b 互斥校验：temperature 与 topP 同填保存被拒、不清�
   });
 });
 
-describe('仅超管可见（S5：普通管理员无入口）', () => {
+describe('调参门禁：管理员及以上可见（S5，用户 2026-10-29 拍板放开 admin）', () => {
   it('super_admin → 可见', () => {
     expect(canAccessTuning(['super_admin'])).toBe(true);
+  });
+  it('admin → 可见（本次翻转，原为 false）', () => {
+    expect(canAccessTuning(['admin'])).toBe(true);
     expect(canAccessTuning(['super_admin', 'admin'])).toBe(true);
   });
-  it('admin / editor / viewer → 不可见', () => {
-    expect(canAccessTuning(['admin'])).toBe(false);
+  it('editor / viewer → 不可见', () => {
     expect(canAccessTuning(['editor'])).toBe(false);
     expect(canAccessTuning(['viewer'])).toBe(false);
+  });
+  it('空数组 / undefined / null → 不可见', () => {
     expect(canAccessTuning([])).toBe(false);
+    expect(canAccessTuning(undefined)).toBe(false);
+    expect(canAccessTuning(null)).toBe(false);
+  });
+  it('大小写敏感：ADMIN 不算管理员（防误放）', () => {
+    expect(canAccessTuning(['ADMIN'])).toBe(false);
   });
 });
 

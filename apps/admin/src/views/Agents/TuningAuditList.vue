@@ -1,7 +1,7 @@
 <!--
   B3 调参审计展示（页面审计区）
   真源：B3-原型说明.md §3「仅超管 + 审计」——保存成功 Toast + 审计条目（改前→改后字段 diff + 运行时生效值）
-  仅超级管理员可见；后端审计落库不归本组件（展示层）。
+  仅管理员及以上可见；后端审计落库不归本组件（展示层）。
 -->
 
 <!--
@@ -15,7 +15,7 @@
   <a-card v-if="visible" class="b3-audit" :bordered="true">
     <template #title>
       调参审计
-      <a-tag class="b3-audit-tag">仅超级管理员可见</a-tag>
+      <a-tag class="b3-audit-tag">仅管理员及以上可见</a-tag>
     </template>
     <a-empty v-if="!entries.length" description="还没有调参记录（本次会话内保存的调参会显示在这里）" />
     <div v-for="entry in visibleEntries" :key="entry.id" class="b3-audit-item">
