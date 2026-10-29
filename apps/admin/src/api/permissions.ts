@@ -31,9 +31,21 @@ export interface SaveRolePayload {
   permissions?: string[];
 }
 
-/** 当前登录用户的权限码数组（admin 特判全量） */
+/**
+ * 当前登录用户的权限码数组（admin 特判全量）
+ *
+ * `validateStatus` 单独放行 304：该接口会被浏览器按 ETag 缓存，二次请求命中
+ * 304 时**响应体为空**。axios 默认只认 2xx，会把 304 当失败抛掉 —— 上层
+ * fetchPermissions 便走进 catch 分支、用本地角色常量覆盖真实权限，
+ * 表现为「超管登录成功却整站 403」（issue #478）。
+ * 放行后由 fetchPermissions 按「空响应 = 未变更」处理，保留既有权限。
+ *
+ * 只在本接口放宽：其余接口的 304 仍按既有行为处理，避免误伤。
+ */
 export function getMyPermissions(): Promise<string[]> {
-  return request.get('/permissions/my');
+  return request.get('/permissions/my', {
+    validateStatus: (status: number) => (status >= 200 && status < 300) || status === 304,
+  });
 }
 
 export interface SyncPermissionResult {
