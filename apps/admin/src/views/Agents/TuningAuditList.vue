@@ -5,9 +5,11 @@
 -->
 
 <!--
-  D4：审计留存条数默认「展示最近 50 条，不做归档」
+  D4：审计留存 —— 保留近 7 天（时间口径）
   出处：docs/ui/prototypes/agent-def-tuning-质检记录.md:106
-  条目顺序以父组件为准（最新在前），截断取头部；仅影响本面板渲染，不删库、不加后端归档。
+  用户 2026-10-29 拍板：条数口径（展示最近 50 条）改为时间口径「保留近 7 天就好」，
+  且是「替换」不是「叠加」——7 天内超过 50 条也照常展示，不再设条数上限。
+  超期条目由父组件在写入时 prune（AgentDefDetail.vue），本组件只做同期展示过滤。
 -->
 <template>
   <a-card v-if="visible" class="b3-audit" :bordered="true">
@@ -30,29 +32,39 @@
       </div>
       <div class="b3-runtime">{{ entry.runtimeNote }}</div>
     </div>
-    <div v-if="isTruncated" class="b3-audit-cap">
-      仅展示最近 {{ AUDIT_VISIBLE_LIMIT }} 条调参记录（共 {{ entries.length }} 条）
+    <div v-if="hiddenCount > 0" class="b3-audit-cap">
+      仅展示近 {{ retentionDays }} 天内的调参记录，已隐藏 {{ hiddenCount }} 条更早记录
     </div>
   </a-card>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { isWithinTuningAuditRetention, TUNING_AUDIT_RETENTION_MS } from '@/utils/tuning-params';
 import type { TuningAuditEntry } from '@/utils/tuning-params';
 
-// D4 默认口径：展示最近 50 条，不做归档
+// D4 留存口径：保留近 7 天（用户 2026-10-29 拍板，替换原「最近 50 条」条数口径）
 // 出处：docs/ui/prototypes/agent-def-tuning-质检记录.md:106
-// 截断方向：父组件 AgentDefDetail.vue:417 用 [entry, ...auditEntries.value] 前置插入，
-// 最新条目在数组头部 → 保留 slice(0, 50)，而非 slice(-50)。
-const AUDIT_VISIBLE_LIMIT = 50;
+const retentionDays = TUNING_AUDIT_RETENTION_MS / (24 * 60 * 60 * 1000);
 
 const props = defineProps<{
   visible: boolean;
   entries: TuningAuditEntry[];
 }>();
 
-const visibleEntries = computed(() => props.entries.slice(0, AUDIT_VISIBLE_LIMIT));
-const isTruncated = computed(() => props.entries.length > AUDIT_VISIBLE_LIMIT);
+// 响应式陷阱：computed 里直接调 Date.now() 不会随时间自动重算 ——
+// 页面长时间开着且不保存时，屏幕上会一直留着已超期的条目。
+// 用 nowTick 每 60s 推一次，把「时间流逝」变成 computed 的依赖。
+const nowTick = ref(Date.now());
+const timer = setInterval(() => {
+  nowTick.value = Date.now();
+}, 60_000);
+onBeforeUnmount(() => clearInterval(timer));
+
+const visibleEntries = computed(() =>
+  props.entries.filter((e) => isWithinTuningAuditRetention(e.ts, nowTick.value)),
+);
+const hiddenCount = computed(() => props.entries.length - visibleEntries.value.length);
 </script>
 
 <style scoped>

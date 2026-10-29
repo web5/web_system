@@ -349,9 +349,33 @@ export interface TuningAuditEntry {
   agentId: string;
   agentName: string;
   operator: string;
+  /** 展示用本地化时间串（形如 2026/10/29 14:42:40）。仅用于渲染，不可用于时间比较 */
   time: string;
+  /** 机器可读时间戳（epoch 毫秒）。D4 留存期判定只认这个字段 —— time 是本地化串，解析它做过滤会随 locale 静默失效 */
+  ts: number;
   diffs: AuditFieldDiff[];
   runtimeNote: string;
+}
+
+/** D4 留存期：审计条目保留近 7 天（用户 2026-10-29 拍板：条数口径改为时间口径） */
+export const TUNING_AUDIT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * 判断审计条目是否落在 D4 留存期内。
+ *
+ * 判据（左闭右开）：`now - ts < TUNING_AUDIT_RETENTION_MS` 视为在留存期内。
+ * - `now - ts === RETENTION_MS`（刚好 7 天）→ **不在**留存期，边界取开；
+ *   语义上「近 7 天内」不含第 7 天整点这一刻。
+ * - `ts > now`（未来时间：时钟回拨 / 跨设备数据）→ `now - ts` 为负 → **在**留存期内，
+ *   不误藏；留存期是「清更老的」，不该把更新的数据清掉。
+ */
+export function isWithinTuningAuditRetention(ts: number, now = Date.now()): boolean {
+  return now - ts < TUNING_AUDIT_RETENTION_MS;
+}
+
+/** 按 D4 留存期裁剪审计条目（写入时 prune，避免超期条目白占内存） */
+export function pruneTuningAuditEntries(entries: TuningAuditEntry[], now = Date.now()): TuningAuditEntry[] {
+  return entries.filter((e) => isWithinTuningAuditRetention(e.ts, now));
 }
 
 /** 保存成功后组装审计条目（改前→改后 diff + 运行时生效值） */
@@ -360,16 +384,20 @@ export function buildTuningAuditEntry(opts: {
   agentName: string;
   operator: string;
   time?: string;
+  /** 仅供单测/回放注入固定时间戳；不传则取当前时刻 */
+  ts?: number;
   before: TuningFields;
   after: TuningFields;
   hasTools: boolean;
 }): TuningAuditEntry {
+  const ts = opts.ts ?? Date.now();
   return {
-    id: `${opts.agentId}-${Date.now()}`,
+    id: `${opts.agentId}-${ts}`,
     agentId: opts.agentId,
     agentName: opts.agentName,
     operator: opts.operator,
-    time: opts.time ?? new Date().toLocaleString('zh-CN', { hour12: false }),
+    time: opts.time ?? new Date(ts).toLocaleString('zh-CN', { hour12: false }),
+    ts,
     diffs: buildTuningDiffs(opts.before, opts.after),
     runtimeNote: buildRuntimeNote({
       hasTools: opts.hasTools,
