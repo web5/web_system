@@ -87,7 +87,7 @@
 | 调试台占位 | 只保留标题「调试台」+ `a-empty`「对话试跑 / 调参测试用例表 · 分期建设中」+ 虚线边框；**技术文案（落地契约 / Turn / Bubble / AnswerBlocks 等）一律不进产品页面**（机检 25d 静态锁定），契约内容归 page-spec 本稿 |
 | 数值占位统一 | Temperature / maxTokens / Top P 三个数值控件 placeholder 一律「未配置」（机检 25c）。`maxTokensPlaceholder(hasTools)` **删除**——它的唯一用途就是切占位文案 |
 | 上限语义只在 extra | 带工具：`留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小`；非工具：`留空 = 系统默认`。**严禁模板硬编码 8192**——`MODEL_MAX_TOKENS` 是 W5 待核定的唯一真源，`budgetFormula` 已在用；运维改真值时文案必须跟着变 |
-| label 对齐（2026-10-29 拍板修正） | 按 **§3.2 定稿口径**落地：label 左置、固定 84px、控件左缘对齐（实现 `label-col width:84px` + `label-align="left"` + `:colon="false"`，机检 26a/26b 静态锁定；`layout="vertical"` 是被原型 `:215-216` 否掉的上一版，禁回潮）。改前游离 form 上下文时 label 列宽自适应 → 四控件左缘参差（实测 349/398/303/397） |
+| label 对齐（2026-10-29 拍板修正 + 追加拍板：右对齐） | 按 **§3.2 定稿口径**落地：label 左置、固定 84px、**文字右对齐**（`label-align="right"`，2026-10-29 用户追加拍板）、控件左缘对齐（实现 `label-col width:84px` + `:colon="false"` + 列距 12px＝原型 `.fitem{gap:12px}`；机检 26a–26f 静态锁定；`layout="vertical"` 是被原型 `:215-216` 否掉的上一版，禁回潮）。改前游离 form 上下文时 label 列宽自适应 → 四控件左缘参差（实测 349/398/303/397） |
 
 ## 3. 字段级改动（参数面板）
 
