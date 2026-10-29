@@ -1,8 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { hasSystem, isAppSystem } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { User } from './user.entity';
+
+/** 该用户当前是否持有超管角色（roles 可能是数组或逗号串，历史数据形态不一） */
+function hasSuperAdminRole(roles: unknown): boolean {
+  const list = Array.isArray(roles)
+    ? roles
+    : typeof roles === 'string'
+      ? roles.split(',')
+      : [];
+  return list.map((r) => String(r).trim()).includes('super_admin');
+}
 
 @Injectable()
 export class UserService {
@@ -80,6 +90,15 @@ export class UserService {
 
   async update(id: string, userData: Partial<User>): Promise<User> {
     const user = await this.findById(id);
+    // 防剥权（2026-10-29）：前端下拉曾不认识 super_admin，编辑保存会把超管静默降级。
+    // 这里是最后一道门：超管角色只能保留；真要摘除由其他超管在数据库层面操作。
+    if (
+      hasSuperAdminRole((user as any).roles) &&
+      (userData as any).roles !== undefined &&
+      !hasSuperAdminRole((userData as any).roles)
+    ) {
+      throw new BadRequestException('不允许移除用户的 super_admin 角色：请先由其他超级管理员在数据库层面操作');
+    }
     const { preferences, ...rest } = userData;
     Object.assign(user, rest);
     if (preferences !== undefined) {
@@ -92,6 +111,10 @@ export class UserService {
 
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
+    // 超管账号不允许删除：删光超管会让后台权限体系失去管理入口
+    if (hasSuperAdminRole((user as any).roles)) {
+      throw new BadRequestException('不允许删除超级管理员账号：请先由其他超级管理员在数据库层面操作');
+    }
     await this.userRepository.remove(user);
   }
 }
