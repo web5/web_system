@@ -348,13 +348,20 @@ onMounted(() => {
   fetchRoleOptions();
 });
 
-/** 角色下拉数据源：动态拉 /admin/roles（自定义角色自动出现）；失败退回内置四项 */
+/** 角色下拉数据源：动态拉 /admin/roles（自定义角色自动出现）；失败退回内置四项。
+ *  ⚠️ 内置角色的 name 与 code 相同（DB 里 name 就是 'admin' 等），不能用它覆盖
+ *  中文文案——只有 name ≠ code 的自定义角色才采用其 name。 */
 async function fetchRoleOptions() {
   try {
     const roles = await listRoles();
     if (Array.isArray(roles) && roles.length) {
-      roleOptions.value = roles.map((r) => ({ value: r.code, label: r.name || r.code }));
-      roleNameMap.value = Object.fromEntries(roles.map((r) => [r.code, r.name || r.code]));
+      roleNameMap.value = Object.fromEntries(
+        roles.filter((r) => r.name && r.name !== r.code).map((r) => [r.code, r.name]),
+      );
+      roleOptions.value = roles.map((r) => ({
+        value: r.code,
+        label: roleLabelOf(r.code, roleNameMap.value),
+      }));
     }
   } catch {
     /* 无 roles:view 权限或接口异常：保持兜底四项 */
