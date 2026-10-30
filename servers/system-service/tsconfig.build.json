@@ -5,6 +5,7 @@
     "dist",
     "dist-test",
     "**/*.spec.ts",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/*-dev"
   ]
 }
