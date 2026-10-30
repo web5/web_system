@@ -15,8 +15,11 @@
 # 选项:
 #   --strict    warning 级也返回非零
 #   --no-color  禁用彩色输出
+#   --max-commits <N>  diff 模式范围 commit 数上限（默认 300，0=不限；env SCAN_MAX_COMMITS 同效）
+# 环境变量:
+#   SCAN_PROFILE=1  逐门打印耗时到 stderr（`+Ns` 本段 / `累计 Ns` 总计，定位慢门用）
 #
-# 返回码: 0=通过  1=存在 error 级违规（或 --strict 下的 warning）
+# 返回码: 0=通过  1=存在 error 级违规（或 --strict 下的 warning）  2=用法/范围错误
 # 白名单/阈值调整：改下方 R* 判定函数，勿改调用方
 # ============================================================
 set -uo pipefail
@@ -43,6 +46,10 @@ STRICT=0
 COLOR=1
 MODE=""
 declare -a MODE_ARGS=()
+# 扫描范围 commit 数上限（0 = 不限制）。见 diff 分支里的「范围过大」判定。
+# 300 的依据：正常 PR 范围 <20、月度自查通常 <100；300 commit 实测约 3~4 分钟，
+#   仍在一个人类愿意等的量级内；再往上就到了"没人会等"的区间，应该缩范围。
+MAX_COMMITS="${SCAN_MAX_COMMITS:-300}"
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[1m'; N='\033[0m'
 
 # ---- 违规收集 ----
@@ -54,9 +61,15 @@ add_warn() { WARNS+=("$1|$2|$3|$4"); }
 # ---- 分阶段计时（SCAN_PROFILE=1 时打到 stderr，不影响 stdout 判定）----
 # 动机：2026-10-22 实测一次 diff 扫描 10 分 29 秒，凭猜找不到瓶颈（怀疑行级 fork 风暴，
 #   实测是 R12/R16 的全仓遍历）。留着比"再猜一次"便宜。
+# 输出两列（2026-10-30 加）：`+N s` = 本段耗时（定位成本用），`累计 N s` = 从启动起算。
+#   只有累计值时得做减法才知道哪段贵 —— 2026-10-30 实测 1517 commit 全历史时正是靠
+#   相邻两行相减才发现 R11 单门吃掉 248s（占 commit 门 35%）。
+_PROF_LAST=0
 _prof() {
   [ "${SCAN_PROFILE:-0}" = "1" ] || return 0
-  printf '[prof] %-26s %ss\n' "$1" "$SECONDS" >&2
+  local _d=$((SECONDS - _PROF_LAST))
+  _PROF_LAST=$SECONDS
+  printf '[prof] %-28s +%4ss  累计 %ss\n' "$1" "$_d" "$SECONDS" >&2
 }
 
 # ---- 文件判定辅助 ----
@@ -990,12 +1003,17 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --strict)   STRICT=1 ;;
     --no-color) COLOR=0 ;;
-    -h|--help)  sed -n '1,28p' "$0"; exit 0 ;;
+    --max-commits) MAX_COMMITS="${2:-}"; shift ;;
+    -h|--help)  sed -n '1,24p' "$0"; exit 0 ;;
     --*)        echo "未知选项: $1" >&2; exit 2 ;;
     *)          if [ -z "$MODE" ]; then MODE="$1"; else MODE_ARGS+=("$1"); fi ;;
   esac
   shift
 done
+
+case "${MAX_COMMITS}" in
+  ''|*[!0-9]*) echo "✗ --max-commits 需要非负整数（收到: '${MAX_COMMITS}'）；0 = 不限制" >&2; exit 2 ;;
+esac
 
 case "$MODE" in
   cached) scan_cached ;;
@@ -1023,6 +1041,33 @@ case "$MODE" in
       ''|*[!0-9]*) echo "✗ 无法枚举扫描范围（git rev-list 失败）: ${_R}" >&2; exit 2 ;;
       0)           echo "✗ 扫描范围为 0 个 commit，拒绝静默通过: ${_R}" >&2; exit 2 ;;
     esac
+    # 范围上限（2026-10-30 实测驱动，不是拍脑袋定的阈值）：
+    #   1517 commit 全历史实测 17m27s、峰值 RSS 186MB —— **不是 OOM**，是 8 道 commit 门
+    #   各遍历一遍 + 每 commit 2~6 次 git 子进程（R11 单门 248s、R17 141s、R10 102s），
+    #   叠加 19.3 万行的逐行检查（341s）。耗时规模到这个量级，调用方（CI job、终端、
+    #   编辑器任务）会先超时把进程杀掉，报出 exit 137/139 —— 看起来像「门禁崩溃」，
+    #   实际是「跑得慢到被杀」。加上限是为了把「静默等 17 分钟然后被杀」变成
+    #   「立刻告诉你范围太大 + 怎么缩」。
+    # 为什么不做静默截断：只扫前 N 个 commit 却照样打印「✓ 红线扫描通过」，就是另一种假通过，
+    #   比 17 分钟更危险（本次 #8249 刚修完同类问题，不能又开一个后门）。
+    if [ "${MAX_COMMITS}" != "0" ] && [ "${_NC}" -gt "${MAX_COMMITS}" ]; then
+      {
+        echo "✗ 扫描范围过大：${_NC} 个 commit（上限 ${MAX_COMMITS}）"
+        echo "  实测成本（2026-10-30，1517 commit）：17m27s / 峰值 186MB —— 不是内存问题，"
+        echo "  但会被 CI job、终端或编辑器的超时机制杀掉（exit 137/139），看起来像崩溃。"
+        echo "  处理（任选其一）："
+        echo "    1) 缩到本次改动（推荐，覆盖 95% 场景）："
+        echo "         MB=\$(git merge-base origin/master HEAD)"
+        echo "         bash scripts/redline/scan-rules.sh diff \"\$MB..HEAD\""
+        echo "    2) 只这一次放行（全局默认不变）："
+        echo "         bash scripts/redline/scan-rules.sh diff '${_R}' --max-commits 0"
+        echo "    3) 确实要全量、又怕被超时杀掉 → 后台跑并看进度："
+        echo "         SCAN_PROFILE=1 SCAN_MAX_COMMITS=0 bash scripts/redline/scan-rules.sh diff '${_R}' \\"
+        echo "           > /tmp/scan.out 2> /tmp/scan.err &"
+        echo "         tail -f /tmp/scan.err      # 每跑完一门打一行「+Ns 累计 Ns」"
+      } >&2
+      exit 2
+    fi
     printf '扫描范围: %s（%s 个 commit）\n' "$_R" "$_NC" >&2
     scan_diff_range "$_R"
     ;;
@@ -1031,7 +1076,7 @@ case "$MODE" in
     for f in "${MODE_ARGS[@]}"; do scan_one_file "$f"; done
     ;;
   tree) scan_tree "${MODE_ARGS[0]:-.}" ;;
-  *) sed -n '1,28p' "$0" >&2; exit 2 ;;
+  *) sed -n '1,24p' "$0" >&2; exit 2 ;;
 esac
 
 # ---- 输出与返回 ----

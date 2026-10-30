@@ -260,6 +260,58 @@ else
 fi
 
 # ============================================================
+sec_head "范围保护 · 上限拒绝 / 显式放行（#8250）"
+# ============================================================
+# 背景：1517 commit 全历史实测 17m27s、峰值 186MB —— 不是内存问题，但会被外部超时
+#   杀掉（exit 137/139），看起来像崩溃。加保护的目的不是"跑得快"，是"别让人等 17 分钟
+#   才被 kill"。⚠️ 判据里必须包含「不得静默截断」：只扫一部分却打印通过，是另一种假通过。
+out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 1 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '扫描范围过大'; then
+  ok "上限：超限 exit 2 + 报「扫描范围过大」"
+else
+  bad "上限：超限 exit 2 + 报「扫描范围过大」" "rc=$rc out=$(printf '%s' "$out" | head -2 | tr '\n' ' ')"
+fi
+
+# 指引必须可执行：缩范围（merge-base）与单次放行（--max-commits 0）两条路都要给
+if printf '%s' "$out" | grep -q 'merge-base' && printf '%s' "$out" | grep -q -- '--max-commits 0'; then
+  ok "上限：指引含「缩范围」与「显式放行」两条可执行路径"
+else
+  bad "上限：指引含两条可执行路径" "out=$(printf '%s' "$out" | head -8 | tr '\n' ' ')"
+fi
+
+# --max-commits 0 = 不限制
+out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 0 2>&1)"; rc=$?
+if ! printf '%s' "$out" | grep -q '扫描范围过大'; then
+  ok "上限：--max-commits 0 不拦截"
+else
+  bad "上限：--max-commits 0 不拦截" "rc=$rc"
+fi
+
+# 非法值必须报错，不能静默当成 0 —— 当 0 等于悄悄关掉保护（假通过的近亲）
+out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits abc 2>&1)"; rc=$?
+if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '非负整数'; then
+  ok "上限：非法值 exit 2（不当成 0 悄悄关保护）"
+else
+  bad "上限：非法值 exit 2" "rc=$rc out=$(printf '%s' "$out" | head -2 | tr '\n' ' ')"
+fi
+
+# 默认 300 不得误伤正常 PR 范围（CI 单 PR <20 commit）
+out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" 2>&1)"; rc=$?
+if ! printf '%s' "$out" | grep -q '扫描范围过大'; then
+  ok "上限：默认 300 不误伤正常 PR 范围"
+else
+  bad "上限：默认 300 不误伤正常 PR 范围" "rc=$rc"
+fi
+
+# SCAN_PROFILE 要能定位「哪一门慢」——只有累计值时要人做减法，等于半个工具
+out="$(cd "$WORK" && SCAN_PROFILE=1 bash "$SCAN" --no-color diff "$BASE..HEAD" 2>&1 >/dev/null)"
+if printf '%s' "$out" | grep -qE '\+[[:space:]]*[0-9]+s.*累计'; then
+  ok "profile：逐门输出「本段 +Ns / 累计 Ns」"
+else
+  bad "profile：逐门输出「本段 +Ns / 累计 Ns」" "out=$(printf '%s' "$out" | head -3 | tr '\n' ' ')"
+fi
+
+# ============================================================
 printf '\n\033[1m== 汇总 ==\033[0m\n'
 printf '通过 %s / 失败 %s\n' "$PASS" "$FAIL"
 if [ "$FAIL" -gt 0 ]; then
