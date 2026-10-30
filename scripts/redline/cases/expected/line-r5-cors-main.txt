@@ -1,0 +1,15 @@
+exit=0
+errors=0
+warnings=3
+--- stdout ---
+══ 红线提示（warning）══
+  [R5] CORS 无参启用
+       servers/api/src/main.ts
+       应读取 config CORS_ORIGINS
+  [R8] main.ts 缺全局异常过滤器
+       servers/api/src/main.ts
+       enableCors 存在但未注册 useGlobalFilters
+  [R5] CORS 疑似硬编码
+       servers/api/src/main.ts:2
+       app.enableCors();
+✓ 红线扫描通过（0 error / 3 warning）

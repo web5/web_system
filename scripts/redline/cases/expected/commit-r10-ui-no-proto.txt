@@ -1,0 +1,19 @@
+exit=1
+errors=1
+warnings=3
+--- stdout ---
+══ 红线违规（error）══
+  [R11] UI commit 缺设计评审凭证
+       feat(admin): 调整卡片布局
+       UI 源码 commit 的 message 须带 Design: pass（D3 已过）；纯视觉微调走 Micro-exempt: <理由>（§3.7）
+══ 红线提示（warning）══
+  [R9b] 既有 UI 改动无同行原型/豁免
+       1 个文件 / 5 行
+       须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）
+  [R10] UI commit 缺 Proto 凭证
+       feat(admin): 调整卡片布局
+       UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）
+  [R17] 测试用例 commit 缺评审凭证
+       feat(admin): 调整卡片布局
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✗ 红线扫描未通过（1 error / 3 warning）

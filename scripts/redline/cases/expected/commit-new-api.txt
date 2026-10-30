@@ -1,0 +1,15 @@
+exit=0
+errors=0
+warnings=3
+--- stdout ---
+══ 红线提示（warning）══
+  [R15] 新增对外接口 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Code: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R17] 测试用例 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R18] 研发方案与发布清单 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Plan: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✓ 红线扫描通过（0 error / 3 warning）
