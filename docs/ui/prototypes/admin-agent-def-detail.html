@@ -42,13 +42,13 @@
     （与 admin-agents.html 同一遗留项，本稿沿用同值）
   · v2.4 调整（2026-10-28 · B3 调参 UI 五控件并入，亮色 --ws-* 口径不变）：
     ⑫ 高级 · 参数面板升级为 **B3 五控件**：temperature / 输出上限 maxTokens / Top P /
-      thinking 三态（未配置 NULL / enabled / disabled，对齐 AgentTuningPanel.vue）/ 最大步数 max_steps。
+      thinking 三态（跟随默认 / 开启 / 关闭，对齐 AgentTuningPanel.vue；契约值 null/enabled/disabled 不进 UI）/ 最大步数。
       思考预算改为**只读预览**（budget_tokens = min(模型上限, maxTokens/2)，不作为 agent 级配置）；
       保留采样方式互斥 seg 与按场景套用预设（page-spec v2 表单形态）。
-    ⑬ 三条联动（D1 §6.3）：联动一 挂工具误配 disabled → 红字警示（可点不锁死）；
+    ⑬ 三条联动（D1 §6.3）：联动一 挂工具误配「关闭」→ 红字警示（可点不锁死）；
       联动二 占位统一「未配置」（与 Temperature / Top P 一致）；留空的上限语义只在 extra 表达
       （带工具=模型上限 8192 / 非工具=系统默认），2026-10-29 拍板；
-      联动三 thinking=enabled → budget 只读预览实时重算。
+      联动三 思考=开启 → budget 只读预览实时重算。
     ⑭ 新增「生效策略预览」：P1–P5 优先级链命中档实时标注 + thinking / budget_tokens / max_tokens 三值输出。
        （2026-10-29 拍板：整宽置于「参数面板 + 调试台」下方，不再困在 420px 参数列内。）
     ⑮ 角色门禁（用户 2026-10-29 拍板放开 admin）：调参卡与审计卡 data-need-role="admin"——admin 及以上可见，editor/viewer 不可见（演示控件可切角色对照）。
@@ -916,7 +916,7 @@
                     <div class="flb">Temperature</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-temp" data-dr="gen-params-temperature">
-                        <input id="in-temp" placeholder="未配置" inputmode="decimal" />
+                        <input id="in-temp" placeholder="如 0.7" inputmode="decimal" />
                         <span class="clear" data-clear="temp">留空=默认</span>
                       </div>
                       <div class="fhint hintrow"><span class="f-tag fix">?? 0.7 修正</span>留空=不覆盖，回落 0.7<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
@@ -942,7 +942,7 @@
                     <div class="flb">Top P</div>
                     <div class="fld">
                       <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
-                        <input id="in-topP" placeholder="未配置" disabled inputmode="decimal" />
+                        <input id="in-topP" placeholder="如 0.9" disabled inputmode="decimal" />
                         <span class="clear" data-clear="topP">留空=默认</span>
                       </div>
                       <div class="fhint hintrow">0–1，与 Temperature 互斥二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
@@ -966,11 +966,11 @@
                     <div class="flb">思考</div>
                     <div class="fld">
                       <div class="seg" id="seg-thinking" data-dr="gen-params-thinking">
-                        <button data-thinking="null" class="on">未配置 (NULL)</button>
-                        <button data-thinking="disabled">disabled</button>
-                        <button data-thinking="enabled">enabled</button>
+                        <button data-thinking="null" class="on">跟随默认</button>
+                        <button data-thinking="enabled">开启</button>
+                        <button data-thinking="disabled">关闭</button>
                       </div>
-                      <div class="fhint hintrow"><span id="extra-thinking">未配置走优先级链；显式值覆盖</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-thinking">跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
                     </div>
                   </div>
                 </div>
@@ -1003,8 +1003,8 @@
                 <!-- 联动一：挂工具误配 disabled → 红字警示（可点不锁死，运行时强制纠正） -->
                 <div class="warn-tool hidden" id="warn-misconfig" data-dr="misconfig-warn">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
-                  <div><b>该 Agent 挂载工具，thinking 将被强制启用</b>
-                    <div class="wd">装配侧检测到带工具且未显式 enabled 时强制 enabled——此处选 disabled 不会生效，运行时会被纠正。</div></div>
+                  <div><b>该 Agent 挂载工具，「思考」将被强制开启</b>
+                    <div class="wd">装配侧检测到带工具且未显式选择「开启」时强制开启——此处选「关闭」不会生效，运行时会被纠正。</div></div>
                 </div>
 
                 <div class="fhint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ws-border-subtle);">
@@ -1433,21 +1433,21 @@
     $('ctrl-topP').classList.toggle('err', conflict);
     $('conflict-hint').classList.toggle('hidden', !conflict);
 
-    // 联动二：占位统一「未配置」（2026-10-29 拍板）；留空的上限语义只在 extra 表达
+    // 联动二：输出上限**不设占位**（2026-10-29 拍板口径 C）——留空 = 用满模型上限、是推荐态，
+    // 写「如 4096」会暗示推荐值、写「未配置」会被读成没配好；空值含义只在 extra 表达
     var hasT = !!(DEFS[current] && DEFS[current].hasTools);
-    $('in-max').placeholder = '未配置';
     $('extra-max').textContent = hasT ? '留空 = 模型上限（8192），不人为压小' : '留空 = 系统默认';
 
     qsa('#seg-thinking button').forEach(function(b){ b.classList.toggle('on', b.dataset.thinking===draft.thinking); });
     $('seg-thinking').classList.toggle('locked', thinkingLocked);
     if(thinkingLocked){
-      $('extra-thinking').textContent = '分类场景强制关闭思考，已锁定（C7-d）；切到其它预设即解锁';
+      $('extra-thinking').textContent = '分类场景强制关闭「思考」，已锁定（C7-d）；切到其它预设即解锁';
     } else if(draft.thinking==='enabled'){
-      $('extra-thinking').textContent = '显式开启；budget 按公式下发';
+      $('extra-thinking').textContent = '显式开启；思考预算按公式下发';
     } else if(draft.thinking==='disabled'){
-      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正';
+      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正为开启';
     } else {
-      $('extra-thinking').textContent = '未配置走优先级链；显式值覆盖';
+      $('extra-thinking').textContent = '跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）';
     }
 
     // 联动三：thinking=enabled → budget 只读预览（min(模型上限, maxTokens/2)）

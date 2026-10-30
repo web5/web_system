@@ -12,7 +12,7 @@
   <div class="b3-tuning">
     <div class="b3-tuning-head">
       <span class="b3-tuning-title">高级调参</span>
-      <a-tag v-if="hasTools" color="blue">带工具 · 强制 enabled 生效</a-tag>
+      <a-tag v-if="hasTools" color="blue">带工具 · 思考强制开启</a-tag>
       <a-tag v-else>非工具</a-tag>
       <a-tag class="b3-role-tag">仅管理员及以上可编辑</a-tag>
     </div>
@@ -36,7 +36,8 @@
       :wrapper-col="{ style: { flex: '1 1 0', minWidth: 0 } }"
       :model="{}"
     >
-      <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填） -->
+      <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填）
+           placeholder 走「示例/格式」口径（2026-10-29 拍板，见 page-spec §2.1） -->
       <a-form-item
         label="Temperature"
         extra="留空 = 不覆盖，运行时回落 0.7；与 topP 互斥"
@@ -48,15 +49,16 @@
           :min="0"
           :max="2"
           :step="0.1"
-          placeholder="未配置"
+          placeholder="如 0.7"
           style="width: 100%"
           @update:value="onTemperature"
         />
       </a-form-item>
 
-      <!-- 控件 2 · maxTokens：占位统一「未配置」（B1，2026-10-29 拍板）；上限语义只在 extra -->
+      <!-- 控件 2 · maxTokens：**无 placeholder**（2026-10-29 拍板口径 C）——留空 = 用满模型上限，
+           是推荐态：写「如 4096」会暗示推荐值，写「未配置」会被读成没配好；空值含义由 extra 承担 -->
       <a-form-item
-        label="输出上限 maxTokens"
+        label="输出上限"
         :extra="hasTools ? `留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小` : '留空 = 系统默认'"
         :help="errs.maxTokens"
         :validate-status="errs.maxTokens ? 'error' : ''"
@@ -65,7 +67,6 @@
           :value="maxTokens"
           :min="1"
           :precision="0"
-          placeholder="未配置"
           style="width: 100%"
           @update:value="onMaxTokens"
         />
@@ -83,16 +84,17 @@
           :min="0"
           :max="1"
           :step="0.01"
-          placeholder="未配置"
+          placeholder="如 0.9"
           style="width: 100%"
           @update:value="onTopP"
         />
       </a-form-item>
 
-      <!-- 控件 4 · thinking：三态 segmented（D1） -->
+      <!-- 控件 4 · thinking：三态 segmented（D1）。文案走业务词，契约值留内部
+           （2026-10-29 拍板，page-spec :127：hint 禁出现内部字段名/实现枚举） -->
       <a-form-item
-        label="thinking"
-        extra='未配置 = 走优先级链；enabled / disabled 显式覆盖。budget_tokens 不进 agent 配置'
+        label="思考"
+        extra="跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）"
       >
         <a-radio-group
           :value="thinkingVal"
@@ -110,7 +112,7 @@
 
       <!-- 控件 5 · max_steps -->
       <a-form-item
-        label="最大步数 max_steps"
+        label="最大步数"
         extra="Agent 引擎最大工具编排轮数"
         :help="errs.maxSteps"
         :validate-status="errs.maxSteps ? 'error' : ''"
@@ -132,8 +134,8 @@
       class="b3-misconfig"
       type="error"
       show-icon
-      message="该 Agent 挂载工具，thinking 将被强制启用"
-      description="按 D1 拍板（双保险 + 强制侧）：装配侧检测到带工具且未显式 enabled 时强制 enabled——此处选 disabled 不会生效，运行时会被纠正。"
+      message="该 Agent 挂载工具，「思考」将被强制开启"
+      description="按 D1 拍板（双保险 + 强制侧）：装配侧检测到带工具且未显式选择「开启」时强制开启——此处选「关闭」不会生效，运行时会被纠正。"
     />
   </div>
 </template>
@@ -162,10 +164,12 @@ const props = defineProps<{
 
 const errs = computed(() => props.errors ?? {});
 
+/** 三态文案走业务词（2026-10-29 拍板），**value 一字不动**——onThinking 与后端契约
+ *  依赖 'null' | 'enabled' | 'disabled' 三个字面量 */
 const thinkingOptions = [
-  { label: '未配置 (NULL)', value: 'null' },
-  { label: 'enabled', value: 'enabled' },
-  { label: 'disabled', value: 'disabled' },
+  { label: '跟随默认', value: 'null' },
+  { label: '开启', value: 'enabled' },
+  { label: '关闭', value: 'disabled' },
 ];
 
 /** 归一化读值（defineModel 可能为 undefined） */
@@ -222,16 +226,15 @@ const preview = computed(() =>
   margin-left: auto;
 }
 /* label 列：固定 84px、**右对齐**（label-align="right"，2026-10-29 用户追加拍板）、无冒号
-   （:colon="false"，原型 .flb 无冒号）。antd horizontal 默认 nowrap，84px 里长 label
-   会被截断 → 这里纠正为可换行：行高 20px + 上内距 6px，单行时文字在 32px 控件高度内
-   视觉居中，换代后自然向下撑开（实测两行 46px < 行高 56px，不溢出、不压控件）。
+   （:colon="false"，原型 .flb 无冒号）。
+   行高 20 + 上内距 6 = 26px，是「单行文字在 32px 控件高度内视觉居中」的装置。label 命名
+   已按 page-spec :126 收窄成业务词（最长「输出上限」4 字 ≈ 52px），84px 里单行放得下，
+   **不再依赖折行**——2026-10-29 因此删掉 white-space:normal / height:auto 两条折行补丁；
+   line-height/padding-top 保留（删了文字会上移 6px，需另做「无 6px」基线实测，属第二批）。
    justify-content: flex-end —— antd 的 <label> 是 inline-flex 容器（flex 项按
    justify-content 排，text-align 管不到容器内文字；默认 normal≈flex-start），
-   右对齐时文字仍贴在内容盒左缘 → 五个 label 文本右缘不齐（实测 335/325/319/319/323）、
-   最长那条还会溢出内盒贴到控件（「Temperature」文本 82px > 内容盒，右缘 335 vs 控件 337
-   只剩 2px）。显式 flex-end 后每行文字都靠内容右缘，五个右缘恒等（实测 349-12=337）。
-   换行仍走继承的 text-align:end（label-align="right" 由 antd 落在 .ant-form-item-label 上），
-   长 label 两行都右对齐，不出现「首行右、次行左」。
+   右对齐时文字仍贴在内容盒左缘 → 五个 label 文本右缘不齐（实测 335/325/319/319/323）。
+   显式 flex-end 后每行文字都靠内容右缘，五个右缘恒等（实测 349-12=337）。
    ⚠️ flex-end 必须收进 min-width:576px 守卫，不能无条件写：<576px 时 ant-design-vue
    **会自动切上置**（es/form/style/index.js:380 的 @media(max-width: screenXSMax=575px)
    → makeVerticalLayout :337-356，label/control 各 flex:0 0 100% 各占满一行；它挂在
@@ -241,8 +244,6 @@ const preview = computed(() =>
    作用在 <label> 这个 inline-flex 容器内部、不受 text-align 管辖 → 无条件 flex-end 会把
    上置态的 label 推到行尾。 */
 .b3-tuning :deep(.ant-form-item-label > label) {
-  height: auto;
-  white-space: normal;
   line-height: 20px;
   padding-top: 6px;
 }
