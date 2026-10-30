@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R11] Design 凭证指向的报告不存在
+       docs/ui/reviews/r11-missing.md
+       报告须落盘 docs/ui/reviews/*.md 并与原型/规格同 commit（§3.7）
+✗ 红线扫描未通过（1 error / 0 warning）
