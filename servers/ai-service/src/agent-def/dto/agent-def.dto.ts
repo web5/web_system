@@ -78,6 +78,24 @@ export class SaveAgentDefDto {
   @IsNotEmpty()
   model: string;
 
+  /**
+   * 路由线索：适用场景描述（AgentDefService 会落 description 列）。
+   *
+   * 🔴 白名单陷阱：main.ts 的 ValidationPipe 是 `whitelist + forbidNonWhitelisted`，
+   * DTO 没声明的字段会被拒成 400。admin 表单 `defaultAgentForm()` 恒定带
+   * `description: ''` / `keywords: []`，所以这两个字段必须在此声明，
+   * 否则「新建 / 保存草稿」两条路径 100% 返回 code 4000。
+   */
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  /** 路由线索：触发关键词（落 keywords 列；空数组 = 清空） */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keywords?: string[] | null;
+
   @IsArray()
   @IsString({ each: true })
   tools: string[];
