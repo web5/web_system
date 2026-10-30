@@ -112,4 +112,44 @@ export class UserMemoryService {
     const result = await this.repo.delete({ id, userId });
     return (result.affected ?? 0) > 0;
   }
+
+  /**
+   * 编辑某条记忆内容（C 端，仅本人；#8229 跟进口径：用户可自己改）。
+   *
+   * - 归属不符 / 不存在 → { ok:false, reason:'not_found' }（controller 转 404，不区分以免探测）；
+   * - 改后与同分类既有条目内容撞车（(user_id, category, content_hash) 唯一）→ conflict
+   *   （controller 转 400；不在这里抛，避免唯一键冲突变成 500）；
+   * - 成功重算 contentHash（归一化口径与写入侧一致），返回更新后的条目。
+   */
+  async update(
+    userId: string,
+    id: number,
+    content: string,
+  ): Promise<{ ok: boolean; reason?: 'not_found' | 'conflict'; row?: MemoryListItem }> {
+    const row = await this.repo.findOne({ where: { id, userId } });
+    if (!row) return { ok: false, reason: 'not_found' };
+
+    const trimmed = String(content ?? '').trim();
+    const contentHash = this.hashOf(trimmed);
+    if (contentHash !== row.contentHash) {
+      const clash = await this.repo.findOne({ where: { userId, category: row.category, contentHash } });
+      if (clash && Number(clash.id) !== Number(row.id)) {
+        return { ok: false, reason: 'conflict' };
+      }
+    }
+
+    row.content = trimmed;
+    row.contentHash = contentHash;
+    const saved = await this.repo.save(row);
+    return {
+      ok: true,
+      row: {
+        id: saved.id,
+        category: saved.category,
+        content: saved.content,
+        confidence: Number(saved.confidence),
+        createdAt: saved.createdAt,
+      },
+    };
+  }
 }
