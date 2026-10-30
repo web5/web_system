@@ -29,7 +29,16 @@ export type ThinkingFormValue = 'null' | 'enabled' | 'disabled';
  *  budget_tokens 不作为 agent 级配置（D1 §4.3），映射时一律丢弃。 */
 export interface ThinkingOption {
   type: 'enabled' | 'disabled';
-  /** 仅运行时调用级使用；agent 配置不写入 */
+  /**
+   * 思考预算。
+   *
+   * ⚠️ 口径订正（#8272）：这个字段**不是「仅运行时用、配置里不会有」**。实测 PUT
+   * `{type:'enabled',budget_tokens:2048}` 后端会接收并落库（`agent-def.dto.ts` 声明了该字段、
+   * `agent-def.service.ts` 还做了 ≥1 校验），回读仍是 2048；运行时 `agent-def-sync.service.ts`
+   * 把它当**显式 budget** 用，会覆盖 `min(模型上限, maxTokens/2)` 公式值。
+   * ⇒ 本 UI 从不写它（见 `thinkingToApi`），但手工塞进去就是**永久生效**的，别拿它做「临时调一下」。
+   * 想调预算请改 maxTokens。
+   */
   budget_tokens?: number;
 }
 
@@ -52,7 +61,14 @@ export function thinkingToForm(v: ThinkingOption | null | undefined): ThinkingFo
   return 'null';
 }
 
-/** 表单三态 → API 值。enabled 时**不**带 budget_tokens（不进 agent 配置） */
+/**
+ * 表单三态 → API 值。
+ * `enabled` 只发 `{type:'enabled'}`，**不带** budget_tokens —— 预算一律由运行时按
+ * `min(模型 max_tokens 上限, maxTokens/2)` 公式算（见 agent-core `thinking-policy.ts`，P3 分支）。
+ *
+ * ⚠️ 别把「UI 不发」读成「配置里不会有」：后端 DTO 仍接受 budget_tokens（存量兼容 + 校验），
+ * 显式传了会落库并被运行时当显式 budget 用。详见 `ThinkingOption.budget_tokens`（#8272）。
+ */
 export function thinkingToApi(v: ThinkingFormValue): ThinkingOption | null {
   if (v === 'enabled') return { type: 'enabled' };
   if (v === 'disabled') return { type: 'disabled' };

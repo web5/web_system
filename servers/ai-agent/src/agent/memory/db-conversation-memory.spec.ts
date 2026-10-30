@@ -125,10 +125,10 @@ describe('DbConversationMemory', () => {
 
   it('loadProfile：读到摘要并注入（原 BUG：此前从不查用户记忆）', async () => {
     const { mem } = setup(null, {
-      summary: { namespace: 'general', summary: '# 用户画像\n- **事实**：用户叫橙子哥哥', version: 2, itemCount: 3 },
+      summary: { namespace: 'general', summary: '· 事实：用户叫橙子哥哥', version: 2, itemCount: 3 },
     });
     const text = await mem.loadProfile('u1');
-    expect(text).toContain('# 用户画像');
+    expect(text).toContain('[用户记忆摘要]');
     expect(text).toContain('橙子哥哥');
   });
 
