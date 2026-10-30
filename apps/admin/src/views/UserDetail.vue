@@ -110,6 +110,9 @@
                     {{ memCategoryLabel(record.category) }}
                   </a-tag>
                 </template>
+                <template v-else-if="column.key === 'content'">
+                  <span :title="record.content">{{ record.content }}</span>
+                </template>
                 <template v-else-if="column.key === 'confidence'">
                   <span class="mem-num">{{ Number(record.confidence).toFixed(2) }}</span>
                 </template>

@@ -66,8 +66,8 @@
       <p>暂无记忆条目，去对话里多聊聊，AI 会慢慢认识你</p>
     </div>
     <div v-else class="groups">
-      <div v-for="g in groups" :key="g.cat" class="group">
-        <h3>{{ g.cat }} <em>{{ g.items.length }} 条</em></h3>
+      <div v-for="g in groups" :key="g.key" class="group">
+        <h3>{{ g.label }} <em>{{ g.items.length }} 条</em></h3>
         <template v-for="m in g.items" :key="m.id">
           <!-- 行内编辑态（同一时刻只编辑一条） -->
           <div v-if="editing && editing.id === m.id" class="row editing">
@@ -144,8 +144,19 @@ const summaryError = ref(false);
 const loading = ref(true);
 const listError = ref(false);
 const items = ref<MemoryItem[]>([]);
-const CATS = ['事实', '偏好', '习惯'];
-const groups = ref<Array<{ cat: string; items: MemoryItem[] }>>([]);
+/* 分类键为后端英文枚举（fact/preference/habit），界面用业务词（原型 §表格列清单口径） */
+const CATS = [
+  { key: 'fact', label: '事实' },
+  { key: 'preference', label: '偏好' },
+  { key: 'habit', label: '习惯' },
+];
+const groups = ref<Array<{ key: string; label: string; items: MemoryItem[] }>>([]);
+
+function regroup(list: MemoryItem[]) {
+  return CATS.map((c) => ({ key: c.key, label: c.label, items: list.filter((m) => m.category === c.key) })).filter(
+    (g) => g.items.length > 0,
+  );
+}
 
 /* ===== 编辑 / 删除 / 待更新 ===== */
 /** 本地「待更新」标记：编辑/删除成功后置 true（摘要由下次对话后重算） */
@@ -188,9 +199,7 @@ async function load() {
   try {
     const { list } = await listMemory(1, 50);
     items.value = list;
-    groups.value = CATS.map((cat) => ({ cat, items: list.filter((m) => m.category === cat) })).filter(
-      (g) => g.items.length > 0,
-    );
+    groups.value = regroup(list);
   } catch {
     listError.value = true;
     items.value = [];
@@ -227,10 +236,7 @@ async function saveEdit() {
     const idx = items.value.findIndex((x) => x.id === ed.id);
     if (idx >= 0) {
       items.value[idx] = { ...items.value[idx], content: row?.content ?? ed.draft.trim() };
-      groups.value = CATS.map((cat) => ({
-        cat,
-        items: items.value.filter((m) => m.category === cat),
-      })).filter((g) => g.items.length > 0);
+      groups.value = regroup(items.value);
     }
     editing.value = null;
     pending.value = true; // 摘要由下次对话后重算，显式标「待更新」
@@ -243,8 +249,10 @@ async function saveEdit() {
       editing.value = null;
       void load();
     } else {
+      // 400 类（空值/超长/同内容撞车）以后端原文优先；其余给统一失败文案
+      const status400 = status === 400;
       const backendMsg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      message.error(backendMsg || '保存失败，请重试');
+      message.error((status400 && backendMsg) || '保存失败，请重试');
       // 保存失败：保留编辑态与已输入内容，用户可改后重试
     }
   } finally {
