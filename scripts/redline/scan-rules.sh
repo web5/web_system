@@ -1001,7 +1001,30 @@ case "$MODE" in
   cached) scan_cached ;;
   diff)
     [ ${#MODE_ARGS[@]} -ge 1 ] || { echo "用法: scan-rules.sh diff <range>（如 origin/master...HEAD）" >&2; exit 2; }
-    scan_diff_range "${MODE_ARGS[0]}"
+    # 防「假通过」（2026-10-30 实测）：range 不可解析 / 为 0 个 commit 时，各 check_* 的
+    #   `git rev-list ... 2>/dev/null` 静默失败 → 空循环，git diff 也是空 → 最终打印
+    #   「✓ 红线扫描通过（0 error / 0 warning）」并 exit 0。
+    #   门禁把「没有输入」当成「没有违规」，比 --no-verify 更危险：
+    #   绕过是显式的、看得见的；假通过是静默的、被当成绿灯。
+    #   实测触发场景：shallow clone 的 worktree 里 `origin/master~20` 解析不了（本地最常见的自查命令）。
+    # 为什么只在 diff 分支校验：cached 模式 range 传的是 `--cached`，无 staged 变更属合法空集。
+    _R="${MODE_ARGS[0]}"
+    if ! git rev-parse --verify --quiet "${_R%%..*}" >/dev/null 2>&1; then
+      {
+        echo "✗ 扫描范围左侧 ref 不可解析: ${_R}"
+        echo "  常见原因：① shallow clone 深度不足（worktree 未 fetch 到该 ref 的历史）② ref 拼写错误"
+        echo "  处理：git fetch --unshallow 或 git fetch --depth=<N> origin '+refs/heads/*:refs/remotes/origin/*'"
+        echo "        验证：git rev-parse --verify --quiet '${_R%%..*}'"
+      } >&2
+      exit 2
+    fi
+    _NC="$(git rev-list --count "$_R" 2>/dev/null || true)"
+    case "${_NC:-}" in
+      ''|*[!0-9]*) echo "✗ 无法枚举扫描范围（git rev-list 失败）: ${_R}" >&2; exit 2 ;;
+      0)           echo "✗ 扫描范围为 0 个 commit，拒绝静默通过: ${_R}" >&2; exit 2 ;;
+    esac
+    printf '扫描范围: %s（%s 个 commit）\n' "$_R" "$_NC" >&2
+    scan_diff_range "$_R"
     ;;
   files)
     [ ${#MODE_ARGS[@]} -ge 1 ] || { echo "用法: scan-rules.sh files <path...>" >&2; exit 2; }
