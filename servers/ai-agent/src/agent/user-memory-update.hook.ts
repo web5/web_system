@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientRegistry, type ChatMessage } from '@kedouai/agent-core';
 import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
 import { PostRunHook, PostRunContext } from '../agent/post-run-hook';
+import { UserMemorySummaryClient } from './memory/user-memory-summary.client';
 
 /** AI 提炼出的单条记忆 */
 interface ExtractedItem {
@@ -32,7 +33,8 @@ const EXTRACT_PROMPT = `你是用户记忆提取器。根据一轮对话（用�
 /**
  * 用户记忆更新插件（PostRunHook 第一个实现）。
  *
- * 每轮对话结束后异步：调 LLM 提炼记忆 → 调 user-service internal 接口写入。
+ * 每轮对话结束后异步：调 LLM 提炼记忆 → 调 user-service internal 接口写入
+ * → 写入成功后触发摘要重算（#8229：明细+摘要双层）。
  * 全程失败静默（.catch），绝不影响对话主链路。
  */
 @Injectable()
@@ -47,6 +49,7 @@ export class UserMemoryUpdateHook implements PostRunHook {
   constructor(
     private readonly configService: ConfigService,
     private readonly clientRegistry: ClientRegistry,
+    private readonly summaryClient: UserMemorySummaryClient,
   ) {
     this.userServiceUrl = this.configService.get<string>('USER_SERVICE_URL', SERVICE_URL_DEFAULTS.user);
     this.serviceKey = this.configService.get<string>('USER_SERVICE_KEY', '');
@@ -60,6 +63,13 @@ export class UserMemoryUpdateHook implements PostRunHook {
       if (!items.length) return;
       await this.upsert(ctx.userId, ctx.conversationId, items);
       this.logger.log(`用户记忆更新: userId=${ctx.userId} items=${items.length}`);
+      // 明细写入成功 → 触发摘要重算（fire-and-forget + catch：refresh 失败不影响对话）
+      this.summaryClient
+        .refreshSummary(ctx.userId)
+        .then(() => this.logger.log(`用户记忆摘要重算触发完成: userId=${ctx.userId}`))
+        .catch((e: unknown) =>
+          this.logger.warn(`用户记忆摘要重算触发失败（不影响对话）: ${(e as Error).message}`),
+        );
     } catch (e) {
       this.logger.warn(`用户记忆更新失败（不影响对话）: ${(e as Error).message}`);
     }

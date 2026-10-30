@@ -26,6 +26,7 @@ import { McpService } from '../mcp/mcp.service';
 import { McpModule } from '../mcp/mcp.module';
 import { AgentController } from './agent.controller';
 import { DbConversationMemory } from './memory/db-conversation-memory';
+import { UserMemorySummaryClient } from './memory/user-memory-summary.client';
 import { AgentConversation } from './memory/agent-conversation.entity';
 import { AgentRunPusher } from './agent-run-pusher';
 import { AgentDefSyncService } from './agent-def-sync.service';
@@ -182,6 +183,7 @@ const postRunHooksProvider: Provider = {
     searchRegistryProvider,
     webSearchToolProvider,
     DbConversationMemory,
+    UserMemorySummaryClient,
     AgentRunPusher,
     AgentDefSyncService,
     ModelCatalogService,

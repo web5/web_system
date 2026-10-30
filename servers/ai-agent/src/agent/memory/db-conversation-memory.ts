@@ -11,6 +11,7 @@ import {
 } from '@kedouai/agent-core';
 import { AgentConversation } from './agent-conversation.entity';
 import { MusicService } from '../../music/music.service';
+import { UserMemorySummaryClient } from './user-memory-summary.client';
 
 /**
  * 数据库版对话记忆：实现 ConversationMemoryPort，落库到 agent_conversations。
@@ -30,13 +31,32 @@ export class DbConversationMemory implements ConversationMemoryPort {
     private readonly repo: Repository<AgentConversation>,
     private readonly compaction: Compaction,
     private readonly music: MusicService,
+    private readonly summaryClient: UserMemorySummaryClient,
   ) {}
 
   /**
-   * 用户级长期记忆：把口味档案渲染成一段 system 文本供引擎注入。
-   * 读失败不影响主链路（口味是增强项，不是功能依赖）。
+   * 用户级长期记忆：双源合并注入（#8229 修复「记忆写进读不回」）。
+   *
+   * 两个来源，任一失败只降级该源、不整体失败：
+   *   1. 口味档案（既有行为，MusicService.getTaste → user-service user_taste_profiles）；
+   *   2. 用户记忆摘要（新增，user-service user_memory_summaries，一用户一条）——
+   *      注入源是摘要行而非明细列表，体积恒定（原 loadProfile 只读口味、从不查
+   *      user_memories，是「AI 不知道用户名字」BUG 的根因，本次顺带修掉）。
+   *
+   * user-service 不可达时：口味侧 getTaste 内部已降级返回空结构（null 文本），
+   * 摘要侧在此降级为 null + warn 日志 → 本方法返回 null/另一源，对话不崩。
    */
   async loadProfile(userId: string): Promise<string | null> {
+    const [tasteText, summaryText] = await Promise.all([
+      this.loadTasteText(userId),
+      this.loadSummaryText(userId),
+    ]);
+    const merged = [tasteText, summaryText].filter(Boolean).join('\n\n');
+    return merged || null;
+  }
+
+  /** 口味档案文本（失败降级为 null，不影响摘要源） */
+  private async loadTasteText(userId: string): Promise<string | null> {
     try {
       const taste = await this.music.getTaste(userId);
       const text = MusicService.formatForPrompt(taste);
@@ -46,6 +66,19 @@ export class DbConversationMemory implements ConversationMemoryPort {
       return text;
     } catch (error) {
       this.logger.warn(`读取用户口味档案失败，跳过注入: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 用户记忆摘要文本（失败降级为 null + warn，不影响口味源） */
+  private async loadSummaryText(userId: string): Promise<string | null> {
+    try {
+      const row = await this.summaryClient.getSummary(userId);
+      if (!row?.summary) return null;
+      this.logger.log(`注入用户记忆摘要: userId=${userId} version=${row.version ?? '?'} itemCount=${row.itemCount ?? '?'}`);
+      return `[用户记忆摘要]\n${row.summary}`;
+    } catch (error) {
+      this.logger.warn(`读取用户记忆摘要失败，跳过注入: ${(error as Error).message}`);
       return null;
     }
   }
