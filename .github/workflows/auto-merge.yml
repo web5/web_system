@@ -299,6 +299,7 @@ jobs:
           script: |
             const { repo, owner } = context.repo;
             const pull_number = context.payload.pull_request.number;
+            try {
             const QUERY = `query($owner:String!,$repo:String!,$num:Int!){
               repository(owner:$owner,name:$repo){ pullRequest(number:$num){
                 id autoMergeRequest { enabledAt mergeMethod } } } }`;
@@ -318,3 +319,22 @@ jobs:
               throw new Error(`disablePullRequestAutoMerge 未报错，但 autoMergeRequest 仍在`);
             }
             console.log(`PR #${pull_number} 已撤销自动合入（no-automerge 标签生效）`);
+            } catch (e) {
+              // 🔴 已知硬限制（2026-10-30 PR #494 实测）：PR **全绿**后 GitHub 已把 auto-merge
+              // 转入合并流程，此时 disablePullRequestAutoMerge 返回 422
+              // "Can't disable auto-merge for this pull request."，任何 token 都撤不掉
+              //（本 PR 自己就是证据：打标签后 6 秒尝试撤销被拒，几分钟后仍被自动合并）。
+              // 撤销窗口只在 CI 未全绿时存在 —— 昨日 #492 能撤成功正是因为当时 build/test 还在跑。
+              // 所以这里对 422 降级为 warning（改不了 GitHub 的语义，只能把话说明白），
+              // 让 job 变红去逼人手撤没有意义：PR 该合还是会合。
+              const msg = String((e && e.message) || '');
+              if (/Can't disable auto-merge/i.test(msg)) {
+                core.warning(
+                  `PR #${pull_number} 已全绿、GitHub 已进入合并流程，API 无法撤销 auto-merge（422）。` +
+                  `本标签只能保证「不再自动挂」；若必须拦住这次合并，唯一窗口是 Checks 未全绿前，` +
+                  `或把 PR 转回 draft。`,
+                );
+                return;
+              }
+              throw e;
+            }
