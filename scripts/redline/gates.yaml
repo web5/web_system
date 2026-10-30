@@ -536,9 +536,11 @@ gates:
     batch: 1
     trigger:
       status: [A]
-      match_path: '*/controller.ts'
-      match_path_alt: '*/controller.js'
+      match_any: ["*/*.controller.ts", "*/*.controller.js"]
       note: 只卡**新增**接口（越权/入参校验/错误处理语义/敏感信息泄露）。改既有实现不触发 —— 本门主观性最强、成本最高，触发面宁可窄
+      # S2 修正：原先写的是 `*/controller.ts`，而 bash 是 `*/*.controller.ts`（要求至少一层目录）。
+      # 两者差在 `apps/controller.ts` 这类根下文件 —— YAML 会命中、bash 不会。
+      # 这就是"声明不可执行"的代价：写得像真的，但对不上，且没有任何机器检查会发现。
     credential:
       trailer: Code
       accept: [pass, path]
@@ -564,11 +566,10 @@ gates:
     batch: 1
     trigger:
       status: [A, M]
-      match_path: 'servers/*/src/*'
-      match_path_alt: 'apps/*/src/*'
+      match_any: ["servers/*/src/*", "apps/*/src/*"]
       extensions: [".ts", ".tsx", ".mjs", ".jsx", ".vue"]
       exclude_paths: ["*.spec.*", "*.test.*"]
-      note: 卡 2.1 放宽过触发面 —— 原「只认新增」实测近 300 commit 只命中 6 次；现为 A|M 递归匹配
+      note: 卡 2.1 放宽过触发面 —— 原「只认新增」实测近 300 commit 只命中 6 次；现为 A|M 递归匹配。bash 的 `case` glob 里 `*` 可跨 `/`，故 `servers/*/src/*` 就是递归
     credential:
       trailer: Test
       accept: [pass, path]
@@ -594,10 +595,7 @@ gates:
     batch: 1
     trigger:
       status: [A]
-      match_path: '*/controller.ts'
-      match_path_alt: '*/controller.js'
-      match_path_alt2: '*/service.ts'
-      match_path_alt3: 'apps/*/src/views/*'
+      match_any: ["*/*.controller.ts", "*/*.controller.js", "*/*.service.ts", "apps/*/src/views/*"]
     credential:
       trailer: Plan
       accept: [pass, path]
