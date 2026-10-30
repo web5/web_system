@@ -28,6 +28,7 @@
 |---|---|
 | 新页面 / 布局级大改 | README → `design.md` + `page-spec-template.md`（Full）→ 用户确认 → 写码 |
 | 小改样式 / 调色 / hover | `design.md` 相关条目 + `color-reference.md` §2/§3 |
+| **表单控件选型 / 开关语义 / label 对齐 / 空值表达** | `page-specs/form-controls-and-toggles-v1.md` §0 速查表（判据）→ 必要时看 §6 现案例判定 / §7 现状扫描；选择阈值与 `design.md` §2 第 10 条同一口径（≤5 项用 radio-group） |
 | 覆盖 antd / 改了不生效 | `css-override-rules.md`（§2 四问 + 排查五步） |
 | 暗色适配 | `design.md` §4 + `packages/ui/src/tokens.css` dark 块 |
 | **生成原型稿（可点击交互稿）** | 通用方法：ai-agent-kit `references/fe-prototype-common.md`（分层/触发/Token 方法/评审清单）→ 工程装配：复制 `prototype-scaffold.html` 骨架 + 主色/目录/命名按 fe-developer「原型稿生成」→ 评审过 → 回填 `page-spec-template.md` |
