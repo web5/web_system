@@ -179,11 +179,18 @@ jobs:
       - name: 造夹具并逐字节比对
         run: bash scripts/redline/cases/run.sh
 
+      # 声明与实现的漂移检查：gates.yaml 里的触发面必须与 bash 的 case 分支逐个相等。
+      # 为什么放这条 job 而不是别处：它和黄金用例是同一件事的两面 ——
+      #   用例证明「行为没变」，lint 证明「声明没撒谎」。少一半都只是半个基线。
+      - name: 校验 gates.yaml 与 bash 一致（声明/实现漂移）
+        run: node scripts/redline/gates-lint.ts
+
       - name: 失败时给出差异摘要
         if: failure()
         run: |
           echo "期望值在 scripts/redline/cases/expected/，实际差异见上一步输出"
           echo "本地复现：bash scripts/redline/cases/run.sh --keep（保留夹具仓库路径）"
+          echo "若 gates-lint 报漂移：以 bash 为准改 gates.yaml，不要反过来改 bash 去迁就声明"
 
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
   #
