@@ -1,0 +1,818 @@
+# ============================================================
+# gates.yaml — 红线门禁的单一真相源（S1 语义抽取产物）
+#
+# 设计：~/AiWorkspace/30-任务产物/2026-10-30-门禁脚本架构重估/门禁脚本重构方案.md
+# 台账：#8251（S0 黄金用例集已完成，本文件是 S1）
+#
+# 为什么要有这个文件
+#   同一道门的定义此前散在 6 处手抄：bash 函数体 / 豁免白名单 / 采集口径 /
+#   gates 文档表格 / PR 模板 / 变异测试 case。6 份手抄 = 6 个漂移面。
+#   加一道门要同步 13 个文件（R17 反查实证）。本文件把「门的语义」收成一份。
+#
+# 🔴 现状：status=declared —— 执行权威仍是 bash，本文件是**声明**
+#   与 bash 不一致时以 bash 为准，并立刻改本文件（gates-lint 会拦）。
+#   S2 引擎落地后 status 改 enforcing，S3 切主后 bash 退场。
+#
+# 改判据的正确顺序（S1 阶段）
+#   1) 先改 bash + 黄金用例（行为先成立）
+#   2) 再改本文件对齐
+#   3) bash scripts/redline/gates-lint.ts 必须绿
+# ============================================================
+
+version: 1
+schema: gate-spec/v1
+status: declared
+updated: 2026-10-30
+owner: 研发部
+
+meta:
+  authority: bash
+  authority_files: ["scripts/redline/scan-rules.sh", "scripts/redline/gate-shared.sh", "scripts/redline/check-commit-msg.sh"]
+  invariant: 本文件与 bash 判定不一致时，以 bash 为准；lint 负责发现不一致并阻断
+  history_note: 编号是长出来的，不是设计的 —— 无 R7，R6 不在 scan-rules.sh，R3/R4 曾一号两义；本文件用 sub 把一号两义拆开
+
+# ---------------- 约定 ----------------
+conventions:
+  levels:
+    error: 阻断，进程退出码 1
+    warning: 提示；--strict 下计入退出码
+    notice: 只做计数提示，从不阻断
+  stages: [line, file, range, commit, repo, delegated, external]
+  # git name-status 状态字母
+  status_letters: [A, M, D, R]
+  # 凭证 trailer 的通用解析口径（与 bash 的 `grep -E '^Name:[[:space:]]*[^[:space:]]+'` 一致）
+  trailer:
+    anchor: line_start
+    case_sensitive: true
+    take: first_match
+    separator: ":"
+  # merge commit 一律不进 commit 级判定（合并语义不等于改动）
+  skip_merges: true
+
+# ---------------- 豁免机制（横跨 8 道门） ----------------
+# 语义全部来自 gate-shared.sh §1；R9b 自己内联了一份同口径循环（历史包袱）
+exemption:
+  trailer: Micro-exempt
+  formats:
+    scoped: "<门号>[,<门号>…]: <理由>"
+    legacy: "<理由>"
+  # 门号后必须紧跟冒号才是分类豁免。理由正文以门号开头（实证 db526889 的 "R9b "）
+  # 若按「首个 token 是门号」判，会把存量一票否决误判成分类豁免 —— 行为突变
+  gate_prefix_rule: 门号列表后必须紧跟冒号，否则按旧格式解析
+  legacy_semantics: 一票否决，豁免所有 eligible 门（向后兼容，不得取消）
+  eligible_gates: [R9b, R10, R11, R13, R14, R15, R17, R18]
+  # R19 不接受豁免：空提交没有任何改动面，豁免只对有改动面的门有意义
+  ineligible_gates: [R19, R20, R21]
+  not_applicable_note: 行级/文件级门（R1~R8）根本没有豁免机制 —— 它们的例外是路径白名单（exclude_paths）与作用域本身，写 Micro-exempt 对它们完全无效。R9 的例外是同行 passport，也不是 Micro-exempt。判断「这道门能不能豁免」只看 eligible_gates，不看它是不是 warning 级
+  quality:
+    min_reason_chars: 10
+    empty_values: ["yes", "no", "true", "false", "ok", "n/a", "none", "tbd", "wip", "skip", "是", "否", "无", "不需要", "不用"]
+    batch:
+      min_ui_files: 5
+      require_file_count: true
+      require_rootcause_keyword: true
+      rootcause_keywords: ["同一", "统一", "批量", "共性", "同样", "同一个", "同批", "共同", "根因"]
+    # 生效日：2026-11-01 00:00:00 +0800。此前的 commit 不追溯翻红，只报 R20 提醒
+    # 实证：6796d16b（2026-10-23，11 个 UI 文件）若追溯会从 warning 直接变 error
+    strict_from: 1793462400
+  env_overrides:
+    EXEMPT_MIN_REASON_LEN: min_reason_chars
+    EXEMPT_BATCH_MIN_FILES: batch.min_ui_files
+    EXEMPT_QUALITY_STRICT_FROM: strict_from
+
+# ---------------- 可复用触发面 ----------------
+# 这些 glob 此前在 scan-rules.sh 与 gate-shared.sh 各写一份（is_ui_file / exempt_is_ui_file）
+# lint 会逐个比对，防止两份漂移
+scopes:
+  code_file:
+    desc: 可执行源码（行级规则的作用域）
+    include: ["*.ts", "*.tsx", "*.vue", "*.js", "*.jsx", "*.mjs", "*.cjs"]
+  ts_file:
+    desc: TypeScript 源码（R4.any 只卡这些）
+    include: ["*.ts", "*.tsx", "*.vue"]
+  ui_file:
+    desc: UI 源码。不能写成 packages/ui/* —— 会把 package.json / tsconfig 也算成 UI，改个 lint 脚本就要求设计评审（2026-10-22 实测误报）
+    include: ["*.wxml", "*.wxss", "*.vue", "apps/*/pages/*", "apps/*/components/*", "apps/*/src/*.vue", "packages/ui/src/*", "app.json", "apps/*/app.json"]
+  contract_file:
+    desc: 契约与数据变更面。收窄原则宁窄勿宽 —— 把整个 packages/agent-core 纳入会让内部实现改动也判契约变更，摩擦过大必被关掉
+    include: ["archive/migrations/*", "packages/types/*", "packages/agent-core/src/interfaces/*", "servers/mcp-gateway/src/*/tools/*", "servers/*/src/*/*.controller.ts", "servers/*/src/*/*.controller.js"]
+  release_file:
+    desc: 发布与环境面。测试通过不等于能上线
+    include: ["ecosystem.config.cjs", "ecosystem.config.js", "servers/*/.env", "servers/*/.env.*", "scripts/.env.deploy", "scripts/.env.deploy.*", "scripts/pipeline/*", "scripts/publish-*.sh", "scripts/deploy-*.sh", "scripts/bootstrap.sh", "servers/deploy-console/src/pipeline/*", ".github/workflows/*"]
+  test_path:
+    desc: 测试/夹具路径（多条规则在此豁免）
+    include: ["*/test/*", "*/tests/*", "*/__tests__/*", "*/spec/*", "*.spec.*", "*.test.*", "*/fixtures/*", "*/mocks/*", "*/mock/*"]
+  passport:
+    desc: 通行证（原型/规格书）。除下列 glob 外还认 is_spec_doc —— specs/ 或 docs/ui/page-specs/ 下、文件名或目录名含 page-spec / prototype / 原型
+    include: ["*/prototype/*", "docs/ui/prototypes/*", "*/page-spec*.md"]
+    binding: partial
+
+# ============================================================
+# 门清单
+# ============================================================
+gates:
+
+  # ---------------- 行级（batch 3，可能移交 ESLint） ----------------
+  - id: R1
+    sub: null
+    title: 调试残留
+    level: error
+    stage: line
+    batch: 3
+    trigger:
+      scope: code_file
+      skip_comment_line: true
+      exclude_paths: ["scripts/*.mjs", "scripts/*.cjs", "apps/*/scripts/*.js", "apps/*/scripts/*.mjs", "apps/*/scripts/*.cjs", "archive/migrations/*.mjs", "archive/migrations/*.cjs", ".codebuddy/skills/*/scripts/*.js", ".codebuddy/skills/*/scripts/*.mjs", ".codebuddy/skills/*/scripts/*.cjs", ".codebuddy/agent-kit/skills/*/scripts/*.js", ".codebuddy/agent-kit/skills/*/scripts/*.mjs", ".codebuddy/agent-kit/skills/*/scripts/*.cjs"]
+      exclude_reason: CLI 脚本的 stdout 是产品行为（进度/结论日志），不是调试残留。2026-09-29 / 2026-10-10 / 2026-10-21 / 2026-10-22 四次 CI 实测误报累积而成
+      match: '(^|[^0-9A-Za-z_])(console\.(log|debug)\(|debugger([^0-9A-Za-z_]|$))'
+    credential: null
+    exempt: false
+    message: 调试残留(console.log/debug/debugger)
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r1-console-log", "line-r1-script-whitelist"]
+
+  - id: R2
+    sub: R2.secret-file
+    title: 敏感文件入库
+    level: error
+    stage: file
+    batch: 3
+    trigger:
+      match_path: '(^|/)[^/]*\.(pem|key|crt|cert)$'
+      alt:
+        match_path: '(^|/)\.env($|\.)'
+        exclude_paths: ["*.example*"]
+    credential: null
+    exempt: false
+    message: 敏感文件入库
+    hint: 证书/私钥文件不应提交；.env* 不应提交（.gitignore 已兜底）
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R2
+    sub: R2.cred
+    title: 疑似硬编码凭据
+    level: error
+    stage: line
+    batch: 3
+    trigger:
+      scope: code_file
+      exclude_scopes: [test_path]
+      exclude_paths: ["*.example.*", "*.md"]
+      skip_comment_line: true
+      case_insensitive: true
+      match: '(password|passwd|secret|api[_-]?key|private[_-]?key|access[_-]?token)[^=;]*=[[:space:]]*["''][^"'']{8,}'
+    credential: null
+    exempt: false
+    message: 疑似硬编码凭据
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r2-cred"]
+
+  - id: R3
+    sub: R3.placeholder
+    title: 占位残留（TODO/FIXME）
+    level: error
+    stage: line
+    batch: 3
+    trigger:
+      scope: code_file
+      skip_comment_line: false
+      match: '(^|[^0-9A-Za-z_])(TODO|FIXME)([^0-9A-Za-z_]|$)'
+    credential: null
+    exempt: false
+    message: 占位残留(TODO/FIXME)
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r3-todo"]
+
+  - id: R3
+    sub: R3.weak
+    title: 弱占位（TEMP/TBD/HACK/XXX）
+    level: warning
+    stage: line
+    batch: 3
+    trigger:
+      scope: code_file
+      skip_comment_line: false
+      match: '(^|[^0-9A-Za-z_])(TEMP|TBD|HACK|XXX)([^0-9A-Za-z_]|$)'
+    credential: null
+    exempt: false
+    message: 弱占位(TEMP/TBD/HACK/XXX)
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R4
+    sub: R4.ts-ignore
+    title: TS 铁律违反（@ts-ignore / @ts-nocheck）
+    level: error
+    stage: line
+    batch: 3
+    trigger:
+      scope: code_file
+      skip_comment_line: false
+      match: '@ts-(ignore|nocheck)'
+    credential: null
+    exempt: false
+    message: TS 铁律违反(@ts-ignore/nocheck)
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R4
+    sub: R4.any
+    title: 'TS 铁律违反（裸 : any）'
+    level: error
+    stage: line
+    batch: 3
+    trigger:
+      scope: ts_file
+      exclude_scopes: [test_path]
+      exclude_paths: ["*.d.ts"]
+      skip_comment_line: true
+      match: ':[[:space:]]*any([^0-9A-Za-z_]|$)'
+      history_note: '原写法 `[[:space:],);\]}]` 中 `\]` 在 POSIX 字符类里不是转义，整个类解析错，`const a: any = 1` / `any[]` / `x: any;` 全部漏报（存量 bug，已修）'
+    credential: null
+    exempt: false
+    message: 'TS 铁律违反(: any)'
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r4-any", "line-r4-any-spec"]
+
+  - id: R5
+    sub: R5.main-cors
+    title: main.ts 无参启用 CORS
+    level: warning
+    stage: file
+    batch: 3
+    trigger:
+      match_path: 'servers/*/src/main.ts'
+      file_contains: 'enableCors\(\s*\)'
+    credential: null
+    exempt: false
+    message: CORS 无参启用
+    hint: 应读取 config CORS_ORIGINS
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r5-cors-main"]
+
+  - id: R5
+    sub: R5.enable-cors
+    title: CORS 无参启用（行级）
+    level: warning
+    stage: line
+    batch: 3
+    trigger:
+      match_path: 'servers/*/src/*'
+      skip_comment_line: true
+      match: 'enableCors\([[:space:]]*\)'
+    credential: null
+    exempt: false
+    message: CORS 疑似硬编码
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r5-cors-main"]
+
+  - id: R5
+    sub: R5.wildcard-origin
+    title: 通配符 origin（行级）
+    level: warning
+    stage: line
+    batch: 3
+    trigger:
+      match_path: 'servers/*/src/*'
+      skip_comment_line: true
+      match: 'origin[[:space:]]*:[[:space:]]*["'']\*["'']'
+    credential: null
+    exempt: false
+    message: CORS 疑似硬编码
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R8
+    sub: null
+    title: main.ts 缺全局异常过滤器
+    level: warning
+    stage: file
+    batch: 3
+    trigger:
+      match_path: 'servers/*/src/main.ts'
+      file_contains: 'enableCors'
+      file_not_contains: 'useGlobalFilters'
+    credential: null
+    exempt: false
+    message: main.ts 缺全局异常过滤器
+    hint: enableCors 存在但未注册 useGlobalFilters
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["line-r5-cors-main"]
+
+  # ---------------- 范围级（delegated：判定在 python 辅助脚本） ----------------
+  - id: R9
+    sub: null
+    title: UI 结构变更须同行原型/规格
+    level: warning
+    stage: range
+    batch: 2
+    trigger:
+      conditions:
+        any_of:
+          - status: [A]
+            match_path: 'apps/*/pages/*'
+          - match_path: 'apps/*/app.json'
+            diff_contains: '"(pages|tabBar)"'
+      pass_when:
+        range_contains_scope: passport
+    credential: null
+    exempt: false
+    exempt_note: R9 的例外是「同 diff 含 passport」，不是 Micro-exempt —— 写豁免对 R9 无效
+    message: UI 结构变更未经原型/规格
+    hint: 须同 diff 含 apps/*/prototype/** 或 specs/**/page-spec*.md（见 specs/kit-sop-enforcement/design.md）
+    spec_ref: specs/kit-sop-enforcement/design.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R9b
+    sub: null
+    title: 既有 UI 改动须同行原型/豁免
+    level: warning
+    stage: range
+    batch: 1
+    trigger:
+      status: [M, D, R]
+      scope: ui_file
+      threshold:
+        lines: 5
+        or_diff_contains: '<(view|template|block)'
+      note: 新增（A）由 R9 管，此处只判修改；passport 判定必须先于新增文件 continue，否则「先提原型再提 UI」的正规走法反被判无同行原型（2026-10-11 实测误报）
+      pass_when:
+        range_contains_scope: passport
+    credential: null
+    exempt: true
+    exempt_note: R9b 在 bash 里是内联循环（不走 exempt_for_gate），口径必须与其它门一致
+    message: 既有 UI 改动无同行原型/豁免
+    loc_template: '{ui_file_count} 个文件 / {lines} 行'
+    hint: '须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）'
+    spec_ref: specs/kit-sop-enforcement/design.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  # ---------------- commit 级凭证门（batch 1：8 道，重复骨架集中地） ----------------
+  - id: R10
+    sub: null
+    title: UI commit 须带 Proto 凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      scope: ui_file
+      status: [A, M, D, R]
+    credential:
+      trailer: Proto
+      accept: [sha]
+      checks:
+        - must_be_ancestor_of: 'commit^'
+    exempt: true
+    message: UI commit 缺 Proto 凭证
+    message_ancestor: UI commit 的 Proto 指向非祖先
+    hint: 'UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）'
+    spec_ref: specs/rd-process-model/design.md
+    also_enforced_in: ["scripts/redline/check-commit-msg.sh"]
+    owner: 研发部
+    validity:
+      status: unmeasured
+      note: 与 R11 同源（UI 改动），豁免时通常一起豁免
+    evidence: ["commit-r10-ui-no-proto"]
+
+  - id: R11
+    sub: null
+    title: 设计评审凭证
+    level: error
+    stage: commit
+    batch: 1
+    trigger:
+      any_of:
+        - branch: ui_commit
+          scope: ui_file
+        - branch: spec_commit
+          scope: passport
+      note: 纯后端 PR 零摩擦 —— 只有 UI 源码或原型/规格 commit 才进入判定
+    credential:
+      trailer: Design
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    exempt_scope: 仅 ui_commit 分支可豁免；spec_commit 分支判的是报告内容，不接受豁免
+    message: UI commit 缺设计评审凭证
+    message_non_pass: UI commit 的 Design 凭证非 pass
+    message_report_missing: Design 凭证指向的报告不存在
+    message_blocking: 设计评审阻塞项未清零
+    hint: 'UI 源码 commit 的 message 须带 Design: pass（D3 已过）；纯视觉微调走 Micro-exempt: <理由>（§3.7）'
+    spec_ref: specs/design-reviewer/design.md
+    also_enforced_in: ["scripts/redline/check-commit-msg.sh"]
+    owner: 研发部
+    validity:
+      status: unmeasured
+      note: error 级 —— 唯一阻断的 commit 门，2026-09-22 拍板不设观察期
+    evidence: []
+
+  - id: R11b
+    sub: null
+    title: 原型锚点漂移
+    level: warning
+    stage: delegated
+    batch: 2
+    level_switch:
+      env: DESIGN_ANCHOR_MODE
+      values:
+        off: 跳过（默认，存量回填前）
+        warn: warning
+        strict: error
+        scoped: DESIGN_ANCHOR_SCOPE 内的 app 为 error，其余 warning
+    trigger:
+      delegate: scripts/redline/scan-design-drift.py
+    credential: null
+    exempt: false
+    message: 原型锚点漂移
+    spec_ref: specs/design-reviewer/design.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+      note: 未回填不等于已漂移 —— 原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规
+    evidence: []
+
+  - id: R13
+    sub: null
+    title: 契约与数据变更评审凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      scope: contract_file
+      threshold:
+        lines: 5
+      note: 控制器类另受行数阈值约束 —— 一行微调不该要求契约评审；二进制文件 numstat 为 `-`，跳过计数
+    credential:
+      trailer: Contract
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    message: 契约与数据变更 commit 缺评审凭证
+    message_report_missing: Contract 凭证指向的报告不存在
+    message_blocking: 契约与数据变更评审阻塞项未清零
+    hint: 'message 须带 Contract: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: specs/rd-process-model/design.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-r13-migration", "commit-r13-migration-small", "commit-r13-controller-shallow"]
+
+  - id: R14
+    sub: null
+    title: 发布与环境变更评审凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      scope: release_file
+    credential:
+      trailer: Release
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    exempt_note: R13 与 R14 此前共用一次豁免判定，一条豁免会顺带放行另一门（卡 2.8 已拆开）
+    message: 发布与环境变更 commit 缺评审凭证
+    message_report_missing: Release 凭证指向的报告不存在
+    message_blocking: 发布与环境变更评审阻塞项未清零
+    hint: 'message 须带 Release: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: docs/development/release-review-checklist.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-release"]
+
+  - id: R15
+    sub: null
+    title: 新增对外接口评审凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      status: [A]
+      match_path: '*/controller.ts'
+      match_path_alt: '*/controller.js'
+      note: 只卡**新增**接口（越权/入参校验/错误处理语义/敏感信息泄露）。改既有实现不触发 —— 本门主观性最强、成本最高，触发面宁可窄
+    credential:
+      trailer: Code
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    message: 新增对外接口 commit 缺评审凭证
+    message_report_missing: Code 凭证指向的报告不存在
+    message_blocking: 新增对外接口评审阻塞项未清零
+    hint: 'message 须带 Code: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: docs/development/code-review-checklist.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-new-api", "commit-r13-controller-shallow"]
+
+  - id: R17
+    sub: null
+    title: 测试用例凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      status: [A, M]
+      match_path: 'servers/*/src/*'
+      match_path_alt: 'apps/*/src/*'
+      extensions: [".ts", ".tsx", ".mjs", ".jsx", ".vue"]
+      exclude_paths: ["*.spec.*", "*.test.*"]
+      note: 卡 2.1 放宽过触发面 —— 原「只认新增」实测近 300 commit 只命中 6 次；现为 A|M 递归匹配
+    credential:
+      trailer: Test
+      accept: [pass, path]
+      checks:
+        - path_exists_anywhere: true
+      path_exists_anywhere_note: 用例文档常落在任务目录（仓库外），故必须同时查 commit 树与文件系统，只查树会必然误报
+    exempt: true
+    message: 测试用例 commit 缺评审凭证
+    message_report_missing: Test 凭证指向的用例文档不存在
+    hint: 'message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: ~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+      note: '2026-10-30 实测触发率约 45% 而 Test: 真实使用 0 次 —— 观察 2 周，出现 ≥5 次真实填写再升 error'
+    evidence: ["commit-r17-fake-path", "commit-r17-pass", "commit-r17-real-path", "commit-new-api"]
+
+  - id: R18
+    sub: null
+    title: 研发方案与发布清单凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      status: [A]
+      match_path: '*/controller.ts'
+      match_path_alt: '*/controller.js'
+      match_path_alt2: '*/service.ts'
+      match_path_alt3: 'apps/*/src/views/*'
+    credential:
+      trailer: Plan
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    message: 研发方案与发布清单 commit 缺评审凭证
+    message_report_missing: Plan 凭证指向的报告不存在
+    message_blocking: 研发方案与发布清单评审阻塞项未清零
+    hint: 'message 须带 Plan: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: ~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-new-api", "commit-r13-controller-shallow"]
+
+  - id: R19
+    sub: null
+    title: 空提交
+    level: error
+    stage: commit
+    batch: 2
+    trigger:
+      condition: 该 commit 的树与其父完全相同（非 merge）
+      skip_merges: true
+    credential: null
+    exempt: false
+    exempt_note: 空提交没有任何改动面，豁免对它没有意义 —— 接受豁免等于留了同一个后门（实证 558d8cb5 曾用 Micro-exempt 绕过）
+    message: 空提交（无任何文件改动）
+    hint: 空提交无意义；如需重跑 CI 请用 CI 重跑按钮，而不是提交空 commit（§2.9）
+    spec_ref: ~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-empty"]
+
+  - id: R20
+    sub: null
+    title: 豁免理由质量
+    level: warning
+    stage: commit
+    batch: 2
+    trigger:
+      when: 某 commit 带 Micro-exempt trailer 且该门被豁免覆盖
+      check: exemption.quality
+    credential: null
+    exempt: false
+    message: 豁免理由不达标（豁免未生效）
+    message_stock: 豁免理由待改进（存量·未追溯，豁免仍生效）
+    hint: '{reason}；请补充可审计的理由后重写 trailer'
+    dedupe: 同一 commit 只报一次（多个门会问到同一个 commit）
+    spec_ref: ~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-exempt-weak-reason"]
+
+  - id: R21
+    sub: null
+    title: 旧格式豁免提示
+    level: notice
+    stage: range
+    batch: 2
+    trigger:
+      when: range 内存在旧格式（未按门分类）豁免
+      aggregate: 每个 commit 只计一次，全 range 汇总成一行
+    credential: null
+    exempt: false
+    exempt_note: 逐 commit 报会把基线刷爆（存量 40 commit 里 20+ 条旧格式），反而看不见新增问题
+    message: 有 {count} 个 commit 用旧格式豁免（未按门分类）
+    hint: '旧写法 Micro-exempt: <理由> 仍是一票否决（豁免全部 8 门，向后兼容）；建议改用 Micro-exempt: <R门号>: <理由>，只豁免指定门'
+    spec_ref: ~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: ["commit-exempt-legacy"]
+
+  # ---------------- 仓库级 ----------------
+  - id: R12
+    sub: null
+    title: kit 能力源与运行源同源
+    level: warning
+    stage: repo
+    batch: 2
+    trigger:
+      compare_pair:
+        src: .codebuddy/agent-kit/skills
+        dst: .codebuddy/skills
+      exclude: ["be-developer", "fe-developer", "design-reviewer", "release-reviewer", "contract-reviewer", "code-reviewer", "rd-digital-agent/references/project-context.md"]
+      note: 上游只写能力源，IDE 加载的是运行源，中间缺 apply 即漂移（#117/#118）
+    credential: null
+    exempt: false
+    message: kit 能力源与运行源漂移
+    hint: 建议：bash scripts/redline/apply-agent-kit.sh（第二跳一键镜像）
+    spec_ref: docs/development/gates/02b-技术CICD机制.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  - id: R16
+    sub: null
+    title: SSE 事件契约一致性
+    level: warning
+    stage: delegated
+    batch: 2
+    trigger:
+      delegate: scripts/redline/check-sse-contract.py
+      note: 不依赖 range —— 比对当前文件内容，改动任一相关文件即触发
+    credential: null
+    exempt: false
+    message: SSE 消费方联合类型与 agent-core 真相源不一致
+    hint: 契约真相源：packages/agent-core 的 StreamEventType（docs/api/contracts.md C2）
+    spec_ref: docs/api/contracts.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+  # ---------------- 仓外（编号连续性说明用） ----------------
+  - id: R6
+    sub: null
+    title: 改动包选择
+    level: warning
+    stage: external
+    batch: external
+    trigger:
+      implementer: scripts/ci/changed-packages.sh
+      note: 不在 scan-rules.sh 里 —— 编号是长出来的，不是设计的（无 R7）
+    credential: null
+    exempt: false
+    message: 改动包选择
+    spec_ref: docs/development/质量门禁总纲.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+    evidence: []
+
+# ============================================================
+# 已知分歧（记录现状，不是"应该是这样"）
+# 每条必须带台账号 —— 没有台账号的分歧等于没人管
+# ============================================================
+known_divergences:
+  - id: D1
+    gates: [R13, R15, R18]
+    summary: 同一类文件在三门的触发面不一致
+    detail: R13 用 `servers/*/src/*/*.controller.ts`（要求 src 下还有一层），R15/R18 用 `*/*.controller.ts`（任意层）→ 单层 `servers/api/src/x.controller.ts` 被 R13 静默漏报
+    evidence: ["commit-r13-controller-shallow"]
+    ledger: 8255
+    status: 待拍板（补齐会扩大门禁面，不宜擅自动）
+
+  - id: D2
+    gates: [R5]
+    summary: 同一个 app.enableCors() 报两条
+    detail: 文件级「CORS 无参启用」+ 行级「CORS 疑似硬编码」，信息冗余但不影响阻断
+    evidence: ["line-r5-cors-main"]
+    ledger: 8255
+    status: 待定（是否去重）
+
+  - id: D3
+    gates: [R3, R4]
+    summary: 曾一号两义
+    detail: 'R3 同时指 TODO/FIXME（error）与 TEMP/TBD（warn）；R4 同时指 @ts-ignore 与 : any。报「R4 违规」时人得先猜是哪一类'
+    evidence: ["line-r3-todo", "line-r4-any"]
+    ledger: 8251
+    status: 本文件已用 sub 拆开（R3.placeholder / R3.weak / R4.ts-ignore / R4.any），报错文案仍沿用旧写法，S3 切主时统一
+
+# ============================================================
+# 覆盖缺口（如实列，不写"基本覆盖"）
+# 每条：哪个门 / 缺什么 / 补齐顺序理由
+# ============================================================
+uncovered:
+  - gate: R2
+    sub: R2.secret-file
+    missing: .env 入库的阳性用例
+    reason: 夹具里提交 .env 需要绕过 .gitignore，成本高于价值
+  - gate: R3
+    sub: R3.weak
+    missing: TEMP/TBD 弱占位阳性
+    reason: 与 R3.placeholder 同一路径，优先级低
+  - gate: R4
+    sub: R4.ts-ignore
+    missing: @ts-ignore 阳性
+    reason: 优先级低（判据与 R4.any 同为字符串匹配）
+  - gate: R5
+    sub: R5.wildcard-origin
+    missing: origin:'*' 阳性
+    reason: 与 R5.enable-cors 同场景触发，单独隔离需再造夹具
+  - gate: R9b
+    missing: 全部（这是 batch 1 里唯一没有用例的门，也是最容易被误报的门）
+    reason: 需造「修改既有 UI 文件 ≥5 行且同 range 无 passport」的夹具；补齐优先级最高
+  - gate: R6
+    missing: 全部
+    reason: 实现不在本仓库的 scan-rules.sh（scripts/ci/changed-packages.sh），门禁扫描碰不到
+  - gate: R9
+    missing: 新增页面 / app.json IA 变化
+    reason: 需构造 app.json 的 pages 段 diff
+  - gate: R11
+    missing: 全部（这是唯一 error 级 commit 门，最该有）
+    reason: '夹具需造 Design: <报告路径> + 报告头部 阻塞: N，三态（缺凭证/非 pass/阻塞未清零）'
+  - gate: R11b
+    missing: 全部
+    reason: 依赖 python 扫描器 + 原型 data-dr 属性
+  - gate: R12
+    missing: 全部
+    reason: 需造 .codebuddy 双源漂移夹具，体积大
+  - gate: R16
+    missing: 全部
+    reason: 依赖 python 辅助脚本与真实 StreamEventType
+
+# 夹具级（不属于任何一道门的校验，防止 scan 本身回归）
+harness_evidence:
+  - id: line-no-trailing-newline
+    protects: 文件末尾无换行时最后一行不得被整行跳过（存量漏洞，2026-10-22 实测）
+  - id: range-multi-commit
+    protects: 一个 range 内多门同时命中时的汇总口径
+  - id: commit-exempt-scoped
+    protects: 分类豁免只放行列出的门（R17 放行，R13/R15/R18 仍判）—— 卡 2.8 的核心断言，不属于单一门

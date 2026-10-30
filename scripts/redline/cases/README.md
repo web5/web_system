@@ -138,7 +138,7 @@ warnings=0
 
 ## 下一步（门禁架构重构 S1/S2 的用法）
 
-1. **S1 语义抽取**：把 `scenarios.tsv` 的每条场景当"行为规格"，逐条翻译成 `gates.yaml` 里的判据
+1. ~~**S1 语义抽取**~~ **已落（2026-10-30）**：`scripts/redline/gates.yaml` 是门的声明，`scripts/redline/gates-lint.ts` 负责把它钉在 bash 行为上（触发面逐个比对 + 用例覆盖 + 豁免接线）。见 [`docs/development/gates/00-单一真相源.md`](../../../docs/development/gates/00-单一真相源.md)
 2. **S2 影子比对**：新引擎跑本用例集，输出必须与 `expected/` 逐字节一致。不一致就停下来看是人有意改的行为还是重写引入的偏差
 3. **S3 切主**：切换后把 `expected/` 重新生成为基线的唯一实现，旧脚本归档
 
