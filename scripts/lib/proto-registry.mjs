@@ -121,6 +121,10 @@ export const OUT_OF_SCOPE_PROTOS = {
     '发布平台历史终稿：v5～v14 共 11 份旧稿已于 2026-10-22 收敛，仅留这一份作设计过程记录（README §三）。',
   'radius-style-dual.html':
     '外观风格探索稿：圆角双风格（柔和/清爽）对比，属设计系统层探索，不是业务模块页。',
+  'admin-user-memory.html':
+    '当前有效稿（README §一）：用户详情页「用户记忆」卡（UserDetail.vue）。宿主是 admin 用户管理模块（台账 #8229 批次 2.1），不并入 Agents 整合稿。',
+  'portal-user-memory.html':
+    '当前有效稿（README §一）：记忆画像页（/profile/memory，Memory.vue）。宿主是 portal（C 端工作台，台账 #8229 批次 2.1），不并入 admin 整合稿。',
 };
 
 /* ── 占位屏的说明文案构造器（不许伪造业务数据） ───────────────────────── */

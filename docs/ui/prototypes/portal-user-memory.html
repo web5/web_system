@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>portal · 记忆页升级 · 记忆画像 · 交互原型 v1</title>
+<!--
+  ============================================================
+  portal · 记忆页（/profile/memory）升级 · 原型（桌面 Web / portal 亮色）
+  · 目标端：portal 桌面三栏壳（顶栏 + 工作区），嵌入 Memory.vue 所在的 .sub 页
+    ⚠️ page-spec「原型继承」表原假设为「portal 移动壳」——实测 portal 为桌面 Web
+    （App.vue 三栏外壳，Memory.vue 渲染于工作区，max-width 720），本稿按实测壳画，
+    回填时把该行改为「portal 桌面三栏壳」
+  · 依据：page-spec-用户记忆面板.md（台账 #8229 批次 2.1 · 交互清单 + 9 场景包矩阵 7–9）
+  · 本稿范围：现有记忆页升级 —— 顶部摘要卡（画像正文 + 条数/更新时间/待更新标）
+    + 下方明细分组（保留现有 事实/偏好/习惯 分组与删除交互，不退化）
+  · 页头口径（page-spec）：标题「记忆画像」副标题「AI 记住的关于你的信息」，
+    「重新生成」为文字型链接按钮（非实心按钮，portal 轻量风格）
+  · 🔴 删除一致性（v1 口径）：删除明细后摘要不即时刷新（摘要由 LLM 从明细重算，
+    下次对话后更新），摘要卡必须显式标「待更新」，不能让用户以为摘要已同步
+  · 🔴 删除为破坏性操作：现有实现直接删（无确认）——本稿按 page-spec 交互清单
+    「破坏性 → 二次确认『确定删除这条记忆？』」画轻量气泡确认，回填时标注
+    「实现需补确认」（现有交互不退化 = 分组/条目形态/删除入口不变，确认是对破坏性的补齐而非退化）
+  · 空值口径：本稿无文本输入框，不涉 placeholder；分组标题用业务词（事实/偏好/习惯）
+    （表单控件与开关规范 v1.3 · docs/ui/page-specs/form-controls-and-toggles-v1.md）
+  · ⚠️ 场景切换条为原型演示控件，不进实现；画像与记忆内容均为演示数据
+  ============================================================
+-->
+<style>
+  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（portal 品牌色已收敛为 #F97316 系，
+     见 apps/portal/src/config/theme.ts —— 页面样式只引 token，不写裸 hex） */
+  :root{
+    --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
+    --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
+    --ws-text-primary:#171717; --ws-text-secondary:#525252; --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
+    --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
+    --ws-accent:#FF8C42; --ws-accent-soft:rgba(255,140,66,.15);
+    --ws-on-brand:#FFFFFF;
+    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC; --ws-ok-700:#256E35;
+    --ws-danger:#E5484D; --ws-danger-soft:#FDECEC;
+    --ws-brand-700:#C2410C;
+    --ws-warn:#E8833A;
+    --ws-shadow-shell:0 24px 70px rgba(20,30,50,.14);
+    --ws-accent-soft-2:rgba(255,140,66,.04);
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px; --ws-radius-xl:12px;
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    --ws-shadow-float:0 8px 24px rgba(0,0,0,.18);
+    --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    --ws-text-body:#3F3F46; --ws-text-strong:#18181B;
+    --ws-leading-tight:1.25; --ws-leading-snug:1.4; --ws-leading-normal:1.6; --ws-leading-relaxed:1.75;
+    --ws-tracking-tight:-0.02em;
+    --ws-duration-fast:150ms; --ws-duration-base:200ms; --ws-duration-slow:300ms;
+    --ws-ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+    --ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);
+    --ws-control-sm:24px; --ws-control-md:32px;
+    --ws-icon-inline:16px;
+    --cat-fact-bg:#EFF6FF;   --cat-fact-tx:#1D4ED8;
+    --cat-pref-bg:#F5F3FF;   --cat-pref-tx:#6D28D9;
+    --cat-habit-bg:#ECFDF5;  --cat-habit-tx:#047857;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :focus-visible{outline:none;box-shadow:var(--ws-focus-ring);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:var(--ws-bg-page);min-height:100vh;padding:24px 20px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--ws-text-primary);
+  }
+  .proto-head{width:1180px;}
+  .proto-head h1{font-size:18px;font-weight:600;margin-bottom:6px;}
+  .proto-head .sub{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);}
+  .proto-head .sub b{color:var(--ws-brand-700);font-weight:600;}
+  .proto-head .sub code{padding:1px 5px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-subtle);
+    font-family:var(--ws-font-mono);font-size:12px;}
+
+  /* ===== 场景包切换条（原型演示控件，不进实现） ===== */
+  .scen-bar{width:1180px;border:1px dashed var(--ws-border);border-radius:var(--ws-radius-lg);
+    padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    font-size:12px;color:var(--ws-text-secondary);}
+  .scen-bar .lb{font-weight:600;color:var(--ws-text-primary);}
+  .scen-bar button{height:26px;padding:0 10px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);
+    background:var(--ws-bg-surface);font:inherit;font-size:12px;color:var(--ws-text-secondary);cursor:pointer;
+    transition:all var(--ws-duration-fast) var(--ws-ease-out);}
+  .scen-bar button:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .scen-bar button.on{background:var(--ws-brand-soft);border-color:var(--ws-brand-400);color:var(--ws-brand-700);font-weight:600;}
+  .scen-bar .hint{margin-left:auto;font-size:11px;color:var(--ws-text-tertiary);}
+
+  /* ===== portal 桌面三栏壳（简化：顶栏 + 工作区；左栏记录列表与本稿无关，略） ===== */
+  .pt-shell{width:1180px;height:860px;border-radius:14px;overflow:hidden;position:relative;
+    background:var(--ws-bg-page);border:1px solid var(--ws-border);box-shadow:var(--ws-shadow-shell);
+    display:flex;flex-direction:column;}
+  .pt-nav{height:52px;background:var(--ws-bg-surface);border-bottom:1px solid var(--ws-border);
+    display:flex;align-items:center;gap:20px;padding:0 22px;flex-shrink:0;}
+  .pt-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ws-accent);}
+  .pt-logo .dot{width:20px;height:20px;border-radius:var(--ws-radius-md);
+    background:linear-gradient(135deg,var(--ws-accent),var(--ws-brand-600));}
+  .pt-nav .ni{font-size:13px;color:var(--ws-text-secondary);cursor:pointer;}
+  .pt-nav .ni:hover{color:var(--ws-text-primary);}
+  .pt-nav .sp{flex:1;}
+  .pt-avatar{width:28px;height:28px;border-radius:50%;background:var(--ws-accent-soft);
+    color:var(--ws-brand-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+  .pt-work{flex:1;overflow:auto;display:flex;justify-content:center;}
+  .sub{width:720px;padding:20px 0 24px;}
+
+  /* 页头（对齐 Memory.vue 现有 .chead 形态） */
+  .chead{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .btn-back{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:none;
+    border-radius:var(--ws-radius-md);font:inherit;font-size:13px;color:var(--ws-text-secondary);
+    cursor:pointer;background:none;}
+  .btn-back:hover{background:var(--ws-bg-subtle);}
+  .btn-back svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .chead h1{font-size:18px;font-weight:600;color:var(--ws-text-primary);}
+  .chead .sp{flex:1;}
+
+  .tip{display:flex;align-items:center;gap:8px;padding:8px 16px;border:1px solid var(--ws-border);
+    border-radius:var(--ws-radius-md);background:var(--ws-bg-surface);font-size:13px;
+    color:var(--ws-text-secondary);margin-bottom:16px;}
+  .tip svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-brand-600);fill:none;
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:0 0 var(--ws-icon-inline);}
+
+  .lnk{color:var(--ws-brand-700);font-size:13px;cursor:pointer;font-weight:500;font-family:inherit;
+    border:none;background:none;padding:0;display:inline-flex;align-items:center;gap:4px;}
+  .lnk:hover{text-decoration:underline;}
+  .lnk[disabled]{color:var(--ws-text-disabled);cursor:not-allowed;text-decoration:none;}
+  .lnk svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .spin{width:11px;height:11px;border-radius:50%;border:2px solid var(--ws-border);
+    border-top-color:var(--ws-brand-600);animation:spin .8s linear infinite;display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ===== 摘要卡（轻量卡片，非 antd） ===== */
+  .sum-card{border:1px solid var(--ws-border);border-radius:var(--ws-radius-xl);
+    background:var(--ws-bg-surface);box-shadow:var(--ws-shadow-card);padding:16px 18px;margin-bottom:16px;}
+  .sum-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .sum-hd .t{font-size:14px;font-weight:600;color:var(--ws-text-strong);}
+  .sum-hd .sp{flex:1;}
+  .sum-body{font-size:13px;color:var(--ws-text-body);line-height:var(--ws-leading-relaxed);}
+  .sum-meta{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;
+    font-size:12px;color:var(--ws-text-secondary);}
+  .sum-meta .dot{color:var(--ws-text-tertiary);}
+  .sum-meta .num{font-variant-numeric:tabular-nums;}
+  .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:var(--ws-radius-sm);
+    font-size:12px;background:var(--ws-bg-subtle);color:var(--ws-text-secondary);white-space:nowrap;}
+  .tag.pend{background:var(--ws-brand-soft);color:var(--ws-brand-700);}
+
+  /* ===== 明细分组（复刻现有 .groups/.group/.row 形态，不退化） ===== */
+  .groups{display:flex;flex-direction:column;gap:16px;}
+  .group h3{font-size:14px;font-weight:600;color:var(--ws-text-primary);margin-bottom:8px;
+    display:flex;align-items:center;gap:6px;}
+  .group h3 .cat-tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;
+    border-radius:var(--ws-radius-sm);font-size:11px;font-weight:500;}
+  .group h3 em{font-style:normal;font-weight:400;font-size:12px;color:var(--ws-text-tertiary);margin-left:2px;}
+  .row{display:flex;align-items:center;gap:8px;padding:12px 16px;border:1px solid var(--ws-border);
+    border-radius:var(--ws-radius-md);background:var(--ws-bg-surface);margin-bottom:8px;}
+  .row .txt{flex:1;font-size:14px;line-height:var(--ws-leading-normal);color:var(--ws-text-primary);}
+  .rm{display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:var(--ws-radius-sm);
+    background:none;color:var(--ws-text-tertiary);cursor:pointer;flex:0 0 24px;}
+  .rm:hover{background:var(--ws-bg-subtle);color:var(--ws-danger);}
+  .rm svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+
+  /* 气泡二次确认（破坏性补齐；对应实现可用 a-popconfirm 轻量档） */
+  .pop{position:absolute;z-index:60;width:232px;background:var(--ws-bg-surface);
+    border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);box-shadow:var(--ws-shadow-float);
+    padding:12px 14px;display:none;}
+  .pop.show{display:block;animation:popIn .16s var(--ws-ease-out);}
+  @keyframes popIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  .pop .pt{font-size:13px;color:var(--ws-text-primary);line-height:var(--ws-leading-snug);}
+  .pop .pa{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+  .pop .pa .btn{height:26px;padding:0 12px;font-size:12px;border-radius:var(--ws-radius-md);
+    border:1px solid var(--ws-border);background:var(--ws-bg-surface);color:var(--ws-text-primary);
+    font-family:inherit;cursor:pointer;}
+  .pop .pa .btn.danger{background:var(--ws-danger);border-color:var(--ws-danger);color:var(--ws-on-brand);font-weight:500;}
+  .pop::before{content:'';position:absolute;top:-5px;width:8px;height:8px;background:var(--ws-bg-surface);
+    border-left:1px solid var(--ws-border);border-top:1px solid var(--ws-border);transform:rotate(45deg);}
+
+  /* 空态 / 失败态 / 骨架 */
+  .blk-empty,.blk-error{padding:36px 16px;text-align:center;}
+  .blk-empty .ic,.blk-error .ic{width:40px;height:40px;margin:0 auto 10px;color:var(--ws-text-tertiary);opacity:.7;}
+  .blk-empty .ic svg,.blk-error .ic svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .blk-empty .t{font-size:13px;color:var(--ws-text-secondary);margin-bottom:4px;}
+  .blk-empty .d{font-size:12px;color:var(--ws-text-tertiary);margin-bottom:12px;}
+  .blk-error .t{font-size:13px;color:var(--ws-text-secondary);margin-bottom:12px;}
+  .blk-error .ic{color:var(--ws-danger);opacity:.85;}
+  .skl .ln{height:14px;border-radius:6px;margin-bottom:10px;
+    background:linear-gradient(90deg,var(--ws-bg-subtle) 25%,var(--ws-bg-active) 37%,var(--ws-bg-subtle) 63%);
+    background-size:400% 100%;animation:sk 1.2s ease infinite;}
+  @keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  .toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);
+    background:rgba(23,23,23,.85);color:var(--ws-on-brand);padding:9px 18px;border-radius:var(--ws-radius-lg);
+    font-size:13px;z-index:70;opacity:0;pointer-events:none;
+    transition:opacity var(--ws-duration-base) var(--ws-ease-out),transform var(--ws-duration-base) var(--ws-ease-out);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="proto-head">
+  <h1>portal · 记忆页升级 ·「记忆画像」· 交互原型 v1</h1>
+  <div class="sub">
+    目标端：<b>portal 桌面三栏壳（顶栏 + 工作区）</b>，嵌入 <code>/profile/memory</code>（Memory.vue）｜
+    依据：<code>page-spec-用户记忆面板.md</code>（台账 #8229 批次 2.1）｜
+    控件口径：<code>docs/ui/page-specs/form-controls-and-toggles-v1.md</code>（表单规范 v1.3）<br>
+    ⚠️ page-spec 原假设「portal 移动壳」与实测不符（portal 实为桌面三栏壳），本稿按实测画，回填时更正｜
+    场景包 3 个对应矩阵 7–9（admin 端 1–6 见 <code>admin-user-memory.html</code>）；虚线切换条为<b>原型演示控件，不进实现</b>。
+  </div>
+</div>
+
+<div class="scen-bar" id="scenBar">
+  <span class="lb">场景包切换（演示控件）</span>
+  <button data-sc="s7" class="on">S7 有画像</button>
+  <button data-sc="s8">S8 无画像</button>
+  <button data-sc="s9">S9 加载失败</button>
+  <span class="hint">对应 page-spec §原型继承 矩阵 7–9</span>
+</div>
+
+<div class="pt-shell">
+  <div class="pt-nav">
+    <div class="pt-logo"><div class="dot"></div>科豆 AI</div>
+    <div class="ni">首页</div><div class="ni">发现</div><div class="ni">画板</div><div class="ni">变变</div>
+    <div class="sp"></div>
+    <div class="pt-avatar">雯</div>
+  </div>
+  <div class="pt-work">
+    <div class="sub">
+
+      <div class="chead">
+        <button class="btn-back" type="button"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>返回</button>
+        <h1>记忆画像</h1>
+        <span class="sp"></span>
+        <button class="lnk" type="button" id="rebuildBtn">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          <span id="rebuildTxt">重新生成</span>
+        </button>
+      </div>
+
+      <div class="tip">
+        <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"/></svg>
+        AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，可单条删除
+      </div>
+
+      <!-- 摘要卡（置顶） -->
+      <div id="sumWrap"></div>
+
+      <!-- 明细分组（保留现有分组与删除交互） -->
+      <div id="grpWrap"></div>
+
+    </div>
+  </div>
+
+  <div class="pop" id="pop" role="dialog" aria-label="删除确认">
+    <div class="pt">确定删除这条记忆？</div>
+    <div class="pa">
+      <button class="btn" type="button" id="popCancel">取消</button>
+      <button class="btn danger" type="button" id="popOk">删除</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<script>
+/* =========================================================
+   演示数据与场景机（S7–S9，对应 page-spec 矩阵 7–9）
+   ========================================================= */
+var CATS = [
+  { key:'fact',       label:'事实', cls:'ft', bg:'var(--cat-fact-bg)',   tx:'var(--cat-fact-tx)' },
+  { key:'preference', label:'偏好', cls:'pf', bg:'var(--cat-pref-bg)',   tx:'var(--cat-pref-tx)' },
+  { key:'habit',      label:'习惯', cls:'hb', bg:'var(--cat-habit-bg)',  tx:'var(--cat-habit-tx)' },
+];
+var SUMMARY = '你偏好华语流行与轻音乐，习惯在晚间听歌放松；做头像时喜欢插画风格、低饱和度，不喜欢过强的滤镜感；你养了一只叫「团子」的橘猫，聊天时喜欢简洁直接的表达。';
+var ITEMS = [
+  { id:1, category:'fact',       content:'你的名字叫李雯' },
+  { id:2, category:'fact',       content:'你养了一只叫「团子」的橘猫' },
+  { id:3, category:'preference', content:'你喜欢华语流行与轻音乐，不喜欢重低音电子' },
+  { id:4, category:'preference', content:'头像偏好插画风格、低饱和度' },
+  { id:5, category:'preference', content:'聊天时喜欢简洁直接的表达' },
+  { id:6, category:'habit',      content:'你习惯在晚间 21–23 点听歌放松' },
+  { id:7, category:'habit',      content:'每周五晚你会来点歌' },
+];
+
+var state = { sc:'s7', itemCount:12, updatedAt:'2026-10-29 21:40',
+  summary:SUMMARY, items:ITEMS.slice(), sumState:'ok', grpState:'ok', pending:false };
+
+function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+/* ============ 摘要卡 ============ */
+function renderSummary(){
+  var w = document.getElementById('sumWrap');
+  if (state.sumState === 'loading') {
+    w.innerHTML = '<div class="sum-card"><div class="skl">' +
+      '<div class="ln" style="width:20%"></div><div class="ln"></div><div class="ln" style="width:64%;margin-bottom:0"></div></div></div>';
+    return;
+  }
+  if (state.sumState === 'error') {
+    w.innerHTML = '<div class="sum-card"><div class="blk-error">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+      '<div class="t">画像加载失败</div>' +
+      '<button class="lnk" type="button" onclick="retrySum()">重试</button></div></div>';
+    return;
+  }
+  if (!state.summary) { /* S8：无画像 */
+    w.innerHTML = '<div class="sum-card"><div class="blk-empty">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
+      '<div class="t">还没有记忆画像</div>' +
+      '<div class="d">和我说说你偏好什么，我就能记住</div>' +
+      '<button class="lnk" type="button" onclick="rebuild()">重新生成</button></div></div>';
+    return;
+  }
+  w.innerHTML = '<div class="sum-card">' +
+    '<div class="sum-hd"><span class="t">你的画像</span>' + (state.pending ? '<span class="tag pend">待更新</span>' : '') + '</div>' +
+    '<div class="sum-body">' + esc(state.summary) + '</div>' +
+    '<div class="sum-meta"><span>条数 <span class="num">' + state.itemCount + '</span></span><span class="dot">·</span>' +
+    '<span>更新时间 <span class="num">' + (state.updatedAt || '—') + '</span></span>' +
+    (state.pending ? '<span class="dot">·</span><span style="color:var(--ws-brand-700)">刚删过记忆，画像将在下次对话后刷新</span>' : '') +
+    '</div></div>';
+}
+
+/* ============ 明细分组（现有形态，不退化） ============ */
+function renderGroups(){
+  var w = document.getElementById('grpWrap');
+  if (state.grpState === 'loading') {
+    w.innerHTML = '<div class="groups"><div class="group" style="background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-xl);padding:16px 18px;">' +
+      '<div class="skl"><div class="ln" style="width:30%;margin-top:2px"></div><div class="ln" style="width:86%"></div><div class="ln" style="width:70%;margin-bottom:0"></div></div></div></div>';
+    return;
+  }
+  if (state.grpState === 'error') {
+    w.innerHTML = '<div class="blk-error" style="border:1px solid var(--ws-border);border-radius:var(--ws-radius-xl);background:var(--ws-bg-surface);">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+      '<div class="t">记忆条目加载失败（与画像互不影响）</div>' +
+      '<button class="lnk" type="button" onclick="retryGrp()">重试</button></div>';
+    return;
+  }
+  if (state.items.length === 0) {
+    w.innerHTML = '<div class="blk-empty" style="border:1px solid var(--ws-border);border-radius:var(--ws-radius-xl);background:var(--ws-bg-surface);">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
+      '<div class="t">暂无记忆条目</div></div>';
+    return;
+  }
+  var html = '<div class="groups">';
+  CATS.forEach(function (c) {
+    var items = state.items.filter(function (m) { return m.category === c.key; });
+    if (items.length === 0) return;
+    html += '<div class="group"><h3><span class="cat-tag" style="background:' + c.bg + ';color:' + c.tx + '">' + c.label + '</span>' +
+      '<em>' + items.length + ' 条</em></h3>';
+    items.forEach(function (m) {
+      html += '<div class="row"><span class="txt">' + esc(m.content) + '</span>' +
+        '<button class="rm" type="button" title="删除" aria-label="删除" onclick="askDelete(event,' + m.id + ')">' +
+        '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  w.innerHTML = html;
+}
+
+function renderAll(){ renderSummary(); renderGroups(); }
+
+/* ============ 交互 ============ */
+var toastTimer;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1800);
+}
+function nowStr(){
+  var d = new Date(), p = function(x){ return ('0' + x).slice(-2); };
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* 删除：破坏性 → 气泡二次确认（现有实现无确认，本稿按 page-spec 补齐，回填时标注） */
+var pendingDeleteId = null;
+function askDelete(ev, id){
+  ev.stopPropagation();
+  pendingDeleteId = id;
+  var pop = document.getElementById('pop');
+  var shell = document.querySelector('.pt-shell');
+  var r = ev.currentTarget.getBoundingClientRect(), d = shell.getBoundingClientRect();
+  pop.classList.add('show');
+  pop.style.left = Math.min(Math.max(r.left - d.left - 100, 12), d.width - 244) + 'px';
+  pop.style.top = (r.top - d.top - pop.offsetHeight - 10 < 60 ? r.bottom - d.top + 8 : r.top - d.top - pop.offsetHeight - 10) + 'px';
+}
+document.getElementById('popCancel').addEventListener('click', hidePop);
+document.getElementById('popOk').addEventListener('click', function(){
+  hidePop();
+  if (pendingDeleteId == null) return;
+  state.items = state.items.filter(function (m) { return m.id !== pendingDeleteId; });
+  state.itemCount = Math.max(0, state.itemCount - 1);
+  state.pending = true;           /* 🔴 v1 口径：画像由 LLM 下次对话后重算，UI 显式标注待更新 */
+  pendingDeleteId = null;
+  renderAll();
+  toast('已删除该记忆');
+});
+document.addEventListener('click', function (e) {
+  var pop = document.getElementById('pop');
+  if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.rm')) hidePop();
+});
+function hidePop(){ document.getElementById('pop').classList.remove('show'); }
+
+/* 重新生成画像：loading + disabled 防重复（幂等非破坏） */
+var rebuilding = false;
+function rebuild(){
+  if (rebuilding) return;
+  rebuilding = true;
+  var btn = document.getElementById('rebuildBtn');
+  btn.disabled = true;
+  document.getElementById('rebuildTxt').innerHTML = '<span class="spin"></span> 生成中…';
+  setTimeout(function () {
+    rebuilding = false;
+    btn.disabled = false;
+    document.getElementById('rebuildTxt').textContent = '重新生成';
+    state.updatedAt = nowStr();
+    state.pending = false;
+    state.sumState = 'ok';
+    if (!state.summary) state.summary = '（暂无可提炼的内容。和我说说你偏好什么，我就能记住。）';
+    renderAll();
+    toast('已更新');
+  }, 900);
+}
+document.getElementById('rebuildBtn').addEventListener('click', rebuild);
+
+function retrySum(){ state.sumState = 'ok'; renderSummary(); toast('画像已恢复'); }
+function retryGrp(){ state.grpState = 'ok'; renderGroups(); toast('记忆条目已恢复'); }
+
+/* ============ 场景切换（演示控件） ============ */
+function applyScenario(sc){
+  state.sc = sc;
+  document.querySelectorAll('#scenBar button').forEach(function (b) { b.classList.toggle('on', b.dataset.sc === sc); });
+  /* rebuildBtn 在本稿三场景下均保留（S8 空态可点、S9 失败仍可试重建） */
+  state.summary = SUMMARY; state.items = ITEMS.slice(); state.itemCount = 12;
+  state.updatedAt = '2026-10-29 21:40'; state.pending = false;
+  state.sumState = 'loading'; state.grpState = 'loading';
+  renderAll();
+  setTimeout(function () {
+    if (state.sc !== sc) return;
+    if (sc === 's7') { state.sumState='ok'; state.grpState='ok'; }
+    if (sc === 's8') { state.summary=''; state.items=[]; state.itemCount=0; state.sumState='ok'; state.grpState='ok'; }
+    if (sc === 's9') { state.sumState='error'; state.grpState='error'; }
+    renderAll();
+  }, 600);
+}
+document.querySelectorAll('#scenBar button').forEach(function (b) {
+  b.addEventListener('click', function () { applyScenario(b.dataset.sc); });
+});
+
+applyScenario('s7');
+</script>
+</body>
+</html>

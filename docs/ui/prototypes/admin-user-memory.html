@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>admin 用户管理 · 用户详情 · 用户记忆面板 · 交互原型 v1</title>
+<!--
+  ============================================================
+  admin 用户管理 · 用户详情页 ·「用户记忆」卡 · 原型（桌面 Web / admin 亮色）
+  · 目标端：桌面 Web（admin 管理后台，亮色 1280 壳，BasicLayout 嵌入用户详情页）
+  · 依据：page-spec-用户记忆面板.md（台账 #8229 批次 2.1 · 交互清单 + 9 场景包矩阵）
+  · 本稿范围：用户详情页内新增「用户记忆」卡 —— 摘要卡置顶（正文 + 版本/条数/更新时间）
+    + 明细表分区（可折叠、可删、删除二次确认）+「重新生成摘要」次级按钮 + 空态明确文案
+  · 🔴 页面规范：本面板不设 primary 操作 —— 用户详情页主操作是「保存用户信息」，
+    「重新生成摘要」一律 secondary（表单规范 v1.3：同屏不双 primary）
+  · 场景包 6 个（与 page-spec §原型继承 矩阵 1–6 对应，切换条在页头下方）：
+    S1 有摘要+有明细 ｜ S2 无摘要（从未对话）｜ S3 有摘要无明细（异常态）
+    S4 摘要待更新（刚删过明细）｜ S5 加载失败（摘要/明细独立 error + 各自重试）
+    S6 无 users:view（路由守卫拦截，不进面板）
+  · 交互口径（page-spec §交互清单）：
+    删除明细 = 破坏性 → 气泡二次确认「删除后 AI 将不再使用这条记忆，确定删除？」，
+    成功 toast「已删除，该条记忆将不再被 AI使用」+ 摘要卡标「待更新」（v1 口径：
+    摘要由 LLM 从明细重算，下次对话后才刷新，UI 必须显式标注，不能让用户以为摘要已同步）
+    重新生成 = 幂等非破坏 → loading + disabled 防重复，成功「摘要已更新」
+  · 空值口径：本稿无文本输入框，不涉 placeholder；label 全部业务词
+    （表单控件与开关规范 v1.3 · docs/ui/page-specs/form-controls-and-toggles-v1.md）
+  · ⚠️ 摘要正文来自 LLM 提炼（半可信输入），实现时必须转义渲染，不得 v-html 直出（page-spec 风险 4）
+  · ⚠️ 场景切换条 / 分页器为原型演示控件，不进实现；用户/记忆内容均为演示数据
+  ============================================================
+-->
+<style>
+  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（色值只引 token，业务样式不出现裸 hex） */
+  :root{
+    --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
+    --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
+    --ws-text-primary:#171717; --ws-text-secondary:#525252; --ws-text-tertiary:#A3A3A3; --ws-text-disabled:#D4D4D4;
+    --ws-border:#E5E5E5; --ws-border-subtle:#EBEBEB;
+    --ws-brand-500:#F97316; --ws-brand-600:#EA580C; --ws-brand-400:#FB923C; --ws-brand-soft:#FFF7ED;
+    --ws-accent:#FF8C42; --ws-accent-soft:rgba(255,140,66,.15);
+    --ws-on-brand:#FFFFFF;
+    --ws-ok:#398E4A; --ws-ok-soft:#EAF6EC; --ws-ok-700:#256E35;
+    --ws-danger:#E5484D; --ws-danger-soft:#FDECEC;
+    --ws-brand-700:#C2410C;
+    --ws-shadow-shell:0 24px 70px rgba(20,30,50,.14);
+    --ws-accent-soft-2:rgba(255,140,66,.04);
+    --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px;
+    --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
+    --ws-overlay:rgba(23,23,23,.45);
+    --ws-shadow-float:0 8px 24px rgba(0,0,0,.18);
+    --ws-font-mono:'Geist Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    --ws-text-body:#3F3F46; --ws-text-strong:#18181B;
+    --ws-leading-tight:1.25; --ws-leading-snug:1.4; --ws-leading-normal:1.6; --ws-leading-relaxed:1.75;
+    --ws-tracking-tight:-0.02em;
+    --ws-duration-fast:150ms; --ws-duration-base:200ms; --ws-duration-slow:300ms;
+    --ws-ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+    --ws-focus-ring:0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55);
+    --ws-control-sm:24px; --ws-control-md:32px; --ws-control-lg:40px;
+    --ws-icon-inline:16px; --ws-icon-action:20px;
+    --ws-warn:#E8833A;
+    /* 分类三色（page-spec §表格列清单：fact=蓝 / preference=紫 / habit=绿）——本稿局部扩展 */
+    --cat-fact-bg:#EFF6FF;   --cat-fact-tx:#1D4ED8;
+    --cat-pref-bg:#F5F3FF;   --cat-pref-tx:#6D28D9;
+    --cat-habit-bg:#ECFDF5;  --cat-habit-tx:#047857;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :focus-visible{outline:none;box-shadow:var(--ws-focus-ring);}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+    background:var(--ws-bg-page);min-height:100vh;padding:24px 20px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--ws-text-primary);
+  }
+  .proto-head{width:1280px;}
+  .proto-head h1{font-size:18px;font-weight:600;margin-bottom:6px;}
+  .proto-head .sub{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);}
+  .proto-head .sub b{color:var(--ws-brand-700);font-weight:600;}
+  .proto-head .sub code{padding:1px 5px;border-radius:var(--ws-radius-sm);background:var(--ws-bg-subtle);
+    font-family:var(--ws-font-mono);font-size:12px;}
+
+  /* ===== 场景包切换条（原型演示控件，不进实现） ===== */
+  .scen-bar{width:1280px;border:1px dashed var(--ws-border);border-radius:var(--ws-radius-lg);
+    padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    font-size:12px;color:var(--ws-text-secondary);}
+  .scen-bar .lb{font-weight:600;color:var(--ws-text-primary);}
+  .scen-bar button{height:26px;padding:0 10px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);
+    background:var(--ws-bg-surface);font:inherit;font-size:12px;color:var(--ws-text-secondary);cursor:pointer;
+    transition:all var(--ws-duration-fast) var(--ws-ease-out);}
+  .scen-bar button:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .scen-bar button.on{background:var(--ws-brand-soft);border-color:var(--ws-brand-400);color:var(--ws-brand-700);font-weight:600;}
+  .scen-bar .hint{margin-left:auto;font-size:11px;color:var(--ws-text-tertiary);}
+
+  /* ===== 桌面壳 ===== */
+  .ad-desktop{width:1280px;height:900px;border-radius:14px;overflow:hidden;position:relative;
+    background:var(--ws-bg-surface);border:1px solid var(--ws-border);box-shadow:var(--ws-shadow-shell);
+    display:flex;}
+  .ad-sider{width:210px;border-right:1px solid var(--ws-border);flex-shrink:0;display:flex;flex-direction:column;}
+  .ad-sider-head{height:56px;display:flex;align-items:center;gap:8px;padding:0 16px;}
+  .ad-logo-dot{width:22px;height:22px;border-radius:var(--ws-radius-md);background:linear-gradient(135deg,var(--ws-accent),var(--ws-brand-600));}
+  .ad-logo-t{color:var(--ws-accent);font-size:14px;font-weight:600;}
+  .ad-menu{padding:4px 8px;overflow:auto;flex:1;}
+  .ad-group{font-size:12px;color:var(--ws-text-secondary);padding:10px 12px 4px;}
+  .ad-item{padding:8px 12px;border-radius:var(--ws-radius-lg);color:var(--ws-text-secondary);font-size:13px;
+    cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:8px;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out);}
+  .ad-item:hover{background:var(--ws-bg-hover);}
+  .ad-item.active{background:linear-gradient(90deg,var(--ws-accent-soft),var(--ws-accent-soft-2));
+    color:var(--ws-accent);font-weight:600;}
+  .ad-main{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .ad-header{height:56px;border-bottom:1px solid var(--ws-border);display:flex;align-items:center;
+    padding:0 22px;gap:8px;flex-shrink:0;}
+  .ad-crumb{font-size:13px;color:var(--ws-text-secondary);}
+  .ad-crumb b{color:var(--ws-text-primary);font-weight:500;}
+  .ad-crumb .lk{color:var(--ws-brand-700);cursor:pointer;font-weight:500;}
+  .ad-content{flex:1;overflow:auto;padding:18px 22px 32px;background:var(--ws-bg-page);}
+
+  /* ===== 通用控件 ===== */
+  .btn{height:var(--ws-control-md);padding:0 16px;border-radius:var(--ws-radius-md);font-size:13px;
+    border:1px solid var(--ws-border);background:var(--ws-bg-surface);color:var(--ws-text-primary);cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;font-family:inherit;
+    transition:background var(--ws-duration-fast) var(--ws-ease-out),border-color var(--ws-duration-fast) var(--ws-ease-out),color var(--ws-duration-fast) var(--ws-ease-out);}
+  .btn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .btn.sm{height:var(--ws-control-sm);padding:0 10px;font-size:12px;}
+  .btn.danger{background:var(--ws-danger);border-color:var(--ws-danger);color:var(--ws-on-brand);font-weight:500;}
+  .btn.danger:hover{background:var(--ws-danger);border-color:var(--ws-danger);color:var(--ws-on-brand);opacity:.9;}
+  .btn[disabled]{opacity:.55;cursor:not-allowed;}
+  .btn svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+  body .hidden{display:none;}
+  .muted{color:var(--ws-text-secondary);font-size:12px;}
+  .lnk{color:var(--ws-brand-700);font-size:13px;cursor:pointer;font-weight:500;font-family:inherit;
+    border:none;background:none;padding:0;}
+  .lnk:hover{text-decoration:underline;}
+  .lnk[disabled]{color:var(--ws-text-disabled);cursor:not-allowed;text-decoration:none;}
+  .spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--ws-border);
+    border-top-color:var(--ws-brand-600);animation:spin .8s linear infinite;display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:var(--ws-radius-sm);
+    font-size:12px;background:var(--ws-bg-subtle);color:var(--ws-text-secondary);white-space:nowrap;}
+  .tag.ok{background:var(--ws-ok-soft);color:var(--ws-ok-700);}
+  .tag.fact{background:var(--cat-fact-bg);color:var(--cat-fact-tx);}
+  .tag.pref{background:var(--cat-pref-bg);color:var(--cat-pref-tx);}
+  .tag.habit{background:var(--cat-habit-bg);color:var(--cat-habit-tx);}
+  .tag.pend{background:var(--ws-brand-soft);color:var(--ws-brand-700);}
+
+  .card{background:var(--ws-bg-surface);border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    padding:16px;margin-bottom:16px;}
+  .card-hd{display:flex;align-items:center;gap:8px;}
+  .card-hd .t{font-size:14px;font-weight:600;color:var(--ws-text-strong);}
+  .card-hd .d{font-size:12px;color:var(--ws-text-secondary);font-weight:400;}
+  .card-hd .sp{flex:1;}
+
+  /* 基本信息（复刻 UserDetail.vue 的 a-descriptions 形态，两列） */
+  .desc{width:100%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);overflow:hidden;
+    font-size:13px;margin-top:12px;border-collapse:separate;border-spacing:0;}
+  .desc tr th,.desc tr td{border-bottom:1px solid var(--ws-border-subtle);padding:9px 14px;text-align:left;vertical-align:top;}
+  .desc tr:last-child th,.desc tr:last-child td{border-bottom:none;}
+  .desc th{width:110px;font-weight:400;color:var(--ws-text-secondary);background:var(--ws-bg-subtle);}
+  .desc td{color:var(--ws-text-primary);}
+  .desc td .num{font-variant-numeric:tabular-nums;}
+
+  /* ===== 用户记忆卡 ===== */
+  .mem-sum{margin-top:14px;border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);
+    background:var(--ws-bg-page);padding:14px 16px;}
+  .mem-sum-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .mem-sum-hd .t{font-size:13px;font-weight:600;color:var(--ws-text-primary);}
+  .mem-sum-hd .sp{flex:1;}
+  .icon-btn{width:26px;height:26px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);
+    background:var(--ws-bg-surface);display:inline-flex;align-items:center;justify-content:center;
+    color:var(--ws-text-secondary);cursor:pointer;flex:0 0 26px;}
+  .icon-btn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .icon-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .mem-sum-body{font-size:13px;color:var(--ws-text-body);line-height:var(--ws-leading-relaxed);}
+  .mem-meta{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;
+    font-size:12px;color:var(--ws-text-secondary);}
+  .mem-meta .dot{color:var(--ws-text-tertiary);}
+  .mem-meta .num{font-variant-numeric:tabular-nums;}
+
+  /* 明细折叠区 */
+  .mem-detail{margin-top:14px;border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);overflow:hidden;}
+  .mem-detail-hd{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;
+    background:var(--ws-bg-surface);user-select:none;}
+  .mem-detail-hd:hover{background:var(--ws-bg-hover);}
+  .mem-detail-hd .cv{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-text-tertiary);fill:none;
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;
+    transition:transform var(--ws-duration-fast) var(--ws-ease-out);}
+  .mem-detail.open .mem-detail-hd .cv{transform:rotate(90deg);}
+  .mem-detail-hd .t{font-size:13px;font-weight:600;color:var(--ws-text-primary);}
+  .mem-detail-hd .d{font-size:12px;color:var(--ws-text-secondary);}
+  .mem-detail-body{border-top:1px solid var(--ws-border-subtle);}
+
+  .tbl{width:100%;border:none;font-size:13px;}
+  .tbl .th{display:flex;padding:8px 16px;background:var(--ws-bg-subtle);
+    font-size:12px;font-weight:500;color:var(--ws-text-secondary);}
+  .tbl .tr{display:flex;padding:10px 16px;border-bottom:1px solid var(--ws-border-subtle);align-items:center;}
+  .tbl .tr:last-child{border-bottom:none;}
+  .tbl .tr:hover{background:var(--ws-bg-hover);}
+  .tbl .c-cat{flex:0 0 92px;}
+  .tbl .c-txt{flex:1;min-width:0;}
+  .tbl .c-conf{flex:0 0 96px;text-align:right;font-variant-numeric:tabular-nums;}
+  .tbl .c-time{flex:0 0 150px;font-variant-numeric:tabular-nums;color:var(--ws-text-secondary);font-size:12px;}
+  .tbl .c-op{flex:0 0 88px;text-align:right;}
+  .tbl .txt{color:var(--ws-text-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    display:block;max-width:520px;}
+  /* 删除按钮 hover 显形（page-spec §列清单：操作列 hover 显形） */
+  .rm-btn{opacity:0;border:none;background:none;cursor:pointer;color:var(--ws-text-secondary);
+    display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;height:24px;padding:0 6px;
+    border-radius:var(--ws-radius-md);}
+  .tbl .tr:hover .rm-btn,.rm-btn:focus-visible{opacity:1;}
+  .rm-btn:hover{color:var(--ws-danger);background:var(--ws-danger-soft);}
+  .rm-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
+    stroke-linecap:round;stroke-linejoin:round;}
+
+  .pagebar{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:12px;color:var(--ws-text-secondary);}
+  .pagebar .sp{flex:1;}
+  .pagebar .pg{font-variant-numeric:tabular-nums;}
+  .pagebar button{height:24px;min-width:24px;padding:0 6px;border-radius:var(--ws-radius-sm);
+    border:1px solid var(--ws-border);background:var(--ws-bg-surface);font:inherit;font-size:12px;
+    color:var(--ws-text-secondary);cursor:pointer;font-variant-numeric:tabular-nums;}
+  .pagebar button[disabled]{color:var(--ws-text-disabled);cursor:not-allowed;}
+  .pagebar button.cur{border-color:var(--ws-brand-400);color:var(--ws-brand-600);font-weight:600;}
+
+  /* 气泡二次确认（对应 a-popconfirm，不用 Modal 套弹窗） */
+  .pop{position:absolute;z-index:60;width:264px;background:var(--ws-bg-surface);
+    border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);box-shadow:var(--ws-shadow-float);
+    padding:12px 14px;display:none;}
+  .pop.show{display:block;animation:popIn .16s var(--ws-ease-out);}
+  @keyframes popIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  .pop .pt{font-size:13px;color:var(--ws-text-primary);line-height:var(--ws-leading-snug);
+    display:flex;gap:8px;align-items:flex-start;}
+  .pop .pt svg{width:var(--ws-icon-inline);height:var(--ws-icon-inline);stroke:var(--ws-warn);fill:none;
+    stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:0 0 var(--ws-icon-inline);margin-top:1px;}
+  .pop .pa{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+  .pop::before{content:'';position:absolute;top:-5px;width:8px;height:8px;background:var(--ws-bg-surface);
+    border-left:1px solid var(--ws-border);border-top:1px solid var(--ws-border);transform:rotate(45deg);}
+
+  /* 空态 / 失败态（摘要卡与明细各自独立，互不阻塞） */
+  .blk-empty,.blk-error{padding:28px 16px;text-align:center;}
+  .blk-empty .ic,.blk-error .ic{width:40px;height:40px;margin:0 auto 10px;color:var(--ws-text-tertiary);opacity:.7;}
+  .blk-empty .ic svg,.blk-error .ic svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .blk-empty .t{font-size:13px;color:var(--ws-text-secondary);margin-bottom:4px;}
+  .blk-empty .d{font-size:12px;color:var(--ws-text-tertiary);margin-bottom:12px;}
+  .blk-error .t{font-size:13px;color:var(--ws-text-secondary);margin-bottom:12px;}
+  .blk-error .ic{color:var(--ws-danger);opacity:.85;}
+
+  /* 骨架屏（摘要 / 明细各一套，互不阻塞） */
+  .skl{padding:16px;}
+  .skl .ln{height:14px;border-radius:6px;margin-bottom:10px;
+    background:linear-gradient(90deg,var(--ws-bg-subtle) 25%,var(--ws-bg-active) 37%,var(--ws-bg-subtle) 63%);
+    background-size:400% 100%;animation:sk 1.2s ease infinite;}
+  @keyframes sk{0%{background-position:100% 0}100%{background-position:-100% 0}}
+
+  /* S6 无权限（a-result 形态） */
+  .forbid{padding:56px 20px;text-align:center;}
+  .forbid .ic{width:48px;height:48px;margin:0 auto 12px;color:var(--ws-text-tertiary);}
+  .forbid .ic svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.4;
+    stroke-linecap:round;stroke-linejoin:round;}
+  .forbid .t{font-size:15px;font-weight:600;color:var(--ws-text-primary);margin-bottom:6px;}
+  .forbid .d{font-size:12px;color:var(--ws-text-secondary);line-height:var(--ws-leading-relaxed);}
+
+  .note{display:flex;gap:8px;padding:8px 12px;border-radius:var(--ws-radius-md);
+    background:var(--ws-bg-subtle);color:var(--ws-text-secondary);font-size:12px;line-height:var(--ws-leading-snug);}
+
+  /* 作品区占位（与本稿无关） */
+  .stub{padding:18px 16px;text-align:center;font-size:12px;color:var(--ws-text-tertiary);
+    border:1px dashed var(--ws-border);border-radius:var(--ws-radius-lg);}
+
+  /* Toast（底部居中：顶部有 sticky 头，必然互相遮挡） */
+  .toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);
+    background:rgba(23,23,23,.85);color:var(--ws-on-brand);padding:9px 18px;border-radius:var(--ws-radius-lg);
+    font-size:13px;z-index:70;opacity:0;pointer-events:none;
+    transition:opacity var(--ws-duration-base) var(--ws-ease-out),transform var(--ws-duration-base) var(--ws-ease-out);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="proto-head">
+  <h1>admin 用户管理 · 用户详情 ·「用户记忆」卡 · 交互原型 v1</h1>
+  <div class="sub">
+    目标端：<b>桌面 Web（admin 亮色 1280 壳）</b>，嵌入 <code>UserDetail.vue</code>（基本信息 / 配额卡之间新增「用户记忆」卡）｜
+    依据：<code>page-spec-用户记忆面板.md</code>（台账 #8229 批次 2.1）｜
+    控件口径：<code>docs/ui/page-specs/form-controls-and-toggles-v1.md</code>（表单规范 v1.3）<br>
+    场景包 6 个对应矩阵 1–6（portal 端 7–9 见 <code>portal-user-memory.html</code>）；下方虚线条与分页器为<b>原型演示控件，不进实现</b>。
+  </div>
+</div>
+
+<!-- 场景包切换（原型演示控件） -->
+<div class="scen-bar" id="scenBar">
+  <span class="lb">场景包切换（演示控件）</span>
+  <button data-sc="s1" class="on">S1 有摘要+明细</button>
+  <button data-sc="s2">S2 无摘要</button>
+  <button data-sc="s3">S3 有摘要无明细</button>
+  <button data-sc="s4">S4 摘要待更新</button>
+  <button data-sc="s5">S5 加载失败</button>
+  <button data-sc="s6">S6 无权限</button>
+  <span class="hint">对应 page-spec §原型继承 矩阵 1–6</span>
+</div>
+
+<div class="ad-desktop">
+  <div class="ad-sider">
+    <div class="ad-sider-head"><div class="ad-logo-dot"></div><div class="ad-logo-t">科豆 AI</div></div>
+    <div class="ad-menu">
+      <div class="ad-group">用户管理</div>
+      <div class="ad-item">👥 用户列表</div>
+      <div class="ad-item active">👤 用户详情</div>
+      <div class="ad-group">内容</div>
+      <div class="ad-item">📄 内容集</div>
+      <div class="ad-item">🔁 内容管线</div>
+      <div class="ad-group">Agents</div>
+      <div class="ad-item">🤖 Agent 定义</div>
+      <div class="ad-item">📊 运行记录</div>
+    </div>
+  </div>
+  <div class="ad-main">
+    <div class="ad-header">
+      <div class="ad-crumb"><span class="lk">用户管理</span> / <span class="lk">用户列表</span> / <b>用户详情 · 李雯</b></div>
+    </div>
+    <div class="ad-content">
+
+      <div class="card" style="display:flex;align-items:center;gap:12px;">
+        <button class="btn sm" type="button">← 返回</button>
+        <span style="font-size:18px;font-weight:600;">用户详情</span>
+      </div>
+
+      <!-- 基本信息（复刻现有 a-descriptions 形态，本稿仅作上下文） -->
+      <div class="card">
+        <div class="card-hd"><span class="t">基本信息</span></div>
+        <table class="desc">
+          <tr><th>用户 ID</th><td class="num">1024</td><th>用户名</th><td>liwen</td></tr>
+          <tr><th>昵称</th><td>李雯</td><th>邮箱</th><td>liwen@example.com</td></tr>
+          <tr><th>手机号</th><td>138****6688</td><th>角色</th><td><span class="tag">普通用户</span></td></tr>
+          <tr><th>状态</th><td><span class="tag ok">启用</span></td><th>创建时间</th><td class="num">2026-08-12 10:24</td></tr>
+        </table>
+      </div>
+
+      <!-- ===== 用户记忆卡（本稿焦点） ===== -->
+      <div class="card" id="memCard">
+        <div class="card-hd">
+          <span class="t">用户记忆</span>
+          <span class="d">AI 在对话中自动提炼的用户信息，可查看与纠错</span>
+          <span class="sp"></span>
+          <button class="btn sm" type="button" id="rebuildBtn">
+            <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            <span id="rebuildTxt">重新生成摘要</span>
+          </button>
+        </div>
+
+        <!-- 摘要卡（置顶） -->
+        <div id="sumWrap"></div>
+
+        <!-- 明细分区（折叠默认展开便于评审；实现默认收起，见 page-spec 模块清单） -->
+        <div class="mem-detail open" id="detWrap"></div>
+      </div>
+
+      <!-- 变变使用配额（现有模块，本稿仅占位示意位置） -->
+      <div class="card">
+        <div class="card-hd"><span class="t">变变使用配额</span></div>
+        <div class="stub" style="margin-top:12px;">现有模块，与本稿无关（略）</div>
+      </div>
+
+      <!-- 用户作品（现有模块，占位） -->
+      <div class="card">
+        <div class="card-hd"><span class="t">用户作品</span><span class="tag" style="margin-left:8px;">6</span></div>
+        <div class="stub" style="margin-top:12px;">现有模块，与本稿无关（略）</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 气泡二次确认 -->
+  <div class="pop" id="pop" role="dialog" aria-label="删除确认">
+    <div class="pt">
+      <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>删除后 AI 将不再使用这条记忆，确定删除？</span>
+    </div>
+    <div class="pa">
+      <button class="btn sm" type="button" id="popCancel">取消</button>
+      <button class="btn sm danger" type="button" id="popOk">删除</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<script>
+/* =========================================================
+   演示数据与场景机（S1–S6，对应 page-spec 矩阵 1–6）
+   ========================================================= */
+var CAT_MAP = { fact:{label:'事实', cls:'fact'}, preference:{label:'偏好', cls:'pref'}, habit:{label:'习惯', cls:'habit'} };
+
+var SUM = '用户李雯偏好华语流行与轻音乐，习惯在晚间 21–23 点听歌放松；常用「变变」做头像风格化，对生成速度敏感，可接受略降质量换更快出图；不喜欢过强的滤镜感，头像偏好插画风格、低饱和度；近期开始尝试 AI 画板的国风主题，每周五晚有固定的点歌习惯。';
+var ITEMS = [
+  { id:1,  category:'fact',        content:'用户姓名：李雯', confidence:0.98, updatedAt:'2026-10-29 18:42' },
+  { id:2,  category:'fact',        content:'常驻城市：杭州', confidence:0.95, updatedAt:'2026-10-29 18:42' },
+  { id:3,  category:'preference',  content:'偏好华语流行与轻音乐，不喜欢重低音电子', confidence:0.87, updatedAt:'2026-10-29 18:42' },
+  { id:4,  category:'preference',  content:'头像偏好插画风格、低饱和度，讨厌过强滤镜', confidence:0.82, updatedAt:'2026-10-28 21:07' },
+  { id:5,  category:'habit',       content:'晚间 21–23 点活跃，常在此时段生成图片', confidence:0.91, updatedAt:'2026-10-28 21:07' },
+  { id:6,  category:'preference',  content:'对生成速度敏感，可接受质量略降换更快出图', confidence:0.78, updatedAt:'2026-10-27 22:15' },
+  { id:7,  category:'habit',       content:'每周五晚固定点歌，偏好国语抒情', confidence:0.74, updatedAt:'2026-10-24 21:33' },
+  { id:8,  category:'fact',        content:'养了一只叫「团子」的橘猫，常聊起它', confidence:0.90, updatedAt:'2026-10-24 21:33' },
+  { id:9,  category:'preference',  content:'近期对 AI 画板的国风主题感兴趣', confidence:0.69, updatedAt:'2026-10-21 20:11' },
+  { id:10, category:'preference',  content:'聊天喜欢简洁直接的表达，不需要寒暄', confidence:0.76, updatedAt:'2026-10-21 20:11' },
+];
+
+var state = { sc:'s1', ver:3, itemCount:ITEMS.length, updatedAt:'2026-10-29 18:42',
+  summary:SUM, items:ITEMS.slice(), sumState:'ok', detState:'ok', pending:false };
+
+/* ============ 渲染：摘要卡 ============ */
+function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function renderSummary(){
+  var w = document.getElementById('sumWrap');
+  if (state.sumState === 'loading') {
+    w.innerHTML = '<div class="mem-sum"><div class="skl">' +
+      '<div class="ln" style="width:22%"></div><div class="ln"></div><div class="ln" style="width:88%"></div><div class="ln" style="width:54%;margin-bottom:0"></div></div></div>';
+    return;
+  }
+  if (state.sumState === 'error') {
+    w.innerHTML = '<div class="mem-sum"><div class="blk-error">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+      '<div class="t">记忆摘要加载失败</div>' +
+      '<button class="btn sm" type="button" onclick="retrySum()">重试</button></div></div>';
+    return;
+  }
+  if (!state.summary) { /* S2：无摘要（从未对话） */
+    w.innerHTML = '<div class="mem-sum"><div class="blk-empty">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
+      '<div class="t">暂无记忆摘要</div>' +
+      '<div class="d">用户完成一次对话后自动生成</div>' +
+      '<button class="btn sm" type="button" onclick="rebuild()">重新生成摘要</button></div></div>';
+    return;
+  }
+  w.innerHTML = '<div class="mem-sum">' +
+    '<div class="mem-sum-hd"><span class="t">记忆摘要</span>' + (state.pending ? '<span class="tag pend">待更新</span>' : '') +
+    '<span class="sp"></span><button class="icon-btn" type="button" title="复制摘要" onclick="copySum()">' +
+    '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>' +
+    '<div class="mem-sum-body">' + esc(state.summary) + '</div>' +
+    '<div class="mem-meta"><span>条数 <span class="num">' + state.itemCount + '</span></span><span class="dot">·</span>' +
+    '<span>版本 <span class="num">' + (state.ver > 0 ? 'v' + state.ver : '—') + '</span></span><span class="dot">·</span>' +
+    '<span>更新时间 <span class="num">' + (state.updatedAt || '—') + '</span></span>' +
+    (state.pending ? '<span class="dot">·</span><span style="color:var(--ws-brand-700)">该摘要尚未包含刚才的删除，将在下次对话后刷新</span>' : '') +
+    '</div></div>';
+}
+
+/* ============ 渲染：明细区 ============ */
+var PAGE_SIZE = 8, curPage = 1;
+function renderDetail(){
+  var w = document.getElementById('detWrap');
+  var n = state.items.length;
+  var head = '<div class="mem-detail-hd" onclick="toggleDetail()">' +
+    '<svg class="cv" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>' +
+    '<span class="t">明细（' + n + '）</span><span class="d">给人看的审计记录；删除后 AI 不再使用该条</span></div>';
+  if (state.detState === 'loading') {
+    w.innerHTML = head + '<div class="mem-detail-body"><div class="skl">' +
+      '<div class="ln" style="width:92%;margin-top:4px"></div><div class="ln" style="width:78%"></div><div class="ln" style="width:85%;margin-bottom:0"></div></div></div>';
+    return;
+  }
+  if (state.detState === 'error') {
+    w.innerHTML = head + '<div class="mem-detail-body"><div class="blk-error">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>' +
+      '<div class="t">明细加载失败（与摘要互不影响）</div>' +
+      '<button class="btn sm" type="button" onclick="retryDet()">重试</button></div></div>';
+    return;
+  }
+  if (n === 0) {
+    w.innerHTML = head + '<div class="mem-detail-body"><div class="blk-empty">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
+      '<div class="t">暂无明细记录</div></div></div>';
+    return;
+  }
+  var pages = Math.ceil(n / PAGE_SIZE);
+  if (curPage > pages) curPage = pages;
+  var start = (curPage - 1) * PAGE_SIZE;
+  var rows = state.items.slice(start, start + PAGE_SIZE).map(function (m) {
+    var c = CAT_MAP[m.category];
+    return '<div class="tr">' +
+      '<span class="c-cat"><span class="tag ' + c.cls + '">' + c.label + '</span></span>' +
+      '<span class="c-txt"><span class="txt" title="' + esc(m.content) + '">' + esc(m.content) + '</span></span>' +
+      '<span class="c-conf">' + m.confidence.toFixed(2) + '</span>' +
+      '<span class="c-time">' + m.updatedAt + '</span>' +
+      '<span class="c-op"><button class="rm-btn" type="button" aria-label="删除" onclick="askDelete(event,' + m.id + ')">' +
+      '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除</button></span>' +
+      '</div>';
+  }).join('');
+  var pgs = '';
+  for (var i = 1; i <= pages; i++) {
+    pgs += '<button type="button" class="' + (i === curPage ? 'cur' : '') + '" ' + (i === curPage ? 'disabled' : 'onclick="goPage(' + i + ')"') + '>' + i + '</button>';
+  }
+  w.innerHTML = head + '<div class="mem-detail-body"><div class="tbl">' + rows + '</div>' +
+    '<div class="pagebar"><span>共 ' + n + ' 条</span><span class="sp"></span>' +
+    '<button type="button" ' + (curPage === 1 ? 'disabled' : 'onclick="goPage(' + (curPage - 1) + ')"') + '>‹</button>' +
+    pgs +
+    '<button type="button" ' + (curPage === pages ? 'disabled' : 'onclick="goPage(' + (curPage + 1) + ')"') + '>›</button>' +
+    '<span class="pg">' + curPage + '/' + pages + ' 页 · 每页 ' + PAGE_SIZE + ' 条</span></div></div>';
+}
+
+function renderAll(){ renderSummary(); renderDetail(); }
+
+/* ============ 交互 ============ */
+var toastTimer;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1800);
+}
+function toggleDetail(){ document.getElementById('detWrap').classList.toggle('open'); }
+function goPage(p){ curPage = p; renderDetail(); }
+function nowStr(){
+  var d = new Date(), p = function(x){ return ('0' + x).slice(-2); };
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* 删除：气泡确认（破坏性，page-spec 确认文案原文） */
+var pendingDeleteId = null;
+function askDelete(ev, id){
+  ev.stopPropagation();
+  pendingDeleteId = id;
+  var pop = document.getElementById('pop');
+  var desktop = document.querySelector('.ad-desktop');
+  var r = ev.currentTarget.getBoundingClientRect(), d = desktop.getBoundingClientRect();
+  pop.classList.add('show');   /* 先显形再定位，否则 offsetHeight=0 */
+  pop.style.left = Math.min(Math.max(r.left - d.left - 100, 12), d.width - 276) + 'px';
+  pop.style.top = (r.top - d.top - pop.offsetHeight - 10 < 8 ? r.bottom - d.top + 8 : r.top - d.top - pop.offsetHeight - 10) + 'px';
+}
+document.getElementById('popCancel').addEventListener('click', function(){ hidePop(); });
+document.getElementById('popOk').addEventListener('click', function(){
+  hidePop();
+  if (pendingDeleteId == null) return;
+  state.items = state.items.filter(function (m) { return m.id !== pendingDeleteId; });
+  state.itemCount = Math.max(0, state.itemCount - 1);
+  state.pending = true;            /* 🔴 v1 口径：摘要由 LLM 下次对话后重算，UI 显式标注待更新 */
+  pendingDeleteId = null;
+  renderAll();
+  toast('已删除，该条记忆将不再被 AI 使用');
+});
+document.addEventListener('click', function (e) {
+  var pop = document.getElementById('pop');
+  if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.rm-btn')) hidePop();
+});
+function hidePop(){ document.getElementById('pop').classList.remove('show'); }
+
+/* 重新生成摘要：loading + disabled 防重复（幂等非破坏） */
+var rebuilding = false;
+function rebuild(){
+  if (rebuilding) return;
+  rebuilding = true;
+  var btn = document.getElementById('rebuildBtn');
+  btn.disabled = true;
+  document.getElementById('rebuildTxt').innerHTML = '<span class="spin"></span> 生成中…';
+  setTimeout(function () {
+    rebuilding = false;
+    btn.disabled = false;
+    document.getElementById('rebuildTxt').textContent = '重新生成摘要';
+    state.ver += 1;
+    state.updatedAt = nowStr();
+    state.pending = false;
+    state.sumState = 'ok';
+    if (!state.summary) state.summary = '（暂无可提炼的记忆内容，用户完成一次对话后自动生成。）';
+    renderAll();
+    toast('摘要已更新');
+  }, 900);
+}
+document.getElementById('rebuildBtn').addEventListener('click', rebuild);
+
+function copySum(){
+  var txt = state.summary || '';
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(function(){});
+  toast('已复制');
+}
+function retrySum(){ state.sumState = 'ok'; renderSummary(); toast('摘要已恢复'); }
+function retryDet(){ state.detState = 'ok'; renderDetail(); toast('明细已恢复'); }
+
+/* ============ 场景切换（演示控件） ============ */
+function applyScenario(sc){
+  state.sc = sc; curPage = 1;
+  document.querySelectorAll('#scenBar button').forEach(function (b) { b.classList.toggle('on', b.dataset.sc === sc); });
+  var rb = document.getElementById('rebuildBtn');
+  if (rb) rb.style.visibility = (sc === 's6') ? 'hidden' : 'visible';
+  var card = document.getElementById('memCard');
+  if (sc === 's6') { /* 矩阵 6：无 users:view → 路由守卫拦截，不进面板 */
+    card.innerHTML = '<div class="forbid">' +
+      '<div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>' +
+      '<div class="t">无权访问该页面</div>' +
+      '<div class="d">当前角色无 <code>users:view</code> 权限，路由守卫直接拦截 —— 不会渲染「用户记忆」面板<br>（原型演示控件：正式实现为路由级 403，不出现卡片骨架）</div></div>';
+    return;
+  }
+  if (card.querySelector('.forbid')) { restoreCard(); }
+  /* 先进 loading（演示骨架态），600ms 后落各自场景 */
+  state.summary = SUM; state.items = ITEMS.slice(); state.itemCount = ITEMS.length; state.ver = 3;
+  state.updatedAt = '2026-10-29 18:42'; state.pending = false;
+  state.sumState = 'loading'; state.detState = 'loading';
+  renderAll();
+  setTimeout(function () {
+    if (state.sc !== sc) return;
+    if (sc === 's1') { state.sumState='ok'; state.detState='ok'; }
+    if (sc === 's2') { state.summary=''; state.items=[]; state.itemCount=0; state.ver=0; state.sumState='ok'; state.detState='ok'; }
+    if (sc === 's3') { state.items=[]; state.itemCount=0; state.sumState='ok'; state.detState='ok'; }
+    if (sc === 's4') { state.pending=true; state.sumState='ok'; state.detState='ok'; }
+    if (sc === 's5') { state.sumState='error'; state.detState='error'; }  /* 摘要/明细各自独立 error + 各自重试 */
+    renderAll();
+  }, 600);
+}
+document.querySelectorAll('#scenBar button').forEach(function (b) {
+  b.addEventListener('click', function () { applyScenario(b.dataset.sc); });
+});
+
+/* S6 后恢复卡片骨架 */
+function restoreCard(){
+  var card = document.getElementById('memCard');
+  card.innerHTML = '<div class="card-hd"><span class="t">用户记忆</span>' +
+    '<span class="d">AI 在对话中自动提炼的用户信息，可查看与纠错</span><span class="sp"></span>' +
+    '<button class="btn sm" type="button" id="rebuildBtn2"><span id="rebuildTxt2">重新生成摘要</span></button></div>' +
+    '<div id="sumWrap"></div><div class="mem-detail open" id="detWrap"></div>';
+  document.getElementById('rebuildBtn2').id = 'rebuildBtn';
+  document.getElementById('rebuildTxt2').id = 'rebuildTxt';
+  document.getElementById('rebuildBtn').addEventListener('click', rebuild);
+}
+
+applyScenario('s1');
+</script>
+</body>
+</html>
