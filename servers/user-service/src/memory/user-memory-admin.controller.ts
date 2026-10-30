@@ -1,16 +1,9 @@
 import {
   Controller,
   Get,
-  Post,
-  Delete,
   Param,
   Query,
-  Body,
   UseGuards,
-  NotFoundException,
-  HttpCode,
-  HttpStatus,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
@@ -20,6 +13,10 @@ import { UserMemorySummaryService } from './user-memory-summary.service';
 
 /**
  * 用户记忆管理端接口（admin · #8229 批次1 卡1.5）。
+ *
+ * admin **只读**（用户 2026-10-30 拍板：admin 只支持查看，编辑归 portal/C 端）——
+ * 批次1 的 rebuild / 删明细两个写端点已收口删除，写能力统一在 C 端
+ * UserMemoryController（本人维度）。
  *
  * 路由口径：挂在 `users` 前缀下（/api/users/:id/memory*），复用网关既有的
  * `/api/users/* → user-service` 通道 —— 网关的 `/api/admin/*` 通配走 system-service，
@@ -40,7 +37,7 @@ export class UserMemoryAdminController {
 
   @Get(':id/memory')
   @RequirePermission('users:view')
-  @ApiOperation({ summary: '查某用户的记忆摘要 + 明细分页（管理端）' })
+  @ApiOperation({ summary: '查某用户的记忆摘要 + 明细分页（管理端，只读）' })
   async detail(
     @Param('id') userId: string,
     @Query('page') page = 1,
@@ -52,25 +49,5 @@ export class UserMemoryAdminController {
       this.memory.list(userId, Number(page) || 1, Number(pageSize) || 50),
     ]);
     return { summary, memories };
-  }
-
-  @Post(':id/memory/summary/rebuild')
-  @RequirePermission('users:view')
-  @ApiOperation({ summary: '重算某用户的记忆摘要（管理端）' })
-  @HttpCode(HttpStatus.OK)
-  async rebuild(@Param('id') userId: string, @Body() body: { namespace?: string }) {
-    const result = await this.summary.rebuild(userId, body?.namespace || 'general');
-    return { success: true, changed: result.changed, skipped: result.skipped, summary: result.row };
-  }
-
-  @Delete(':id/memory/:memoryId')
-  @RequirePermission('users:view')
-  @ApiOperation({ summary: '删除某用户的一条记忆明细（管理端；删除后摘要于下次重算更新）' })
-  async removeMemory(@Param('id') userId: string, @Param('memoryId', ParseIntPipe) memoryId: number) {
-    const ok = memoryId > 0 && (await this.memory.remove(userId, memoryId));
-    if (!ok) {
-      throw new NotFoundException('记忆明细不存在');
-    }
-    return { success: true };
   }
 }
