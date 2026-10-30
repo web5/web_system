@@ -18,6 +18,9 @@ export interface SummaryItemInput {
  *
  * 超时预算 30s（对端 maxTokens 800 的补全调用）；任何失败向上抛，
  * 由 UserMemorySummaryService 回落确定性模板聚合（链路不阻断）。
+ *
+ * 注意：ai-agent 全局异常过滤器固定返回 HTTP 200 + { code, message, data }，
+ * 所以失败判定必须落在 body.code 上（详见 summarize 内注释）。
  */
 @Injectable()
 export class AiAgentSummaryClient {
@@ -46,7 +49,16 @@ export class AiAgentSummaryClient {
     if (!res.ok) {
       throw new Error(`ai-agent internal llm/memory-summary 返回 ${res.status}`);
     }
-    const body = (await res.json()) as { summary?: string };
+    // ⚠️ 必须看 body.code，不能只依赖 res.ok：
+    // ai-agent 的 UnifiedExceptionFilter 把所有异常统一包成 **HTTP 200** + { code, message, data }
+    // （response.status(HttpStatus.OK) 是既有全局约定），因此守卫抛 401、对端 500 时 res.ok 仍为 true。
+    // 只看 res.ok 会让「密钥错配 / 鉴权失败 / 服务端异常」被当成「LLM 返回空摘要」，
+    // 静默回落到模板聚合 —— 功能不崩但配置错误无人发现。
+    const body = (await res.json()) as { code?: number; message?: string | string[]; summary?: string };
+    if (typeof body?.code === 'number' && body.code !== 0) {
+      const detail = Array.isArray(body.message) ? body.message.join('；') : body.message ?? '';
+      throw new Error(`ai-agent internal 返回 code=${body.code} message=${detail}`);
+    }
     return body?.summary ?? '';
   }
 }

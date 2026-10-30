@@ -5,6 +5,7 @@
     "dist",
     "e2e",
     "**/*.spec.ts",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/*-dev"
   ]
 }
