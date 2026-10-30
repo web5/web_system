@@ -42,6 +42,8 @@ import { ListMusicProvidersTool } from '../music/tools/list-music-providers.tool
 import { PresentMusicCardTool } from '../music/tools/present-music-card.tool';
 import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
 import { UserMemoryUpdateHook } from './user-memory-update.hook';
+import { LlmInternalController } from './memory/llm-internal.controller';
+import { AiAgentServiceKeyGuard } from './memory/ai-agent-service-key.guard';
 import { POST_RUN_HOOKS, PostRunHook } from './post-run-hook';
 import { ImageGenTool } from './tools/image-gen.tool';
 
@@ -200,9 +202,10 @@ const postRunHooksProvider: Provider = {
     AgentConversationQueryService,
     IntentService,
     UserMemoryUpdateHook,
+    AiAgentServiceKeyGuard,
     postRunHooksProvider,
   ],
-  controllers: [AgentController],
+  controllers: [AgentController, LlmInternalController],
   exports: [AgentRunner, AgentEngine, ToolRegistry, AgentRegistry, ClientRegistry, DbConversationMemory, Compaction],
 })
 export class AgentModule implements OnModuleInit, OnModuleDestroy {
