@@ -3,6 +3,7 @@ import { AgentConversation } from './agent-conversation.entity';
 import { Compaction, ChatMessage, AgentMemoryConfig } from '@kedouai/agent-core';
 import { Repository } from 'typeorm';
 import { MusicService } from '../../music/music.service';
+import { UserMemorySummaryClient } from './user-memory-summary.client';
 
 /**
  * DbConversationMemory 持久化行为单测：
@@ -10,6 +11,7 @@ import { MusicService } from '../../music/music.service';
  * - 既有会话 title 保留（不被整行覆盖写 null）
  * - 摘要压缩分支同样保留 title，且 messages 缩为 keepRecent
  * - save 对象不携带 report/meta（避免把业务快照列覆盖为空）
+ * - loadProfile 双源合并（#8229）：摘要 + 口味并存、单源降级、失败不崩
  */
 describe('DbConversationMemory', () => {
   const config: AgentMemoryConfig = {
@@ -27,7 +29,7 @@ describe('DbConversationMemory', () => {
     return msgs;
   }
 
-  function setup(existing: Partial<AgentConversation> | null) {
+  function setup(existing: Partial<AgentConversation> | null, options?: { taste?: unknown; summary?: unknown }) {
     const repo = {
       findOne: jest.fn().mockResolvedValue(existing),
       save: jest.fn().mockImplementation((e) => Promise.resolve(e)),
@@ -41,13 +43,18 @@ describe('DbConversationMemory', () => {
       ),
     } as unknown as Compaction;
     const music = {
-      getTaste: jest.fn().mockResolvedValue({
-        likes: { genres: [], artists: [], moods: [] },
-        dislikes: { genres: [], artists: [] },
-      }),
+      getTaste: jest.fn().mockResolvedValue(
+        options?.taste ?? {
+          likes: { genres: [], artists: [], moods: [] },
+          dislikes: { genres: [], artists: [] },
+        },
+      ),
     } as unknown as MusicService;
-    const mem = new DbConversationMemory(repo, compaction, music as never);
-    return { repo, compaction, mem };
+    const summaryClient = {
+      getSummary: jest.fn().mockResolvedValue(options?.summary ?? null),
+    } as unknown as UserMemorySummaryClient;
+    const mem = new DbConversationMemory(repo, compaction, music as never, summaryClient as never);
+    return { repo, compaction, mem, music, summaryClient };
   }
 
   it('新建会话：title 取首条 user 内容前 20 字（去空白）', async () => {
@@ -112,5 +119,56 @@ describe('DbConversationMemory', () => {
     expect(saved.summarizedCount).toBe(6);
     expect(Array.isArray(saved.messages)).toBe(true);
     expect((saved.messages as unknown[]).length).toBe(6);
+  });
+
+  // ── loadProfile 双源合并（#8229 批次1 卡1.6）─────────────────────────
+
+  it('loadProfile：读到摘要并注入（原 BUG：此前从不查用户记忆）', async () => {
+    const { mem } = setup(null, {
+      summary: { namespace: 'general', summary: '# 用户画像\n- **事实**：用户叫橙子哥哥', version: 2, itemCount: 3 },
+    });
+    const text = await mem.loadProfile('u1');
+    expect(text).toContain('# 用户画像');
+    expect(text).toContain('橙子哥哥');
+  });
+
+  it('loadProfile：摘要与口味并存时两者都注入', async () => {
+    const { mem } = setup(null, {
+      taste: {
+        likes: { genres: ['民谣'], artists: ['周杰伦'], moods: [] },
+        dislikes: { genres: [], artists: [] },
+      },
+      summary: { namespace: 'general', summary: '- **偏好**：偏好简洁的回答风格', version: 1, itemCount: 1 },
+    });
+    const text = await mem.loadProfile('u1');
+    expect(text).toContain('用户口味档案');
+    expect(text).toContain('民谣');
+    expect(text).toContain('用户记忆摘要');
+    expect(text).toContain('偏好简洁的回答风格');
+  });
+
+  it('loadProfile：user-service 不可达（读摘要抛错）不崩、不注入摘要，口味仍注入', async () => {
+    const { mem, summaryClient } = setup(null, {
+      taste: {
+        likes: { genres: ['摇滚'], artists: [], moods: [] },
+        dislikes: { genres: [], artists: [] },
+      },
+    });
+    (summaryClient.getSummary as jest.Mock).mockRejectedValue(new Error('connect ECONNREFUSED'));
+    const text = await mem.loadProfile('u1');
+    expect(text).toContain('用户口味档案');
+    expect(text).not.toContain('用户记忆摘要');
+  });
+
+  it('loadProfile：双源都失败时返回 null（不抛异常，对话主链路不受影响）', async () => {
+    const { mem, music, summaryClient } = setup(null);
+    (music.getTaste as jest.Mock).mockRejectedValue(new Error('connect ECONNREFUSED'));
+    (summaryClient.getSummary as jest.Mock).mockRejectedValue(new Error('connect ECONNREFUSED'));
+    await expect(mem.loadProfile('u1')).resolves.toBeNull();
+  });
+
+  it('loadProfile：无摘要、无口味时返回 null（不注入空档案）', async () => {
+    const { mem } = setup(null);
+    await expect(mem.loadProfile('u1')).resolves.toBeNull();
   });
 });

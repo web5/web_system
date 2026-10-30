@@ -21,6 +21,7 @@ import { RoleEntity } from './permission/entities/role.entity';
 import { RolePermissionEntity } from './permission/entities/role-permission.entity';
 import { GlossaryEntryEntity } from './glossary/glossary-entry.entity';
 import { UserMemoryEntity } from './memory/user-memory.entity';
+import { UserMemorySummaryEntity } from './memory/user-memory-summary.entity';
 import { UserTasteProfileEntity } from './user-taste/user-taste-profile.entity';
 import { EmailVerificationCodeEntity } from './email/entities/email-verification-code.entity';
 
@@ -42,7 +43,7 @@ import { EmailVerificationCodeEntity } from './email/entities/email-verification
         // ⚠️ 手写清单：新增实体必须同步登记，否则 forFeature 注入 Repository 时
         //    会抛 EntityMetadataNotFoundError（2026-09-26 踩过：EmailVerificationCodeEntity 漏登记
         //    → /internal/users/email/verify 恒 500，且编译与单测均不报错）
-        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity, GlossaryEntryEntity, UserMemoryEntity, UserTasteProfileEntity, EmailVerificationCodeEntity];
+        const entities = [User, McpApiKeyEntity, McpKeyCodeEntity, PermissionEntity, RoleEntity, RolePermissionEntity, GlossaryEntryEntity, UserMemoryEntity, UserMemorySummaryEntity, UserTasteProfileEntity, EmailVerificationCodeEntity];
         if (dbType === 'mysql') {
           return {
             type: 'mysql',

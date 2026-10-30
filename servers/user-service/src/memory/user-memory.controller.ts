@@ -2,6 +2,8 @@ import {
   Controller,
   Get,
   Delete,
+  Post,
+  Body,
   Param,
   Query,
   Req,
@@ -14,9 +16,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { UserMemoryService } from './user-memory.service';
+import { UserMemorySummaryService } from './user-memory-summary.service';
 
 /**
- * 用户记忆（C 端，当前用户维度，只读 + 删除）。
+ * 用户记忆（C 端，当前用户维度，只读 + 删除 + 自己的摘要）。
  * 鉴权：AuthGuard → auth-service verify → req.user.id。
  */
 @ApiTags('用户记忆')
@@ -24,7 +27,10 @@ import { UserMemoryService } from './user-memory.service';
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class UserMemoryController {
-  constructor(private readonly memory: UserMemoryService) {}
+  constructor(
+    private readonly memory: UserMemoryService,
+    private readonly summary: UserMemorySummaryService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: '我的记忆列表（分页）' })
@@ -34,6 +40,21 @@ export class UserMemoryController {
     @Query('pageSize') pageSize = 50,
   ) {
     return this.memory.list(userIdOf(req), Number(page), Number(pageSize));
+  }
+
+  @Get('summary')
+  @ApiOperation({ summary: '我的记忆摘要（一用户一条，自动生成）' })
+  async mySummary(@Req() req: Request, @Query('namespace') namespace?: string) {
+    const row = await this.summary.get(userIdOf(req), namespace || 'general');
+    return { summary: row };
+  }
+
+  @Post('summary/rebuild')
+  @ApiOperation({ summary: '触发重算我的记忆摘要' })
+  @HttpCode(HttpStatus.OK)
+  async rebuildMySummary(@Req() req: Request, @Body() body: { namespace?: string }) {
+    const result = await this.summary.rebuild(userIdOf(req), body?.namespace || 'general');
+    return { success: true, changed: result.changed, skipped: result.skipped, summary: result.row };
   }
 
   @Delete(':id')
