@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R2] 疑似硬编码凭据
+       servers/api/src/cred.ts:1
+       export const apiSecret = 'abcd1234efgh';
+✗ 红线扫描未通过（1 error / 0 warning）

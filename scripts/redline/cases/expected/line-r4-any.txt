@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R4] TS 铁律违反(: any)
+       servers/api/src/any.ts:1
+       export const payload: any = {};
+✗ 红线扫描未通过（1 error / 0 warning）

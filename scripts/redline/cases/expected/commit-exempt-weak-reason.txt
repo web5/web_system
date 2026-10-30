@@ -1,0 +1,12 @@
+exit=0
+errors=0
+warnings=2
+--- stdout ---
+══ 红线提示（warning）══
+  [R20] 豁免理由不达标（豁免未生效）
+       feat: 改 ex_weak Micro-exempt: R17: yes
+       豁免理由过短（3 字 < 10 字）；请补充可审计的理由后重写 trailer
+  [R17] 测试用例 commit 缺评审凭证
+       feat: 改 ex_weak Micro-exempt: R17: yes
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✓ 红线扫描通过（0 error / 2 warning）

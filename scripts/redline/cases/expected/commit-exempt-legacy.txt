@@ -1,0 +1,8 @@
+exit=0
+errors=0
+warnings=0
+--- stdout ---
+══ 门禁提示（notice）══
+  [R21] 有 1 个 commit 用旧格式豁免（未按门分类）
+       旧写法 Micro-exempt: <理由> 仍是一票否决（豁免全部 8 门，向后兼容）；建议改用 Micro-exempt: <R门号>: <理由>，只豁免指定门
+✓ 红线扫描通过（0 error / 0 warning）

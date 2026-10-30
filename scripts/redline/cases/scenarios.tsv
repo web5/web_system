@@ -1,0 +1,42 @@
+# 门禁黄金用例集 · 场景表
+#
+# 格式（TAB 分隔，不要用空格）：id <TAB> mode <TAB> args <TAB> 说明
+#   mode: files | diff（与 scan-rules.sh 的子命令一致）
+#   args: 直接传给 scan-rules.sh；diff 模式下可用 ${C_XXX} 占位，由 run.sh 展开成夹具里的真实 sha
+#
+# 收录原则（每条都要能回答「它防的是哪种回归」）：
+#   1) 每门至少一条**阳性**（该报）+ 一条**阴性**（不该报）—— 只测阳性会漏掉"全报"的坏实现
+#   2) 源码注释里的踩坑条目（实测误报 / 边界 bug）逐条翻成断言 —— 那些是真实付过代价的知识
+#   3) 判据变化时先改这里，再改实现（用例先行，否则"改成什么算对"没有共识）
+#
+# 加新场景：在这里加一行 → run.sh --update 生成期望 → **人工 review 生成的 .txt** → 提交
+
+# ---------------- 行级规则（R1/R2/R3/R4/R5/R8）----------------
+line-r1-console-log	files	servers/api/src/dbg.ts	R1 阳性：console.log 报 error
+line-r1-script-whitelist	files	scripts/tool.mjs	R1 阴性：scripts/*.mjs 的 console.log 是产品行为，不报（2026-09-29 CI 实测误报）
+line-r3-todo	files	servers/api/src/todo.ts	R3 阳性：TODO 报 error（注释行不跳过）
+line-r4-any	files	servers/api/src/any.ts	R4 阳性：裸 `: any` 报 error
+line-r4-any-spec	files	servers/api/src/typed.spec.ts	R4 阴性：测试文件里的 `: any` 不报
+line-r5-cors-main	files	servers/api/src/main.ts	R5+R8 阳性：main.ts 的 enableCors() 无参 + 缺 useGlobalFilters
+line-r2-cred	files	servers/api/src/cred.ts	R2 阳性：疑似硬编码凭据
+line-no-trailing-newline	files	servers/api/src/nonl.ts	踩坑 #967：文件末尾无换行时最后一行不得被整行跳过
+
+# ---------------- commit 门（8 道）----------------
+commit-r10-ui-no-proto	diff	${C_UI_NO_PROTO}^..${C_UI_NO_PROTO}	R10 阳性：改 UI 无 Proto 凭证
+commit-new-api	diff	${C_NEW_API}^..${C_NEW_API}	R15/R17/R18 阳性：新增 controller + service，凭证全缺
+commit-r13-migration-small	diff	${C_MIGRATION_SMALL}^..${C_MIGRATION_SMALL}	R13 阴性：单行迁移低于行数阈值(5)，属微调不报（阈值下界）
+commit-r13-migration	diff	${C_MIGRATION}^..${C_MIGRATION}	R13 阳性：6 行迁移过阈值，契约面须 Contract 凭证
+commit-release	diff	${C_RELEASE}^..${C_RELEASE}	R14 阳性：CI workflow 属发布面
+commit-empty	diff	${C_EMPTY}^..${C_EMPTY}	R19 阳性：空提交（不能靠 Micro-exempt 绕过）
+commit-r17-fake-path	diff	${C_TEST_FAKE}^..${C_TEST_FAKE}	R17 阳性：Test 指向不存在的路径（卡 2.2 真实性）
+commit-r17-pass	diff	${C_TEST_PASS}^..${C_TEST_PASS}	R17 阴性：Test: pass 放行
+commit-r17-real-path	diff	${C_TEST_REAL}^..${C_TEST_REAL}	R17 阴性：Test 指向真实落盘文件放行
+commit-exempt-legacy	diff	${C_EXEMPT_LEGACY}^..${C_EXEMPT_LEGACY}	豁免旧格式：一票否决全部 8 门 + R21 notice 计数
+commit-exempt-scoped	diff	${C_EXEMPT_SCOPED}^..${C_EXEMPT_SCOPED}	卡 2.8：R17 分类豁免只放行 R17，R13/R15/R18 仍判
+# ⚠ 下面这条是「现状记录」不是「正确行为」：R13 的 controller 模式要求两层目录，浅层静默漏报。
+#   若将来拍板补齐触发面，这条期望会变红 —— 那是预期的红，改期望即可（见台账 #8252）。
+commit-r13-controller-shallow	diff	${C_CTRL_SHALLOW}^..${C_CTRL_SHALLOW}	现状：浅层 controller 触发 R17/R18 但**不触发 R13**（触发面不一致，疑漏报）
+commit-exempt-weak-reason	diff	${C_EXEMPT_WEAK}^..${C_EXEMPT_WEAK}	卡 2.7：豁免理由只有「yes」→ R20 质量门
+
+# ---------------- 跨门聚合（验证一个 range 内多门同时命中时的汇总口径）----------------
+range-multi-commit	diff	${C_UI_NO_PROTO}~1..${C_TEST_REAL}	多 commit 范围：行级 + 多道 commit 门同时命中，汇总计数须稳定

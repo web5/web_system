@@ -1,0 +1,40 @@
+exit=1
+errors=2
+warnings=9
+--- stdout ---
+══ 红线违规（error）══
+  [R11] UI commit 缺设计评审凭证
+       feat(admin): 调整卡片布局
+       UI 源码 commit 的 message 须带 Design: pass（D3 已过）；纯视觉微调走 Micro-exempt: <理由>（§3.7）
+  [R19] 空提交（无任何文件改动）
+       chore: 空提交仅重跑 CI
+       空提交无意义；如需重跑 CI 请用 CI 重跑按钮，而不是提交空 commit（§2.9）
+══ 红线提示（warning）══
+  [R9b] 既有 UI 改动无同行原型/豁免
+       1 个文件 / 5 行
+       须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）
+  [R10] UI commit 缺 Proto 凭证
+       feat(admin): 调整卡片布局
+       UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）
+  [R13] 契约与数据变更 commit 缺评审凭证
+       feat(db): 批量加列并建索引
+       message 须带 Contract: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R14] 发布与环境变更 commit 缺评审凭证
+       chore(ci): 加 fixture workflow
+       message 须带 Release: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R15] 新增对外接口 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Code: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R17] 测试用例 commit 缺评审凭证
+       feat(admin): 调整卡片布局
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R17] 测试用例 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R17] Test 凭证指向的用例文档不存在
+       docs/不存在的用例文档.md
+       Test: <路径> 须指向真实存在的用例文档（仓库内或任务目录内）；确无用例需求写 Test: pass
+  [R18] 研发方案与发布清单 commit 缺评审凭证
+       feat(api): 新增 thing 接口
+       message 须带 Plan: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✗ 红线扫描未通过（2 error / 9 warning）

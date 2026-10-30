@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R19] 空提交（无任何文件改动）
+       chore: 空提交仅重跑 CI
+       空提交无意义；如需重跑 CI 请用 CI 重跑按钮，而不是提交空 commit（§2.9）
+✗ 红线扫描未通过（1 error / 0 warning）

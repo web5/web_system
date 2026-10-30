@@ -1,0 +1,9 @@
+exit=0
+errors=0
+warnings=1
+--- stdout ---
+══ 红线提示（warning）══
+  [R17] Test 凭证指向的用例文档不存在
+       docs/不存在的用例文档.md
+       Test: <路径> 须指向真实存在的用例文档（仓库内或任务目录内）；确无用例需求写 Test: pass
+✓ 红线扫描通过（0 error / 1 warning）

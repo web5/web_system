@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R3] 占位残留(TODO/FIXME)
+       servers/api/src/todo.ts:1
+       // TODO: 补齐空值分支
+✗ 红线扫描未通过（1 error / 0 warning）
