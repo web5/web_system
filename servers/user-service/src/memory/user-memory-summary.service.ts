@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import { UserMemorySummaryEntity } from './user-memory-summary.entity';
 import { UserMemoryEntity } from './user-memory.entity';
+import { AiAgentSummaryClient } from './ai-agent-summary.client';
 
 /** 摘要正文的长度上限（验收判据 6：CHAR_LENGTH(summary) ≤ 500） */
 const SUMMARY_MAX_CHARS = 500;
@@ -40,46 +40,31 @@ interface MemoryDetailRow {
 }
 
 /**
- * 用户记忆摘要服务（#8229 批次1 卡1.2）。
+ * 用户记忆摘要服务（#8229 批次1 卡1.2；架构修正：LLM 统一走 ai-agent）。
  *
  * 职责：
  *   - get：读某用户某域的摘要行（或 null）；
  *   - upsert：幂等写摘要行（source_hash 相同不产生新版本）；
  *   - rebuild：从明细层全量重算摘要（拍板②：明细写入后全量重算）。
  *
- * 摘要生成（拍板③：复用提炼用的同一模型）：
- *   - 模型取 MEMORY_EXTRACT_MODEL（与 ai-agent 记忆提炼同环境变量），未配回落 deepseek-v4-flash；
- *   - 经 TokenHub OpenAI 兼容通道（TOKENHUB_BASE_URL + TOKENHUB_API_KEY / HY3_API_KEY）直连；
- *   - LLM 不可用 / 调用失败时回落确定性模板聚合（分类小标题 + 明细原文），保证 dev 无
- *     TokenHub 配置时链路仍完整可用（降级 warn 日志）。
+ * 摘要生成（架构修正，用户 2026-10-30 拍板）：
+ *   - LLM 调用统一走 ai-agent internal 端点 /internal/llm/memory-summary
+ *     （AiAgentSummaryClient，x-service-key 鉴权）；本服务**不直连 TokenHub、
+ *     不持有任何 LLM 密钥**，模型与密钥都归 ai-agent（与记忆提炼同一模型）；
+ *   - LLM 不可用 / 调用失败 / 超时 → 回落确定性模板聚合（分类小标题 + 明细原文），
+ *     链路不阻断（降级 warn 日志）。
  */
 @Injectable()
 export class UserMemorySummaryService {
   private readonly logger = new Logger(UserMemorySummaryService.name);
-
-  private readonly tokenHubBaseUrl: string;
-  private readonly tokenHubApiKey: string;
-  private readonly summaryModel: string;
 
   constructor(
     @InjectRepository(UserMemorySummaryEntity)
     private readonly repo: Repository<UserMemorySummaryEntity>,
     @InjectRepository(UserMemoryEntity)
     private readonly memoryRepo: Repository<UserMemoryEntity>,
-    private readonly configService: ConfigService,
-  ) {
-    this.tokenHubBaseUrl = (
-      this.configService.get<string>('TOKENHUB_BASE_URL') ||
-      this.configService.get<string>('HY3_BASE_URL') ||
-      'https://tokenhub.tencentmaas.com/v1'
-    ).replace(/\/+$/, '');
-    this.tokenHubApiKey =
-      this.configService.get<string>('TOKENHUB_API_KEY') ||
-      this.configService.get<string>('HY3_API_KEY') ||
-      '';
-    // 拍板③：摘要模型 = 记忆提炼用的同一模型（同一环境变量 MEMORY_EXTRACT_MODEL）
-    this.summaryModel = this.configService.get<string>('MEMORY_EXTRACT_MODEL') || 'deepseek-v4-flash';
-  }
+    private readonly aiAgent: AiAgentSummaryClient,
+  ) {}
 
   /** 读某用户某域的摘要行；没有返回 null */
   async get(userId: string, namespace = DEFAULT_SUMMARY_NAMESPACE): Promise<UserMemorySummaryEntity | null> {
@@ -151,7 +136,7 @@ export class UserMemorySummaryService {
     const lastItemAt = details.length
       ? details.reduce((acc, d) => (d.createdAt > acc ? d.createdAt : acc), details[0].createdAt)
       : null;
-    const summary = await this.generateSummary(details);
+    const summary = await this.generateSummary(userId, namespace, details);
     const { changed, row } = await this.upsert({
       userId,
       namespace,
@@ -183,12 +168,12 @@ export class UserMemorySummaryService {
    * 生成摘要正文：优先 LLM（拍板③），失败回落确定性模板（分类小标题 + 原文）。
    * 本方法不抛异常——摘要生成失败不能阻断 refresh 链路。
    */
-  private async generateSummary(details: MemoryDetailRow[]): Promise<string> {
+  private async generateSummary(userId: string, namespace: string, details: MemoryDetailRow[]): Promise<string> {
     if (details.length === 0) {
       return '# 用户画像\n（该用户暂无记忆明细）';
     }
     try {
-      const llm = await this.generateSummaryByLlm(details);
+      const llm = await this.generateSummaryByLlm(userId, namespace, details);
       if (llm && llm.trim()) return llm.trim();
       this.logger.warn('摘要 LLM 返回空，回落模板聚合');
     } catch (e) {
@@ -197,45 +182,13 @@ export class UserMemorySummaryService {
     return templateSummary(details);
   }
 
-  /** 经 TokenHub OpenAI 兼容通道生成结构化摘要（同提炼模型：MEMORY_EXTRACT_MODEL） */
-  private async generateSummaryByLlm(details: MemoryDetailRow[]): Promise<string> {
-    if (!this.tokenHubApiKey.trim()) {
-      throw new Error('未配置 TOKENHUB_API_KEY / HY3_API_KEY');
-    }
-    const lines = details
+  /** 经 ai-agent internal 端点生成结构化摘要（LLM 统一通道，模型归 ai-agent） */
+  private async generateSummaryByLlm(userId: string, namespace: string, details: MemoryDetailRow[]): Promise<string> {
+    const items = details
       .slice()
       .sort((a, b) => Number(a.id) - Number(b.id))
-      .map((d) => `- [${d.category}] ${d.content}`);
-    const system =
-      '你是用户记忆摘要生成器。把「记忆明细」压缩成一段结构化中文用户画像，要求：\n' +
-      '1. 首行必须是「# 用户画像」；\n' +
-      '2. 按事实/偏好/习惯分组，每行「- 分类：内容」，保留稳定事实，不逐条罗列对话细节；\n' +
-      '3. 末尾加一行「- 统计：共 N 条记忆」，N 用给定明细数；\n' +
-      '4. 总长不超过 450 字，不含与记忆无关的内容；只输出摘要正文。';
-    const user = `明细数：${details.length}\n记忆明细：\n${lines.join('\n')}`;
-    const res = await fetch(`${this.tokenHubBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.tokenHubApiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.summaryModel,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0.2,
-        max_tokens: 800,
-        stream: false,
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!res.ok) {
-      throw new Error(`TokenHub ${this.summaryModel} 返回 ${res.status}`);
-    }
-    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    return data?.choices?.[0]?.message?.content ?? '';
+      .map((d) => ({ category: d.category, content: d.content }));
+    return this.aiAgent.summarize(userId, namespace, items, details.length);
   }
 }
 
