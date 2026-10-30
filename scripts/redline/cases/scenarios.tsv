@@ -34,7 +34,7 @@ commit-r17-real-path	diff	${C_TEST_REAL}^..${C_TEST_REAL}	R17 阴性：Test 指�
 commit-exempt-legacy	diff	${C_EXEMPT_LEGACY}^..${C_EXEMPT_LEGACY}	豁免旧格式：一票否决全部 8 门 + R21 notice 计数
 commit-exempt-scoped	diff	${C_EXEMPT_SCOPED}^..${C_EXEMPT_SCOPED}	卡 2.8：R17 分类豁免只放行 R17，R13/R15/R18 仍判
 # ⚠ 下面这条是「现状记录」不是「正确行为」：R13 的 controller 模式要求两层目录，浅层静默漏报。
-#   若将来拍板补齐触发面，这条期望会变红 —— 那是预期的红，改期望即可（见台账 #8252）。
+#   若将来拍板补齐触发面，这条期望会变红 —— 那是预期的红，改期望即可（见台账 #8255）。
 commit-r13-controller-shallow	diff	${C_CTRL_SHALLOW}^..${C_CTRL_SHALLOW}	现状：浅层 controller 触发 R17/R18 但**不触发 R13**（触发面不一致，疑漏报）
 commit-exempt-weak-reason	diff	${C_EXEMPT_WEAK}^..${C_EXEMPT_WEAK}	卡 2.7：豁免理由只有「yes」→ R20 质量门
 
