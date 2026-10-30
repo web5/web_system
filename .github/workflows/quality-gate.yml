@@ -164,6 +164,27 @@ jobs:
           bash -n scripts/verify-deliverables.sh
           bash scripts/verify-deliverables.sh --self-check
 
+  # 门禁黄金用例集（2026-10-30 立）：改门禁判定逻辑时，输出必须与 expected/ 逐字节一致
+  #
+  # 为什么放 CI：用例不自动跑 = 一年后没人记得它存在，改动直接从它上面碾过去。
+  # 为什么不能省「跨平台」这一层：门禁在 CI(Linux) 与本地(macOS) 两处执行，
+  #   同一份输入若两边输出不同，等于「CI 绿 ≠ 本地绿」——那是比 bug 更难发现的事。
+  #   这条 job 红了先怀疑跨平台差异（locale / GNU vs BSD），不要先怀疑用例。
+  gate-cases:
+    name: 门禁黄金用例集（逐字节）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 造夹具并逐字节比对
+        run: bash scripts/redline/cases/run.sh
+
+      - name: 失败时给出差异摘要
+        if: failure()
+        run: |
+          echo "期望值在 scripts/redline/cases/expected/，实际差异见上一步输出"
+          echo "本地复现：bash scripts/redline/cases/run.sh --keep（保留夹具仓库路径）"
+
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
   #
   # 为什么不只靠本地脚本：散落的根因不是「不会跑」，是「没人提醒要跑」。
