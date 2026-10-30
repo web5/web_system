@@ -633,15 +633,63 @@ const advW = await page.$eval('#adv-body', (e) => e.getBoundingClientRect().widt
 rec('25b 策略预览整宽（≥ adv-body 90%）', Math.round(stratW) + '/' + Math.round(advW),
   '≥ ' + Math.round(advW * 0.9), stratW >= advW * 0.9);
 
-// B-1（运行时）：三个数值控件占位统一「未配置」
+// B-1（运行时）：占位口径 C（2026-10-29 拍板）——示例值 / 留空，**不再按等词比较**
+//   旧判据是「三个 === '未配置'」：每换一次词就得改脚本，且它把「未配置」当成正确目标，
+//   反而锁死了语义词。新判据断**语义类别**：
+//   temp/topP 必须有占位且不得含语义词（未配置 / 跟随默认 / 不设置…）——占位只放格式/单位/示例；
+//   maxTokens 的占位必须为空——留空 = 用满模型上限是推荐态，任何提示词都会误导。
+const SEMANTIC_WORDS = ['未配置', '跟随默认', '不设置', '默认值', '系统默认'];
 const phs = await page.evaluate(() => ({
-  temp: document.querySelector('#in-temp')?.placeholder ?? null,
-  max: document.querySelector('#in-max')?.placeholder ?? null,
-  topP: document.querySelector('#in-topP')?.placeholder ?? null,
+  temp: document.querySelector('#in-temp')?.placeholder ?? '',
+  max: document.querySelector('#in-max')?.placeholder ?? '',
+  topP: document.querySelector('#in-topP')?.placeholder ?? '',
 }));
-rec('25c 三个数值控件占位统一「未配置」', JSON.stringify(phs),
-  'temp/max/topP 均未配置',
-  phs.temp === '未配置' && phs.max === '未配置' && phs.topP === '未配置');
+const badPh = Object.entries(phs)
+  .filter(([k, v]) => (k === 'max' ? v !== '' : v.trim() === '' || SEMANTIC_WORDS.some((w) => v.includes(w))))
+  .map(([k, v]) => `${k}=${JSON.stringify(v)}`);
+rec('25c 占位口径：temp/topP 为示例值且无语义词、maxTokens 留空', JSON.stringify(phs),
+  'temp/topP 非空且不含语义词 / max 为空', badPh.length === 0);
+
+// B-2（运行时）：thinking 三按钮 = 业务词 + 顺序 跟随默认 → 开启 → 关闭
+//   （原为「未配置 (NULL) / enabled / disabled」，且顺序 null/disabled/enabled 与 Vue 相反）
+const segBtns = await page.$$eval('#seg-thinking button', (els) =>
+  els.map((e) => ({ text: e.textContent.trim(), value: e.dataset.thinking })));
+const segOk = segBtns.length === 3
+  && segBtns[0].text === '跟随默认' && segBtns[0].value === 'null'
+  && segBtns[1].text === '开启' && segBtns[1].value === 'enabled'
+  && segBtns[2].text === '关闭' && segBtns[2].value === 'disabled';
+rec('25e thinking 三按钮 = 跟随默认/开启/关闭（顺序与契约值均对）',
+  JSON.stringify(segBtns), '跟随默认(null) → 开启(enabled) → 关闭(disabled)', segOk);
+
+// B-3（运行时）：调参表单区不得出现实现枚举/内部字段名（page-spec :127）
+//   扫描域 = #adv-body（表单区）可见文本，不含屏级 .only-* 演示说明块与策略预览/差异表
+//   —— 那两处展示的是**运行值**（如策略命中明细），属第二批「值显示」口径，不在本条范围。
+const advText = await page.$eval('#adv-body', (e) => e.innerText);
+const enumLeaks = ['NULL', 'enabled', 'disabled'].filter((w) =>
+  new RegExp('(^|[^A-Za-z_])' + w + '([^A-Za-z_]|$)').test(advText));
+rec('25f 表单区不出现 NULL / enabled / disabled（业务词替代实现枚举）',
+  enumLeaks.join('|') || '(无)', '(无)', enumLeaks.length === 0);
+
+// B-4（运行时）：五个控件 label = 业务词（page-spec :126「用业务词不用字段名」）
+//   面板里还有「采样方式」「思考预算」两行 label（本就不含字段名，不在改名范围）→ 判据不按
+//   全量等值比较，而断两件事：① 五个目标 label 按顺序出现（子序列）；② 任何 label 都不含
+//   原始字段名（maxTokens / max_steps / max_tokens / top_p / budget_tokens / thinking）。
+//   Temperature 经实测保留英文专名：`.ant-form-item-label > label` clientWidth=82 ==
+//   scrollWidth=82（1440/1280 均为 82/82，nowrap 下不裁字），84px 列宽装得下。
+const flbs = await page.$$eval('#adv-body .flb', (els) =>
+  els.map((e) => e.textContent.trim()).filter(Boolean));
+const wantLabels = ['Temperature', '输出上限', 'Top P', '思考', '最大步数'];
+const isSubseq = (arr, sub) => {
+  let i = 0;
+  for (const v of arr) if (i < sub.length && v === sub[i]) i += 1;
+  return i === sub.length;
+};
+const FIELD_NAME_TOKENS = ['maxTokens', 'max_steps', 'max_tokens', 'top_p', 'budget_tokens', 'thinking'];
+const labelFieldLeaks = flbs.filter((t) => FIELD_NAME_TOKENS.some((k) => t.includes(k)));
+rec('25g 五个 label 为业务词（Temperature 保留英文专名 / 无字段名残留）',
+  JSON.stringify(flbs) + ' / 字段名残留=' + (labelFieldLeaks.join('|') || '(无)'),
+  JSON.stringify(wantLabels) + ' 依序出现 / 字段名残留=(无)',
+  isSubseq(flbs, wantLabels) && labelFieldLeaks.length === 0);
 
 // A-2（静态）：debug-slot 技术文案不得回潮（写给开发的文档不进产品页面）
 const DETAIL_SRC = REPO + 'apps/admin/src/views/Agents/AgentDefDetail.vue';
