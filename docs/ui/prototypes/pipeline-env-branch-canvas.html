@@ -90,8 +90,11 @@
   .side-item.active{background:var(--primary);color:#fff;font-weight:600;}
   .side-item svg{width:15px;height:15px;}
   .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg);}
+  /* 面包屑行：band 高锁 48、内容垂直居中。
+     原写法 padding:12px 20px 0 上下不对称（上 12 / 下 0），
+     内容被压到 band 下半区，面包屑墨迹中心比 band 中心低约 6px。 */
   .crumb-row{display:flex;align-items:center;justify-content:space-between;
-    padding:12px 20px 0;}
+    height:48px;padding:0 20px;}
   .crumb{font-size:13px;color:var(--text-3);}
   .crumb b{color:var(--text);font-weight:600;}
   .top-ops{display:flex;gap:8px;}
