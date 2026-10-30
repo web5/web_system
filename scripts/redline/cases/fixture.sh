@@ -198,7 +198,7 @@ Micro-exempt: R17: 纯样式改动，不涉及行为，用例沿用上一批" $t
   #   R13 的模式是 `servers/*/src/*/*.controller.ts`（要求 src 下还有一层目录），
   #   而 R15/R18 用的是 `*/*.controller.ts`（任意层）→ 同一个文件 R13 不判、R15/R18 判。
   #   真实仓库的 controller 多在 `src/modules/<域>/x.controller.ts`（两层，能命中），
-  #   但 `src/x.controller.ts`（单层）会被 R13 静默漏掉。是否补齐待拍板（台账 #8252）。
+  #   但 `src/x.controller.ts`（单层）会被 R13 静默漏掉。是否补齐待拍板（台账 #8255）。
   _fx_write servers/api/src/shallow.controller.ts \
     'export class ShallowController {' \
     '  ping() { return "pong"; }' \
