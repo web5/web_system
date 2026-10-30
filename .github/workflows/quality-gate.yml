@@ -125,6 +125,45 @@ jobs:
       - name: 全量 ESLint 水位（warning 不超基线）
         run: pnpm lint:ci
 
+  # 交付物完整性检查（卡 2.4 · 2026-10-29）
+  #
+  # 判据源：~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md §2.10「交付物清单」四件套
+  #   （方案 / 需求单 / 测试用例 / 交互清单）
+  #
+  # ⚠️ 为什么「拿不到任务目录就跳过」而不是报错：
+  #   交付物大多落在**仓库外**的 ~/AiWorkspace/30-任务产物/…，CI runner 上默认不存在。
+  #   若强制要求，CI 会 100% 红，且红灯原因与代码质量无关 —— 那是「永远红的门」，
+  #   团队只会学会无视它。故默认跳过，只在显式提供 DELIVERABLES_DIR 时才真跑。
+  #
+  # 如何启用：仓库变量/环境变量 DELIVERABLES_DIR 指向任务目录（如
+  #   /home/runner/work/AiWorkspace/30-任务产物/2026-10-29-xxx）
+  #   —— 需要该目录在 runner 上真实存在（自托管 runner 或 checkout 同一 AiWorkspace 仓库时可用）。
+  deliverables-check:
+    name: 交付物完整性（四件套）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 交付物完整性检查
+        env:
+          DELIVERABLES_DIR: ${{ vars.DELIVERABLES_DIR }}
+        run: |
+          if [ -z "${DELIVERABLES_DIR:-}" ]; then
+            echo "跳过：未提供 DELIVERABLES_DIR（交付物在仓库外，CI 上默认不可得）"
+            echo "如需启用：设置仓库变量 DELIVERABLES_DIR 指向任务目录绝对路径"
+            exit 0
+          fi
+          if [ ! -d "$DELIVERABLES_DIR" ]; then
+            echo "跳过：DELIVERABLES_DIR 指向的目录不存在：$DELIVERABLES_DIR"
+            exit 0
+          fi
+          bash scripts/verify-deliverables.sh "$DELIVERABLES_DIR" "${GITHUB_SHA:-}"
+
+      - name: 校验脚本自身可用（语法 + 自检）
+        run: |
+          bash -n scripts/verify-deliverables.sh
+          bash scripts/verify-deliverables.sh --self-check
+
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
   #
   # 为什么不只靠本地脚本：散落的根因不是「不会跑」，是「没人提醒要跑」。
