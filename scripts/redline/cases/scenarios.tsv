@@ -38,5 +38,11 @@ commit-exempt-scoped	diff	${C_EXEMPT_SCOPED}^..${C_EXEMPT_SCOPED}	卡 2.8：R17 
 commit-r13-controller-shallow	diff	${C_CTRL_SHALLOW}^..${C_CTRL_SHALLOW}	现状：浅层 controller 触发 R17/R18 但**不触发 R13**（触发面不一致，疑漏报）
 commit-exempt-weak-reason	diff	${C_EXEMPT_WEAK}^..${C_EXEMPT_WEAK}	卡 2.7：豁免理由只有「yes」→ R20 质量门
 
+# ---------------- R11 设计评审凭证（唯一 error 级 commit 门，四个输出分支）----------------
+commit-r11-nonpass	diff	${C_R11_NONPASS}^..${C_R11_NONPASS}	R11 阳性：UI commit 的 Design 不是 pass
+commit-r11-spec-missing	diff	${C_R11_SPEC_MISSING}^..${C_R11_SPEC_MISSING}	R11 阳性：spec commit 的 Design 指向的报告不存在
+commit-r11-spec-blocking	diff	${C_R11_SPEC_BLOCKING}^..${C_R11_SPEC_BLOCKING}	R11 阳性：报告头部 阻塞: 2 → 阻塞未清零
+commit-r11-spec-ok	diff	${C_R11_SPEC_OK}^..${C_R11_SPEC_OK}	R11 阴性：spec commit + 报告阻塞为 0 → 一条不报
+
 # ---------------- 跨门聚合（验证一个 range 内多门同时命中时的汇总口径）----------------
 range-multi-commit	diff	${C_UI_NO_PROTO}~1..${C_TEST_REAL}	多 commit 范围：行级 + 多道 commit 门同时命中，汇总计数须稳定

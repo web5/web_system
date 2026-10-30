@@ -209,6 +209,53 @@ Micro-exempt: R17: 纯样式改动，不涉及行为，用例沿用上一批" $t
   _fx_commit "feat: 新增浅层 controller" $t; t=$((t + 60))
   echo "C_CTRL_SHALLOW $(git rev-parse HEAD)"
 
+  # ---- R11 设计评审凭证：四个分支 ----
+  # R11 是唯一 error 级 commit 门，此前零用例（台账 #8256）。它的输出文案有四种，
+  #   如果只测「缺凭证」一种，其余三种改错了也没人发现。
+  #   ① UI 分支  Design 非 pass     → 「UI commit 的 Design 凭证非 pass」
+  #   ② spec 分支 报告不存在        → 「Design 凭证指向的报告不存在」
+  #   ③ spec 分支 阻塞项未清零      → 「设计评审阻塞项未清零」（带 阻塞: N）
+  #   ④ spec 分支 阻塞为 0          → 阴性，一条都不报
+  # ⚠️ 为什么 ②③④ 必须用「非 UI 的 spec commit」：bash 的分支是
+  #   isui=0 走报告内容校验，isui=1 只认 `Design: pass`。在 UI commit 上写报告路径
+  #   命中的是「凭证非 pass」，永远走不到「报告不存在」——这就是只测阳性的盲区。
+
+  # ① UI commit 带 Design: 但值不是 pass
+  _fx_write apps/admin/src/views/R11Nonpass.vue '<template><div>r11</div></template>'
+  git add -A
+  _fx_commit "feat(admin): 新增 r11 面板
+Design: warn" $t; t=$((t + 60))
+  echo "C_R11_NONPASS $(git rev-parse HEAD)"
+
+  # ② spec commit 指向不存在的报告
+  _fx_write docs/ui/prototypes/r11-missing.md '# r11 原型（缺报告）'
+  git add -A
+  _fx_commit "docs(proto): r11 原型（报告未落盘）
+Design: docs/ui/reviews/r11-missing.md" $t; t=$((t + 60))
+  echo "C_R11_SPEC_MISSING $(git rev-parse HEAD)"
+
+  # ③ spec commit 报告存在但阻塞未清零
+  _fx_write docs/ui/reviews/r11-blocked.md \
+    '# r11 设计评审' \
+    '阻塞: 2' \
+    '- 空态未定义' \
+    '- 移动端断点缺失'
+  _fx_write docs/ui/prototypes/r11-blocked.md '# r11 原型（有阻塞）'
+  git add -A
+  _fx_commit "docs(proto): r11 原型（评审有阻塞）
+Design: docs/ui/reviews/r11-blocked.md" $t; t=$((t + 60))
+  echo "C_R11_SPEC_BLOCKING $(git rev-parse HEAD)"
+
+  # ④ spec commit 报告阻塞为 0 —— 阴性
+  _fx_write docs/ui/reviews/r11-clean.md \
+    '# r11 设计评审' \
+    '阻塞: 0'
+  _fx_write docs/ui/prototypes/r11-clean.md '# r11 原型（评审通过）'
+  git add -A
+  _fx_commit "docs(proto): r11 原型（评审通过）
+Design: docs/ui/reviews/r11-clean.md" $t; t=$((t + 60))
+  echo "C_R11_SPEC_OK $(git rev-parse HEAD)"
+
   # 劣质理由（只有 yes）——时间落在 R20 生效日之后，确保质量门会判
   _fx_write servers/api/src/ex_weak.ts 'export const e3 = 1;'
   git add -A

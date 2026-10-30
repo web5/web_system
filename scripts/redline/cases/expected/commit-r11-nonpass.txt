@@ -1,0 +1,19 @@
+exit=1
+errors=1
+warnings=3
+--- stdout ---
+══ 红线违规（error）══
+  [R11] UI commit 的 Design 凭证非 pass
+       warn
+       UI commit 须写 Design: pass；报告路径应挂在原型/规格 commit 上（§3.7）
+══ 红线提示（warning）══
+  [R10] UI commit 缺 Proto 凭证
+       feat(admin): 新增 r11 面板 Design: warn
+       UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）
+  [R17] 测试用例 commit 缺评审凭证
+       feat(admin): 新增 r11 面板 Design: warn
+       message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R18] 研发方案与发布清单 commit 缺评审凭证
+       feat(admin): 新增 r11 面板 Design: warn
+       message 须带 Plan: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✗ 红线扫描未通过（1 error / 3 warning）

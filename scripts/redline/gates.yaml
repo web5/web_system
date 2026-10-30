@@ -446,7 +446,8 @@ gates:
     validity:
       status: unmeasured
       note: error 级 —— 唯一阻断的 commit 门，2026-09-22 拍板不设观察期
-    evidence: []
+      branches_note: 四个输出分支各自有用例（非 pass / 报告不存在 / 阻塞未清零 / 阻塞为 0 的阴性）。②③④ 必须用非 UI 的 spec commit —— 在 UI commit 上写报告路径命中的是「凭证非 pass」，永远走不到「报告不存在」
+    evidence: ["commit-r11-nonpass", "commit-r11-spec-missing", "commit-r11-spec-blocking", "commit-r11-spec-ok", "commit-r10-ui-no-proto"]
 
   - id: R11b
     sub: null
@@ -795,9 +796,6 @@ uncovered:
   - gate: R9
     missing: 新增页面 / app.json IA 变化
     reason: 需构造 app.json 的 pages 段 diff
-  - gate: R11
-    missing: 全部（这是唯一 error 级 commit 门，最该有）
-    reason: '夹具需造 Design: <报告路径> + 报告头部 阻塞: N，三态（缺凭证/非 pass/阻塞未清零）'
   - gate: R11b
     missing: 全部
     reason: 依赖 python 扫描器 + 原型 data-dr 属性
