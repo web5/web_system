@@ -13,6 +13,7 @@ import {
   Dropdown,
   Menu,
   Modal,
+  Popconfirm, // 记忆页删除二次确认（#8229 批次 2 卡 2.3）
   ConfigProvider,
   App as AntdApp,
 } from 'ant-design-vue';
@@ -45,6 +46,7 @@ const components = [
   Tabs, // 自动注册 TabPane
   Dropdown, Menu, // Menu 自动注册 MenuItem / MenuDivider
   Modal,
+  Popconfirm, // 记忆页删除二次确认（#8229 批次 2 卡 2.3）
   ConfigProvider,
   AntdApp,
 ];
