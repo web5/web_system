@@ -185,11 +185,22 @@ jobs:
       - name: 校验 gates.yaml 与 bash 一致（声明/实现漂移）
         run: node scripts/redline/gates-lint.ts
 
+      # 影子比对：新引擎（gate.ts）与 bash 在同一组输入上必须输出逐字节一致。
+      #
+      # 为什么这条不能省：run.sh 只证明「bash 的行为没变」，它完全无法发现
+      #   「新引擎少判了一道门」——重写引入的偏差正是要靠这一步抓。
+      # 实测价值：第一次跑就抓到 gate.ts 把 credential.checks 当字符串读，
+      #   导致所有「报告路径是否存在」的校验被静默跳过（R17 假路径用例假绿）。
+      #   这种bug不会报错、不会崩，只会让门禁变哑。
+      - name: 双引擎影子比对（bash ↔ gate.ts）
+        run: bash scripts/redline/cases/shadow.sh
+
       - name: 失败时给出差异摘要
         if: failure()
         run: |
           echo "期望值在 scripts/redline/cases/expected/，实际差异见上一步输出"
           echo "本地复现：bash scripts/redline/cases/run.sh --keep（保留夹具仓库路径）"
+          echo "影子比对失败：bash scripts/redline/cases/shadow.sh --filter <场景id> 定位"
           echo "若 gates-lint 报漂移：以 bash 为准改 gates.yaml，不要反过来改 bash 去迁就声明"
 
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
