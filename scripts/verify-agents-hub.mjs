@@ -357,7 +357,7 @@ rec('9t 折叠/展开子菜单后无 JS 报错', jsErrors.length, 0);
 // 背景：产品意见「把菜单占位的原型稿也整合进来吧，后续就不用整合了，迭代也会更精准」。
 // 机制：scripts/lib/proto-registry.mjs 每屏一行 —— 写了 source 的屏由 build 从原型稿同源抽取。
 // 这一段证明三件事：① 登记了 = 真的合进去了；② 合进去没把别的屏弄坏；③ 占位屏的批次不是编的。
-const hubHtml = fs.readFileSync(ROOT + '/docs/ui/prototypes/admin-agents-hub.html', 'utf8');
+const hubHtml = fs.readFileSync((process.argv[2] || ROOT + '/docs/ui/prototypes/admin-agents-hub.html'), 'utf8');
 const regScreens = REGISTRY.map((r) => r.screen);
 const navScreens = NAV.map((m) => m.screen);
 
@@ -386,6 +386,35 @@ const dupInject = SOURCE_DEFS.map((s) => ({
 })).filter((x) => x.n !== 2);
 rec('10b3 每份源稿 CSS/JS 各只注入一次（不是每屏一份）',
   dupInject.map((x) => `${x.file}:${x.n}`).join('|'), '');
+
+// 10b4 id 隔离**不得**靠「全局覆写 document.getElementById」（2026-10-29 修复 + 防复发）
+//  背景：旧实现在抽取 prelude 里写 `document.getElementById = function(id){…}`，两个模块各装一次 →
+//   后装的劫持**同页所有代码**：admin-agent-def-detail.html 的 getElementById('toast') 被映射到
+//   'zm-toast'，hub 内 toast 完全不显示；且 querySelector('#id') 完全不受 shim 保护 →
+//   试采状态分段 / 手动触发弹窗状态分段在 hub 内静默失效。
+//  现状：改成 IIFE 局部的 byId/qs/qsa（见 scripts/lib/proto-registry.mjs 3a 段）。
+rec('10b4-1 生成稿无全局 getElementById 覆写（id 隔离只走 IIFE 局部 byId）',
+  (hubHtml.match(/document\.getElementById\s*=[^=]/g) || []).length, 0);
+const shimState = await page.evaluate(() => ({
+  hijacked: /SELF_IDS|RAW_BY_ID|SELF\[/.test(String(document.getElementById)),
+  toastId: (document.getElementById('toast') || {}).id ?? null,
+}));
+rec('10b4-2 运行时 document.getElementById 仍是原生（未被任何模块 shim 劫持）', shimState.hijacked, false);
+rec('10b4-3 运行时 getElementById("toast") 命中的是本稿 toast（不是别的模块的 zm-/dm- 前缀件）',
+  shimState.toastId, 'toast');
+// 10b5 querySelector('#id') 必须同样吃到前缀 —— 旧 shim 只管 getElementById，这类选择器
+//      在 hub 内会静默返回空（不报错，只是控件不联动），是最难发现的一类。
+const segLive = await page.evaluate(() => {
+  const seg = document.getElementById('zm-testStateSeg');
+  if (!seg) return { found: false };
+  const btns = [...seg.querySelectorAll('button')];
+  if (btns.length < 2) return { found: true, total: btns.length };
+  btns[btns.length - 1].click();
+  return { found: true, total: btns.length, onIdx: btns.findIndex((b) => b.classList.contains('on')) };
+});
+rec('10b5 模块 querySelector("#id") 前缀生效：点试采状态末档，.on 跟到末档（旧 shim 下恒停在首档）',
+  segLive.found ? `${segLive.onIdx}/${segLive.total}` : 'not-found',
+  `${(segLive.total ?? 0) - 1}/${segLive.total}`);
 
 // 10c 作用域隔离：合入稿的 CSS 规则必须条条带作用域（裸规则会污染全站 —— v2 事故同型）
 const SEC = '/* ===== 来自 ';
@@ -532,10 +561,189 @@ await wait(280);
 rec('10g-modal2 弹窗可关闭', await page.$eval('#zm-triggerMask', (e) => e.classList.contains('on')), false);
 rec('10g-err 自媒体运营交互后仍无 JS 报错', jsErrors.length, 0);
 
+// 10h 面包屑契约（2026-10-29）：把「模块 crumb 写」这条**隐式依赖**钉成显式契约
+//  —— 实测结论（详见 docs/ui/reviews/proto-crumb-contract-2026-10-29.md）：
+//    · 稿自己的 #crumb 在 <header class="topbar">（admin-media-ops.html:439），而抽取区
+//      <div class="content"> 从 447 行起 → **该元素从不进 hub**；但抽取逻辑把全部 <script>
+//      整段照搬，故 go()（:1423）/ accEdit()（:1485）对 #crumb 的写落在 **hub 壳**元素上。
+//    · 主屏：hub 的 paint() 最后写（zmSync → hash → showHub → 重绘），模块写被覆盖，不可见；
+//    · 子页 4 个：hub 的 CRUMBS **没有这 4 个键**，paint() 会写空 → 模块的写是**唯一来源**。
+//  —— 所以这不是「可以随手删掉的冗余」：谁把模块的 crumb 写隔离掉、或改了 hub 壳 #crumb 的
+//      id/class（go()/accEdit() 均无 null 守卫 → 抛错会让整个自媒体模块切屏失效），
+//      4 个子页的面包屑会**静默变空**。下面两条就是为此设的哨兵。
+/* ⚠️ 必须容 null：万一 hub 壳的 #crumb 被改名/移除，这里要**报 FAIL**，
+   而不是抛异常把整个机检跑崩（崩了就看不到后面几十条断言的结果了）。 */
+const crumbText = () => page.$eval('#crumb', (e) => e.textContent.trim().replace(/\s+/g, ' '))
+  .catch(() => null);
+const crumbLevel = async () => {
+  const t = await crumbText();
+  return t ? t.split('/').map((s) => s.trim()).filter(Boolean).length : 0;
+};
+const gotoScreen = async (s) => {
+  await page.$eval(`.ad-item[data-screen="${s}"]`, (e) => e.click());
+  await wait(420);
+};
+
+/* 主屏集合取自菜单（与 proto-shell.mjs 的 SHELL_NAV 单源对齐，不在此硬编码） */
+const contentScreens = (await page.$$eval('.ad-item[data-screen^="content-"]',
+  (ns) => ns.map((n) => n.dataset.screen))).sort();
+const mainDetail = [];
+const emptyCrumb = [];
+for (const s of contentScreens) {
+  await gotoScreen(s);
+  const t = await crumbText();
+  const lv = await crumbLevel();
+  mainDetail.push(`${s.replace('content-', '')}:${lv}`);
+  if (!t) emptyCrumb.push(s);
+}
+/* 子页：hub 的 CRUMBS 无键 → 只有模块的 crumb 写在供内容 */
+const SUB_PAGES = [
+  { key: 'source-edit', parent: 'content-sources' },
+  { key: 'item-detail', parent: 'content-items' },
+  { key: 'pipeline-edit', parent: 'content-pipelines' },
+  { key: 'account-edit', parent: 'content-accounts' },
+];
+const subDetail = [];
+const levelBad = [];
+for (const { key, parent } of SUB_PAGES) {
+  await gotoScreen(parent);
+  const pLv = await crumbLevel();
+  const btn = await page.$(`#zm-screen-${MOUNT_MAP[parent]} [onclick*="go('${key}')"]`);
+  if (!btn) { subDetail.push(`${key}:入口缺失`); emptyCrumb.push(`${key}(入口缺失)`); continue; }
+  await btn.click();
+  await wait(420);
+  const t = await crumbText();
+  const lv = await crumbLevel();
+  subDetail.push(`${key}:${lv}/${pLv}`);
+  if (!t) emptyCrumb.push(key);
+  /* ⚠️ 必须是 **严格大于**（子页 = 父屏 + 1 级），不能写成 ≥：
+       变异测试实测 —— 把模块的 crumb 写屏蔽掉后，子页面包屑**不会变空**，而是
+       停留在父屏那两级（进主屏时 paint() 写的，进子页时没人覆盖）→ 变成 2/2。
+       用 ≥ 的话 2≥2 仍然通过，这条断言就成了摆设。 */
+  if (lv <= pLv) levelBad.push(`${key}:${lv}≤${pLv}`);
+}
+rec('10h-1 面包屑非空：6 主屏 + 4 子页（子页无 hub CRUMBS 键 → 全靠模块 crumb 写）',
+  `空=[${emptyCrumb.join(',')}] 主屏[${mainDetail.join(' ')}] 子页(层级/父屏)[${subDetail.join(' ')}]`,
+  '空=[]', emptyCrumb.length === 0);
+rec('10h-2 子页面包屑层级 = 父主屏 + 1 级（少一级说明模块的 crumb 写没生效）',
+  `越级=[${levelBad.join(',')}] 子页(层级/父屏)[${subDetail.join(' ')}]`,
+  '越级=[] （每个子页层级均 = 父屏+1）', levelBad.length === 0);
+
 
 // 10f 页面头部说明必须写明「注册表机制」，否则新人还是按老办法手工整合
 rec('10f 页头写明整合机制（注册表 + 重跑 build）',
   await page.$eval('.proto-head', (e) => /proto-registry|注册表/.test(e.textContent)), true);
+
+// —— ⑪ detail 屏 CSS / 状态完整性（2026-10-28 事故复盘） ——
+// 事故：build 的 between('<style>','</style>') 只取第一段 style，而 B3 五控件 CSS 误挂在
+// 第二段（sync-prototype-shell 注入的壳块）尾部 → .only-* 状态矩阵 / .warn-tool 整块丢失，
+// hub 屏② 五个数据态同显 + 警告 SVG（viewBox 24）撑成巨大黑三角。单稿正常、hub 坏，
+// verify-agents-hub 当时 222/223 也没拦住 → 本段把这类「静默丢失」钉死。
+const dtHtml = fs.readFileSync(ROOT + '/docs/ui/prototypes/admin-agent-def-detail.html', 'utf8');
+
+// ⑪a 关键 CSS 规则必须在 hub CSS 流里（字符串断言，删掉规则立即 FAIL —— 经得起变异测试）
+const CSS_NEEDLES = [
+  ['.only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}', '状态矩阵基础隐藏组'],
+  ['[data-demo-state="loading"] .only-loading', '状态切换规则（loading）'],
+  ['[data-demo-state="normal"] .only-normal', '默认态显示规则'],
+  ['.warn-tool svg{width:18px', '.warn-tool svg 尺寸规则（防 SVG 撑爆）'],
+  ['.warn-tool{display:flex', '.warn-tool 警示框'],
+  ['.budget-ro{display:flex', '.budget-ro 只读预览'],
+  ['.strat-chain{list-style', '.strat 策略预览'],
+  ['.audit-item{padding', '.audit-item 审计条目'],
+  ['.state-box{padding', '.state-box 状态占位'],
+  ['html[data-demo-role="editor"] [data-need-role="admin"]', '角色可见性规则（editor 不可见）'],
+  ['html[data-demo-role="viewer"] [data-need-role="admin"]', '角色可见性规则（viewer 不可见）'],
+];
+for (const [needle, why] of CSS_NEEDLES) {
+  rec(`11a hub CSS 含 ${why}`, hubHtml.includes(needle), true);
+}
+
+// 11a-2 旧「仅 super_admin」门禁已随口径放开移除（2026-10-29 拍板：admin 及以上可见）
+rec('11a-2 hub 不再含旧 data-need-role="superadmin" 门禁',
+  hubHtml.includes('data-need-role="superadmin"'), false);
+
+// ⑪b 模块关键 CSS 条目数不为 0（防「整块 CSS 被过滤掉」的静默丢失）
+const KEY_SEL = ['.f-tag{', '.warn-tool{', '.budget-ro{', '.strat{', '.audit-item{', '.state-box{', '.role-fallback{', '.only-loading,'];
+rec('11b detail 屏关键 CSS 条目全命中（防整块丢失）',
+  KEY_SEL.filter((k) => !hubHtml.includes(k)).join('|'), '');
+
+// ⑪c 屏② DOM 的 data-demo-state 数量与 src 一致（stripWrapper 会剥 wrapper 属性，build 必须补回）
+//     只数 DOM 属性（`data-demo-state="`），不数 CSS 选择器里的 `[data-demo-state=…]`
+const countAttr = (html, region) => {
+  const seg = region ? html.slice(html.indexOf(region)) : html;
+  return (seg.match(/data-demo-state="/g) || []).length;
+};
+const srcDetailFrom = dtHtml.indexOf('<div id="screen-detail"');
+const srcDetailTo = dtHtml.indexOf('<aside class="demo-ctl"');
+const srcDetailHtml = dtHtml.slice(srcDetailFrom, srcDetailTo > srcDetailFrom ? srcDetailTo : undefined);
+const hubDetailFrom = hubHtml.indexOf('data-screen="detail"');
+const hubDetailTo = hubHtml.indexOf('data-screen="', hubDetailFrom + 10);
+const hubDetailHtml = hubHtml.slice(hubDetailFrom, hubDetailTo > hubDetailFrom ? hubDetailTo : undefined);
+const srcDemoCount = (srcDetailHtml.match(/data-demo-state="/g) || []).length;
+const hubDemoCount = (hubDetailHtml.match(/data-demo-state="/g) || []).length;
+rec('11c 屏② DOM 的 data-demo-state 数量与 src 一致', hubDemoCount, srcDemoCount);
+rec('11c2 detail 容器带 data-demo-state="normal"（状态矩阵选择器的挂载点）',
+  /data-screen="detail"[^>]*data-demo-state="normal"|data-demo-state="normal"[^>]*data-screen="detail"/.test(hubHtml), true);
+
+// ⑪d 运行时：默认态只显示 .only-normal，五个演示数据态全隐（CSS 真生效，不是只写了规则）
+await page.evaluate(() => { location.hash = '#/agents/definitions'; });
+await wait(200);
+await page.evaluate(() => {
+  const btns = document.querySelectorAll('.tbl .btn, [data-dr="row-edit"], .dt-back');
+  // 直接开 detail（与 openDef 同路径）：hash 路由 + 显示 detail 屏
+  location.hash = '#/agents/definitions/report-helper';
+});
+await wait(360);
+const stateVis = async () => {
+  const names = ['loading', 'empty', 'error', 'forbidden', 'misconfig', 'normal'];
+  const pairs = [];
+  for (const n of names) {
+    pairs.push(n + '=' + await vis(`[data-screen="detail"] .only-${n}`));
+  }
+  return pairs.join('|');
+};
+rec('11d 默认态（data-demo-state=normal）：仅 .only-normal 可见，五个数据态全隐',
+  await stateVis(), 'loading=false|empty=false|error=false|forbidden=false|misconfig=false|normal=true');
+
+// ⑪e 手动切 data-demo-state：单态可见、其余全隐（矩阵互斥真生效）
+//     ⚠️ misconfig 例外：按设计 = 警示横幅(.only-misconfig) + 正常表单(.only-normal) **同显**
+//     （「误配态演示」是在正常表单上方加红框警示，不是替换整屏）
+for (const st of ['loading', 'error', 'empty', 'forbidden']) {
+  await page.evaluate((s) => {
+    document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', s);
+  }, st);
+  await wait(120);
+  const expect = ['loading', 'empty', 'error', 'forbidden', 'misconfig', 'normal']
+    .map((n) => `${n}=${n === st}`).join('|');
+  rec(`11e 切 data-demo-state=${st} → 仅 .only-${st} 可见`, await stateVis(), expect);
+}
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'misconfig');
+});
+await wait(120);
+rec('11e 切 data-demo-state=misconfig → 警示横幅 + 正常表单同显（设计如此，非互斥替换）',
+  await stateVis(), 'loading=false|empty=false|error=false|forbidden=false|misconfig=true|normal=true');
+// 复位
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'normal');
+});
+await wait(120);
+
+// ⑪f .warn-tool svg 实际渲染尺寸 = 18×18（不是无约束撑爆）
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'misconfig');
+});
+await wait(120);
+const svgBox = await page.$eval('[data-screen="detail"] .only-misconfig .warn-tool svg', (e) => {
+  const r = e.getBoundingClientRect();
+  return Math.round(r.width) + 'x' + Math.round(r.height);
+});
+rec('11f 误配态 .warn-tool svg 渲染尺寸 = 18×18（无尺寸约束会撑成巨大黑三角）', svgBox, '18x18');
+await page.evaluate(() => {
+  document.querySelector('[data-screen="detail"]').setAttribute('data-demo-state', 'normal');
+});
+await wait(80);
 
 await browser.close();
 

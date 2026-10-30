@@ -91,6 +91,17 @@ export class DeployPipelineEntity extends AbstractEntity {
   @Column({ type: 'varchar', length: 64, nullable: true, comment: '操作人' })
   operator?: string;
 
+  /**
+   * 触发来源（2026-10-27 防再犯）：区分「谁的会话/哪把 Key/哪个脚本」触发了本次发布。
+   *
+   * 背景：两轮非预期 PROD 批量发布经 MCP Key 通道提交 + 自动审批触发，
+   * `operator=1` 无法归因（见 docs/development/reports/2026-10-27-PROD发布触发源归因-批量MCP脚本.md）。
+   * 样例：`ui`、`ui:page-releases`、`mcp:ai-ops-automation`、`web|sess-1|mcp:ai-ops-automation`、`ci:release.yml`。
+   * null = 历史数据（列加入前的运行记录）。
+   */
+  @Column({ type: 'varchar', length: 128, nullable: true, comment: '触发来源 ui/mcp:<keyName>/ci:<source>' })
+  triggerSource?: string;
+
   /** 模块类型快照（check 阶段确定）：micro-frontend / frontend / backend */
   @Column({ type: 'varchar', length: 32, nullable: true, comment: '模块类型快照' })
   moduleType?: string;

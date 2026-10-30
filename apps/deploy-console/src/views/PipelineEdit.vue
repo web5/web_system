@@ -26,7 +26,7 @@ import StepBranchEditor from '@/components/pipeline/StepBranchEditor.vue'
 import StepConditionEditor from '@/components/pipeline/StepConditionEditor.vue'
 import PipelineVarPanel from '@/components/pipeline/PipelineVarPanel.vue'
 import VarReferenceTable from '@/components/pipeline/VarReferenceTable.vue'
-import { isShellNode, nodeDisplayName } from '@/components/pipeline/pipeline.stages'
+import { isShellNode, nodeDisplayName, defaultNodesFor } from '@/components/pipeline/pipeline.stages'
 
 /**
  * 编辑流水线（定义态）。
@@ -207,20 +207,9 @@ async function saveNodeFromDrawer() {
 const vars = ref<PipelineVar[]>([])
 
 /**
- * 默认节点序列（新建态）：拉取代码 → 构建 → 发布确认 → 发布
- *
- * 注意：审批节点的 `approvers` / `onReject` 目前只在后端 `ApprovalNode` 里建模，
- * 前端 api 的 `TemplateNode` 还没跟上（改了会碰到别人正在编辑的同一文件），
- * 所以这里就地断言 —— 后端 normalizeNodes 会正常接收。
+ * 默认节点序列（新建态）见 `defaultNodesFor`（pipeline.stages.ts）：
+ * 后台 = 拉取代码 → 预构建 → 构建 → 发布确认 → 发布；前端/小程序不含预构建（Q3，2026-10-27）。
  */
-function defaultNodes(): TemplateNode[] {
-  return [
-    { kind: 'shell', key: 'git', label: '拉取代码' },
-    { kind: 'shell', key: 'build', label: '构建' },
-    { kind: 'approval', key: 'gate', label: '发布确认', approvers: [], onReject: 'abort' } as TemplateNode,
-    { kind: 'shell', key: 'release', label: '发布' },
-  ]
-}
 
 const isPlatformNode = (key: string) => (PLATFORM_NODE_KEYS as readonly string[]).includes(key)
 
@@ -249,7 +238,7 @@ async function load() {
         defaultTarget: 'auto',
         approvers: [],
       }
-      nodeDraft.value = defaultNodes()
+      nodeDraft.value = defaultNodesFor(moduleType.value)
       vars.value = []
       selNodeKey.value = ''
       editingItem.value = null
@@ -489,11 +478,239 @@ function buildScriptFor(t: string) {
     : 'set -euo pipefail\ncd "${RELEASE_DIR}"\nnpm ci\nnpx tsc -p tsconfig.json\necho \'{"artifactPath":"dist/"}\' > "$WS_RESULT_FILE"'
 }
 
+/**
+ * prebuild 节点预置脚本（Q1=A，2026-10-27）：自包含多行 bash，全量扫 packages/*
+ * 做 isStale 判定重建（#270 后端打包吃旧 dist 防线）。不依赖仓内任何 .mjs/.sh 文件，
+ * node 只当 JSON 工具读 package.json。正文与操作指引附录 A（docs/development/reports/
+ * 2026-10-27-存量流水线补prebuild节点-操作指引.md）一致。
+ */
+const prebuildScriptBody = `#!/usr/bin/env bash
+# workspace 包预构建（流水线 prebuild 节点）：全量扫 packages/*，isStale 判定后重建陈旧包。
+# 解决：后端打包 copyWorkspaceOutputs 直接拷 packages/*/dist，源码比 dist 新时静默吃旧产物（#270）。
+# 幂等：产物新于源码即跳过。node 只当 JSON 工具读 package.json。
+# 环境变量：
+#   SKIP_WORKSPACE_PREBUILD=1   跳过（幂等开关）
+#   WORKSPACE_PREBUILD_FORCE=1  强制重建（等价 --force）
+# 参数：--force ｜ --only <pkg-name>
+set -euo pipefail
+
+log() { echo "[prebuild] $*"; }
+die() { echo "[prebuild] ERROR: $*" >&2; exit 1; }
+
+[ -n "\${RELEASE_DIR:-}" ] || die "RELEASE_DIR 未注入"
+cd "\${RELEASE_DIR}" || die "RELEASE_DIR 不存在: \${RELEASE_DIR}"
+
+if [ "\${SKIP_WORKSPACE_PREBUILD:-}" = "1" ]; then
+  log "跳过 workspace 预构建（SKIP_WORKSPACE_PREBUILD=1）"
+  exit 0
+fi
+
+FORCE=0
+ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --force) FORCE=1 ;;
+    --only)
+      shift
+      ONLY="\${1:-}"
+      [ -n "$ONLY" ] || die "--only 需要包名参数"
+      ;;
+    *) log "忽略未知参数: $1" ;;
+  esac
+  shift
+done
+[ "\${WORKSPACE_PREBUILD_FORCE:-}" = "1" ] && FORCE=1
+
+if [ ! -d packages ]; then
+  log "packages/ 下无 workspace 包，跳过"
+  exit 0
+fi
+
+# ---- JSON 读取（node 只当 JSON 工具）----
+# 输出：NAME=<n> / HAS_BUILD=<0|1> / ENTRY=<rel>（可多行）
+read_pkg() {
+  node -e '
+const fs = require("fs");
+let p;
+try { p = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { process.exit(0); }
+const emit = (s) => process.stdout.write(s + "\\n");
+emit("NAME=" + (p.name || ""));
+emit("HAS_BUILD=" + (p.scripts && p.scripts.build ? 1 : 0));
+const out = [];
+if (typeof p.main === "string") out.push(p.main);
+const e = p.exports;
+if (typeof e === "string") out.push(e);
+else if (e && typeof e === "object") {
+  const d = e["."];
+  if (typeof d === "string") out.push(d);
+  else if (d && typeof d === "object") for (const v of Object.values(d)) if (typeof v === "string") out.push(v);
+}
+for (const rel of out) emit("ENTRY=" + rel);
+' "$1" 2>/dev/null || true
+}
+
+# 找第一个存在的入口文件 → echo 路径；全不存在返回 1
+find_entry() {
+  local dir="$1" entries="$2" rel
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    if [ -f "$dir/$rel" ]; then
+      echo "$dir/$rel"
+      return 0
+    fi
+  done <<EOF
+$entries
+EOF
+  return 1
+}
+
+# 源码/构建配置是否比入口新（find -newer，可移植；同秒抖动可能多建一次，无害幂等）
+is_stale() {
+  local dir="$1" entry="$2"
+  if [ -d "$dir/src" ]; then
+    if [ -n "$(find "$dir/src" \\( -name node_modules -o -name dist \\) -prune -o -type f -newer "$entry" -print 2>/dev/null)" ]; then
+      return 0
+    fi
+  fi
+  if [ -n "$(find "$dir" -maxdepth 1 -type f \\( -name package.json -o -name 'tsconfig*.json' \\) -newer "$entry" -print 2>/dev/null)" ]; then
+    return 0
+  fi
+  return 1
+}
+
+# ---- 原子目录锁 ----
+CURRENT_LOCK=""
+release_lock() {
+  if [ -n "$CURRENT_LOCK" ]; then
+    rm -rf "$CURRENT_LOCK" 2>/dev/null || true
+    CURRENT_LOCK=""
+  fi
+}
+trap release_lock EXIT
+
+acquire_lock() {
+  local lock="$1"
+  local deadline=$(( $(date +%s) + 180 ))
+  while ! mkdir "$lock" 2>/dev/null; do
+    # 陈旧锁（>10min）视为崩溃残留，清理后重试
+    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +10 -print 2>/dev/null)" ]; then
+      log "清理陈旧构建锁: $lock"
+      rm -rf "$lock" 2>/dev/null || true
+      continue
+    fi
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      die "等待构建锁超时: $lock"
+    fi
+    sleep 1
+  done
+  CURRENT_LOCK="$lock"
+}
+
+BUILT=0
+SKIPPED=0
+
+for manifest in packages/*/package.json; do
+  [ -f "$manifest" ] || continue
+  dir="\${manifest%/package.json}"
+
+  NAME=""
+  HAS_BUILD="0"
+  ENTRIES=""
+  while IFS= read -r line; do
+    case "$line" in
+      NAME=*) NAME="\${line#NAME=}" ;;
+      HAS_BUILD=*) HAS_BUILD="\${line#HAS_BUILD=}" ;;
+      ENTRY=*)
+        if [ -n "$ENTRIES" ]; then
+          ENTRIES="\${ENTRIES}"$'\\n'"\${line#ENTRY=}"
+        else
+          ENTRIES="\${line#ENTRY=}"
+        fi
+        ;;
+    esac
+  done <<EOF
+$(read_pkg "$manifest")
+EOF
+  [ -n "$NAME" ] || NAME="$(basename "$dir")"
+
+  if [ -n "$ONLY" ] && [ "$NAME" != "$ONLY" ]; then
+    continue
+  fi
+
+  if [ "$HAS_BUILD" != "1" ]; then
+    log "\${NAME}：无 build 脚本，跳过"
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  fi
+
+  NEED_BUILD=0
+  if [ "$FORCE" = "1" ]; then
+    log "\${NAME}：强制重建"
+    NEED_BUILD=1
+  elif [ -z "$ENTRIES" ]; then
+    # 无入口候选 = 源码直引，视为已就绪
+    log "\${NAME}：无产物入口（源码直引），跳过"
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  elif ! ENTRY="$(find_entry "$dir" "$ENTRIES")"; then
+    log "\${NAME}：产物缺失，预构建"
+    NEED_BUILD=1
+  elif is_stale "$dir" "$ENTRY"; then
+    log "\${NAME}：源码/构建配置比产物新，重建"
+    NEED_BUILD=1
+  else
+    log "\${NAME}：产物已存在且新于源码，跳过"
+    SKIPPED=$((SKIPPED + 1))
+    continue
+  fi
+
+  T0=$(date +%s)
+  acquire_lock "$dir/.build.lock"
+  # 拿到锁后再查一次：等待期间可能已被别的进程构建好
+  if [ "$FORCE" != "1" ]; then
+    if ENTRY2="$(find_entry "$dir" "$ENTRIES")" && ! is_stale "$dir" "$ENTRY2"; then
+      log "\${NAME}：等待期间已构建完成"
+      release_lock
+      log "\${NAME}：构建完成（$(( $(date +%s) - T0 ))s）"
+      BUILT=$((BUILT + 1))
+      continue
+    fi
+  fi
+  ( cd "$dir" && npm run build )
+  release_lock
+
+  # 构建后再验入口存在
+  if [ -n "$ENTRIES" ] && ! find_entry "$dir" "$ENTRIES" >/dev/null; then
+    die "$NAME 预构建后仍无产物入口（期望 \${ENTRIES%%$'\\n'*}）。请检查该包 build 脚本是否成功产出 dist"
+  fi
+
+  log "\${NAME}：构建完成（$(( $(date +%s) - T0 ))s）"
+  BUILT=$((BUILT + 1))
+done
+
+log "预构建完成：重建 \${BUILT} 个，跳过 \${SKIPPED} 个"
+`
+
 async function prefillBuildScript(id: string) {
   const t = moduleType.value
   if (!t) return
   try {
     await pipelineStepApi.save(id, 'build', { command: buildScriptFor(t), timeoutSec: 900 })
+  } catch {
+    // 预填失败不阻塞创建（用户可自己在节点抽屉里改脚本）
+  }
+}
+
+/**
+ * 预构建节点脚本预置（Q3，2026-10-27）：v5 节点脚本真相源是 deploy_pipeline_step_commands
+ * （流水线 × 节点 key），后台默认节点含 prebuild 时**连脚本一起预置**。
+ * 仅后台（be）默认序列带该节点；创建前已从画布删掉该节点则不预置。失败不阻塞创建。
+ */
+async function prefillPrebuildScript(id: string) {
+  if (moduleType.value !== 'be') return
+  if (!nodeDraft.value.some((n) => n.key === 'prebuild')) return
+  try {
+    await pipelineStepApi.save(id, 'prebuild', { command: prebuildScriptBody, timeoutSec: 900 })
   } catch {
     // 预填失败不阻塞创建（用户可自己在节点抽屉里改脚本）
   }
@@ -525,6 +742,8 @@ async function save() {
       } as any)
       // 按「前端 / 后台」预填构建节点脚本（用户 2026-09-15：新建时选类型 → 初始流水线带出构建命令）
       await prefillBuildScript(created.id)
+      // 后台默认序列的预构建节点连脚本一起预置（Q3，2026-10-27）
+      await prefillPrebuildScript(created.id)
       dirty.value = false
       message.success('流水线已创建，key 已锁定')
       router.replace({ name: 'PipelineEdit', params: { id: created.id } })

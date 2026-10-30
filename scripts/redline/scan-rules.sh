@@ -15,8 +15,11 @@
 # 选项:
 #   --strict    warning 级也返回非零
 #   --no-color  禁用彩色输出
+#   --max-commits <N>  diff 模式范围 commit 数上限（默认 300，0=不限；env SCAN_MAX_COMMITS 同效）
+# 环境变量:
+#   SCAN_PROFILE=1  逐门打印耗时到 stderr（`+Ns` 本段 / `累计 Ns` 总计，定位慢门用）
 #
-# 返回码: 0=通过  1=存在 error 级违规（或 --strict 下的 warning）
+# 返回码: 0=通过  1=存在 error 级违规（或 --strict 下的 warning）  2=用法/范围错误
 # 白名单/阈值调整：改下方 R* 判定函数，勿改调用方
 # ============================================================
 set -uo pipefail
@@ -29,10 +32,24 @@ else
 fi
 cd "$TOP"
 
+# 门禁共享判定库（豁免机制 2.7/2.8 + 规格书识别 2.6）
+# 为什么 source 而不是各写一份：豁免判定横跨 scan-rules.sh 与 check-commit-msg.sh，
+# 两份实现口径一旦漂移就会出现「本地认、CI 不认」—— 2.8 要消灭的正是这类摩擦。
+#
+# ⚠️ 路径按**脚本自身位置**解析，不能用 $TOP：
+#   scan-rules.sh 会被用来扫别的仓库（本地自测、临时仓库、其它 worktree），
+#   此时 $TOP 是被扫仓库的根，脚本却住在本仓库 —— 用 $TOP 会找不到库文件。
+# shellcheck source=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-shared.sh"
+
 STRICT=0
 COLOR=1
 MODE=""
 declare -a MODE_ARGS=()
+# 扫描范围 commit 数上限（0 = 不限制）。见 diff 分支里的「范围过大」判定。
+# 300 的依据：正常 PR 范围 <20、月度自查通常 <100；300 commit 实测约 3~4 分钟，
+#   仍在一个人类愿意等的量级内；再往上就到了"没人会等"的区间，应该缩范围。
+MAX_COMMITS="${SCAN_MAX_COMMITS:-300}"
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; B='\033[1m'; N='\033[0m'
 
 # ---- 违规收集 ----
@@ -44,9 +61,15 @@ add_warn() { WARNS+=("$1|$2|$3|$4"); }
 # ---- 分阶段计时（SCAN_PROFILE=1 时打到 stderr，不影响 stdout 判定）----
 # 动机：2026-10-22 实测一次 diff 扫描 10 分 29 秒，凭猜找不到瓶颈（怀疑行级 fork 风暴，
 #   实测是 R12/R16 的全仓遍历）。留着比"再猜一次"便宜。
+# 输出两列（2026-10-30 加）：`+N s` = 本段耗时（定位成本用），`累计 N s` = 从启动起算。
+#   只有累计值时得做减法才知道哪段贵 —— 2026-10-30 实测 1517 commit 全历史时正是靠
+#   相邻两行相减才发现 R11 单门吃掉 248s（占 commit 门 35%）。
+_PROF_LAST=0
 _prof() {
   [ "${SCAN_PROFILE:-0}" = "1" ] || return 0
-  printf '[prof] %-26s %ss\n' "$1" "$SECONDS" >&2
+  local _d=$((SECONDS - _PROF_LAST))
+  _PROF_LAST=$SECONDS
+  printf '[prof] %-28s +%4ss  累计 %ss\n' "$1" "$_d" "$SECONDS" >&2
 }
 
 # ---- 文件判定辅助 ----
@@ -222,9 +245,11 @@ check_r9() {
     case "$st" in
       A*) case "$path" in apps/*/pages/*) new_pages+=("$path") ;; esac ;;
     esac
+    # 卡 2.6：规格书识别放宽 —— 与 is_passport_file / check-commit-msg.sh 同一判定
     case "$path" in
       */prototype/*|docs/ui/prototypes/*|*/page-spec*.md) passport+=("$path") ;;
     esac
+    is_spec_doc "$path" && passport+=("$path")
   done < <(git diff --name-status --no-renames "$range" -- 2>/dev/null)
   # app.json 信息架构（pages / tabBar 段）变化
   local ia_files
@@ -261,7 +286,95 @@ is_passport_file() {
   case "$1" in
     */prototype/*|docs/ui/prototypes/*|*/page-spec*.md|page-spec*.md) return 0 ;;
   esac
+  # 卡 2.6：规格书识别放宽 —— 文件在 specs/ 或 docs/ui/page-specs/ 下，
+  # 且文件名/目录名含 page-spec / prototype / 原型 语义即算规格书。
+  # 解决 db526889 式「有原型但文件名不符约定 → 被迫用 Micro-exempt 豁免」。
+  is_spec_doc "$1" && return 0
   return 1
+}
+
+# ---- 豁免判定（卡 2.7 理由质量门 + 卡 2.8 按门分类）----
+# 所有豁免判定点统一走这里，避免 8 处各写一遍导致口径漂移。
+#
+# exempt_for_gate <commit> <body> <GATE>
+#   → 0 = 该 commit 对该门被豁免（可跳过判定）；1 = 未豁免
+#     旧格式 Micro-exempt: <理由>      → 一票否决（豁免全部 8 门，向后兼容）
+#     新格式 Micro-exempt: R11: <理由>  → 只豁免 R11，其余门照常判定
+# 理由质量不达标（卡 2.7）→ 豁免不生效（视同未豁免），并额外报一条 R20。
+# 已就「理由质量不达标」报过警的 commit（避免同一 commit 被多个门各报一次）
+_EXEMPT_REPORTED=""
+# 已就「旧格式豁免」提示过的 commit（同样只提示一次）
+_EXEMPT_LEGACY_HINTED=""
+# 用旧格式（未按门分类）的豁免 commit 数 → 输出时汇总成一行提示
+_EXEMPT_LEGACY_N=0
+# NOTICES：非违规的提示信息（不计入 error/warning 计数）
+declare -a NOTICES=()
+add_notice() { NOTICES+=("$1|$2|$3|$4"); }
+exempt_for_gate() {
+  local c="$1" body="$2" gate="$3"
+  local qmsg ui_n tot_n
+
+  exempt_parse "$body" || return 1
+  exempt_covers "$gate" || return 1
+  # 卡 2.8：旧格式（未按门分类）仍一票否决（向后兼容），但提示改用新格式
+  # 提示只汇总成一行（NOTICES 通道），不逐 commit 刷屏 —— 存量 40 commit 里有 20+ 条旧格式，
+  # 逐条报会把基线刷爆，反而让人看不见真正的新增问题。
+  if [ "$EXEMPT_LEGACY" = "1" ]; then
+    case "$_EXEMPT_LEGACY_HINTED" in
+      *"|$c|"*) ;;
+      *)
+        _EXEMPT_LEGACY_HINTED="${_EXEMPT_LEGACY_HINTED}|${c}|"
+        _EXEMPT_LEGACY_N=$((_EXEMPT_LEGACY_N + 1))
+        ;;
+    esac
+  fi
+  # 需要理由质量判定 → 算该 commit 的改动计数（仅在有豁免时才付 git 调用成本）
+  read -r ui_n tot_n <<<"$(commit_change_counts "$c")"
+  if ! exempt_quality "$EXEMPT_REASON" "$ui_n" "$tot_n"; then
+    qmsg="$EXEMPT_QUALITY_MSG"
+    # 存量（生效日之前）**不追溯翻红**：只提醒，豁免照常生效。
+    # 见 gate-shared.sh 的 EXEMPT_QUALITY_STRICT_FROM 注释（6796d16b 实证）。
+    if ! exempt_quality_is_strict "$c"; then
+      case "$_EXEMPT_LEGACY_HINTED" in
+        *"|legacy-q|$c|"*) ;;
+        *)
+          _EXEMPT_LEGACY_HINTED="${_EXEMPT_LEGACY_HINTED}|legacy-q|${c}|"
+          add_warn "R20" "豁免理由待改进（存量·未追溯，豁免仍生效）" "$(git log -1 --format=%s "$c" 2>/dev/null)" "${qmsg}；新提交起该理由将导致豁免失效，请按 §3.7 补可审计理由"
+          ;;
+      esac
+      return 0
+    fi
+    # 理由质量不达标 → 豁免不生效，但要把原因讲清楚（否则执行者不知道为什么被拦）
+    # 同一 commit 只报一次（多个门都会问到同一个 commit）
+    case "$_EXEMPT_REPORTED" in
+      *"|$c|"*) ;;
+      *)
+        _EXEMPT_REPORTED="${_EXEMPT_REPORTED}|${c}|"
+        add_warn "R20" "豁免理由不达标（豁免未生效）" "$(git log -1 --format=%s "$c" 2>/dev/null)" "${qmsg}；请补充可审计的理由后重写 trailer"
+        ;;
+    esac
+    return 1
+  fi
+  return 0
+}
+
+# ---- 统计某 commit 的 UI 源码改动文件数 / 总改动文件数 ----
+# 质量门（卡 2.7 ②）需要「UI 源码改动 ≥ 5 个文件」这个量级。
+# 只在 commit 命中豁免时才需要算 —— 绝大多数 commit 无豁免，不额外付 git 调用成本。
+# 结果缓存在 _CC_SHA/_CC_UI/_CC_TOT：同一 commit 可能被多个门问到（如 R13 与 R14 共用一次判定）。
+_CC_SHA=""; _CC_UI=0; _CC_TOT=0
+commit_change_counts() {
+  local c="$1" names
+  if [ "$_CC_SHA" = "$c" ]; then
+    printf '%s %s' "$_CC_UI" "$_CC_TOT"
+    return 0
+  fi
+  names="$(git show --name-only --format= "$c" 2>/dev/null)"
+  _CC_SHA="$c"
+  _CC_UI="$(printf '%s\n' "$names" | exempt_ui_count)"
+  # awk 计数（理由同 check_r19_empty_commit：grep -c 的 0 匹配会与 `|| echo 0` 拼成 "0\n0"）
+  _CC_TOT="$(printf '%s\n' "$names" | awk 'NF{c++} END{print c+0}')"
+  printf '%s %s' "$_CC_UI" "$_CC_TOT"
 }
 
 # 契约与数据变更面（R13）——这类故障编译能过、测试能过、线上才炸
@@ -325,12 +438,27 @@ check_r9b() {
   fi
   [ "${lines:-0}" -lt "$R9B_LINE_THRESHOLD" ] && [ "$struct" = "0" ] && return 0
 
-  if git log --format=%B "$range" 2>/dev/null | grep -qE '^Micro-exempt:'; then
-    return 0
-  fi
+  # 豁免（卡 2.8 按门分类）：R9b 只认「豁免范围含 R9b」的声明。
+  # 旧格式 Micro-exempt: <理由> 仍是一票否决（豁免全部 8 门，向后兼容）。
+  while IFS= read -r _rec; do
+    [ -n "$_rec" ] || continue
+    _sha="${_rec%%$'\x1f'*}"
+    _rsn="${_rec#*$'\x1f'}"
+    exempt_split "$_rsn"
+    exempt_covers "R9b" || continue
+    read -r _ui _tot <<<"$(commit_change_counts "$_sha")"
+    if exempt_quality "$EXEMPT_REASON" "$_ui" "$_tot"; then
+      return 0
+    fi
+    # 存量（生效日之前）不追溯翻红 —— 与 exempt_for_gate 同口径
+    if ! exempt_quality_is_strict "$_sha"; then
+      add_warn "R20" "豁免理由待改进（存量·未追溯，豁免仍生效）" "$(git log -1 --format=%s "$_sha" 2>/dev/null)" "${EXEMPT_QUALITY_MSG}；新提交起该理由将导致豁免失效"
+      return 0
+    fi
+    add_warn "R20" "豁免理由不达标（豁免未生效）" "$(git log -1 --format=%s "$_sha" 2>/dev/null)" "${EXEMPT_QUALITY_MSG}；请补充可审计的理由后重写 trailer"
+  done < <(exempt_commits_in_range "$range")
   add_warn "R9b" "既有 UI 改动无同行原型/豁免" "${#ui_files[@]} 个文件 / ${lines} 行" "须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）"
 }
-
 # ---- R10 UI commit 须带 Proto 凭证（commit 级 · warning 级）----
 # 方案 B 的 CI 兜底：本地可被 --no-verify 绕过，故这里再验一次（§3.8）。
 check_r10() {
@@ -352,7 +480,8 @@ check_r10() {
 
     body="$(git log -1 --format=%B "$c" 2>/dev/null)"
     # 「微调豁免」语义与 R9b 保持一致：纯视觉微调在 commit 层同样被认，避免两套口径制造摩擦
-    if printf '%s' "$body" | grep -qE '^Micro-exempt:'; then
+    # 卡 2.8：豁免按门分类 —— 只有豁免范围含 R10 才放行 R10。
+    if exempt_for_gate "$c" "$body" "R10"; then
       continue
     fi
 
@@ -406,7 +535,7 @@ check_r11() {
       continue
     fi
 
-    if printf '%s' "$body" | grep -qE '^Micro-exempt:'; then
+    if exempt_for_gate "$c" "$body" "R11"; then
       continue
     fi
     if [ -z "$dval" ]; then
@@ -557,9 +686,14 @@ check_r13_r14() {
     [ "$hit_c" -eq 0 ] && [ "$hit_r" -eq 0 ] && continue
 
     body="$(git log -1 --format=%B "$c" 2>/dev/null)"
-    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
-    [ "$hit_c" -eq 1 ] && _trailer_check_one "R13" "Contract" "契约与数据变更" "$c" "$body"
-    [ "$hit_r" -eq 1 ] && _trailer_check_one "R14" "Release" "发布与环境变更" "$c" "$body"
+    # 卡 2.8：豁免按门分类 —— R13 与 R14 各自独立判定（原来共用一次判定，
+    # 一条豁免会顺带放行另一门）。旧格式仍是一票否决（豁免全部 8 门，向后兼容）。
+    if [ "$hit_c" = "1" ]; then
+      exempt_for_gate "$c" "$body" "R13" || _trailer_check_one "R13" "Contract" "契约与数据变更" "$c" "$body"
+    fi
+    if [ "$hit_r" = "1" ]; then
+      exempt_for_gate "$c" "$body" "R14" || _trailer_check_one "R14" "Release" "发布与环境变更" "$c" "$body"
+    fi
   done
 }
 
@@ -594,8 +728,8 @@ check_r15() {
     [ "$hit" -eq 0 ] && continue
 
     body="$(git log -1 --format=%B "$c" 2>/dev/null)"
-    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
-    _trailer_check_one "R15" "Code" "新增对外接口" "$c" "$body"
+    # 卡 2.8：豁免按门分类 —— 只有豁免范围含 R15 才放行 R15
+    exempt_for_gate "$c" "$body" "R15" || _trailer_check_one "R15" "Code" "新增对外接口" "$c" "$body"
   done
 }
 
@@ -605,9 +739,16 @@ check_r15() {
 #       prod 缺前端产物与 seed），全部由用户走查才发现。
 # 判据源：~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md §4（测试方案）
 #          —— 通用规范 2026-10-23 起迁出仓库，真源在总控；本仓库只放项目实例文档
-# 触发面：**新增**非测试源码（servers/*/src、apps/*/src 下 *.ts/*.vue，排除 *.spec.ts）
-#   —— 触发面刻意取窄（同 R15）：新增实现是最该配用例的形态，改动既有实现不触发。
-# 判据：commit 须带 `Test: pass` 或 `Test: <用例文档路径>`
+#
+# 触发面（卡 2.1 放宽）：
+#   ① 状态由「只认新增 A」放宽为「新增 A 或修改 M」
+#      —— 改既有实现同样可能漏测，只卡新增会漏掉绝大多数改动（实测近 300 commit 只命中 6 次）。
+#   ② 路径改为递归匹配（servers/*/src/**、apps/*/src/** 下任意层级）
+#   ③ 扩展 .tsx / .mjs / .jsx（admin / portal 侧存在这些扩展）
+#   ④ 仍排除测试文件自身（*.spec.* / *.test.*）—— 用例文档门不该拦写测试的人
+# 判据（卡 2.2 真实性）：
+#   `Test: pass`     → 允许（表示本 commit 无需测试用例，如纯文档）
+#   `Test: <路径>`   → 该路径必须真实存在（否则判 FAIL —— 防止随手写个路径糊弄）
 # 级别：warning（--strict 下 error），先观察误报再决定是否收紧
 check_r17() {
   local range="$1"
@@ -617,16 +758,26 @@ check_r17() {
   done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   [ ${#commits[@]} -eq 0 ] && return 0
 
-  local c st f body hit
+  local c st f body hit tval
   for c in "${commits[@]}"; do
     hit=0
     while IFS=$'\t' read -r st f; do
       [ -n "${f:-}" ] || continue
+      # 卡 2.1 ①：新增 A 或修改 M 都触发
       case "$st" in
-        A*)
+        A*|M*)
+          # 卡 2.1 ②③：递归 glob + 扩展名放宽
           case "$f" in
-            servers/*/src/*.ts|apps/*/src/*.ts|apps/*/src/*.vue)
-              case "$f" in *.spec.ts|*.spec.tsx|*.test.ts) ;; *) hit=1 ;; esac
+            servers/*/src/*|apps/*/src/*)
+              case "$f" in
+                *.ts|*.tsx|*.mjs|*.jsx|*.vue)
+                  # 卡 2.1 ④：排除测试文件自身
+                  case "$f" in
+                    *.spec.*|*.test.*) ;;
+                    *) hit=1 ;;
+                  esac
+                  ;;
+              esac
               ;;
           esac
           ;;
@@ -635,9 +786,29 @@ check_r17() {
     [ "$hit" -eq 0 ] && continue
 
     body="$(git log -1 --format=%B "$c" 2>/dev/null)"
-    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
-    _trailer_check_one "R17" "Test" "测试用例" "$c" "$body"
+    # 卡 2.8：豁免按门分类 —— 只有豁免范围含 R17 才放行 R17
+    exempt_for_gate "$c" "$body" "R17" || _r17_credential_check "$c" "$body"
   done
+}
+
+# ---- R17 凭证真实性检查（卡 2.2）----
+# `Test: pass`   → 允许（表示本 commit 无需测试用例，如纯文档）
+# `Test: <路径>` → 路径必须真实存在；不存在即判 FAIL
+# 用 `_trailer_check_one` 复用「缺凭证」判定，但路径存在性按 R17 语义单独判
+#   （用例文档常落在任务目录而非仓库内，故不能只查 git 对象树）。
+_r17_credential_check() {
+  local c="$1" body="$2" tval
+  tval="$(printf '%s' "$body" | grep -E '^Test:[[:space:]]*[^[:space:]]+' | head -n 1 | sed -E 's/^Test:[[:space:]]*//' | tr -d '\r')"
+  if [ -z "$tval" ]; then
+    add_warn "R17" "测试用例 commit 缺评审凭证" "$(git log -1 --format=%s "$c")" "message 须带 Test: pass（无需测试用例）或 Test: <用例文档路径>（路径须真实存在）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）"
+    return 0
+  fi
+  [ "$tval" = "pass" ] && return 0
+  if ! exempt_path_exists "$c" "$tval" "$TOP"; then
+    add_warn "R17" "Test 凭证指向的用例文档不存在" "$tval" "Test: <路径> 须指向真实存在的用例文档（仓库内或任务目录内）；确无用例需求写 Test: pass"
+    return 0
+  fi
+  return 0
 }
 
 # ---- R18 研发方案与发布任务清单凭证（commit 级 · warning）----
@@ -673,9 +844,32 @@ check_r18() {
     [ "$hit" -eq 0 ] && continue
 
     body="$(git log -1 --format=%B "$c" 2>/dev/null)"
-    printf '%s' "$body" | grep -qE '^Micro-exempt:' && continue
-    _trailer_check_one "R18" "Plan" "研发方案与发布清单" "$c" "$body"
+    # 卡 2.8：豁免按门分类 —— 只有豁免范围含 R18 才放行 R18
+    exempt_for_gate "$c" "$body" "R18" || _trailer_check_one "R18" "Plan" "研发方案与发布清单" "$c" "$body"
   done
+}
+
+# ---- R19 空提交检测（commit 级 · error 级）----
+# 背景：空 commit 没有任何内容，却能占一个 commit 位置 —— 实质是「用空提交重跑 CI」
+#       的后门。实证 558d8cb5「空 commit 仅触发 CI 重跑，无代码变更」曾用 Micro-exempt: 绕过，
+#       绕过了该 commit 的全部门禁判定。
+# 判据：commit 的树与其父提交完全相同（无任何文件改动）且非 merge commit → 判 FAIL。
+#   ⚠️ merge commit 一律跳过：merge 相对第一父的 diff 可能为空，但那是合并语义不是空提交。
+#   ⚠️ 不豁免：空提交不产生任何改动面，Micro-exempt 也救不了它（豁免只对有改动面的门有意义）。
+#       故本门不接受 Micro-exempt 豁免 —— 否则等于留了同一个后门。
+check_r19_empty_commit() {
+  local range="$1"
+  local c nfiles
+  # --no-merges：merge commit 不是「空提交」，是合并
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    # --root：首个 commit（无父）也算有内容
+    # 用 awk 计数：grep -c 在 0 匹配时「输出 0 且退出码 1」，
+    #   配 `|| echo 0` 会拼成 "0\n0"，导致后续比较永远不等。
+    nfiles="$(git diff-tree --no-commit-id --name-only -r --root "$c" 2>/dev/null | awk 'NF{c++} END{print c+0}')"
+    [ "${nfiles:-0}" = "0" ] || continue
+    add_err "R19" "空提交（无任何文件改动）" "$(git log -1 --format=%s "$c")" "空提交无意义；如需重跑 CI 请用 CI 重跑按钮，而不是提交空 commit（§2.9）"
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
 }
 
 # ---- R12 kit 能力源 ↔ 运行源 同源守门 ----
@@ -734,8 +928,13 @@ scan_diff_range() {
   check_r15 "$range";  _prof "R15 对外接口评审凭证"
   check_r17 "$range";  _prof "R17 测试用例凭证"
   check_r18 "$range";  _prof "R18 研发方案凭证"
+  check_r19_empty_commit "$range";  _prof "R19 空提交检测"
   check_r12;           _prof "R12 kit 同源（全仓遍历）"
   check_r16;           _prof "R16 SSE 契约（调 python）"
+  # 卡 2.8：旧格式豁免的汇总提示（NOTICES 通道，不计入 error/warning）
+  if [ "$_EXEMPT_LEGACY_N" -gt 0 ]; then
+    add_notice "R21" "有 ${_EXEMPT_LEGACY_N} 个 commit 用旧格式豁免（未按门分类）" "" "旧写法 Micro-exempt: <理由> 仍是一票否决（豁免全部 8 门，向后兼容）；建议改用 Micro-exempt: <R门号>: <理由>，只豁免指定门"
+  fi
   diff_text="$(git diff --no-color --unified=0 "$range" -- '*.ts' '*.tsx' '*.vue' '*.js' '*.jsx' '*.mjs' '*.cjs' 2>/dev/null)"
   _prof "git diff 取新增行"
   [ -n "$diff_text" ] || return 0
@@ -804,25 +1003,80 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --strict)   STRICT=1 ;;
     --no-color) COLOR=0 ;;
-    -h|--help)  sed -n '1,28p' "$0"; exit 0 ;;
+    --max-commits) MAX_COMMITS="${2:-}"; shift ;;
+    -h|--help)  sed -n '1,24p' "$0"; exit 0 ;;
     --*)        echo "未知选项: $1" >&2; exit 2 ;;
     *)          if [ -z "$MODE" ]; then MODE="$1"; else MODE_ARGS+=("$1"); fi ;;
   esac
   shift
 done
 
+case "${MAX_COMMITS}" in
+  ''|*[!0-9]*) echo "✗ --max-commits 需要非负整数（收到: '${MAX_COMMITS}'）；0 = 不限制" >&2; exit 2 ;;
+esac
+
 case "$MODE" in
   cached) scan_cached ;;
   diff)
     [ ${#MODE_ARGS[@]} -ge 1 ] || { echo "用法: scan-rules.sh diff <range>（如 origin/master...HEAD）" >&2; exit 2; }
-    scan_diff_range "${MODE_ARGS[0]}"
+    # 防「假通过」（2026-10-30 实测）：range 不可解析 / 为 0 个 commit 时，各 check_* 的
+    #   `git rev-list ... 2>/dev/null` 静默失败 → 空循环，git diff 也是空 → 最终打印
+    #   「✓ 红线扫描通过（0 error / 0 warning）」并 exit 0。
+    #   门禁把「没有输入」当成「没有违规」，比 --no-verify 更危险：
+    #   绕过是显式的、看得见的；假通过是静默的、被当成绿灯。
+    #   实测触发场景：shallow clone 的 worktree 里 `origin/master~20` 解析不了（本地最常见的自查命令）。
+    # 为什么只在 diff 分支校验：cached 模式 range 传的是 `--cached`，无 staged 变更属合法空集。
+    _R="${MODE_ARGS[0]}"
+    if ! git rev-parse --verify --quiet "${_R%%..*}" >/dev/null 2>&1; then
+      {
+        echo "✗ 扫描范围左侧 ref 不可解析: ${_R}"
+        echo "  常见原因：① shallow clone 深度不足（worktree 未 fetch 到该 ref 的历史）② ref 拼写错误"
+        echo "  处理：git fetch --unshallow 或 git fetch --depth=<N> origin '+refs/heads/*:refs/remotes/origin/*'"
+        echo "        验证：git rev-parse --verify --quiet '${_R%%..*}'"
+      } >&2
+      exit 2
+    fi
+    _NC="$(git rev-list --count "$_R" 2>/dev/null || true)"
+    case "${_NC:-}" in
+      ''|*[!0-9]*) echo "✗ 无法枚举扫描范围（git rev-list 失败）: ${_R}" >&2; exit 2 ;;
+      0)           echo "✗ 扫描范围为 0 个 commit，拒绝静默通过: ${_R}" >&2; exit 2 ;;
+    esac
+    # 范围上限（2026-10-30 实测驱动，不是拍脑袋定的阈值）：
+    #   1517 commit 全历史实测 17m27s、峰值 RSS 186MB —— **不是 OOM**，是 8 道 commit 门
+    #   各遍历一遍 + 每 commit 2~6 次 git 子进程（R11 单门 248s、R17 141s、R10 102s），
+    #   叠加 19.3 万行的逐行检查（341s）。耗时规模到这个量级，调用方（CI job、终端、
+    #   编辑器任务）会先超时把进程杀掉，报出 exit 137/139 —— 看起来像「门禁崩溃」，
+    #   实际是「跑得慢到被杀」。加上限是为了把「静默等 17 分钟然后被杀」变成
+    #   「立刻告诉你范围太大 + 怎么缩」。
+    # 为什么不做静默截断：只扫前 N 个 commit 却照样打印「✓ 红线扫描通过」，就是另一种假通过，
+    #   比 17 分钟更危险（本次 #8249 刚修完同类问题，不能又开一个后门）。
+    if [ "${MAX_COMMITS}" != "0" ] && [ "${_NC}" -gt "${MAX_COMMITS}" ]; then
+      {
+        echo "✗ 扫描范围过大：${_NC} 个 commit（上限 ${MAX_COMMITS}）"
+        echo "  实测成本（2026-10-30，1517 commit）：17m27s / 峰值 186MB —— 不是内存问题，"
+        echo "  但会被 CI job、终端或编辑器的超时机制杀掉（exit 137/139），看起来像崩溃。"
+        echo "  处理（任选其一）："
+        echo "    1) 缩到本次改动（推荐，覆盖 95% 场景）："
+        echo "         MB=\$(git merge-base origin/master HEAD)"
+        echo "         bash scripts/redline/scan-rules.sh diff \"\$MB..HEAD\""
+        echo "    2) 只这一次放行（全局默认不变）："
+        echo "         bash scripts/redline/scan-rules.sh diff '${_R}' --max-commits 0"
+        echo "    3) 确实要全量、又怕被超时杀掉 → 后台跑并看进度："
+        echo "         SCAN_PROFILE=1 SCAN_MAX_COMMITS=0 bash scripts/redline/scan-rules.sh diff '${_R}' \\"
+        echo "           > /tmp/scan.out 2> /tmp/scan.err &"
+        echo "         tail -f /tmp/scan.err      # 每跑完一门打一行「+Ns 累计 Ns」"
+      } >&2
+      exit 2
+    fi
+    printf '扫描范围: %s（%s 个 commit）\n' "$_R" "$_NC" >&2
+    scan_diff_range "$_R"
     ;;
   files)
     [ ${#MODE_ARGS[@]} -ge 1 ] || { echo "用法: scan-rules.sh files <path...>" >&2; exit 2; }
     for f in "${MODE_ARGS[@]}"; do scan_one_file "$f"; done
     ;;
   tree) scan_tree "${MODE_ARGS[0]:-.}" ;;
-  *) sed -n '1,28p' "$0" >&2; exit 2 ;;
+  *) sed -n '1,24p' "$0" >&2; exit 2 ;;
 esac
 
 # ---- 输出与返回 ----
@@ -846,6 +1100,16 @@ if [ ${#WARNS[@]} -gt 0 ]; then
     echo -e "  ${Y}[$rule]${N} ${desc}"
     echo -e "       ${B}${loc}${N}"
     [ -n "$content" ] && echo -e "       $content"
+  done
+fi
+
+if [ ${#NOTICES[@]} -gt 0 ]; then
+  echo -e "${B}══ 门禁提示（notice）══${N}"
+  for v in "${NOTICES[@]}"; do
+    IFS='|' read -r rule desc loc content <<<"$v"
+    echo -e "  ${B}[${rule}]${N} ${desc}"
+    [ -n "$loc" ] && echo -e "       ${B}${loc}${N}"
+    [ -n "$content" ] && echo -e "       ${Y}${content}${N}"
   done
 fi
 

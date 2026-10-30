@@ -2,6 +2,7 @@
  * Hy3 客户端（腾讯混元 Turbo，Tencent MaaS TokenHub），原生 fetch 版。
  */
 import { BaseAiClient, type ChatMessage, type ChatOptions, type StreamChunk, type ToolCallSchema, type ToolCall, type ChatWithToolsResult, type StreamToolEvent, parseJsonToolCall } from './base-ai.client';
+import { lookupModelMaxTokens, resolveMaxTokens, resolveThinking } from './thinking-policy';
 import { Logger } from '../lib/logger';
 import { API_TIMEOUT } from '../lib/timeout';
 import { postJson, streamSse } from '../lib/fetch-http';
@@ -95,15 +96,39 @@ export class Hy3Client extends BaseAiClient {
   }
 
   /**
-   * 思考开关（网关透传官方 `thinking` 参数）。
+   * 生成参数组装（D1 三处收口的唯一入口，与 tokenhub.client / content-hub 逐字节同策略）。
    *
-   * hy3 默认是「边想边答」：只给 60 token 预算时，思考会先把预算吃光，
-   * 返回 `finish_reason=length` + `content=''`（实测 2026-10-08，意图分类 3/3 复现）。
-   * 只有调用方**显式**传 options.thinking 才下发 —— 不传时 payload 与改造前逐字节一致，
-   * 主对话的「思考中」可视化不受影响。
+   * 原「仅显式传才发」已废弃：hy3 是思考型模型，`reasoning_content` 与 `content` 共用
+   * max_tokens —— 小输出预算下思考吃满预算 → finish_reason=length + 空正文（实测 3/3）。
+   * 现统一走 `resolveThinking` 优先级链（带工具强制 enabled / 非工具缺省 disabled）。
    */
-  private thinkingPayload(options?: ChatOptions): Record<string, unknown> {
-    return options?.thinking ? { thinking: options.thinking } : {};
+  private genParams(
+    options: ChatOptions | undefined,
+    hasTools: boolean,
+    clientDefaultMaxTokens: number,
+  ): Record<string, unknown> {
+    const modelMaxTokens = lookupModelMaxTokens(this.modelId);
+    const params: Record<string, unknown> = {
+      max_tokens: resolveMaxTokens({
+        hasTools,
+        maxTokens: options?.maxTokens,
+        modelMaxTokens,
+        clientDefault: clientDefaultMaxTokens,
+      }),
+    };
+    // wire-format 逃生口：整体不下发 thinking 字段（不参与策略链）
+    if (options?.omitThinking) return params;
+    return {
+      ...params,
+      ...resolveThinking({
+        hasTools,
+        maxTokens: options?.maxTokens,
+        agentThinking: options?.agentThinking,
+        override: options?.thinking,
+        modelMaxTokens,
+        clientDefaultMaxTokens,
+      }),
+    };
   }
 
   async chatWithTools(
@@ -120,9 +145,8 @@ export class Hy3Client extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
       top_p: options?.topP ?? 1.0,
-      ...this.thinkingPayload(options),
+      ...this.genParams(options, tools.length > 0, 2000),
       stream: false,
     };
     if (tools.length > 0) {
@@ -216,9 +240,8 @@ export class Hy3Client extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 4000,
       top_p: options?.topP ?? 1.0,
-      ...this.thinkingPayload(options),
+      ...this.genParams(options, tools.length > 0, 4000),
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -324,8 +347,7 @@ export class Hy3Client extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 2000,
-      ...this.thinkingPayload(options),
+      ...this.genParams(options, false, 2000),
       stream: true,
     };
 

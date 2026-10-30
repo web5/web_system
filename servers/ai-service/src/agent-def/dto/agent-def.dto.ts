@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -11,7 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { CapabilityRef } from '@kedouai/agent-core';
+import { CapabilityRef, ThinkingOption } from '@kedouai/agent-core';
 
 class CapabilityDto implements CapabilityRef {
   @IsString()
@@ -28,6 +29,23 @@ class CapabilityDto implements CapabilityRef {
   @IsOptional()
   @IsObject()
   config?: Record<string, unknown>;
+}
+
+/**
+ * 思考预算覆盖（C7 生成参数）。
+ * 与 `temperature` 的互斥不在这里判（class-validator 跨字段校验写起来别扭），
+ * 由 `AgentDefService.assertTuningParams()` 统一给出中文报错。
+ */
+class ThinkingDto implements ThinkingOption {
+  @IsString()
+  @IsIn(['enabled', 'disabled'])
+  type: 'enabled' | 'disabled';
+
+  /** type='enabled' 时的思考 token 上限 */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  budget_tokens?: number;
 }
 
 class MemoryDto {
@@ -75,9 +93,27 @@ export class SaveAgentDefDto {
   @Min(1)
   maxSteps: number;
 
+  /** 采样温度；与 topP 互斥（同填会被 service 层拒绝） */
   @IsOptional()
   @IsNumber()
   temperature?: number | null;
+
+  /** 输出 token 上限（防跑飞） */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxTokens?: number | null;
+
+  /** 核采样 top_p；与 temperature 互斥 */
+  @IsOptional()
+  @IsNumber()
+  topP?: number | null;
+
+  /** 思考预算覆盖（null / 不传 = 沿用客户端默认） */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ThinkingDto)
+  thinking?: ThinkingOption | null;
 
   @ValidateNested()
   @Type(() => MemoryDto)

@@ -1,13 +1,14 @@
 /**
  * TokenHub 通用客户端（腾讯 MaaS 网关，OpenAI 兼容）。
  *
- * 与 Hy3Client/DeepseekClient 协议一致（chat/completions + OpenAI function calling），
+ * 与 Hy3Client 协议一致（chat/completions + OpenAI function calling），
  * 区别：modelId 由构造注入，因此可用网关上托管的任意模型
  * （如 deepseek-v4-flash、deepseek-v4-pro-0813、hy4-preview、glm-5.3、kimi-k3 等）。
  *
  * 配置：
  *   TOKENHUB_BASE_URL  默认 https://tokenhub.tencentmaas.com/v1
- *   TOKENHUB_API_KEY   缺省回落到 HY3_API_KEY（同一把网关 key）
+ *   TOKENHUB_API_KEY   缺省回落到 HY3_API_KEY → LLM_API_KEY（同一把网关 key）
+ *   构造参数 apiKey     显式传入优先于环境变量（调用方最清楚用哪把 key）
  */
 import {
   BaseAiClient,
@@ -18,61 +19,42 @@ import {
   type ToolCall,
   type ChatWithToolsResult,
   type StreamToolEvent,
-  type ThinkingOption,
   parseJsonToolCall,
 } from './base-ai.client';
+import { lookupModelMaxTokens, resolveMaxTokens, resolveThinking } from './thinking-policy';
 import { Logger } from '../lib/logger';
 import { API_TIMEOUT } from '../lib/timeout';
 import { postJson, streamSse } from '../lib/fetch-http';
 
 const DEFAULT_BASE_URL = 'https://tokenhub.tencentmaas.com/v1';
 
-/**
- * DeepSeek 系"推理档思考预算"控制（TokenHub stream=true 实测 2026-09-08）：
- * 网关在流式下会忽略 reasoning_effort，但会透传官方 `thinking` 参数：
- *   - { type: 'disabled' }            → 关思考，纯正文（content 一定完整）
- *   - { type: 'enabled', budget_tokens: N } → 思考限 N token，正文保底（推荐，保留"边思考边答"）
- * 读取 TOKENHUB_THINKING：'none' | 'budget:<N>' | 空。
- * 空时仅对 DeepSeek 推理系默认 budget:1024（防长任务思考把正文挤成 0），其余模型不加限制。
- */
-function resolveThinking(modelId: string): Record<string, unknown> {
-  const cfg = (process.env.TOKENHUB_THINKING ?? '').trim().toLowerCase();
-  if (cfg === 'none' || cfg === 'disabled') return { thinking: { type: 'disabled' } };
-  const m = cfg.match(/^budget:(\d+)$/);
-  if (m) return { thinking: { type: 'enabled', budget_tokens: Number(m[1]) } };
-  if (modelId.toLowerCase().includes('deepseek')) {
-    return { thinking: { type: 'enabled', budget_tokens: 1024 } };
-  }
-  return {};
-}
-
-/**
- * 最终思考参数：**按调用**覆盖 > 按模型名推断 > 环境变量。
- *
- * 优先级刻意设为「显式传参最高」：调用方最清楚这次要什么
- * （意图分类只要 60 token 的 JSON → 必须 disabled；主对话要边想边答 → 用默认）。
- * 环境变量是全局开关，改它会连带影响主对话，因此不能用来修单点调用。
- */
-function thinkingPayload(modelId: string, override?: ThinkingOption): Record<string, unknown> {
-  if (override) return { thinking: override };
-  return resolveThinking(modelId);
-}
+/** 非工具未配 maxTokens 时的客户端现状默认（C7-e 回归口径，D1 §4.3） */
+const CLIENT_DEFAULT_MAX_TOKENS = 8000;
 
 export class TokenHubClient extends BaseAiClient {
   readonly modelId: string;
   readonly displayName: string;
   readonly description: string;
   private readonly logger = new Logger(TokenHubClient.name);
+  /** 显式传入的 API key（优先于环境变量） */
+  private readonly explicitApiKey?: string;
 
-  constructor(modelId: string, displayName?: string) {
+  constructor(modelId: string, displayName?: string, apiKey?: string) {
     super();
     this.modelId = modelId;
     this.displayName = displayName || modelId;
     this.description = `TokenHub 托管模型 ${modelId}`;
+    this.explicitApiKey = apiKey;
   }
 
   private getApiKey(): string {
-    return process.env.TOKENHUB_API_KEY ?? process.env.HY3_API_KEY ?? '';
+    return (
+      this.explicitApiKey?.trim() ||
+      process.env.TOKENHUB_API_KEY ||
+      process.env.HY3_API_KEY ||
+      process.env.LLM_API_KEY ||
+      ''
+    );
   }
   private getBaseUrl(): string {
     return process.env.TOKENHUB_BASE_URL || process.env.HY3_BASE_URL || DEFAULT_BASE_URL;
@@ -81,6 +63,38 @@ export class TokenHubClient extends BaseAiClient {
     const base = this.getBaseUrl().replace(/\/+$/, '');
     if (base.endsWith('/chat/completions')) return base;
     return `${base}/chat/completions`;
+  }
+
+  /**
+   * 生成参数组装（D1 三处收口的唯一入口）：max_tokens + thinking 都走共享策略函数，
+   * 与 hy3.client / content-hub 逐字节同策略（消除三份心智）。
+   */
+  private genParams(
+    options: ChatOptions | undefined,
+    hasTools: boolean,
+  ): Record<string, unknown> {
+    const modelMaxTokens = lookupModelMaxTokens(this.modelId);
+    const params: Record<string, unknown> = {
+      max_tokens: resolveMaxTokens({
+        hasTools,
+        maxTokens: options?.maxTokens,
+        modelMaxTokens,
+        clientDefault: CLIENT_DEFAULT_MAX_TOKENS,
+      }),
+    };
+    // wire-format 逃生口：整体不下发 thinking 字段（不参与策略链）
+    if (options?.omitThinking) return params;
+    return {
+      ...params,
+      ...resolveThinking({
+        hasTools,
+        maxTokens: options?.maxTokens,
+        agentThinking: options?.agentThinking,
+        override: options?.thinking,
+        modelMaxTokens,
+        clientDefaultMaxTokens: CLIENT_DEFAULT_MAX_TOKENS,
+      }),
+    };
   }
 
   isAvailable(): boolean {
@@ -98,15 +112,14 @@ export class TokenHubClient extends BaseAiClient {
   ): Promise<ChatWithToolsResult> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     const payload: Record<string, unknown> = {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 8000,
-      ...thinkingPayload(this.modelId, options?.thinking),
+      ...this.genParams(options, tools.length > 0),
       stream: false,
     };
     if (tools.length > 0) {
@@ -179,7 +192,7 @@ export class TokenHubClient extends BaseAiClient {
   ): AsyncGenerator<StreamToolEvent, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     // 观测：本轮客户端模式（排查"正文为空/被截断"用，日志 [tokenhub] 前缀）
@@ -202,8 +215,7 @@ export class TokenHubClient extends BaseAiClient {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 8000,
-      ...thinkingPayload(this.modelId, options?.thinking),
+      ...this.genParams(options, tools.length > 0),
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -309,14 +321,13 @@ export class TokenHubClient extends BaseAiClient {
   ): AsyncGenerator<StreamChunk, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY 或 HY3_API_KEY`);
+      throw new Error(`${this.modelId} 不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
     const payload: Record<string, unknown> = {
       model: this.modelId,
       messages: messages.map((m) => this.toApiMessage(m)),
       temperature: options?.temperature ?? 0.7,
-      max_tokens: options?.maxTokens ?? 8000,
-      ...thinkingPayload(this.modelId, options?.thinking),
+      ...this.genParams(options, false),
       stream: true,
     };
     for await (const ev of streamSse(this.getChatEndpoint(), payload, {

@@ -85,6 +85,25 @@
 > 为什么新增接口要单独设门：**越权、重复提交、失败静默、敏感泄露**这四类问题机器查不出，而它们恰好集中在「新增一个对外接口」时引入。
 > 与 `rd-review`（实现者自查）的分工：自查的天然缺陷是**知道自己想做什么**，于是会替代码补上不存在的意图；独立评审的价值就在于**不知道**。
 
+### 2.5.4 模型接入与生成参数动作门（LLM 调参 · 与 UI 无关）
+
+凡改动命中模型链路 —— **即使是纯后端改动、即使只有一行**：
+
+- `packages/agent-core/src/clients/**`（`ChatOptions` / 模型客户端）
+- `packages/agent-core/src/interfaces/agent.interface.ts` 的 `AgentDefinition` **调参字段**、`core/agent-engine.ts` 的 options 构造
+- `servers/ai-service/src/agent-def/**`（`agent_definitions` 实体列 / DTO / 下发）、`common/client.registry.ts`
+- `servers/ai-agent/src/agent/model-catalog.service.ts`、DB 字典 `llm_models`
+- `INTENT_MODEL` / `CLASSIFY_MAX_TOKENS` / `TOKENHUB_*` 相关 env
+
+按 `.codebuddy/rules/llm-interface/RULE.mdc` 的动作门执行：判是否契约 → 先登记后实现 → **契约面字段 / DB 列 / 引擎入参三处同步** → 互斥校验 → 机检 → **阻塞项清零** → commit 带 `Contract: pass`（命中 env 时并行带 `Release: pass`）。
+
+- 判据源：`docs/api/contracts.md` §7（C7 · Agent 生成参数与模型清单，含取值档位 §7.4 与禁项）
+- 承担角色：`contract-reviewer`（不代改、不代登记，只出报告并回流）
+- 防复发机检：`node scripts/check-agent-core-exports.mjs`（README 声明 ↔ `index.ts` 实际导出对拍）
+- 纯微调走 `Micro-exempt: <理由>`
+
+> 为什么单独设门：调参字段天然是**三处双份事实**（契约字段 / DB 列 / 运行时入参），漏任何一处都是「后台填了值但不生效」，编译与测试全绿 —— 与 `'card'` 事件同型的静默失效。
+
 ## 3 AI 规则（含 agent 安全）
 
 - 只要与 agent 相关（含**工程的安全规则**）→ 放 **`.codebuddy/rules/`**（工具扫描加载）；通用红线在上游 `ai-agent-kit` 的 `rules/general/01–05`。

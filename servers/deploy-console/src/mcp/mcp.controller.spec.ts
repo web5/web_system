@@ -140,3 +140,230 @@ describe('McpController.submitPipeline（入参转发）', () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * triggerSource 强制并入（2026-10-27 防再犯 S1）。
+ *
+ * 背景：两轮非预期 PROD 批量发布经 MCP Key 通道提交 + 自动审批一体触发，
+ * operator=1 无法区分「哪把 Key/谁的会话」。MCP 通道必须把 Key 名并入触发来源，
+ * 且**不可被调用方抹掉** —— 本组测试钉死强制段。
+ */
+describe('McpController.submitPipeline（triggerSource 强制并入 Key 名）', () => {
+  let controller: McpController;
+  let submit: jest.Mock;
+
+  beforeEach(async () => {
+    submit = jest.fn(async () => ({ jobId: 'job-1', status: 'pending' }));
+    const moduleRef = await Test.createTestingModule({
+      controllers: [McpController],
+      providers: [
+        { provide: PipelineService, useValue: { submit } },
+        {
+          provide: DeployService,
+          useValue: { listModules: jest.fn(), getCurrentVersions: jest.fn() },
+        },
+        { provide: ApproverService, useValue: { list: jest.fn(async () => ({ users: [] })) } },
+        { provide: ReleasePlanService, useValue: { plan: jest.fn() } },
+        { provide: ReleaseVerifyService, useValue: { verify: jest.fn() } },
+        { provide: McpAuthService, useValue: { verifyKey: jest.fn() } },
+      ],
+    }).compile();
+    controller = moduleRef.get(McpController);
+  });
+
+  const call = (body: unknown, req: any) =>
+    controller.submitPipeline(body as any, req as any);
+
+  const baseBody = {
+    env: 'dev',
+    moduleKey: 'admin',
+    branch: 'master',
+    commitId: 'abc1234',
+  };
+
+  it('缺省 → mcp:<keyName>（Key 名强制在场）', async () => {
+    await call(baseBody, {
+      mcpOperator: '1',
+      mcpKeyInfo: { ownerId: '1', keyName: 'ai-ops-automation' },
+    });
+    const dto = submit.mock.calls[0][0];
+    expect(dto.triggerSource).toBe('mcp:ai-ops-automation');
+  });
+
+  it('调用方传了 triggerSource 也抹不掉 Key 名：拼成 <body>|mcp:<keyName>', async () => {
+    await call(
+      { ...baseBody, triggerSource: 'web|sess-1' },
+      { mcpOperator: '1', mcpKeyInfo: { ownerId: '1', keyName: 'ai-ops-automation' } },
+    );
+    const dto = submit.mock.calls[0][0];
+    expect(dto.triggerSource).toBe('web|sess-1|mcp:ai-ops-automation');
+  });
+
+  it('keyName 缺失 → mcp:unknown（不静默丢通道）', async () => {
+    await call(baseBody, { mcpOperator: '1' });
+    const dto = submit.mock.calls[0][0];
+    expect(dto.triggerSource).toBe('mcp:unknown');
+  });
+
+  it('非法 triggerSource（含空格）直接 400，不进服务层', async () => {
+    await expect(
+      call(
+        { ...baseBody, triggerSource: 'has space' },
+        { mcpOperator: '1', mcpKeyInfo: { ownerId: '1', keyName: 'k' } },
+      ),
+    ).rejects.toThrow(/triggerSource/);
+    expect(submit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * S2：prod 去 auto-approve（2026-10-27 防再犯）。
+ *
+ * 背景：`/tmp/prod-deploy.sh` 式脚本经 MCP 通道提交后用 confirm=true 自动审批，
+ * 两轮非预期 PROD 批量发布由此触发。prod 必须人工审批（控制台），
+ * MCP 通道 approve 对 prod 一律拒绝；reject 保留（拒绝不放行，风险方向不同）。
+ */
+describe('McpController.approvePipeline / rejectPipeline（prod 去 auto-approve）', () => {
+  let controller: McpController;
+  let approve: jest.Mock;
+  let reject: jest.Mock;
+  let get: jest.Mock;
+
+  const makePipeline = (env: string) => ({
+    id: 'job-1',
+    env,
+    moduleKey: 'admin',
+    operator: '1',
+    status: 'pending-approval',
+    triggerSource: 'mcp:ai-ops-automation',
+  });
+
+  beforeEach(async () => {
+    approve = jest.fn(async () => ({ id: 'job-1', status: 'approved' }));
+    reject = jest.fn(async () => ({ id: 'job-1', status: 'rejected' }));
+    get = jest.fn(async () => makePipeline('prod'));
+    const moduleRef = await Test.createTestingModule({
+      controllers: [McpController],
+      providers: [
+        { provide: PipelineService, useValue: { submit: jest.fn(), approve, reject, get } },
+        {
+          provide: DeployService,
+          useValue: { listModules: jest.fn(), getCurrentVersions: jest.fn() },
+        },
+        // reviewerOf 会调 list() 把 ownerId 解析成用户名；返回 admin 便于断言
+        {
+          provide: ApproverService,
+          useValue: {
+            list: jest.fn(async () => ({
+              users: [{ id: 1, username: 'admin' }],
+            })),
+          },
+        },
+        { provide: ReleasePlanService, useValue: { plan: jest.fn() } },
+        { provide: ReleaseVerifyService, useValue: { verify: jest.fn() } },
+        { provide: McpAuthService, useValue: { verifyKey: jest.fn() } },
+      ],
+    }).compile();
+    controller = moduleRef.get(McpController);
+  });
+
+  const req = {
+    mcpOperator: '1',
+    mcpKeyInfo: { ownerId: '1', keyName: 'ai-ops-automation' },
+  };
+
+  it('prod + confirm=true 也拒绝（不再走放行）——错误信息可读', async () => {
+    await expect(
+      controller.approvePipeline(
+        'job-1',
+        { comment: 'auto', confirm: true },
+        req as any,
+      ),
+    ).rejects.toThrow(/prod 环境必须人工审批/);
+    await expect(
+      controller.approvePipeline('job-1', { confirm: true }, req as any),
+    ).rejects.toThrow(/MCP 通道不允许审批 prod/);
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it('prod 未传 confirm 同样拒绝（拒绝发生在 confirm 判定之前）', async () => {
+    await expect(
+      controller.approvePipeline('job-1', { comment: 'x' }, req as any),
+    ).rejects.toThrow(/prod 环境必须人工审批/);
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it('dev 非 prod 环境 MCP approve 正常放行（自动化 dev 发布仍可用）', async () => {
+    get.mockResolvedValueOnce(makePipeline('dev'));
+    const r = await controller.approvePipeline(
+      'job-1',
+      { comment: 'dev ok' },
+      req as any,
+    );
+    expect(r.status).toBe('approved');
+    expect(approve).toHaveBeenCalledTimes(1);
+    // 审批通道写进服务层（审计用）：mcp:<keyName>
+    expect(approve.mock.calls[0][4]).toBe('mcp:ai-ops-automation');
+    // 审批人由 ownerId 解析成用户名
+    expect(approve.mock.calls[0][1]).toBe('admin');
+  });
+
+  it('MCP reject prod 仍可用（拒绝不放行，风险方向不同）', async () => {
+    const r = await controller.rejectPipeline(
+      'job-1',
+      { comment: 'prod 异常，叫停' },
+      req as any,
+    );
+    expect(r.status).toBe('rejected');
+    expect(reject).toHaveBeenCalledTimes(1);
+    expect(reject.mock.calls[0][4]).toBe('mcp:ai-ops-automation');
+  });
+
+  it('reject 仍强制填意见（与控制台同语义）', async () => {
+    await expect(
+      controller.rejectPipeline('job-1', { comment: '  ' }, req as any),
+    ).rejects.toThrow(/拒绝必须填写审批意见/);
+    expect(reject).not.toHaveBeenCalled();
+  });
+});
+
+describe('McpController.getPipeline（triggerSource 查询出口）', () => {
+  it('返回体含 triggerSource（归因检索用）', async () => {
+    const get = jest.fn(async () => ({
+      id: 'job-1',
+      env: 'prod',
+      moduleKey: 'admin',
+      versionTag: 'abc',
+      mode: 'direct',
+      status: 'succeeded',
+      stage: 'verify',
+      progress: { current: 9, total: 9, message: 'done' },
+      logs: [],
+      error: undefined,
+      result: undefined,
+      operator: '1',
+      triggerSource: 'mcp:ai-ops-automation',
+      startTime: 1,
+      endTime: 2,
+    }));
+    const moduleRef = await Test.createTestingModule({
+      controllers: [McpController],
+      providers: [
+        { provide: PipelineService, useValue: { get } },
+        {
+          provide: DeployService,
+          useValue: { listModules: jest.fn(), getCurrentVersions: jest.fn() },
+        },
+        { provide: ApproverService, useValue: { list: jest.fn(async () => ({ users: [] })) } },
+        { provide: ReleasePlanService, useValue: { plan: jest.fn() } },
+        { provide: ReleaseVerifyService, useValue: { verify: jest.fn() } },
+        { provide: McpAuthService, useValue: { verifyKey: jest.fn() } },
+      ],
+    }).compile();
+    const controller = moduleRef.get(McpController);
+    const r = await controller.getPipeline('job-1', {
+      mcpOperator: '1',
+    } as any);
+    expect(r.triggerSource).toBe('mcp:ai-ops-automation');
+  });
+});

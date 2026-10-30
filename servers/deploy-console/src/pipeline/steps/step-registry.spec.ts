@@ -23,7 +23,7 @@ describe('step-registry（内置步骤配置化声明）', () => {
   const p = (over: Record<string, unknown> = {}) =>
     ({ moduleType: undefined, reuseArtifact: false, skipVerify: false, ...over }) as never;
 
-  it('八步骤齐全（restart / verify 已下沉），category 与 commandMode 正确', () => {
+  it('八步骤齐全（restart / verify 已下沉；prebuild 已去内置 = 普通脚本节点），category 与 commandMode 正确', () => {
     expect(Object.keys(registry).sort()).toEqual(
       ['apply', 'build', 'check', 'cleanup', 'pointer', 'pull', 'upload', 'version'],
     );

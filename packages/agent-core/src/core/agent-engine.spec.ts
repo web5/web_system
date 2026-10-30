@@ -130,6 +130,64 @@ describe('AgentEngine (agent-core)', () => {
     expect(events.some((e) => e.type === 'error' && e.content.includes('最大步数'))).toBe(true);
   });
 
+  describe('TC-G4 runId 透出（N5 补齐回归 #254）', () => {
+    it('TC-G4-02: final 帧携带 runId', async () => {
+      const agent = makeAgent();
+      agentRegistry.get.mockReturnValue(agent);
+      const client = makeStreamingClient(
+        jest.fn().mockResolvedValue({
+          content: '你好',
+          toolCalls: [],
+          assistantMessage: { role: 'assistant', content: '你好' },
+        } as unknown as ChatWithToolsResult),
+      );
+      clientRegistry.getOrFallback.mockReturnValue(client as any);
+
+      const events: any[] = [];
+      for await (const e of engine.run({ agentId: 'test-agent', userInput: 'hi' }, 'u1', 'tc-g4-02-run')) events.push(e);
+
+      const finalEvent = events.find((e) => e.type === 'final');
+      expect(finalEvent).toBeDefined();
+      expect(finalEvent.runId).toBe('tc-g4-02-run');
+    });
+
+    it('TC-G4-03: error 帧携带 runId（模型异常路径）', async () => {
+      const agent = makeAgent();
+      agentRegistry.get.mockReturnValue(agent);
+      const client = makeStreamingClient(jest.fn().mockRejectedValue(new Error('API down')));
+      clientRegistry.getOrFallback.mockReturnValue(client as any);
+
+      const events: any[] = [];
+      for await (const e of engine.run({ agentId: 'test-agent', userInput: 'hi' }, 'u1', 'tc-g4-03-run')) events.push(e);
+
+      const errorEvent = events.find((e) => e.type === 'error');
+      expect(errorEvent).toBeDefined();
+      expect(errorEvent.runId).toBe('tc-g4-03-run');
+    });
+
+    it('TC-G4-03b: error 帧携带 runId（maxSteps 熔断路径）', async () => {
+      const agent = makeAgent({ maxSteps: 1 });
+      agentRegistry.get.mockReturnValue(agent);
+      const call: ToolCall = { id: 't', name: 'calc', arguments: '{}' };
+      const client = makeStreamingClient(
+        jest.fn().mockResolvedValue({
+          content: '',
+          toolCalls: [call],
+          assistantMessage: { role: 'assistant', content: '', toolCalls: [call] },
+        } as unknown as ChatWithToolsResult),
+      );
+      clientRegistry.getOrFallback.mockReturnValue(client as any);
+      toolRegistry.execute.mockResolvedValue({ success: true, content: '1' });
+
+      const events: any[] = [];
+      for await (const e of engine.run({ agentId: 'test-agent', userInput: 'loop' }, 'u1', 'tc-g4-03b-run')) events.push(e);
+
+      const errorEvent = events.find((e) => e.type === 'error');
+      expect(errorEvent).toBeDefined();
+      expect(errorEvent.runId).toBe('tc-g4-03b-run');
+    });
+  });
+
   describe('TelemetryPort（Phase2.1）', () => {
     it('注入 telemetry 时，run 触发 onRunStart / onLlmSpan / onRunEnd（无工具直接回答）', async () => {
       const agent = makeAgent();
@@ -199,5 +257,72 @@ describe('AgentEngine (agent-core)', () => {
         expect.objectContaining({ runId: 'r2', tool: 'calc', ok: false, error: '工具爆炸' }),
       );
     });
+  });
+});
+
+describe('AgentEngine 生成参数分层透传（D1 O2-A）', () => {
+  let toolRegistry: jest.Mocked<ToolRegistry>;
+  let agentRegistry: jest.Mocked<AgentRegistry>;
+  let clientRegistry: jest.Mocked<ClientRegistry>;
+  let memory: jest.Mocked<ConversationMemoryPort>;
+  let engine: AgentEngine;
+
+  beforeEach(() => {
+    toolRegistry = { toSchemas: jest.fn().mockResolvedValue([]), execute: jest.fn() } as any;
+    agentRegistry = { get: jest.fn() } as any;
+    clientRegistry = { getOrFallback: jest.fn() } as any;
+    memory = {
+      load: jest.fn().mockResolvedValue({ summary: null, messages: [] }),
+      persist: jest.fn().mockResolvedValue('conv-1'),
+    } as any;
+    engine = new AgentEngine(clientRegistry, toolRegistry, agentRegistry, memory);
+  });
+
+  it('agent.thinking → agentThinking（P3）、runInput.thinking → thinking（P2），不预合并', async () => {
+    const agent = makeAgent({
+      tools: [],
+      thinking: { type: 'disabled' },
+    });
+    agentRegistry.get.mockReturnValue(agent);
+    const chatWithTools = jest.fn().mockResolvedValue({
+      content: 'ok',
+      toolCalls: [],
+      assistantMessage: { role: 'assistant', content: 'ok' },
+    } as unknown as ChatWithToolsResult);
+    const client = makeStreamingClient(chatWithTools);
+    clientRegistry.getOrFallback.mockReturnValue(client as any);
+
+    const runInput = {
+      agentId: 'test-agent',
+      userInput: 'hi',
+      thinking: { type: 'enabled' as const, budget_tokens: 12 },
+    };
+    for await (const _e of engine.run(runInput, 'u1', 'r1')) {
+      // drain
+    }
+
+    expect(chatWithTools).toHaveBeenCalledTimes(1);
+    const options = chatWithTools.mock.calls[0][2] as ChatOptions;
+    // 分层收参：两层各自保留，引擎不把 runInput.thinking 合进 agentThinking
+    expect(options.agentThinking).toEqual({ type: 'disabled' });
+    expect(options.thinking).toEqual({ type: 'enabled', budget_tokens: 12 });
+  });
+
+  it('agent.thinking 为 null 时不设置 agentThinking（未配置 → 走优先级链下层）', async () => {
+    const agent = makeAgent({ tools: [], thinking: null });
+    agentRegistry.get.mockReturnValue(agent);
+    const chatWithTools = jest.fn().mockResolvedValue({
+      content: 'ok',
+      toolCalls: [],
+      assistantMessage: { role: 'assistant', content: 'ok' },
+    } as unknown as ChatWithToolsResult);
+    clientRegistry.getOrFallback.mockReturnValue(makeStreamingClient(chatWithTools) as any);
+
+    for await (const _e of engine.run({ agentId: 'test-agent', userInput: 'hi' }, 'u1', 'r1')) {
+      // drain
+    }
+    const options = chatWithTools.mock.calls[0][2] as ChatOptions;
+    expect(options).not.toHaveProperty('agentThinking');
+    expect(options).not.toHaveProperty('thinking');
   });
 });

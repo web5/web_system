@@ -1,10 +1,13 @@
+<!--
+  Agent 定义管理列表。编辑/新建走详情页路由（page-spec v2：独立详情页，v1 弹窗版已废弃，无双入口）。
+-->
 <template>
   <a-page-header
     title="Agent 定义管理"
     sub-title="配置化维护 Agent 的 systemPrompt / 模型 / 工具 / 记忆，发布后 30s 内运行时生效"
   >
     <template #extra>
-      <a-button type="primary" @click="openCreate">新建 Agent</a-button>
+      <a-button type="primary" @click="goCreate">新建 Agent</a-button>
       <a-button :loading="loading" @click="reload">刷新</a-button>
     </template>
   </a-page-header>
@@ -56,7 +59,7 @@
         </template>
         <template v-else-if="column.dataIndex === 'actions'">
           <a-space>
-            <a-button type="link" size="small" @click="openEdit(record)">编辑</a-button>
+            <a-button type="link" size="small" @click="goEdit(record)">编辑</a-button>
             <a-button type="link" size="small" @click="openVersions(record)">版本</a-button>
             <a-popconfirm
               v-if="canManage && record.status !== 'published'"
@@ -73,112 +76,7 @@
     </a-table>
   </a-card>
 
-  <!-- 编辑 / 新建 弹窗 -->
-  <a-modal
-    :open="editOpen"
-    :title="editing ? `编辑 Agent · ${editing.id}` : '新建 Agent'"
-    :width="880"
-    :confirm-loading="saving"
-    ok-text="保存"
-    cancel-text="取消"
-    @ok="save"
-    @cancel="closeEdit"
-    :get-container="moduleOverlayContainer"
-  >
-    <a-form layout="vertical" :model="form">
-      <a-row :gutter="16">
-        <a-col :span="12">
-          <a-form-item label="Agent ID（唯一，小写短横线）">
-            <a-input v-model:value="form.id" :disabled="!!editing" placeholder="如 contract-risk" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="12">
-          <a-form-item label="名称">
-            <a-input v-model:value="form.name" placeholder="如 合同翻译官" />
-          </a-form-item>
-        </a-col>
-      </a-row>
-      <!-- 意图路由线索：给 IntentClassifier 读（关键词命中走规则路由，零 LLM 开销） -->
-      <a-row :gutter="16">
-        <a-col :span="12">
-          <a-form-item
-            label="用途说明"
-            extra="给意图路由的 LLM 读的一句话：这个 agent 负责什么。留空则只能靠 agent 名称猜"
-          >
-            <a-input v-model:value="form.description!" :maxlength="500" placeholder="如：把脑海里的角色场景画成图片" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="12">
-          <a-form-item
-            label="路由关键词"
-            extra="逗号分隔；用户这句里包含任一个关键词就直接路由过来，不调 LLM"
-          >
-            <a-select
-              v-model:value="keywordsInput"
-              mode="tags"
-              token-separators="[',','，','、']"
-              placeholder="如 画画,生图,变变"
-            />
-          </a-form-item>
-        </a-col>
-      </a-row>
-      <a-row :gutter="16">
-        <a-col :span="8">
-          <a-form-item label="模型">
-            <a-select
-              v-model:value="form.model"
-              show-search
-              option-filter-prop="label"
-              :options="modelOptions"
-              placeholder="从字典 llm_models 选择"
-            />
-          </a-form-item>
-        </a-col>
-        <a-col :span="8">
-          <a-form-item label="最大步数">
-            <a-input-number v-model:value="form.maxSteps" :min="1" :max="50" style="width: 100%" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="8">
-          <a-form-item label="Temperature">
-            <a-input-number v-model:value="form.temperature" :min="0" :max="2" :step="0.1" style="width: 100%" />
-          </a-form-item>
-        </a-col>
-      </a-row>
-      <a-form-item label="能力配置（本地工具 / MCP 远程工具 / Skills）">
-        <CapabilityConfigurator v-model:capabilities="form.capabilities" />
-      </a-form-item>
-      <a-form-item label="System Prompt">
-        <a-textarea
-          v-model:value="form.systemPrompt"
-          :rows="14"
-          placeholder="Agent 的系统提示词，发布后运行时生效"
-        />
-      </a-form-item>
-      <a-row :gutter="16">
-        <a-col :span="8">
-          <a-form-item label="记忆：压缩阈值">
-            <a-input-number v-model:value="form.memory.compactionThreshold" :min="1" style="width: 100%" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="8">
-          <a-form-item label="记忆：保留近期条数">
-            <a-input-number v-model:value="form.memory.keepRecent" :min="1" style="width: 100%" />
-          </a-form-item>
-        </a-col>
-        <a-col :span="8">
-          <a-form-item label="启用记忆">
-            <a-switch v-model:checked="form.memory.enabled" />
-          </a-form-item>
-        </a-col>
-      </a-row>
-      <a-form-item label="流式输出" extra="开启后 AI 回答逐字流式渲染；关闭后最终回答一次性输出（适合结构化报告类 Agent）">
-        <a-switch v-model:checked="form.streaming!" />
-      </a-form-item>
-    </a-form>
-  </a-modal>
-
-  <!-- 版本弹窗 -->
+  <!-- 版本弹窗（历史/回滚，非编辑表单） -->
   <a-modal
     :open="versionsOpen"
     :title="`版本历史 · ${currentDef?.id || ''}`"
@@ -220,75 +118,31 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { moduleOverlayContainer } from '@/utils/mount';
 import dayjs from 'dayjs';
 import {
   listAgentDefs,
-  createAgentDef,
-  updateAgentDef,
   publishAgentDef,
   setAgentDefEnabled,
   listAgentDefVersions,
   rollbackAgentDef,
   type AgentDef,
   type AgentDefVersion,
-  type SaveAgentDefPayload,
-  type CapabilityRef,
 } from '@/api/agent-defs';
 import { useUserStore } from '@/stores/user';
-import CapabilityConfigurator from './CapabilityConfigurator.vue';
-import { fetchDictItems } from '@/api/dict';
 
+const router = useRouter();
 const userStore = useUserStore();
 const canManage = userStore.hasPermission('agents:manage');
 
 const loading = ref(false);
 const defs = ref<AgentDef[]>([]);
-const editOpen = ref(false);
-const editing = ref<AgentDef | null>(null);
-const saving = ref(false);
 const versionsOpen = ref(false);
 const versions = ref<AgentDefVersion[]>([]);
 const currentDef = ref<AgentDef | null>(null);
-
-const defaultForm = (): SaveAgentDefPayload => ({
-  id: '',
-  name: '',
-  systemPrompt: '',
-  model: 'hy3',
-  tools: [],
-  capabilities: [],
-  maxSteps: 10,
-  temperature: 0.7,
-  memory: { compactionThreshold: 20, keepRecent: 6, enabled: true },
-  streaming: true,
-  description: '',
-  keywords: [],
-});
-const form = reactive<SaveAgentDefPayload>(defaultForm());
-/** 「路由关键词」tags 选择器的中间态（保存时同步进 form.keywords） */
-const keywordsInput = ref<string[]>([]);
-
-/**
- * 模型下拉来自字典 llm_models（可用性以字典为准），hy3 由专用通道承载固定列出。
- * 字典不可用时只保留 hy3，避免把过时的硬编码值继续写进 Agent 定义。
- */
-const modelOptions = ref<Array<{ value: string; label: string }>>([{ value: 'hy3', label: 'hy3（混元）' }]);
-async function loadModelOptions(): Promise<void> {
-  try {
-    const res = await fetchDictItems('llm_models', { pageSize: 200 });
-    modelOptions.value = [
-      { value: 'hy3', label: 'hy3（混元）' },
-      ...res.items
-        .filter((i) => i.enabled && i.value !== 'hy3')
-        .map((i) => ({ value: i.value, label: `${i.label}（${i.value}）` })),
-    ];
-  } catch {
-    /* 保持兜底：只列 hy3 */
-  }
-}
 
 const columns = [
   { title: 'ID', dataIndex: 'id' },
@@ -315,15 +169,16 @@ function fmt(s: string) {
   return s ? dayjs(s).format('YYYY-MM-DD HH:mm') : '—';
 }
 
-function unwrap(res: any): any {
+function unwrap(res: unknown): unknown {
   // request 拦截器已 unwrap {code,data,message}；这里再兼容 res?.data
-  return res?.data ?? res;
+  const r = res as { data?: unknown } | null | undefined;
+  return r?.data ?? r;
 }
 
 async function reload() {
   loading.value = true;
   try {
-    const res: any = await listAgentDefs();
+    const res = await listAgentDefs();
     defs.value = (unwrap(res) || []) as AgentDef[];
   } catch {
     defs.value = [];
@@ -332,86 +187,35 @@ async function reload() {
   }
 }
 
-function openCreate() {
-  editing.value = null;
-  Object.assign(form, defaultForm());
-  keywordsInput.value = [];
-  editOpen.value = true;
+/** 编辑/新建一律走详情页路由（page-spec v2，弹窗路径已移除，不留双入口） */
+function goEdit(def: AgentDef) {
+  void router.push(`/agents/definitions/${def.id}`);
 }
 
-function openEdit(def: AgentDef) {
-  editing.value = def;
-  // capabilities 为空时从 tools 派生（老数据兼容）
-  const caps: CapabilityRef[] =
-    def.capabilities?.length
-      ? def.capabilities.map((c) => ({ ...c }))
-      : (def.tools || []).map((t) => ({ type: 'tool', ref: t, enabled: true }));
-  Object.assign(form, {
-    id: def.id,
-    name: def.name,
-    systemPrompt: def.systemPrompt,
-    model: def.model,
-    tools: [...(def.tools || [])],
-    capabilities: caps,
-    maxSteps: def.maxSteps,
-    temperature: def.temperature ?? 0.7,
-    memory: { ...def.memory },
-    streaming: def.streaming !== false,
-    description: def.description ?? '',
-    keywords: def.keywords ?? [],
-  });
-  keywordsInput.value = [...(def.keywords || [])];
-  editOpen.value = true;
-}
-
-function closeEdit() {
-  editOpen.value = false;
-  editing.value = null;
-}
-
-async function save() {
-  if (!form.id.trim() || !form.name.trim()) {
-    message.warning('Agent ID 和名称必填');
-    return;
-  }
-  saving.value = true;
-  try {
-    // tags 选择器是 string[] 的中间态，落 payload 前同步一次
-    form.keywords = keywordsInput.value.map((k) => k.trim()).filter(Boolean);
-    if (editing.value) {
-      const res: any = await updateAgentDef(editing.value.id, form);
-      message.success('已保存（如修改了 prompt，需点"发布"才生效）');
-    } else {
-      const res: any = await createAgentDef(form);
-      message.success('已创建草稿，点击"发布"生效');
-    }
-    closeEdit();
-    await reload();
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '保存失败');
-  } finally {
-    saving.value = false;
-  }
+function goCreate() {
+  void router.push('/agents/definitions/new');
 }
 
 async function toggleEnabled(def: AgentDef, enabled: boolean) {
   try {
-    const res: any = await setAgentDefEnabled(def.id, enabled);
+    await setAgentDefEnabled(def.id, enabled);
     message.success(enabled ? '已启用' : '已停用');
     await reload();
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '操作失败');
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } };
+    message.error(err?.response?.data?.message || '操作失败');
     await reload();
   }
 }
 
 async function publish(def: AgentDef) {
   try {
-    const res: any = await publishAgentDef(def.id);
+    const res = await publishAgentDef(def.id);
     message.success(`已发布 v${(unwrap(res) as AgentDef).version}，约 30s 内生效`);
     await reload();
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '发布失败');
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } };
+    message.error(err?.response?.data?.message || '发布失败');
   }
 }
 
@@ -419,7 +223,7 @@ async function openVersions(def: AgentDef) {
   currentDef.value = def;
   versionsOpen.value = true;
   try {
-    const res: any = await listAgentDefVersions(def.id);
+    const res = await listAgentDefVersions(def.id);
     versions.value = (unwrap(res) || []) as AgentDefVersion[];
   } catch {
     versions.value = [];
@@ -428,17 +232,17 @@ async function openVersions(def: AgentDef) {
 
 async function rollback(ver: AgentDefVersion) {
   try {
-    const res: any = await rollbackAgentDef(currentDef.value!.id, ver.id);
+    const res = await rollbackAgentDef(currentDef.value!.id, ver.id);
     message.success(`已回滚并发布 v${(unwrap(res) as AgentDef).version}`);
     versionsOpen.value = false;
     await reload();
-  } catch (e: any) {
-    message.error(e?.response?.data?.message || '回滚失败');
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } } };
+    message.error(err?.response?.data?.message || '回滚失败');
   }
 }
 
 onMounted(() => {
   void reload();
-  void loadModelOptions();
 });
 </script>

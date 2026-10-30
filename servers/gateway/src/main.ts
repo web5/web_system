@@ -13,12 +13,49 @@ import helmet from 'helmet';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { json, urlencoded } from 'body-parser';
+import { DEFAULT_TRUST_PROXY, applyTrustProxy } from './trust-proxy';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Gateway');
   const indexHtmlService = app.get(IndexHtmlService);
+
+  // ── trust proxy（P0 修复 2026-10-27）────────────────────────────────────
+  // 背景（prod 拓扑已实测确认）：公网 nginx(内网 172.16.16.15) → 网关(172.16.16.2:6000)，
+  // 且 6000 端口公网不可达 → 唯一允许的直接上游就是 nginx 这台机器。
+  // 未开 trust proxy 时 express 的 req.ip 恒等于 nginx 的内网 IP，
+  // 导致 @nestjs/throttler 的「每 IP 100 次/分钟」退化成「全站共享一个桶」。
+  //
+  // 机制（forwarded + proxy-addr）：
+  //   forwarded 把地址链构造成 [socket对端, XFF最右, …, XFF最左]（socket 在 index 0）；
+  //   proxy-addr 从 index 0 开始判定信任，命中第一个「不可信」就截断，返回截断后**最后一个**。
+  //   nginx 用 $proxy_add_x_forwarded_for 追加 → XFF 最右 = 真实客户端 IP，客户端伪造值在更左侧。
+  //
+  // 为什么用「按代理 IP 白名单」而不是 trust proxy = 1 / true
+  // （结论来自真实 express 4.x + 真实 HTTP 请求的实测，不是推断；回归用例见 main.trust-proxy.spec.ts）：
+  //   trust = ['172.16.16.15'] → 经 nginx 取到真实客户端 IP；客户端伪造任意层 XFF 均无效；
+  //                             直连方不在白名单 → index 0 即被截断 → req.ip = socket 地址，
+  //                             伪造 XFF 同样无效；
+  //   trust = 1（数字跳数）  → 经 nginx 也能取到真实 IP，但 socket 无论来自谁都落在 index 0
+  //                             且被信任 → 直连时客户端自带的 XFF 直接成为 req.ip
+  //                             → 直连方可任意伪造 req.ip 绕过限流；
+  //   trust = true（全信）   → 返回链上最左的值 = 客户端伪造值 → 限流可被绕过。
+  //   ⇒ 只有「代理 IP 白名单」同时满足：取到真实客户端 IP + 伪造无效 + 直连也安全。
+  //
+  // ⚠️ 不要把 'loopback' 加进信任列表：那会把「本机任意进程」也提升为可信代理
+  //    （本机进程的 socket 同样落在 index 0），自带 XFF 即可伪造 req.ip。
+  //    保持 loopback 不可信：直连请求 req.ip = 自己的 socket 地址（127.0.0.1 /
+  //    压测轮换用的 127.0.0.x），天然分桶，且伪造 XFF 无效。
+  // ⚠️ nginx 已启用 upstream keepalive：池化连接上除首条请求外，socket 对端恒为 nginx IP。
+  //    所以客户端 IP **只能**来自 X-Forwarded-For，绝不能回落到 socket 地址来分桶。
+  const trustProxyRaw = configService.get<string>('TRUST_PROXY', DEFAULT_TRUST_PROXY);
+  const trustProxyList = applyTrustProxy(app, trustProxyRaw);
+  if (trustProxyList.length === 0) {
+    logger.warn('TRUST_PROXY 为空：trust proxy 未启用，req.ip 将恒为直连方地址');
+  } else {
+    logger.log(`trust proxy enabled: [${trustProxyList.join(', ')}]`);
+  }
 
   // 版本化 index.html：读取 <PUBLIC_ROOT>/<pub>/index.html，注入当前环境/版本元信息（供未来灰度扩展）
   const sendIndex = async (pub: string, req: any, res: any) => {

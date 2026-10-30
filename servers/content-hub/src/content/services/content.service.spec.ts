@@ -300,10 +300,9 @@ describe('rebuildPublication 存量记录重建（#431）', () => {
     // 正文里的 {{date}} 必须也洗掉 —— 只重渲 title 修不到正文
     expect(written.markdown).not.toContain('{{date}}');
     expect(written.html).not.toContain('{{date}}');
-    // 裸 URL 变成可点链接（#399 的渲染器）
-    expect(written.html).toContain(
-      '<a href="https://example.com/a">https://example.com/a</a>',
-    );
+    // 裸 URL 变成可点链接（#399 的渲染器；B1 后 <a> 带内联 style）
+    expect(written.html).toContain('href="https://example.com/a"');
+    expect(written.html).toContain('>https://example.com/a</a>');
     expect(written.title).toBe('AI 资讯日报 ｜ 2026-10-23');
   });
 

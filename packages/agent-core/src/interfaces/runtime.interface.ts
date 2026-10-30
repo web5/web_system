@@ -1,6 +1,7 @@
 /**
  * Agent 运行时接口（RunInput / StreamEvent）。
  */
+import type { ThinkingOption } from '../clients/base-ai.client';
 
 export type StreamEventType =
   | 'content_delta'
@@ -83,4 +84,10 @@ export interface RunInput {
    * 缺省不过滤（向后兼容）。
    */
   scene?: 'admin' | 'c-end';
+  /**
+   * P2 单次覆盖思考开关（D1 分层输入，仅非工具场景优先；
+   * 带工具场景会被共享策略强制纠正为 enabled）。
+   * 与 Agent 定义层 `thinking`（P3）**分层不预合并**，由 `resolveThinking` 闭环判定。
+   */
+  thinking?: ThinkingOption | null;
 }

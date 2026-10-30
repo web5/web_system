@@ -10,7 +10,9 @@ import { McpAuthService } from './mcp-auth.service';
  * MCP 专用鉴权守卫（替代控制台 JWT，用于 /api/mcp/* 路由）。
  *
  * 取 `X-Mcp-Key`（mcp-core 的 pass-through 凭证头）或 `Authorization: Bearer`，
- * 校验出 ownerId 后挂到 `req.mcpOperator`，供审计日志使用。
+ * 校验出 ownerId 后挂到 `req.mcpOperator`，供审计日志使用；
+ * 另挂 `req.mcpKeyInfo={ownerId,keyId,keyName}`，供触发来源归因（2026-10-27）
+ * —— MCP 提交强制把 Key 名并入 triggerSource，防「operator=1 无法区分哪把 Key」。
  *
  * 安全约束：ownerId 缺失时一律拒绝 —— 审计不允许出现 mcp/anonymous/unknown。
  */
@@ -36,6 +38,11 @@ export class McpKeyGuard implements CanActivate {
 
     req.mcpOperator = result.ownerId;
     req.mcpKeyId = result.keyId;
+    req.mcpKeyInfo = {
+      ownerId: result.ownerId,
+      keyId: result.keyId,
+      keyName: result.keyName,
+    };
     return true;
   }
 }

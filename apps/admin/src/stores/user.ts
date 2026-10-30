@@ -18,12 +18,28 @@ export const useUserStore = defineStore(
     const permissionsReady = ref(false);
 
     const roles = computed<Role[]>(() => {
-      return (userInfo.value?.roles as Role[]) || ['viewer'];
+      // 必须是真数组：历史上 roles 若是字符串 / undefined，`flatMap` 会抛
+      // TypeError，而它又在 fetchPermissions 的 catch 分支里被调用 ——
+      // 二次抛出会让权限停留在初始空数组，表现为整站 403。
+      const raw = userInfo.value?.roles as unknown;
+      return Array.isArray(raw) && raw.length ? (raw as Role[]) : ['viewer'];
     });
 
-    /** 本地 fallback：按角色展开 ROLE_PERMISSIONS */
+    /**
+     * 本地 fallback：按角色展开 ROLE_PERMISSIONS。
+     *
+     * 🔴 未知角色（不在四个内置角色内，典型是 auth-service 的兜底值 `'user'`）
+     * **必须退回 viewer 档，不能返回空数组** —— 空数组会让每个页面都 403，
+     * 且 /403 页据此显示「当前账号没有后台访问权限」，把「后端没拿到权限」
+     * 说成「账号没权限」（issue #478）。看得见工作台、点得动的地方不多，
+     * 也比整站不可用 + 误导性文案要好。
+     */
     const fallbackPermissions = (): string[] => {
-      return roles.value.flatMap((r) => ROLE_PERMISSIONS[r] || []);
+      const known = roles.value.filter((r) => r in ROLE_PERMISSIONS);
+      if (known.length) {
+        return [...new Set(known.flatMap((r) => ROLE_PERMISSIONS[r] || []))];
+      }
+      return ROLE_PERMISSIONS.viewer;
     };
 
     function hasPermission(code: string): boolean {
@@ -42,10 +58,22 @@ export const useUserStore = defineStore(
       try {
         const { getMyPermissions } = await import('@/api/permissions');
         const res: any = await getMyPermissions();
-        const list = Array.isArray(res) ? res : (res?.permissions || []);
-        permissions.value = list.length ? list : fallbackPermissions();
+        const list = Array.isArray(res) ? res : (res?.permissions || res?.data || []);
+        if (list.length) {
+          permissions.value = list;
+          return;
+        }
+        // 🔴 空响应 ≠ 没有权限。最常见的是 304（Not Modified）：响应体为空，
+        // 语义是「权限没变」，不是「权限为空」。早期版本在这里直接覆盖成 fallback，
+        // 304 场景下会把一份正常权限清成空 → 整站 403（issue #478）。
+        // 已有权限就原样保留；只有确实一份都没有时才用 fallback。
+        if (!permissions.value.length) {
+          permissions.value = fallbackPermissions();
+        }
       } catch {
-        permissions.value = fallbackPermissions();
+        if (!permissions.value.length) {
+          permissions.value = fallbackPermissions();
+        }
       } finally {
         permissionsReady.value = true;
       }

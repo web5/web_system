@@ -153,6 +153,19 @@ const routes: RouteRecordRaw[] = [
             meta: { title: 'Agent 定义管理', permission: 'agents:manage' },
           },
           {
+            // 新建：详情页形态（page-spec v2，编辑弹窗已废弃），静态段优先于 :id
+            path: 'definitions/new',
+            name: 'AgentDefCreate',
+            component: () => import('@/views/Agents/AgentDefDetail.vue'),
+            meta: { title: '新建 Agent', permission: 'agents:manage' },
+          },
+          {
+            path: 'definitions/:id',
+            name: 'AgentDefDetail',
+            component: () => import('@/views/Agents/AgentDefDetail.vue'),
+            meta: { title: 'Agent 定义详情', permission: 'agents:manage' },
+          },
+          {
             path: 'skills',
             name: 'SkillList',
             component: () => import('@/views/Agents/SkillList.vue'),
@@ -311,12 +324,35 @@ const router = createRouter({
 });
 
 /**
- * 本次页面加载是否已拉取过权限。
+ * 是否需要（重新）拉取权限。
+ *
+ * 判定键是 **token 本身**，不是「本次页面加载拉过没」的布尔位。
+ *
+ * 背景（issue #478，superadmin 登录成功却落 /403）：布尔位在**换账号登录**后
+ * 不会重置 —— 同一次 SPA 会话里先以 A 账号加载过页面，权限已按 A 算好；随后
+ * 登出再用 B 账号登录，守卫看到「已经拉过」直接跳过，B 就沿用 A 的权限。
+ * A 没有后台权限时那份权限是空数组 → B 连 /dashboard 都进不去，落到 /403，
+ * 而 /403 页又据此显示「当前账号没有后台访问权限」，把「缓存没刷新」说成
+ * 「账号没权限」，极具误导性。
+ *
+ * token 每次登录都会变，拿它当键天然覆盖「换账号 / 重新登录 / 刷新后换人」三种场景。
+ */
+export function needsPermissionFetch(
+  authed: boolean,
+  fetchedForToken: string | null,
+  token: string | null | undefined,
+): boolean {
+  if (!authed || !token) return false;
+  return fetchedForToken !== token;
+}
+
+/**
+ * 上一次拉取权限时所用的 token。
  * 模块级变量：刷新页面即重置，**不能**用持久化的 permissionsReady 代替 ——
  * 那个标记一旦被写脏（例如某次拉取异常写入了空数组），后续每次加载都不会再拉，
  * 菜单会一直按空权限渲染成只剩「工作台」。
  */
-let permissionsFetched = false;
+let permissionsFetchedForToken: string | null = null;
 
 router.beforeEach(async (to, _from, next) => {
   // 从 Pinia store 读取状态，而非裸解析 localStorage JSON
@@ -338,13 +374,16 @@ router.beforeEach(async (to, _from, next) => {
   // 每次页面加载都重新拉取一次权限（模块级标记，刷新即重置）。
   // 不能只看持久化的 permissionsReady，否则权限一旦被写脏就永久生效：
   // 表现为菜单塌陷成只剩「工作台」，而守卫（按角色映射）却放行页面，非常迷惑。
-  if (authed && !permissionsFetched) {
+  if (needsPermissionFetch(authed, permissionsFetchedForToken, token)) {
     try {
       await userStore.fetchPermissions();
     } catch {
       /* fetchPermissions 内部已 fallback，这里仅兜底 */
+    } finally {
+      // 成败都记账：失败时 fetchPermissions 已回退本地角色常量，
+      // 不记账会让每次导航都重发一次请求。
+      permissionsFetchedForToken = token;
     }
-    permissionsFetched = true;
   }
 
   // 权限检查：与侧边栏菜单同源（store.permissions；后端不可用时 store 内部已回退本地角色常量）。

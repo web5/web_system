@@ -1,4 +1,4 @@
-import { isAuthed, isTokenExpired } from './index';
+import { isAuthed, isTokenExpired, needsPermissionFetch } from './index';
 
 /**
  * 回归：过期 token 必须被判为「未登录」。
@@ -57,5 +57,36 @@ describe('admin 路由守卫 · 登录判定口径', () => {
     expect(isAuthed(jwtWithExp(9999999999))).toBe(true); // 2286 远未来，必有效
     expect(isAuthed('')).toBe(false); // 空串 = 未登录
     expect(isAuthed('garbage')).toBe(true); // 非 JWT 解析失败，不假设过期
+  });
+});
+
+/**
+ * 回归：换账号登录必须重新拉权限（issue #478）。
+ *
+ * 此前守卫用模块级布尔位 `permissionsFetched` 记账，登出再登录不会重置 ——
+ * 新账号沿用上一个账号的权限。若上一个账号没有后台权限（库里 5 个 `["user"]`、
+ * auth-service 兜底 `'user'` 都属此类），那份权限是空数组，于是**超管登录成功
+ * 却连 /dashboard 都进不去**，落到 /403 并被提示「当前账号没有后台访问权限」。
+ *
+ * 修法是把记账键从布尔位换成 token：token 每次登录都变，天然覆盖换账号场景。
+ */
+describe('admin 路由守卫 · 换账号后的权限刷新', () => {
+  it('V6 首次进入（从未拉取过）必须拉取', () => {
+    expect(needsPermissionFetch(true, null, 'token-A')).toBe(true);
+  });
+
+  it('V7 同一 token 的后续导航不再重复拉取', () => {
+    expect(needsPermissionFetch(true, 'token-A', 'token-A')).toBe(false);
+  });
+
+  it('V8 🔴 换账号登录（token 变了）必须重新拉取 —— #478 根因，改回布尔位此用例即红', () => {
+    expect(needsPermissionFetch(true, 'token-A', 'token-B')).toBe(true);
+  });
+
+  it('V9 未登录 / 登出后（token 空）不拉取', () => {
+    expect(needsPermissionFetch(false, null, 'token-A')).toBe(false);
+    expect(needsPermissionFetch(true, 'token-A', '')).toBe(false);
+    expect(needsPermissionFetch(true, 'token-A', null)).toBe(false);
+    expect(needsPermissionFetch(true, 'token-A', undefined)).toBe(false);
   });
 });

@@ -4,6 +4,9 @@ import { API_TIMEOUT } from '@web-system/shared';
 import { message } from 'ant-design-vue';
 import router from '@/router';
 
+// 401 跳转防重入锁（#288：SSE 流与 axios 拦截器并发 401 只跳 1 次登录页）
+let isRedirecting = false;
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -186,9 +189,13 @@ export function sendChatMessageStream(
         return;
       }
       // 刷新失败，跳转登录
-      message.error('登录已过期，请重新登录');
-      const currentPath = router.currentRoute.value.fullPath;
-      router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+      message.error({ content: '登录已过期，请重新登录', key: 'auth-expired' });
+      if (!isRedirecting) {
+        isRedirecting = true;
+        setTimeout(() => { isRedirecting = false; }, 60000);
+        const currentPath = router.currentRoute.value.fullPath;
+        router.push(`/login?redirect=${encodeURIComponent(currentPath)}`);
+      }
       onError(new Error('登录已过期'));
       return;
     }

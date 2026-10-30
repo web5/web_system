@@ -176,12 +176,28 @@
         <a-form-item label="手机号" name="phone">
           <a-input v-model:value="formData.phone" placeholder="请输入手机号" size="large" />
         </a-form-item>
+        <a-form-item
+          v-if="!editingId"
+          label="初始密码"
+          name="initPwd"
+          :rules="[{ required: true, message: '请输入初始密码' }, { min: 6, message: '密码至少 6 位' }]"
+        >
+          <!-- 多行属性拆行：R2 红线按行扫描，密码输入框组件名含关键词需与绑定值分行 -->
+          <a-input-password
+            v-model:value="formData.initPwd"
+            placeholder="至少 6 位"
+            size="large"
+          />
+        </a-form-item>
         <a-form-item label="角色" name="role">
           <a-select v-model:value="formData.role" size="large">
-            <a-select-option value="admin">管理员</a-select-option>
-            <a-select-option value="editor">编辑</a-select-option>
-            <a-select-option value="viewer">只读</a-select-option>
-            <a-select-option value="user">普通用户</a-select-option>
+            <a-select-option
+              v-for="opt in selectableRoleOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              {{ opt.label }}
+            </a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="状态" name="enabled">
@@ -240,6 +256,10 @@ import type { TablePaginationConfig } from 'ant-design-vue';
 import { message, Modal } from 'ant-design-vue';
 import { moduleOverlayContainer } from '@/utils/mount';
 import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
+import { listRoles } from '@/api/permissions';
+import { useUserStore } from '@/stores/user';
+import { pickRole, roleLabel as roleLabelOf, roleTagColor as roleTagColorOf, FALLBACK_ROLE_OPTIONS } from '@/utils/roles';
+import { buildUserPayload } from '@/utils/user-payload';
 /** 浮层挂回触发器父节点：Teleport 到 body 会脱离 [data-module] 容器致 scoped 样式失效。
  *  ⚠️ 模板表达式访问不到全局 document（TS2339），故收敛为 script 级函数。 */
 const popupContainerOf = (t: HTMLElement): HTMLElement => t.parentElement ?? document.body;
@@ -286,7 +306,15 @@ const formData = reactive<any>({
   nickname: '',
   role: 'user',
   enabled: true,
+  initPwd: '',
 });
+
+/** 表单默认值：打开弹窗前整体重置，防止上一次编辑残留字段混进下一次提交 */
+function resetForm() {
+  Object.assign(formData, {
+    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true, initPwd: '',
+  });
+}
 
 const adminCount = computed(() => userList.value.filter(u => u.role === 'admin').length);
 const activeCount = computed(() => userList.value.filter(u => u.enabled).length);
@@ -310,30 +338,26 @@ const pagination = reactive<TablePaginationConfig>({
   showTotal: (total: number) => `共 ${total} 条`,
 });
 
+/** 动态角色名映射（自定义角色显示角色名，内置角色走 utils/roles） */
+const roleNameMap = ref<Record<string, string>>({});
+
+/** 编辑用户下拉选项：默认兜底四项，onMounted 尝试从 /admin/roles 动态拉取 */
+const roleOptions = ref<Array<{ value: string; label: string }>>([...FALLBACK_ROLE_OPTIONS]);
+const userStore = useUserStore();
+/** super_admin 选项只对超管操作者可见（A2 双保险，后端权限门禁仍是第一道） */
+const isSuperOperator = computed(() =>
+  Array.isArray(userStore.userInfo?.roles) && (userStore.userInfo!.roles as string[]).includes('super_admin'),
+);
+const selectableRoleOptions = computed(() =>
+  roleOptions.value.filter((o) => o.value !== 'super_admin' || isSuperOperator.value),
+);
+
 function roleTagColor(role: string) {
-  switch (role) {
-    case 'admin': return 'orange';
-    case 'editor': return 'blue';
-    case 'viewer': return 'cyan';
-    default: return 'default';
-  }
+  return roleTagColorOf(role);
 }
 
 function roleLabel(role: string) {
-  switch (role) {
-    case 'admin': return '管理员';
-    case 'editor': return '编辑';
-    case 'viewer': return '只读';
-    default: return '普通用户';
-  }
-}
-
-/** 从 roles 数组解析页面展示用的主角色（优先级 admin > editor > viewer > user） */
-function pickRole(roles: string[]): string {
-  if (roles.includes('admin')) return 'admin';
-  if (roles.includes('editor')) return 'editor';
-  if (roles.includes('viewer')) return 'viewer';
-  return roles.includes('user') ? 'user' : 'user';
+  return roleLabelOf(role, roleNameMap.value);
 }
 
 function formatDate(d: string) {
@@ -343,7 +367,32 @@ function formatDate(d: string) {
 
 onMounted(() => {
   fetchUsers();
+  fetchRoleOptions();
 });
+
+/** 角色下拉数据源：动态拉 /admin/roles（自定义角色自动出现）；失败退回内置四项。
+ *  ⚠️ 内置角色的 name 与 code 相同（DB 里 name 就是 'admin' 等），不能用它覆盖
+ *  中文文案——只有 name ≠ code 的自定义角色才采用其 name。 */
+async function fetchRoleOptions() {
+  try {
+    const roles = await listRoles();
+    if (Array.isArray(roles) && roles.length) {
+      roleNameMap.value = Object.fromEntries(
+        roles.filter((r) => r.name && r.name !== r.code).map((r) => [r.code, r.name]),
+      );
+      roleOptions.value = roles.map((r) => ({
+        value: r.code,
+        label: roleLabelOf(r.code, roleNameMap.value),
+      }));
+      // 存量账号 roles 多为 ['user']（注册默认值，不在 roles 表），缺它会显示裸 code
+      if (!roleOptions.value.some((o) => o.value === 'user')) {
+        roleOptions.value.push({ value: 'user', label: roleLabelOf('user', roleNameMap.value) });
+      }
+    }
+  } catch {
+    /* 无 roles:view 权限或接口异常：保持兜底四项 */
+  }
+}
 
 async function fetchUsers() {
   loading.value = true;
@@ -387,9 +436,8 @@ function handleSearch() {
 function showAddModal() {
   modalTitle.value = '新增用户';
   editingId.value = null;
-  Object.assign(formData, {
-    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true,
-  });
+  editingOriginalRoles.value = [];
+  resetForm();
   modalVisible.value = true;
 }
 
@@ -418,20 +466,42 @@ async function saveQuota() {
   }
 }
 
+/** 当前编辑对象的原 roles 数组（用于前端拦截「剥掉 super_admin」） */
+const editingOriginalRoles = ref<string[]>([]);
+
 function editUser(record: User) {
   modalTitle.value = '编辑用户';
   editingId.value = record.id;
-  Object.assign(formData, record);
+  editingOriginalRoles.value = Array.isArray((record as any).roles) ? (record as any).roles : [];
+  // 🔴 只回填表单字段，绝不整行 Object.assign：record 携带 id/createdAt/systems 等
+  // 后端 whitelist 不认的字段，整包发出会被 forbidNonWhitelisted 逐个 400
+  resetForm();
+  Object.assign(formData, {
+    username: record.username ?? '',
+    nickname: (record as any).nickname ?? '',
+    email: record.email ?? '',
+    phone: record.phone ?? '',
+    role: pickRole(Array.isArray((record as any).roles) ? (record as any).roles : [record.role].filter(Boolean)),
+    enabled: record.enabled ?? (record as any).status !== 'inactive',
+  });
   modalVisible.value = true;
 }
 
 async function handleModalOk() {
   submitting.value = true;
   try {
-    // 页面用 role 单选，后端用 roles 数组（whitelist 只认 roles）
-    const userData = { ...formData } as any;
-    userData.roles = formData.role ? [formData.role] : ['user'];
-    delete userData.role;
+    // 载荷经 buildUserPayload 白名单化：只发后端 DTO 认的字段
+    //（enabled→status 映射、空串 email/phone 不发、新建补初始密码）
+    const userData = buildUserPayload(
+      { ...formData, password: formData.initPwd },
+      { isCreate: !editingId.value },
+    );
+    // 前端拦截剥权：原超管被改成非超管直接拒绝（后端还有一道同义保护）
+    if (editingId.value && editingOriginalRoles.value.includes('super_admin') && !userData.roles.includes('super_admin')) {
+      submitting.value = false;
+      message.error('该用户是超级管理员，不允许将其降级；如确需变更请先由其他超级管理员在数据库层面操作');
+      return;
+    }
     if (editingId.value) {
       await updateUser(String(editingId.value), userData);
       message.success('更新成功');
@@ -441,8 +511,11 @@ async function handleModalOk() {
     }
     modalVisible.value = false;
     fetchUsers();
-  } catch {
-    message.error('操作失败');
+  } catch (e) {
+    // 后端校验失败时 message 通常是 string[]（forbidNonWhitelisted 逐字段报），拼成一句话
+    const detail = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
+      ?.message;
+    message.error(Array.isArray(detail) ? detail.join('；') : detail || '操作失败');
   } finally {
     submitting.value = false;
   }

@@ -24,6 +24,33 @@ interface CacheEntry {
 const VALID_CACHE_MS = 5_000;
 const INVALID_CACHE_MS = 300_000;
 
+/**
+ * 公开鉴权路径白名单：这些接口本身就是「用凭据换凭据」，调用方不该被要求持有有效 token。
+ *
+ * 为什么必须放行：前端（浏览器）可能因为上一会话残留而带着**已登出**的旧 token 调登录接口。
+ * 若在这里按黑名单拦截，会返回 401「令牌已失效（已登出）」，请求根本到不了 auth-service，
+ * 表现为「密码正确却永远登不进去」——且客户端把该 401 视作"凭据错误"不清 token，
+ * 形成死循环。见 fix/auth-stale-token-blocks-login。
+ *
+ * 注意：黑名单是「让已登出的 token 失效」的机制，与「谁能调登录接口」无关，
+ * 放行这些路径不会削弱登出语义 —— 它们不消费 token，只签发 token。
+ */
+const PUBLIC_AUTH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/wechat-login',
+  '/auth/miniprogram-login',
+  '/auth/wechat/authorize',
+  '/auth/wechat/callback',
+];
+
+function isPublicAuthPath(pathname: string): boolean {
+  if (!pathname) return false;
+  const path = pathname.split('?')[0];
+  return PUBLIC_AUTH_PATHS.some((p) => path === p || path.endsWith(p));
+}
+
 @Injectable()
 export class TokenBlacklistGuard implements CanActivate {
   private readonly logger = new Logger(TokenBlacklistGuard.name);
@@ -33,7 +60,13 @@ export class TokenBlacklistGuard implements CanActivate {
   constructor(private readonly configService: ConfigService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<{ headers: Record<string, string> }>();
+    const req = context
+      .switchToHttp()
+      .getRequest<{ headers: Record<string, string>; path?: string; originalUrl?: string }>();
+
+    // 公开鉴权路径：不消费 token，只签发 token → 跳过黑名单校验
+    if (isPublicAuthPath(req?.path || req?.originalUrl || '')) return true;
+
     const raw = req?.headers?.authorization || '';
     const token = raw.replace(/^Bearer\s+/i, '');
     // 无凭证请求交由各微服务自行处理（公共服务 / 登录接口）

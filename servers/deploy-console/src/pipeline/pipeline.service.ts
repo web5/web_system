@@ -39,6 +39,11 @@ import { evalCondition } from './steps/condition';
 import { pickStepBranch } from './steps/step-branch';
 import { assertBackendRuntimePlan } from './backend-runtime-safety';
 import { submissionConflictWhere } from './submission-admission';
+import {
+  assertTriggerSource,
+  composeApprovalChannel,
+  formatSubmitAuditDetail,
+} from './trigger-source';
 // 平台托管脚本同步（git 等 locked 节点的正文，随代码落库）
 // 配置中心服务（与 @nestjs/config 的 ConfigService 重名，故别名导入）
 import { ConfigService as ConfigCenterService } from '../config/config.service';
@@ -95,6 +100,8 @@ import { runOrchestration, type EngineStep } from '../pipeline-orchestration/orc
 import type { ConditionVars } from './steps/condition';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { runActionSequence } from './steps/action-sequence';
+// 工作区文件锁（方案 B）：git→package 临界区跨 run/跨模块互斥（2026-10-27 并发抢包根因）
+import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
 import { resolveServiceStep } from './steps/service-tools';
 // 拉码结果的版本身份与一致性断言（纯函数）
@@ -538,6 +545,12 @@ export interface SubmitPipelineDto {
   target?: 'local' | 'remote';
   /** 灰度规则（mode=grayscale 时必填）：{ type:'percent'|'user-list'|'header', ... } */
   grayscaleRule?: Record<string, unknown>;
+  /**
+   * 触发来源（可选，向后兼容）：`ui` / `mcp:<keyName>` / `ci:<source>` 等。
+   * 缺省由各通道派生；MCP 通道服务端强制并入 Key 名，不信任调用方单方声明。
+   * 白名单字符集、长度 ≤128（见 trigger-source.ts），非法 400。
+   */
+  triggerSource?: string;
 }
 
 /**
@@ -862,6 +875,8 @@ export class PipelineService {
     if (mode === 'grayscale' && !dto.grayscaleRule) {
       throw new BadRequestException('灰度发布必须提供 grayscaleRule');
     }
+    // 触发来源（2026-10-27 防再犯）：白名单校验 + 落库，供归因「谁的会话/哪把 Key/哪个脚本」
+    const triggerSource = assertTriggerSource(dto.triggerSource);
 
     const running = await this.pipelineRepo.findOne({
       where: submissionConflictWhere({ env: dto.env, moduleKey: dto.moduleKey, configuredCutover: this.configService.get('RELEASE_WORKSPACE_CUTOVER_MS') }),
@@ -950,6 +965,8 @@ export class PipelineService {
         ? [`该发布需审批（模板「${tpl.name}」）：提交已阻断，审批通过后自动执行`]
         : [],
       operator,
+      // 触发来源快照（提交时固化，归因用）
+      triggerSource,
       grayscaleRule: dto.grayscaleRule,
       startTime: Date.now(),
     });
@@ -971,7 +988,7 @@ export class PipelineService {
         env: dto.env,
         component: dto.moduleKey,
         status: 'pending_approval',
-        detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）→ 需审批，已阻断等待`,
+        detail: formatSubmitAuditDetail(id, mode, tpl.name, triggerSource, true),
       });
       this.notifications.notify({
         event: 'deploy.pending-approval',
@@ -991,7 +1008,7 @@ export class PipelineService {
       env: dto.env,
       component: dto.moduleKey,
       status: 'started',
-      detail: `提交发布流水线 ${id}（mode=${mode}, 模板=${tpl.name}）`,
+      detail: formatSubmitAuditDetail(id, mode, tpl.name, triggerSource),
     });
 
     // 后台执行，不阻塞提交响应（投递目标已随实例快照 runTarget 固化）
@@ -1161,6 +1178,9 @@ export class PipelineService {
       grayscaleRule: p.grayscaleRule as Record<string, unknown> | undefined,
       target: p.runTarget && p.runTarget !== 'auto' ? (p.runTarget as 'local' | 'remote') : undefined,
       pipelineId: p.pipelineId ?? undefined,
+      // 重试沿用原触发来源：归因要回答「这条发布最初是谁触发的」，
+      // 重试只是同通道的再执行（UI 重试按钮也保留原 Key/脚本指纹）
+      triggerSource: p.triggerSource,
     };
     return this.submit(dto, operator || p.operator);
   }
@@ -1175,14 +1195,17 @@ export class PipelineService {
    *  - **流水线级门禁**（`pending-approval`，历史）：提交即阻断，批准后从头执行。
    *
    * @param nodeKey 指定要批准的节点（同一时刻至多一条待决单，缺省自动取待决的那条）
+   * @param channel 审批通道标记（`ui` / `mcp:<keyName>`），写进审计便于归因（2026-10-27）
    */
   async approve(
     id: string,
     reviewer?: string,
     comment?: string,
     nodeKey?: string,
+    channel?: string,
   ): Promise<{ id: string; status: string; resumedFrom?: string }> {
     const p = await this.get(id);
+    const via = composeApprovalChannel(channel);
 
     // 节点级：从被挂起的节点之后继续
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
@@ -1222,11 +1245,12 @@ export class PipelineService {
         env: p.env,
         component: p.moduleKey,
         status: 'approved',
-        detail: `节点「${approval.nodeKey ?? '-'}」审批通过，流水线 ${id} 从其后继续执行（意见: ${comment?.trim() || '-'}）`,
+        detail: `节点「${approval.nodeKey ?? '-'}」审批通过，流水线 ${id} 从其后继续执行（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
         changes: [
           { field: 'approval.status', before: 'pending', after: 'approved' },
           { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
           { field: 'approval.comment', before: null, after: comment?.trim() || null },
+          { field: 'approval.channel', before: null, after: via },
         ],
       });
       this.notifications.notify({
@@ -1273,10 +1297,11 @@ export class PipelineService {
       env: p.env,
       component: p.moduleKey,
       status: 'approved',
-      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      detail: `审批通过流水线 ${id}（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
       changes: [
         { field: 'approval.status', before: 'pending', after: 'approved' },
         { field: 'approval.comment', before: null, after: comment?.trim() || null },
+        { field: 'approval.channel', before: null, after: via },
       ],
     });
     this.notifications.notify({
@@ -1307,8 +1332,10 @@ export class PipelineService {
     reviewer?: string,
     comment?: string,
     nodeKey?: string,
+    channel?: string,
   ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
+    const via = composeApprovalChannel(channel);
 
     if (p.status === PIPELINE_AWAITING_APPROVAL) {
       const approval =
@@ -1342,10 +1369,11 @@ export class PipelineService {
         env: p.env,
         component: p.moduleKey,
         status: 'rejected',
-        detail: `节点「${approval.nodeKey ?? '-'}」审批拒绝，流水线 ${id} 终止（onReject=${onReject}, 意见: ${comment?.trim() || '-'}）`,
+        detail: `节点「${approval.nodeKey ?? '-'}」审批拒绝，流水线 ${id} 终止（onReject=${onReject}, 意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
         changes: [
           { field: 'approval.status', before: 'pending', after: 'rejected' },
           { field: 'approval.nodeKey', before: null, after: approval.nodeKey ?? null },
+          { field: 'approval.channel', before: null, after: via },
         ],
       });
       this.notifications.notify({
@@ -1386,10 +1414,11 @@ export class PipelineService {
       env: p.env,
       component: p.moduleKey,
       status: 'rejected',
-      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}）`,
+      detail: `审批拒绝流水线 ${id}（意见: ${comment?.trim() || '-'}, 通道: ${via}）`,
       changes: [
         { field: 'approval.status', before: 'pending', after: 'rejected' },
         { field: 'approval.comment', before: null, after: comment?.trim() || null },
+        { field: 'approval.channel', before: null, after: via },
       ],
     });
     this.notifications.notify({
@@ -1677,6 +1706,39 @@ export class PipelineService {
       return;
     }
 
+    // 工作区文件锁（方案 B）：抢 RELEASE_DIR 上的锁，横跨整个「git→prebuild→build→package」
+    // 临界区（在本 run 生命周期的 try/finally 里持有）。同工作区同一时刻只允许一个 run
+    // 处于该临界区——跨 env（dev/prod）与跨模块（共用 checkout 的 git reset）都互斥。
+    // 锁等待超时与构建失败在错误信息上明确区分（WorkspaceLockTimeoutError）。
+    let releaseWorkspaceLock: WorkspaceLockRelease | null = null;
+    try {
+      releaseWorkspaceLock = await acquireWorkspaceLock(this.releaseWorkspace, p.id);
+    } catch (e) {
+      const reason =
+        e instanceof WorkspaceLockTimeoutError
+          ? e.message
+          : `工作区锁获取失败: ${(e as Error).message}`;
+      p.status = 'failed';
+      p.error = reason;
+      p.progress = {
+        ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
+        message: e instanceof WorkspaceLockTimeoutError ? '锁等待超时（非构建失败）' : '工作区锁获取失败',
+      };
+      p.endTime = Date.now();
+      await this.save(p);
+      await this.auditService.log({
+        user: p.operator || 'unknown',
+        action: 'pipeline.rejected',
+        env: p.env,
+        component: p.moduleKey,
+        status: 'failed',
+        detail: reason,
+      });
+      this.logger.warn(`工作区锁未获取: ${p.id} ${p.env}/${p.moduleKey}: ${reason}`);
+      await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      return;
+    }
+
     try {
       p.status = 'running';
       await this.save(p);
@@ -1873,6 +1935,8 @@ export class PipelineService {
     } finally {
       // 无论成功失败都必须释放锁，否则只能等 TTL 过期后才能再次发布
       await this.releaseLock.release(p.moduleKey, p.env, p.id);
+      // 释放工作区文件锁（方案 B）：临界区结束（含失败/取消/审批挂起）即放行下一个 run
+      releaseWorkspaceLock?.();
       // 撤销本次 run 签发的短期令牌：脚本已跑完，令牌再有效就是多余的敞口
       // （挂起等审批也走这里 —— 恢复时会重新签发新令牌，不受影响）
       this.revokeScriptTokens(p.id);

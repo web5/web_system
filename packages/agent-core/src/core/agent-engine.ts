@@ -25,7 +25,12 @@ import { ToolRegistry } from '../registry/tool.registry';
 import { AgentRegistry } from '../registry/agent.registry';
 import { ClientRegistry } from '../registry/client.registry';
 import { type ConversationMemoryPort } from '../memory/memory-port';
-import { type ChatMessage, type ToolCall, type ChatWithToolsResult } from '../clients/base-ai.client';
+import {
+  type ChatMessage,
+  type ToolCall,
+  type ChatWithToolsResult,
+  type ChatOptions,
+} from '../clients/base-ai.client';
 import { type ToolSchema } from '../interfaces/tool.interface';
 import { SkillLoader } from '../skills/skill-loader';
 import { Logger } from '../lib/logger';
@@ -173,14 +178,24 @@ export class AgentEngine {
     // 本轮已执行的工具调用名（用于多步工具链完成后的 summary 总结事件）
     const toolSteps: string[] = [];
 
+    // 生成参数（C7）：只透传**显式填了**的字段 —— 全为 null/undefined 时等价于不传，
+    // 行为与本次改动之前完全一致（向后兼容，可回归对照，见 contracts.md C7-e）。
+    // temperature 与 topP 的互斥由定义保存侧（DTO）拦，此处不重复判定。
+    const chatOptions: ChatOptions = {};
+    if (agent.temperature != null) chatOptions.temperature = agent.temperature;
+    if (agent.maxTokens != null) chatOptions.maxTokens = agent.maxTokens;
+    if (agent.topP != null) chatOptions.topP = agent.topP;
+    // D1 分层透传（O2-A，不预合并）：P3 agent 配置 → agentThinking；P2 单次覆盖 → thinking。
+    // 判定在客户端 resolveThinking 内闭环（带工具强制 enabled 等），引擎不参与合并。
+    if (agent.thinking != null) chatOptions.agentThinking = agent.thinking;
+    if (input.thinking != null) chatOptions.thinking = input.thinking;
+
     for (let step = 0; step < agent.maxSteps; step++) {
       const stepStartedAt = Date.now();
       let resp: ChatWithToolsResult | undefined;
       let streamedContent = '';
       try {
-        for await (const ev of client.chatWithToolsStream(messages, toolSchemas, {
-          temperature: agent.temperature,
-        })) {
+        for await (const ev of client.chatWithToolsStream(messages, toolSchemas, chatOptions)) {
           if (ev.type === 'content_delta' && ev.delta) {
             streamedContent += ev.delta;
             // 流式透传：模型正在生成最终回答内容，边生成边推给前端逐字渲染
@@ -204,6 +219,7 @@ export class AgentEngine {
         yield {
           type: 'error',
           content: withCode(AGENT_ERROR_CODES.MODEL_ERROR, detail),
+          runId,
           usage: usageOf(accPrompt, accCompletion),
         };
         this.emit('onRunEnd', {
@@ -220,6 +236,7 @@ export class AgentEngine {
         yield {
           type: 'error',
           content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, '模型未返回结果'),
+          runId,
         };
         this.emit('onRunEnd', {
           runId,
@@ -250,7 +267,7 @@ export class AgentEngine {
       // 既污染后续上下文，前端历史载入时还会渲染出一个空气泡。这里直接判失败返回。
       if (!resp.content && (!resp.toolCalls || resp.toolCalls.length === 0)) {
         const detail = '模型返回了空结果';
-        yield { type: 'error', content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail) };
+        yield { type: 'error', content: withCode(AGENT_ERROR_CODES.MODEL_EMPTY, detail), runId };
         this.emit('onRunEnd', {
           runId,
           status: 'error',
@@ -293,6 +310,7 @@ export class AgentEngine {
           content: resp.content,
           step,
           conversationId: currentConversationId,
+          runId,
           usage: usageOf(accPrompt, accCompletion),
         };
         this.emit('onRunEnd', {
@@ -358,6 +376,7 @@ export class AgentEngine {
     yield {
       type: 'error',
       content: `达到最大步数限制 (${agent.maxSteps})`,
+      runId,
       usage: usageOf(accPrompt, accCompletion),
     };
     this.emit('onRunEnd', {
