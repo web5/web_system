@@ -85,7 +85,10 @@ describe('UserMemorySummaryService', () => {
     const { service } = makeService({ details, llm: { reject: new Error('connect ECONNREFUSED') } });
     const result = await service.rebuild('u1');
     expect(result.changed).toBe(true);
-    expect(result.row!.summary).toContain('# 用户画像');
+    // #8273 格式契约：纯文本「· 分类：内容」，无 markdown（前端 {{ }} 转义，markdown 不会渲染、只会露出符号）
+    expect(result.row!.summary).toContain('· 事实：');
+    expect(result.row!.summary).toContain('· 习惯：');
+    expect(result.row!.summary).not.toMatch(/(^#\s|^[-*]\s|\*\*)/m);
     expect(result.row!.summary).toContain('橙子哥哥');
     expect(result.row!.sourceHash).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -94,7 +97,8 @@ describe('UserMemorySummaryService', () => {
     const details = [detail(1, 'preference', '偏好简洁的回答风格')];
     const { service } = makeService({ details, llm: { resolve: '' } });
     const result = await service.rebuild('u1');
-    expect(result.row!.summary).toContain('# 用户画像');
+    expect(result.row!.summary).toContain('· 偏好：');
+    expect(result.row!.summary).not.toMatch(/(^#\s|^[-*]\s|\*\*)/m);
     expect(result.row!.summary).toContain('偏好简洁的回答风格');
   });
 

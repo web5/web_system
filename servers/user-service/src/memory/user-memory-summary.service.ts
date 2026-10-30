@@ -170,7 +170,7 @@ export class UserMemorySummaryService {
    */
   private async generateSummary(userId: string, namespace: string, details: MemoryDetailRow[]): Promise<string> {
     if (details.length === 0) {
-      return '# 用户画像\n（该用户暂无记忆明细）';
+      return '该用户暂无记忆明细';
     }
     try {
       const llm = await this.generateSummaryByLlm(userId, namespace, details);
@@ -201,7 +201,14 @@ function truncate(text: string, max: number): string {
     .join('') + '…';
 }
 
-/** 确定性模板聚合（LLM 不可用时的兜底，同样满足「结构化中文 + 分类小标题」） */
+/**
+ * 确定性模板聚合（LLM 不可用时的兜底，与 LLM 输出同格式：纯文本多行「· 分类：内容」）
+ *
+ * 格式口径（#8273）：前端摘要卡按 `{{ }}` 插值转义渲染、禁 v-html（防 LLM 半可信输入
+ * 注入 HTML），markdown 不会被渲染，只会露出 `#`/`-`/`**`。故兜底模板与 ai-agent 侧
+ * prompt 必须同口径输出纯文本；两处任一漏改，LLM 成功/失败切换时观感就会跳变。
+ * 「条数 / 更新时间」由卡片 meta 单独展示，正文不重复。
+ */
 function templateSummary(details: MemoryDetailRow[]): string {
   const byCategory = new Map<string, string[]>();
   for (const d of details) {
@@ -210,13 +217,10 @@ function templateSummary(details: MemoryDetailRow[]): string {
     byCategory.set(d.category, list);
   }
   const label: Record<string, string> = { fact: '事实', preference: '偏好', habit: '习惯' };
-  const parts: string[] = ['# 用户画像'];
+  const parts: string[] = [];
   for (const [cat, contents] of byCategory) {
     const name = label[cat] ?? cat;
-    parts.push(`- **${name}**：${contents.join('；')}`);
+    parts.push(`· ${name}：${contents.join('；')}`);
   }
-  const last = details.reduce((acc, d) => (d.createdAt > acc ? d.createdAt : acc), details[0].createdAt);
-  const day = last ? new Date(last).toISOString().slice(0, 10) : '';
-  parts.push(`- **统计**：共 ${details.length} 条记忆${day ? `，最近更新 ${day}` : ''}`);
   return parts.join('\n');
 }
