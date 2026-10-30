@@ -85,7 +85,7 @@
 | 参数面板单列 | 五控件纵向顺序堆叠，**不得**在面板内部再劈两列。落地组件 `AgentTuningPanel.vue` 不出现 `<a-col>`（机检 25a 静态锁定）。实测根因：外层 a-col span=12（505px）里再嵌 a-row 12/12 → 输入框仅 235px，thinking 三按钮折行、预算公式折断 |
 | 策略预览整宽 | `AgentStrategyPreview.vue` 独立组件，置于「参数面板 + 调试台」a-row **之后**整宽渲染（机检 25b：`.strat` 宽度 ≥ 容器 90%）。原型实测改前 403px（困在 420px 参数列）→ 改后 980px（整宽） |
 | 调试台占位 | 只保留标题「调试台」+ `a-empty`「对话试跑 / 调参测试用例表 · 分期建设中」+ 虚线边框；**技术文案（落地契约 / Turn / Bubble / AnswerBlocks 等）一律不进产品页面**（机检 25d 静态锁定），契约内容归 page-spec 本稿 |
-| 数值占位统一 | Temperature / maxTokens / Top P 三个数值控件 placeholder 一律「未配置」（机检 25c）。`maxTokensPlaceholder(hasTools)` **删除**——它的唯一用途就是切占位文案 |
+| 数值占位口径（2026-10-29 拍板 C，替换旧「一律未配置」） | **placeholder 只放格式/单位/示例，不放状态语义词**：Temperature `如 0.7`、Top P `如 0.9`；**输出上限不带 placeholder**（留空 = 用满模型上限、是推荐态——写「如 4096」暗示推荐值，写「未配置」被读成"没配好"，空值含义由该行 extra 承担）。机检 25c 按**语义类别**判：temp/topP 非空且不含语义词（未配置/跟随默认/不设置/默认值/系统默认），maxTokens 为空——不再做等词比较，换词不必改脚本 |
 | 上限语义只在 extra | 带工具：`留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小`；非工具：`留空 = 系统默认`。**严禁模板硬编码 8192**——`MODEL_MAX_TOKENS` 是 W5 待核定的唯一真源，`budgetFormula` 已在用；运维改真值时文案必须跟着变 |
 | label 对齐（2026-10-29 拍板修正 + 追加拍板：右对齐） | 按 **§3.2 定稿口径**落地：label 左置、固定 84px、**文字右对齐**（`label-align="right"`，2026-10-29 用户追加拍板）、控件左缘对齐（实现 `label-col width:84px` + `:colon="false"` + 列距 12px＝原型 `.fitem{gap:12px}`；机检 26a–26f 静态锁定；`layout="vertical"` 是被原型 `:215-216` 否掉的上一版，禁回潮）。改前游离 form 上下文时 label 列宽自适应 → 四控件左缘参差（实测 349/398/303/397） |
 
@@ -97,7 +97,7 @@
 | 2 | Temperature | 0–2；留空 = `null` = 沿用服务侧默认（C7-c） |
 | 3 | Top P | 0–1；留空 = `null`；与 Temperature 互斥，切换即**清空另一侧** |
 | 4 | 输出上限 maxTokens | 整数 1–32768；**占位「未配置」**（2026-10-29 拍板，与 Temperature/Top P 一致）；extra 按工具态给上限语义（带工具=`留空 = 模型上限（8192），不人为压小`，用 `MODEL_MAX_TOKENS` 插值；非工具=`留空 = 系统默认`） |
-| 5 | 思考 thinking | 三态：沿用默认 / 关闭（`{type:'disabled'}`）/ 开启并限预算（`{type:'enabled', budget_tokens}`）；选「开启」才出现**思考预算**行 |
+| 5 | 思考 | 三态按钮文案 **跟随默认 / 开启 / 关闭**（契约值 `null` / `enabled` / `disabled` 只在代码与契约文档里，不进 UI；顺序即此序，机检 25e 锁定）：开启 = `{type:'enabled', budget_tokens}` 且出现**思考预算**行，关闭 = `{type:'disabled'}`，跟随默认 = 不在此层锁定、按优先级链决定（带工具时强制开启） |
 | 6 | 按场景套用预设 | 六档（§7.4）：分类 / 抽取 / 代码 / 对话 / 创意 / **工具调用**；**先复位采样方式再写值**（避免写进禁用控件）；契约给区间或「按 X 自定」的一律**留空**，区间原文在提示中回显 |
 | 7 | 分类档锁定 | 套用「分类」后 thinking 段 `locked`（`pointer-events:none` + handler 兜底），hint 说明「分类场景强制关闭思考（C7-d）」；换其它档即解锁 |
 
@@ -123,7 +123,7 @@
 | hint | 12px / `--ws-text-secondary`，**一行短句 ≤22 字**，写在控件下方 6px |
 | hint 禁止项 | 实现细节（轮询周期、表名、环境变量名）、契约代号（C7-x）、内部字段名；这些只出现在本规格与代码注释 |
 | diff badge | 出现在该字段 **hint 行右侧**（`.fhint.hintrow` + `.sp` 撑开），不在 label 后（label 仅 84px 放不下） |
-| label 命名 | 用业务词不用字段名：`系统提示词`（非 `System Prompt`）、`输出上限`（非 `maxTokens`）、`思考`（非 `thinking`） |
+| label 命名 | 用业务词不用字段名：`系统提示词`（非 `System Prompt`）、`输出上限`（非 `maxTokens`）、`思考`（非 `thinking`）、`最大步数`（非 `max_steps`）。例外：`Temperature` / `Top P` 保留英文专名（LLM 参数面板通用叫法；实测 `.ant-form-item-label > label` clientWidth=82 == scrollWidth=82，84px 列宽内 nowrap 不裁字，故不改「温度」） |
 
 ## 4. 参数对比（三级，口径必须一致）
 

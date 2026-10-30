@@ -3380,7 +3380,7 @@
                     <div class="flb">Temperature</div>
                     <div class="fld">
                       <div class="ctrl" id="ctrl-temp" data-dr="gen-params-temperature">
-                        <input id="in-temp" placeholder="未配置" inputmode="decimal" />
+                        <input id="in-temp" placeholder="如 0.7" inputmode="decimal" />
                         <span class="clear" data-clear="temp">留空=默认</span>
                       </div>
                       <div class="fhint hintrow"><span class="f-tag fix">?? 0.7 修正</span>留空=不覆盖，回落 0.7<span class="sp"></span><span class="badge hidden" id="badge-temp" data-dr="gen-params-temperature-badge"></span></div>
@@ -3406,7 +3406,7 @@
                     <div class="flb">Top P</div>
                     <div class="fld">
                       <div class="ctrl off" id="ctrl-topP" data-dr="gen-params-topP">
-                        <input id="in-topP" placeholder="未配置" disabled inputmode="decimal" />
+                        <input id="in-topP" placeholder="如 0.9" disabled inputmode="decimal" />
                         <span class="clear" data-clear="topP">留空=默认</span>
                       </div>
                       <div class="fhint hintrow">0–1，与 Temperature 互斥二选一<span class="sp"></span><span class="badge hidden" id="badge-topP" data-dr="gen-params-topP-badge"></span></div>
@@ -3430,11 +3430,11 @@
                     <div class="flb">思考</div>
                     <div class="fld">
                       <div class="seg" id="seg-thinking" data-dr="gen-params-thinking">
-                        <button data-thinking="null" class="on">未配置 (NULL)</button>
-                        <button data-thinking="disabled">disabled</button>
-                        <button data-thinking="enabled">enabled</button>
+                        <button data-thinking="null" class="on">跟随默认</button>
+                        <button data-thinking="enabled">开启</button>
+                        <button data-thinking="disabled">关闭</button>
                       </div>
-                      <div class="fhint hintrow"><span id="extra-thinking">未配置走优先级链；显式值覆盖</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
+                      <div class="fhint hintrow"><span id="extra-thinking">跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）</span><span class="sp"></span><span class="badge hidden" id="badge-thinking" data-dr="gen-params-thinking-badge"></span></div>
                     </div>
                   </div>
                 </div>
@@ -3467,8 +3467,8 @@
                 <!-- 联动一：挂工具误配 disabled → 红字警示（可点不锁死，运行时强制纠正） -->
                 <div class="warn-tool hidden" id="warn-misconfig" data-dr="misconfig-warn">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>
-                  <div><b>该 Agent 挂载工具，thinking 将被强制启用</b>
-                    <div class="wd">装配侧检测到带工具且未显式 enabled 时强制 enabled——此处选 disabled 不会生效，运行时会被纠正。</div></div>
+                  <div><b>该 Agent 挂载工具，「思考」将被强制开启</b>
+                    <div class="wd">装配侧检测到带工具且未显式选择「开启」时强制开启——此处选「关闭」不会生效，运行时会被纠正。</div></div>
                 </div>
 
                 <div class="fhint" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--ws-border-subtle);">
@@ -5125,21 +5125,21 @@ qsa('.mask, .drawer-mask').forEach(m =>
     $('ctrl-topP').classList.toggle('err', conflict);
     $('conflict-hint').classList.toggle('hidden', !conflict);
 
-    // 联动二：占位统一「未配置」（2026-10-29 拍板）；留空的上限语义只在 extra 表达
+    // 联动二：输出上限**不设占位**（2026-10-29 拍板口径 C）——留空 = 用满模型上限、是推荐态，
+    // 写「如 4096」会暗示推荐值、写「未配置」会被读成没配好；空值含义只在 extra 表达
     var hasT = !!(DEFS[current] && DEFS[current].hasTools);
-    $('in-max').placeholder = '未配置';
     $('extra-max').textContent = hasT ? '留空 = 模型上限（8192），不人为压小' : '留空 = 系统默认';
 
     qsa('#seg-thinking button').forEach(function(b){ b.classList.toggle('on', b.dataset.thinking===draft.thinking); });
     $('seg-thinking').classList.toggle('locked', thinkingLocked);
     if(thinkingLocked){
-      $('extra-thinking').textContent = '分类场景强制关闭思考，已锁定（C7-d）；切到其它预设即解锁';
+      $('extra-thinking').textContent = '分类场景强制关闭「思考」，已锁定（C7-d）；切到其它预设即解锁';
     } else if(draft.thinking==='enabled'){
-      $('extra-thinking').textContent = '显式开启；budget 按公式下发';
+      $('extra-thinking').textContent = '显式开启；思考预算按公式下发';
     } else if(draft.thinking==='disabled'){
-      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正';
+      $('extra-thinking').textContent = '显式关闭；挂工具时会被强制纠正为开启';
     } else {
-      $('extra-thinking').textContent = '未配置走优先级链；显式值覆盖';
+      $('extra-thinking').textContent = '跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）';
     }
 
     // 联动三：thinking=enabled → budget 只读预览（min(模型上限, maxTokens/2)）
