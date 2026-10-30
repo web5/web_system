@@ -3,32 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>portal · 记忆页升级 · 记忆画像 · 交互原型 v1</title>
+<title>portal · 记忆画像（用户可编辑）· 交互原型 v2</title>
 <!--
   ============================================================
-  portal · 记忆页（/profile/memory）升级 · 原型（桌面 Web / portal 亮色）
+  portal · 记忆页（/profile/memory）·「记忆画像」· 原型 v2（桌面 Web / portal 亮色）
   · 目标端：portal 桌面三栏壳（顶栏 + 工作区），嵌入 Memory.vue 所在的 .sub 页
-    ⚠️ page-spec「原型继承」表原假设为「portal 移动壳」——实测 portal 为桌面 Web
-    （App.vue 三栏外壳，Memory.vue 渲染于工作区，max-width 720），本稿按实测壳画，
-    回填时把该行改为「portal 桌面三栏壳」
-  · 依据：page-spec-用户记忆面板.md（台账 #8229 批次 2.1 · 交互清单 + 9 场景包矩阵 7–9）
-  · 本稿范围：现有记忆页升级 —— 顶部摘要卡（画像正文 + 条数/更新时间/待更新标）
-    + 下方明细分组（保留现有 事实/偏好/习惯 分组与删除交互，不退化）
-  · 页头口径（page-spec）：标题「记忆画像」副标题「AI 记住的关于你的信息」，
-    「重新生成」为文字型链接按钮（非实心按钮，portal 轻量风格）
-  · 🔴 删除一致性（v1 口径）：删除明细后摘要不即时刷新（摘要由 LLM 从明细重算，
-    下次对话后更新），摘要卡必须显式标「待更新」，不能让用户以为摘要已同步
-  · 🔴 删除为破坏性操作：现有实现直接删（无确认）——本稿按 page-spec 交互清单
-    「破坏性 → 二次确认『确定删除这条记忆？』」画轻量气泡确认，回填时标注
-    「实现需补确认」（现有交互不退化 = 分组/条目形态/删除入口不变，确认是对破坏性的补齐而非退化）
-  · 空值口径：本稿无文本输入框，不涉 placeholder；分组标题用业务词（事实/偏好/习惯）
-    （表单控件与开关规范 v1.3 · docs/ui/page-specs/form-controls-and-toggles-v1.md）
+  · 依据：page-spec-用户记忆面板.md v1.1 + **用户 2026-10-30 15:34 口径变更**
+    （原话「admin 端只支持查看，portal 端，用户可以自己改」）
+  · 🔴 v2 口径：本页是**用户唯一能改自己记忆的地方**
+    - 现有「删除」（↗ 保留二次确认「确定删除这条记忆？」）
+    - **新增「编辑」**：行内编辑（点击铅笔 → 行内 textarea），约束如下
+      · 长度上限 **200 字**（超限/为空即时红字校验，超限时保存按钮禁用）
+      · 保存 loading + 禁用防重复提交
+      · 取消不落改动（不请求，直接还原）
+      · 保存成功 → toast「已保存」+ 摘要卡标「待更新 · 下次对话后刷新」
+      · 保存失败 → toast「保存失败，请重试」+ **保留编辑态与已输入内容**（不丢用户输入）
+      · 越权（非本人 / 已被删除）→ toast「无权修改该条记忆，可能已被删除」并退出编辑态刷新列表
+    - 摘要仍不可手改（v1 范围外：摘要与明细失同步风险高），只能「重新生成」
+  · 场景包 7 个（切换条在页头下方，原型演示控件）：
+    P1 有画像（读态，hover 出 编辑/删除）｜P2 编辑保存成功｜P3 编辑取消（不落改动）
+    P4 校验失败（超 200 字 / 为空）｜P5 保存失败（保留输入）｜P6 无画像｜P7 加载失败
+  · 删除一致性（v1 口径）：改/删明细后摘要不即时刷新（LLM 下次对话后重算），
+    摘要卡必须显式标「待更新」，不能让用户以为摘要已同步
+  · 空值口径：编辑框 placeholder 写「说点什么，比如：我更喜欢安静的歌」——
+    **不写语义词（未配置/跟随默认/不设置）**，遵守表单控件规范 v1.3 §4 候选 C 口径
   · ⚠️ 场景切换条为原型演示控件，不进实现；画像与记忆内容均为演示数据
   ============================================================
 -->
 <style>
-  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（portal 品牌色已收敛为 #F97316 系，
-     见 apps/portal/src/config/theme.ts —— 页面样式只引 token，不写裸 hex） */
+  /* Token 对齐 packages/ui/src/tokens.ts 的 roles.light（portal 品牌色已收敛 #F97316 系） */
   :root{
     --ws-bg-page:#FAFAFA; --ws-bg-surface:#FFFFFF; --ws-bg-elevated:#FFFFFF;
     --ws-bg-subtle:#F2F2F2; --ws-bg-hover:#F2F2F2; --ws-bg-active:#EBEBEB;
@@ -42,7 +45,6 @@
     --ws-brand-700:#C2410C;
     --ws-warn:#E8833A;
     --ws-shadow-shell:0 24px 70px rgba(20,30,50,.14);
-    --ws-accent-soft-2:rgba(255,140,66,.04);
     --ws-radius-sm:4px; --ws-radius-md:6px; --ws-radius-lg:8px; --ws-radius-xl:12px;
     --ws-shadow-card:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04);
     --ws-shadow-float:0 8px 24px rgba(0,0,0,.18);
@@ -85,7 +87,7 @@
   .scen-bar button.on{background:var(--ws-brand-soft);border-color:var(--ws-brand-400);color:var(--ws-brand-700);font-weight:600;}
   .scen-bar .hint{margin-left:auto;font-size:11px;color:var(--ws-text-tertiary);}
 
-  /* ===== portal 桌面三栏壳（简化：顶栏 + 工作区；左栏记录列表与本稿无关，略） ===== */
+  /* ===== portal 桌面三栏壳（简化：顶栏 + 工作区） ===== */
   .pt-shell{width:1180px;height:860px;border-radius:14px;overflow:hidden;position:relative;
     background:var(--ws-bg-page);border:1px solid var(--ws-border);box-shadow:var(--ws-shadow-shell);
     display:flex;flex-direction:column;}
@@ -129,7 +131,7 @@
     border-top-color:var(--ws-brand-600);animation:spin .8s linear infinite;display:inline-block;}
   @keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ===== 摘要卡（轻量卡片，非 antd） ===== */
+  /* ===== 摘要卡（轻量卡片，非 antd；只读，不可手改） ===== */
   .sum-card{border:1px solid var(--ws-border);border-radius:var(--ws-radius-xl);
     background:var(--ws-bg-surface);box-shadow:var(--ws-shadow-card);padding:16px 18px;margin-bottom:16px;}
   .sum-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
@@ -144,7 +146,7 @@
     font-size:12px;background:var(--ws-bg-subtle);color:var(--ws-text-secondary);white-space:nowrap;}
   .tag.pend{background:var(--ws-brand-soft);color:var(--ws-brand-700);}
 
-  /* ===== 明细分组（复刻现有 .groups/.group/.row 形态，不退化） ===== */
+  /* ===== 明细分组（读态形态沿用现有 .groups/.group/.row） ===== */
   .groups{display:flex;flex-direction:column;gap:16px;}
   .group h3{font-size:14px;font-weight:600;color:var(--ws-text-primary);margin-bottom:8px;
     display:flex;align-items:center;gap:6px;}
@@ -153,14 +155,43 @@
   .group h3 em{font-style:normal;font-weight:400;font-size:12px;color:var(--ws-text-tertiary);margin-left:2px;}
   .row{display:flex;align-items:center;gap:8px;padding:12px 16px;border:1px solid var(--ws-border);
     border-radius:var(--ws-radius-md);background:var(--ws-bg-surface);margin-bottom:8px;}
+  .row:hover{border-color:var(--ws-border-subtle);}
   .row .txt{flex:1;font-size:14px;line-height:var(--ws-leading-normal);color:var(--ws-text-primary);}
-  .rm{display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:var(--ws-radius-sm);
+  /* 行内操作：hover 显形（编辑 + 删除），键盘可达 */
+  .row-acts{display:flex;align-items:center;gap:2px;opacity:0;transition:opacity var(--ws-duration-fast) var(--ws-ease-out);}
+  .row:hover .row-acts,.row-acts:focus-within{opacity:1;}
+  .icon-act{display:grid;place-items:center;width:24px;height:24px;border:none;border-radius:var(--ws-radius-sm);
     background:none;color:var(--ws-text-tertiary);cursor:pointer;flex:0 0 24px;}
-  .rm:hover{background:var(--ws-bg-subtle);color:var(--ws-danger);}
-  .rm svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
+  .icon-act:hover{background:var(--ws-bg-subtle);color:var(--ws-brand-600);}
+  .icon-act.del:hover{color:var(--ws-danger);}
+  .icon-act svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5;
     stroke-linecap:round;stroke-linejoin:round;}
 
-  /* 气泡二次确认（破坏性补齐；对应实现可用 a-popconfirm 轻量档） */
+  /* ===== 行内编辑态 ===== */
+  .row.editing{display:block;border-color:var(--ws-brand-400);background:var(--ws-bg-surface);
+    box-shadow:0 0 0 3px var(--ws-brand-soft);}
+  .edit-ta{width:100%;border:1px solid var(--ws-border);border-radius:var(--ws-radius-md);
+    padding:9px 12px;font:inherit;font-size:14px;line-height:var(--ws-leading-normal);
+    color:var(--ws-text-primary);background:var(--ws-bg-surface);min-height:64px;resize:vertical;}
+  .edit-ta:focus{border-color:var(--ws-brand-400);outline:none;}
+  .edit-ta::placeholder{color:var(--ws-text-disabled);}
+  .edit-ta.err{border-color:var(--ws-danger);}
+  .edit-foot{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .counter{font-size:12px;color:var(--ws-text-tertiary);font-variant-numeric:tabular-nums;}
+  .counter.over{color:var(--ws-danger);}
+  .edit-err{font-size:12px;color:var(--ws-danger);display:none;}
+  .edit-err.show{display:block;}
+  .edit-foot .sp{flex:1;}
+  .ebtn{height:26px;padding:0 12px;border-radius:var(--ws-radius-md);border:1px solid var(--ws-border);
+    background:var(--ws-bg-surface);font:inherit;font-size:12px;color:var(--ws-text-primary);cursor:pointer;
+    display:inline-flex;align-items:center;gap:5px;}
+  .ebtn:hover{border-color:var(--ws-brand-400);color:var(--ws-brand-600);}
+  .ebtn.save{background:var(--ws-brand-700);border-color:var(--ws-brand-700);color:var(--ws-on-brand);font-weight:500;}
+  .ebtn.save:hover{background:var(--ws-brand-700);border-color:var(--ws-brand-700);color:var(--ws-on-brand);opacity:.92;}
+  .ebtn[disabled]{opacity:.55;cursor:not-allowed;}
+  .ebtn[disabled]:hover{border-color:var(--ws-border);color:var(--ws-text-primary);}
+
+  /* 气泡二次确认（删除，破坏性） */
   .pop{position:absolute;z-index:60;width:232px;background:var(--ws-bg-surface);
     border:1px solid var(--ws-border);border-radius:var(--ws-radius-lg);box-shadow:var(--ws-shadow-float);
     padding:12px 14px;display:none;}
@@ -199,22 +230,27 @@
 <body>
 
 <div class="proto-head">
-  <h1>portal · 记忆页升级 ·「记忆画像」· 交互原型 v1</h1>
+  <h1>portal · 记忆画像（<b>用户可编辑</b>）· 交互原型 v2</h1>
   <div class="sub">
     目标端：<b>portal 桌面三栏壳（顶栏 + 工作区）</b>，嵌入 <code>/profile/memory</code>（Memory.vue）｜
-    依据：<code>page-spec-用户记忆面板.md</code>（台账 #8229 批次 2.1）｜
-    控件口径：<code>docs/ui/page-specs/form-controls-and-toggles-v1.md</code>（表单规范 v1.3）<br>
-    ⚠️ page-spec 原假设「portal 移动壳」与实测不符（portal 实为桌面三栏壳），本稿按实测画，回填时更正｜
-    场景包 3 个对应矩阵 7–9（admin 端 1–6 见 <code>admin-user-memory.html</code>）；虚线切换条为<b>原型演示控件，不进实现</b>。
+    依据：<code>page-spec-用户记忆面板.md</code> v1.1 + <b>用户 2026-10-30 15:34 口径变更</b><br>
+    🔴 <b>v2 可编辑</b>：「portal 端用户可以自己改」——现有删除（保留二次确认）+ <b>新增行内编辑</b>
+    （200 字上限 / 空值校验 / 保存 loading 防重复 / 取消不落改动 / 保存失败保留输入 / 越权明确报错）；
+    摘要仍不可手改（只能「重新生成」）。<br>
+    场景包 7 个（<code>admin-user-memory.html</code> 为只读侧，6 个）；虚线切换条为<b>原型演示控件，不进实现</b>。
   </div>
 </div>
 
 <div class="scen-bar" id="scenBar">
   <span class="lb">场景包切换（演示控件）</span>
-  <button data-sc="s7" class="on">S7 有画像</button>
-  <button data-sc="s8">S8 无画像</button>
-  <button data-sc="s9">S9 加载失败</button>
-  <span class="hint">对应 page-spec §原型继承 矩阵 7–9</span>
+  <button data-sc="p1" class="on">P1 有画像（读态）</button>
+  <button data-sc="p2">P2 编辑保存成功</button>
+  <button data-sc="p3">P3 编辑取消</button>
+  <button data-sc="p4">P4 校验失败</button>
+  <button data-sc="p5">P5 保存失败</button>
+  <button data-sc="p6">P6 无画像</button>
+  <button data-sc="p7">P7 加载失败</button>
+  <span class="hint">矩阵 R7–R13（page-spec §原型继承）</span>
 </div>
 
 <div class="pt-shell">
@@ -239,13 +275,13 @@
 
       <div class="tip">
         <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"/></svg>
-        AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，可单条删除
+        AI 每次对话后从聊天里提炼关于你的信息；每一条你都可以自己改或删
       </div>
 
-      <!-- 摘要卡（置顶） -->
+      <!-- 摘要卡（置顶，只读） -->
       <div id="sumWrap"></div>
 
-      <!-- 明细分组（保留现有分组与删除交互） -->
+      <!-- 明细分组（读态 + 行内编辑） -->
       <div id="grpWrap"></div>
 
     </div>
@@ -264,12 +300,13 @@
 
 <script>
 /* =========================================================
-   演示数据与场景机（S7–S9，对应 page-spec 矩阵 7–9）
+   演示数据与场景机（P1–P7，对应 page-spec 矩阵 R7–R13）
    ========================================================= */
+var MAXLEN = 200;
 var CATS = [
-  { key:'fact',       label:'事实', cls:'ft', bg:'var(--cat-fact-bg)',   tx:'var(--cat-fact-tx)' },
-  { key:'preference', label:'偏好', cls:'pf', bg:'var(--cat-pref-bg)',   tx:'var(--cat-pref-tx)' },
-  { key:'habit',      label:'习惯', cls:'hb', bg:'var(--cat-habit-bg)',  tx:'var(--cat-habit-tx)' },
+  { key:'fact',       label:'事实', bg:'var(--cat-fact-bg)',  tx:'var(--cat-fact-tx)' },
+  { key:'preference', label:'偏好', bg:'var(--cat-pref-bg)',  tx:'var(--cat-pref-tx)' },
+  { key:'habit',      label:'习惯', bg:'var(--cat-habit-bg)', tx:'var(--cat-habit-tx)' },
 ];
 var SUMMARY = '你偏好华语流行与轻音乐，习惯在晚间听歌放松；做头像时喜欢插画风格、低饱和度，不喜欢过强的滤镜感；你养了一只叫「团子」的橘猫，聊天时喜欢简洁直接的表达。';
 var ITEMS = [
@@ -282,12 +319,14 @@ var ITEMS = [
   { id:7, category:'habit',      content:'每周五晚你会来点歌' },
 ];
 
-var state = { sc:'s7', itemCount:12, updatedAt:'2026-10-29 21:40',
-  summary:SUMMARY, items:ITEMS.slice(), sumState:'ok', grpState:'ok', pending:false };
+var state = { sc:'p1', itemCount:ITEMS.length, updatedAt:'2026-10-30 09:20',
+  summary:SUMMARY, items:ITEMS.slice(), sumState:'ok', grpState:'ok', pending:false,
+  editing:null,      /* {id, draft, err, saving} —— 同一时刻只编辑一条 */
+  saveFail:false };  /* 演示开关：true 时保存返回失败 */
 
 function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
-/* ============ 摘要卡 ============ */
+/* ============ 摘要卡（只读） ============ */
 function renderSummary(){
   var w = document.getElementById('sumWrap');
   if (state.sumState === 'loading') {
@@ -302,7 +341,7 @@ function renderSummary(){
       '<button class="lnk" type="button" onclick="retrySum()">重试</button></div></div>';
     return;
   }
-  if (!state.summary) { /* S8：无画像 */
+  if (!state.summary) { /* R12：无画像 */
     w.innerHTML = '<div class="sum-card"><div class="blk-empty">' +
       '<div class="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>' +
       '<div class="t">还没有记忆画像</div>' +
@@ -315,11 +354,11 @@ function renderSummary(){
     '<div class="sum-body">' + esc(state.summary) + '</div>' +
     '<div class="sum-meta"><span>条数 <span class="num">' + state.itemCount + '</span></span><span class="dot">·</span>' +
     '<span>更新时间 <span class="num">' + (state.updatedAt || '—') + '</span></span>' +
-    (state.pending ? '<span class="dot">·</span><span style="color:var(--ws-brand-700)">刚删过记忆，画像将在下次对话后刷新</span>' : '') +
+    (state.pending ? '<span class="dot">·</span><span style="color:var(--ws-brand-700)">你改过记忆，画像将在下次对话后刷新</span>' : '') +
     '</div></div>';
 }
 
-/* ============ 明细分组（现有形态，不退化） ============ */
+/* ============ 明细分组（读态 / 行内编辑态） ============ */
 function renderGroups(){
   var w = document.getElementById('grpWrap');
   if (state.grpState === 'loading') {
@@ -347,31 +386,113 @@ function renderGroups(){
     html += '<div class="group"><h3><span class="cat-tag" style="background:' + c.bg + ';color:' + c.tx + '">' + c.label + '</span>' +
       '<em>' + items.length + ' 条</em></h3>';
     items.forEach(function (m) {
-      html += '<div class="row"><span class="txt">' + esc(m.content) + '</span>' +
-        '<button class="rm" type="button" title="删除" aria-label="删除" onclick="askDelete(event,' + m.id + ')">' +
-        '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>';
+      if (state.editing && state.editing.id === m.id) {
+        /* ── 行内编辑态 ── */
+        var len = state.editing.draft.length;
+        var over = len > MAXLEN;
+        html += '<div class="row editing" data-edit-row="' + m.id + '">' +
+          '<textarea class="edit-ta' + (state.editing.err ? ' err' : '') + '" id="editTa" maxlength="' + (MAXLEN + 40) + '"' +
+          ' placeholder="说点什么，比如：我更喜欢安静的歌">' + esc(state.editing.draft) + '</textarea>' +
+          '<div class="edit-foot">' +
+          '<span class="counter' + (over ? ' over' : '') + '" id="editCounter">' + len + '/' + MAXLEN + '</span>' +
+          '<span class="edit-err' + (state.editing.err ? ' show' : '') + '" id="editErr">' + (state.editing.err || '') + '</span>' +
+          '<span class="sp"></span>' +
+          '<button class="ebtn" type="button" id="editCancel" ' + (state.editing.saving ? 'disabled' : '') + '>取消</button>' +
+          '<button class="ebtn save" type="button" id="editSave" ' + (state.editing.saving || state.editing.err ? 'disabled' : '') + '>' +
+          (state.editing.saving ? '<span class="spin"></span> 保存中…' : '保存') + '</button>' +
+          '</div></div>';
+      } else {
+        /* ── 读态 ── */
+        html += '<div class="row" data-row="' + m.id + '"><span class="txt" id="memTxt-' + m.id + '">' + esc(m.content) + '</span>' +
+          '<span class="row-acts">' +
+          '<button class="icon-act" type="button" title="编辑" aria-label="编辑" onclick="startEdit(' + m.id + ')">' +
+          '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' +
+          '<button class="icon-act del" type="button" title="删除" aria-label="删除" onclick="askDelete(event,' + m.id + ')">' +
+          '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+          '</span></div>';
+      }
     });
     html += '</div>';
   });
   html += '</div>';
   w.innerHTML = html;
+  bindEdit();
 }
 
 function renderAll(){ renderSummary(); renderGroups(); }
 
-/* ============ 交互 ============ */
-var toastTimer;
-function toast(msg){
-  var el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1800);
-}
-function nowStr(){
-  var d = new Date(), p = function(x){ return ('0' + x).slice(-2); };
-  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+/* ============ 编辑：进入 / 输入 / 校验 / 保存 / 取消 ============ */
+function startEdit(id){
+  var m = state.items.filter(function (x) { return x.id === id; })[0];
+  if (!m) return;
+  state.editing = { id:id, draft:m.content, err:'', saving:false };
+  renderGroups();
+  var ta = document.getElementById('editTa');
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
 }
 
-/* 删除：破坏性 → 气泡二次确认（现有实现无确认，本稿按 page-spec 补齐，回填时标注） */
+function validate(draft){
+  if (!draft.trim()) return '内容不能为空';
+  if (draft.length > MAXLEN) return '最多 ' + MAXLEN + ' 字，已超出 ' + (draft.length - MAXLEN) + ' 字';
+  return '';
+}
+
+function bindEdit(){
+  var ta = document.getElementById('editTa');
+  if (!ta) return;
+  ta.addEventListener('input', function () {
+    var draft = ta.value;
+    state.editing.draft = draft;
+    var err = validate(draft);
+    state.editing.err = err;
+    ta.classList.toggle('err', !!err);
+    var c = document.getElementById('editCounter');
+    if (c) {
+      c.textContent = draft.length + '/' + MAXLEN;
+      c.classList.toggle('over', draft.length > MAXLEN);
+    }
+    var e = document.getElementById('editErr');
+    if (e) { e.textContent = err; e.classList.toggle('show', !!err); }
+    var sv = document.getElementById('editSave');
+    if (sv && !state.editing.saving) sv.disabled = !!err;
+  });
+  document.getElementById('editCancel').addEventListener('click', cancelEdit);
+  document.getElementById('editSave').addEventListener('click', saveEdit);
+}
+
+function cancelEdit(){
+  /* 取消不落改动：不发请求、直接丢弃草稿 */
+  state.editing = null;
+  renderGroups();
+}
+
+function saveEdit(){
+  var ed = state.editing;
+  if (!ed || ed.saving) return;
+  var err = validate(ed.draft);
+  if (err) { ed.err = err; renderGroups(); return; }
+  ed.saving = true;
+  ed.err = '';
+  renderGroups();
+  setTimeout(function () {
+    /* 演示两种结局：saveFail 时按后端失败处理 */
+    if (state.saveFail) {
+      state.editing.saving = false;   /* 保留编辑态与已输入内容，不丢用户输入 */
+      renderGroups();
+      toast('保存失败，请重试');
+      return;
+    }
+    var target = state.items.filter(function (x) { return x.id === ed.id; })[0];
+    if (target) target.content = ed.draft.trim();
+    state.editing = null;
+    state.pending = true;             /* 🔴 摘要不即时刷新，显式标「待更新」 */
+    renderGroups();
+    renderSummary();
+    toast('已保存，AI 下次对话后会使用新内容');
+  }, 900);
+}
+
+/* ============ 删除（保留二次确认） ============ */
 var pendingDeleteId = null;
 function askDelete(ev, id){
   ev.stopPropagation();
@@ -389,18 +510,18 @@ document.getElementById('popOk').addEventListener('click', function(){
   if (pendingDeleteId == null) return;
   state.items = state.items.filter(function (m) { return m.id !== pendingDeleteId; });
   state.itemCount = Math.max(0, state.itemCount - 1);
-  state.pending = true;           /* 🔴 v1 口径：画像由 LLM 下次对话后重算，UI 显式标注待更新 */
+  state.pending = true;
   pendingDeleteId = null;
   renderAll();
   toast('已删除该记忆');
 });
 document.addEventListener('click', function (e) {
   var pop = document.getElementById('pop');
-  if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.rm')) hidePop();
+  if (pop.classList.contains('show') && !pop.contains(e.target) && !e.target.closest('.icon-act')) hidePop();
 });
 function hidePop(){ document.getElementById('pop').classList.remove('show'); }
 
-/* 重新生成画像：loading + disabled 防重复（幂等非破坏） */
+/* ============ 重新生成画像（摘要不可手改，只能重算） ============ */
 var rebuilding = false;
 function rebuild(){
   if (rebuilding) return;
@@ -422,23 +543,55 @@ function rebuild(){
 }
 document.getElementById('rebuildBtn').addEventListener('click', rebuild);
 
+function nowStr(){
+  var d = new Date(), p = function(x){ return ('0' + x).slice(-2); };
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+var toastTimer;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1800);
+}
 function retrySum(){ state.sumState = 'ok'; renderSummary(); toast('画像已恢复'); }
 function retryGrp(){ state.grpState = 'ok'; renderGroups(); toast('记忆条目已恢复'); }
 
 /* ============ 场景切换（演示控件） ============ */
+/* 校验失败场景用的超长草稿：按 MAXLEN 循环补齐后截断，恒为「超限 13 字」
+   （不手写死长度——第一版拼两遍只有 188 字，仍在上限内，浏览器实测抓出来的） */
+var LONG_BASE = '我喜欢安静一点的音乐，晚上十点以后基本只听纯音乐和轻钢琴，不喜欢太吵的电子音；做头像的时候希望是插画风格、低饱和度；养了一只橘猫叫团子，经常发它的照片；聊天的时候希望直接说结论，不用寒暄。';
+var LONG = LONG_BASE;
+while (LONG.length <= MAXLEN + 10) LONG += LONG_BASE;
+LONG = LONG.slice(0, MAXLEN + 13);
+
+function resetData(){
+  state.summary = SUMMARY; state.items = ITEMS.map(function (m) { return { id:m.id, category:m.category, content:m.content }; });
+  state.itemCount = ITEMS.length; state.updatedAt = '2026-10-30 09:20';
+  state.pending = false; state.editing = null; state.saveFail = false;
+}
+
 function applyScenario(sc){
   state.sc = sc;
   document.querySelectorAll('#scenBar button').forEach(function (b) { b.classList.toggle('on', b.dataset.sc === sc); });
-  /* rebuildBtn 在本稿三场景下均保留（S8 空态可点、S9 失败仍可试重建） */
-  state.summary = SUMMARY; state.items = ITEMS.slice(); state.itemCount = 12;
-  state.updatedAt = '2026-10-29 21:40'; state.pending = false;
+  resetData();
+  if (sc === 'p6') { /* 无画像 */
+    state.summary = ''; state.items = []; state.itemCount = 0;
+    state.sumState = 'ok'; state.grpState = 'ok';
+    renderAll(); return;
+  }
+  if (sc === 'p7') { /* 加载失败 */
+    state.sumState = 'error'; state.grpState = 'error';
+    renderAll(); return;
+  }
   state.sumState = 'loading'; state.grpState = 'loading';
   renderAll();
   setTimeout(function () {
     if (state.sc !== sc) return;
-    if (sc === 's7') { state.sumState='ok'; state.grpState='ok'; }
-    if (sc === 's8') { state.summary=''; state.items=[]; state.itemCount=0; state.sumState='ok'; state.grpState='ok'; }
-    if (sc === 's9') { state.sumState='error'; state.grpState='error'; }
+    state.sumState = 'ok'; state.grpState = 'ok';
+    if (sc === 'p2') { state.editing = { id:3, draft:'你喜欢华语流行与轻音乐，不喜欢重低音电子，最近开始听爵士', err:'', saving:false }; }
+    if (sc === 'p3') { state.editing = { id:3, draft:'你喜欢华语流行与轻音乐（草稿，点取消应丢弃）', err:'', saving:false }; }
+    if (sc === 'p4') { state.editing = { id:3, draft:LONG, err:validate(LONG), saving:false }; }
+    if (sc === 'p5') { state.editing = { id:3, draft:'你喜欢华语流行与轻音乐，但也开始听爵士', err:'', saving:false }; state.saveFail = true; }
     renderAll();
   }, 600);
 }
@@ -446,7 +599,7 @@ document.querySelectorAll('#scenBar button').forEach(function (b) {
   b.addEventListener('click', function () { applyScenario(b.dataset.sc); });
 });
 
-applyScenario('s7');
+applyScenario('p1');
 </script>
 </body>
 </html>
