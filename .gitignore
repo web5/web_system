@@ -16,6 +16,13 @@ build/
 *.local
 *.tsbuildinfo
 
+# 各服务的历史「投递副本」目录：servers/<svc>/<svc>-dev/<commit>/，每份含自己的 src 快照与
+# node_modules。它们不进任何 tsconfig 的 exclude，`nest build` 会当源码一起编译 → 出现
+# 「@nestjs/common 被解析成两个版本」这类类型冲突（实测 ai-agent 报 9 处 TS 错，构建直接失败）。
+# 不带斜杠的那条覆盖 symlink 形态（同上方 node_modules 的教训）。
+servers/*/*-dev/
+servers/*/*-dev
+
 # 微前端构建产物（由 build-module.mjs / build-externals.mjs / shell 构建生成，rsync 部署到 gateway public）
 servers/gateway/public/shell/
 servers/gateway/public/static/
