@@ -1,5 +1,6 @@
-import { Controller, Post, Get, Body, Query, Res, Headers, HttpCode, HttpStatus, UnauthorizedException, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Req, Res, Headers, HttpCode, HttpStatus, UnauthorizedException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { QrcodeService } from '../qrcode/qrcode.service';
@@ -11,7 +12,14 @@ import {
 } from '@web-system/types';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import {
+  resolveAuthClient,
+  readRefreshCookie,
+  setRefreshCookie,
+  clearRefreshCookie,
+  isSecureCookieEnv,
+} from './refresh-cookie';
 
 @ApiTags('认证')
 @Controller('auth')
@@ -22,54 +30,109 @@ export class AuthController {
     private authService: AuthService,
     private qrcodeService: QrcodeService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
+
+  /**
+   * 下发 refresh cookie（方案 2 · S1）。
+   *
+   * 为什么同时保留 body 里的 refreshToken：老前端（及小程序）仍从响应体读，
+   * cookie 是**增量**能力，二者并存才不会在发版瞬间打断存量客户端。
+   */
+  private attachRefreshCookie(req: Request, res: Response, refreshToken: string): void {
+    const nodeEnv = this.configService.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    setRefreshCookie(res, resolveAuthClient(req), refreshToken, isSecureCookieEnv(nodeEnv));
+  }
+
+  private secureCookie(): boolean {
+    const nodeEnv = this.configService.get<string>('NODE_ENV') || process.env.NODE_ENV;
+    return isSecureCookieEnv(nodeEnv);
+  }
 
   @Post('login')
   @ApiOperation({ summary: '用户名密码登录' })
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto): Promise<LoginResponse> {
-    return this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.authService.login(loginDto);
+    this.attachRefreshCookie(req, res, result.refreshToken);
+    return result;
   }
 
   @Post('register')
   @ApiOperation({ summary: '用户注册' })
   @HttpCode(HttpStatus.OK)
-  async register(@Body() registerDto: RegisterDto): Promise<LoginResponse> {
-    return this.authService.register(registerDto);
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.authService.register(registerDto);
+    this.attachRefreshCookie(req, res, result.refreshToken);
+    return result;
   }
 
   @Post('wechat-login')
   @ApiOperation({ summary: '微信扫码登录' })
   @HttpCode(HttpStatus.OK)
-  async wechatLogin(@Body() wechatDto: WechatLoginRequest): Promise<LoginResponse> {
-    return this.authService.wechatLogin(wechatDto);
+  async wechatLogin(
+    @Body() wechatDto: WechatLoginRequest,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const result = await this.authService.wechatLogin(wechatDto);
+    this.attachRefreshCookie(req, res, result.refreshToken);
+    return result;
   }
 
   @Post('miniprogram-login')
   @ApiOperation({ summary: '微信小程序登录' })
   @HttpCode(HttpStatus.OK)
   async miniprogramLogin(@Body() mpDto: MiniprogramLoginRequest): Promise<MiniprogramLoginResponse> {
+    // 小程序侧没有浏览器 cookie 语义，凭据走 wx.storage + Bearer，故不下发 cookie
     return this.authService.miniprogramLogin(mpDto);
   }
 
   @Post('refresh')
   @ApiOperation({ summary: '刷新 Token' })
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body('refreshToken') refreshToken: string): Promise<LoginResponse> {
-    return this.authService.refreshToken(refreshToken);
+  async refresh(
+    @Body('refreshToken') refreshToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponse> {
+    const client = resolveAuthClient(req);
+    // 优先 body（老客户端），其次 httpOnly cookie（新客户端，脚本读不到 token）
+    const token = refreshToken || readRefreshCookie(req, client) || '';
+    if (!token) {
+      throw new UnauthorizedException('缺少 refreshToken');
+    }
+    const result = await this.authService.refreshToken(token);
+    // 轮换后同步 cookie，避免客户端继续持旧的（cookie 侧跟随最新一次签发）
+    this.attachRefreshCookie(req, res, result.refreshToken);
+    return result;
   }
 
   @Post('logout')
   @ApiBearerAuth()
   @ApiOperation({ summary: '登出' })
   @HttpCode(HttpStatus.OK)
-  async logout(@Headers('authorization') auth: string): Promise<{ success: boolean }> {
+  async logout(
+    @Headers('authorization') auth: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ success: boolean }> {
     // 无凭证直接 401：此前会「静默成功」，导致前端以为已登出而服务端并未作废
     const token = auth?.replace(/^Bearer\s+/i, '');
     if (!token) {
       throw new UnauthorizedException('缺少 Authorization 头');
     }
     await this.authService.logout(token);
+    // access 进黑名单之外，必须同时把 refresh cookie 清掉：
+    // 否则 cookie 里那颗 refresh 还能继续换新 token（脚本读不到但浏览器会自动带上）
+    clearRefreshCookie(res, this.secureCookie());
     return { success: true };
   }
 

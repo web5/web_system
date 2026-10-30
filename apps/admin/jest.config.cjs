@@ -25,6 +25,8 @@ module.exports = {
     // 否则 store 不被 stub，模块顶层的 persist.storage = localStorage 在 node 环境下直接抛错。
     '^@/stores/user$': '<rootDir>/test-stubs/empty-module.ts',
     '^@/utils/module-load-error$': '<rootDir>/test-stubs/empty-module.ts',
+    // shared 单独给个替身：request.ts 顶层读 API_TIMEOUT.DEFAULT，不能是空的
+    '^@web-system/shared$': '<rootDir>/test-stubs/web-system-shared.ts',
     '^@web-system/': '<rootDir>/test-stubs/empty-module.ts',
     '\\.vue$': '<rootDir>/test-stubs/empty-module.ts',
     '^@/(.*)$': '<rootDir>/src/$1',

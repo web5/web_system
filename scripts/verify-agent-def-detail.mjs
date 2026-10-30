@@ -650,6 +650,110 @@ const leakWords = ['落地契约', 'AnswerBlocks', 'debug-slot-note'].filter((k)
 rec('25d AppDefDetail.vue 无技术文案泄漏（debug-slot 瘦身）',
   leakWords.join('|') || '(无)', '(无)', leakWords.length === 0);
 
+// —— 26 label 对齐（2026-10-29 拍板修正：按 page-spec §3.2 定稿口径 —— label 左置固定 84px）——
+// 症状：五个 a-form-item 游离在 form 上下文外 → antd label 列宽自适应文字宽 →
+// 四个数值输入左缘参差（真实页面实测 349/398/303/397，最大差 95px）。
+// 口径来源：原型 :215-216/:221（.flb{flex:0 0 84px}）+ page-spec §3.2:120。
+// ⚠️ layout="vertical" 是被原型明确否掉的上一版（本次实现曾误用，已纠正，禁回潮）。
+// 本脚本是 file:// 原型机检（与本地服务解耦，见 docs/api/contracts.md「无头验证」），
+// 量不到真实 app 几何 → 断言**成因结构**；几何证据（两视口 left/width/换行实测）
+// 在 docs/ui/reviews/agent-tuning-label-align-2026-10-29.md。
+// 26a（静态）：label 列必须固定 84px，且 layout="vertical" 残留必须为 0
+//    （先剥掉 HTML 注释再数——注释里提及「曾试过 vertical」是文档，不是代码回潮）
+const panelCode = panelSrc.replace(/<!--[\s\S]*?-->/g, '');
+const labelCol84 = /label-col="[^"]*84px/.test(panelCode);
+const verticalLeftover = (panelCode.match(/layout="vertical"/g) || []).length;
+rec('26a label 左置固定 84px（§3.2）且 layout="vertical" 残留 0',
+  `label-col 84px=${labelCol84 ? '有' : '无'} / vertical 残留 ${verticalLeftover}`,
+  '有 / 残留 0', labelCol84 && verticalLeftover === 0);
+// 26b（静态）：label-col 不得出现 84px 以外的固定宽度（防改成 120px 之类再破坏规格）
+const badLabelWidths = [...panelSrc.matchAll(/label-col="[^"]*?width:\s*'(\d+)px'/g)]
+  .map((m) => m[1]).filter((w) => w !== '84');
+rec('26b label-col 固定宽度只允许 84px',
+  badLabelWidths.join('|') || '(无非 84px 固定值)', '(无非 84px 固定值)',
+  badLabelWidths.length === 0);
+// —— 26c/26d：thinking 行折行（2026-10-29 dev 复测抓到的偏差，属「label 左置」的副作用）——
+// 症状：label 左置后 control 列可用宽 485（1440）/405（1280）。antd .ant-form-item-row 是
+// flex-wrap:wrap，control 用 flex-basis:auto 时基线尺寸取内容 max-content——
+// thinking 行 extra 文案实测 max-content **535px > 485**，整块 control 被折到下一行、
+// 左缘从 337 退回行首 253（其余四行 extra 182–352 均 < 485，故不折）。
+// ⚠️ 判据要从「数 input 左缘」改成「数 control 左缘」：折行时 input 左缘仍是 337×4
+// （input 在折下来的 control 内部），旧判据完全看不见这个缺陷（见评审文档「判据有效性」）。
+// 本脚本量不到 app 几何 → 断言成因：control 基线尺寸必须归 0（flex '1 1 0'）。
+// 26c（静态）：wrapper-col 的 flex 必须是 '1 1 0'（basis 0），不得回退 '1 1 auto'
+const wrapperFlexBasis0 = /wrapper-col="[^"]*flex:\s*'1 1 0'/.test(panelCode);
+const wrapperFlexAuto = /wrapper-col="[^"]*flex:\s*'1 1 auto'/.test(panelCode);
+rec('26c control 基线尺寸归 0（wrapper-col flex 1 1 0，防整块折行）',
+  `basis0=${wrapperFlexBasis0 ? '有' : '无'} / 1-1-auto 残留=${wrapperFlexAuto ? '有' : '无'}`,
+  'basis0=有 / 残留=无', wrapperFlexBasis0 && !wrapperFlexAuto);
+// 26d（静态）：radio 组必须可内部换行（窄容器下最小占宽降到单按钮 ≈124px，禁缩字号硬塞）
+const radioRule = (panelCode.match(/\.ant-radio-group\)\s*\{[\s\S]*?\}/) || [''])[0];
+rec('26d radio 组内部可换行（flex-wrap: wrap）',
+  radioRule ? (/flex-wrap:\s*wrap/.test(radioRule) ? 'flex-wrap: wrap ✓' : '缺 flex-wrap: wrap') : '未找到 .ant-radio-group 规则',
+  'flex-wrap: wrap ✓', /flex-wrap:\s*wrap/.test(radioRule) && radioRule !== '');
+// —— 26e–26h：label 右对齐（2026-10-29 用户追加拍板：label 文字右对齐，84px 定宽不变）——
+// ⚠️ 判据盲区实测：只有 label-align="right" 这个 prop 是**不够的**——antd 把 prop 落成
+// .ant-form-item-label 的 text-align:end（只管列内摆放），而 <label> 是 inline-flex 容器、
+// justify 默认 normal（≈flex-start），容器内文字仍贴左 → 五个文本右缘实测
+// 335/325/319/319/323 参差、「Temperature」距控件仅 2px。
+// 要右缘全等还须三条配套：① label 容器 justify-content: flex-end；② 清掉 ：colon="false"
+// 下仍残留占位的 ::after 冒号位（content:" " + margin: 0 8px 0 2px，占 10px——antd 空冒号
+// 不渲染字符但 margin 仍在）；③ 列距 column-gap: 12px（原型 .fitem{gap:12px} 口径，
+// 放列外不占 84px 定宽）。26e 锁 prop，26f 锁 ②③，26g/26h 锁 ① 及其守卫。
+// 26e（静态）：label-align 必须是 right，且不得残留 left
+const labelAlignRight = /label-align="right"/.test(panelCode);
+const labelAlignLeft = (panelCode.match(/label-align="left"/g) || []).length;
+rec('26e label 右对齐（label-align="right"，2026-10-29 追加拍板）',
+  `right=${labelAlignRight ? '有' : '无'} / left 残留 ${labelAlignLeft}`,
+  'right=有 / left 残留 0', labelAlignRight && labelAlignLeft === 0);
+// 26f（静态）：右对齐配套 ②::after 清除 + ③列距 12px
+// ⚠️ ① justify-content 的断言已挪到 26g/26h —— 它必须落在 576px 守卫内，用原来那种
+// "match 第一个 label 规则块再断言"的写法，加上守卫后会抓到不带 flex-end 的那段、随机绿。
+const labelAfterRule = (panelCode.match(/\.ant-form-item-label > label\)::after\s*\{[\s\S]*?\}/) || [''])[0];
+const rowGapRule = (panelCode.match(/\.ant-form-item-row\)\s*\{[\s\S]*?\}/) || [''])[0];
+const afterCleared = /content:\s*none/.test(labelAfterRule) && /margin:\s*0/.test(labelAfterRule);
+const rowGap12 = /column-gap:\s*12px/.test(rowGapRule);
+rec('26f 右对齐配套（::after 清除 / 列距 12px）',
+  `after清除=${afterCleared ? '有' : '无'} / 列距12px=${rowGap12 ? '有' : '无'}`,
+  'after清除=有 / 列距12px=有', afterCleared && rowGap12);
+// 26g/26h（静态）：① justify-content:flex-end 必须收在 @media(min-width:576px) 守卫内
+// 为什么必须有守卫：<576px 时 ant-design-vue **自动切上置**（es/form/style/index.js:380 的
+//   @media(max-width: screenXSMax=575px) → makeVerticalLayout :337-356，label/control 各
+//   flex:0 0 100%；它挂在 genVerticalStyle 顶层、被 genComponentStyleHook 无条件导出，
+//   对 horizontal 也生效）。上置态由 makeVerticalLayoutLabel(:328-336) 设 text-align:start
+//   要求**左**对齐；而 justify-content 作用在 <label> 这个 inline-flex 容器内部、不受
+//   text-align 管辖 → 无条件 flex-end 会把上置态 label 推到行尾。
+// 判据有效性（变异验证）：① 删掉 @media 保留 flex-end → 26h 红；② 删掉 flex-end → 26g 红；
+//   ③ 把 min-width 改成 575 → 26h 红（字符串按 576 精确匹配）；④ 把 flex-end 挪到基础规则
+//   且不加守卫 → 26g 红（baseLabelRule 里出现 flex-end）+ 26h 红。
+const braceBlockAfter = (src, needle) => {
+  const i = src.indexOf(needle);
+  if (i < 0) return null;
+  const open = src.indexOf('{', i);
+  if (open < 0) return null;
+  let depth = 0;
+  for (let k = open; k < src.length; k += 1) {
+    if (src[k] === '{') depth += 1;
+    else if (src[k] === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(open + 1, k);
+    }
+  }
+  return null;
+};
+const GUARD_576 = '@media (min-width: 576px)';
+const guardBody = braceBlockAfter(panelCode, GUARD_576);
+const baseLabelRule = (panelCode.match(/\.ant-form-item-label > label\)\s*\{[\s\S]*?\}/) || [''])[0];
+const flexEndInGuard = !!guardBody
+  && /\.ant-form-item-label > label/.test(guardBody)
+  && /justify-content:\s*flex-end/.test(guardBody);
+const flexEndUnguarded = /justify-content:\s*flex-end/.test(baseLabelRule);
+rec('26g flex-end 收在 576px 守卫内（基础规则不得无条件写）',
+  `守卫内=${flexEndInGuard ? '有' : '无'} / 基础规则无条件写=${flexEndUnguarded ? '有' : '无'}`,
+  '守卫内=有 / 基础规则无条件写=无', flexEndInGuard && !flexEndUnguarded);
+rec('26h 576px 守卫存在（防手工删守卫 / 改断点）',
+  guardBody ? '有' : '无', '有', !!guardBody);
+
 console.log(JSON.stringify(out, null, 1));
 const fail = out.filter((o) => !o.ok);
 console.log(fail.length ? `\n❌ 失败 ${fail.length} 项` : `\n✅ 全部通过（${out.length} 项）`);

@@ -13,6 +13,9 @@
 #   - 只处理**同仓库**分支的 PR（fork PR 直接跳过），因为要读 Secret；
 #     事件用 `pull_request`（不是 pull_request_target），不 checkout 任何被改代码，只调 API。
 #   - draft PR 不挂自动合入（避免草稿被自动合）。
+#   - **给 PR 打 `no-automerge` 标签即跳过**（人工逃生口，2026-10-29 加）。默认行为不变，
+#     只在「还需要人看一眼」时用：如同一个 PR 之后还要推修正提交、或改动涉及流程本身。
+#     不用这个标签就得每次 `gh pr merge <n> --disable-auto` 跟本 workflow 抢跑（2026-10-29 实测抢了两次）。标签是双向的：enable 排除它，disable job 负责撤已挂上的。
 #   - 合并仍需分支保护放行（checks 全绿 + 与 master 同步），本 workflow **不绕过任何门禁**：
 #     它只是把「等绿了自动合」这件事挂上，绿灯之前不会合。
 #
@@ -23,7 +26,10 @@ name: auto-merge
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+    # labeled / unlabeled 是给下面的 `disable-auto-merge` job 用的（2026-10-29）：
+    # 只加标签而不重新推送提交时，`enable-auto-merge` 会被 if 跳过 —— 跳过就等于**没人去撤**
+    # 已经挂上的 auto-merge，标签形同虚设。必须有一个「反向动作」把已挂的撤掉。
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
   # master 前进后扫一遍开放 PR（修 #407 的残留缺口）——
   # 「master 前进导致 PR 落后」**不产生 pull_request 事件**，只靠上面的触发点，
   # 落后的 PR 会一直等到有人往它上面推代码为止。
@@ -38,10 +44,17 @@ jobs:
   enable-auto-merge:
     runs-on: ubuntu-latest
     # 同仓库分支 + 非草稿：fork PR 拿不到 Secret，跳过即可（不失败、不误合）
+    # no-automerge 标签 = **人工逃生口**（2026-10-29 加）：
+    #   默认仍是「挂上自动合入」，不改既有承诺；给需要人先看一眼的 PR 一个开关，
+    #   避免每次都靠 `gh pr merge <n> --disable-auto` 跟本 workflow 抢跑。
+    #   加它的场景（实测踩过）：① 同一 PR 上还会继续推修正提交，过早合入会让后续提交变孤儿
+    #   （2026-10-29 #487：CI 一绿自动合并了错误方向的版本，修正 `cada3806` 只能 cherry-pick
+    #   另开 #489 补救）② PR 内容涉及流程本身 / 需要人复核语义，而不只是"机器能验过"。
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.draft == false
       && !startsWith(github.event.pull_request.head.ref, 'feature/manual-review/')
+      && !contains(github.event.pull_request.labels.*.name, 'no-automerge')
     steps:
       - name: 校验 AUTO_PR_TOKEN
         env:
@@ -265,3 +278,63 @@ jobs:
               }
             }
             console.log(`本轮共同步 ${synced} 个 PR`);
+
+  # 打上 no-automerge 标签时，把**已经挂上的**自动合入撤掉（2026-10-29）
+  #
+  # 为什么必须有这个 job：`enable-auto-merge` 的 if 里排除了带标签的 PR → 打标签后它被跳过，
+  # 「跳过」不等于「撤销」—— PR 创建后补打标签时，opened 事件那轮已经把 auto-merge 挂上了
+  # （PR #493 实测：opened 时挂上、补打标签后 synchronize 轮 skipping，autoMergeRequest 仍在）。
+  # 所以标签必须是**双向**的：enable 排除它，同时这里负责撤。unlabeled 也触发（幂等：撤完即无操作），
+  # 顺带让「误打标签后想恢复」走 re-label / 再推一次提交的自然路径，不额外造第三种状态。
+  disable-auto-merge:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && contains(github.event.pull_request.labels.*.name, 'no-automerge')
+    steps:
+      - name: 撤销已挂的自动合入
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.AUTO_PR_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+            try {
+            const QUERY = `query($owner:String!,$repo:String!,$num:Int!){
+              repository(owner:$owner,name:$repo){ pullRequest(number:$num){
+                id autoMergeRequest { enabledAt mergeMethod } } } }`;
+            const got = await github.graphql(QUERY, { owner, repo, num: pull_number });
+            const pr = got.repository.pullRequest;
+            if (!pr) throw new Error(`读不到 PR #${pull_number}`);
+            if (!pr.autoMergeRequest) {
+              console.log(`PR #${pull_number} 未挂自动合入，无需撤销`);
+              return;
+            }
+            await github.graphql(
+              `mutation($id:ID!){ disablePullRequestAutoMerge(input:{pullRequestId:$id}){ pullRequest { number } } }`,
+              { id: pr.id },
+            );
+            const after = await github.graphql(QUERY, { owner, repo, num: pull_number });
+            if (after.repository.pullRequest.autoMergeRequest) {
+              throw new Error(`disablePullRequestAutoMerge 未报错，但 autoMergeRequest 仍在`);
+            }
+            console.log(`PR #${pull_number} 已撤销自动合入（no-automerge 标签生效）`);
+            } catch (e) {
+              // 🔴 已知硬限制（2026-10-30 PR #494 实测）：PR **全绿**后 GitHub 已把 auto-merge
+              // 转入合并流程，此时 disablePullRequestAutoMerge 返回 422
+              // "Can't disable auto-merge for this pull request."，任何 token 都撤不掉
+              //（本 PR 自己就是证据：打标签后 6 秒尝试撤销被拒，几分钟后仍被自动合并）。
+              // 撤销窗口只在 CI 未全绿时存在 —— 昨日 #492 能撤成功正是因为当时 build/test 还在跑。
+              // 所以这里对 422 降级为 warning（改不了 GitHub 的语义，只能把话说明白），
+              // 让 job 变红去逼人手撤没有意义：PR 该合还是会合。
+              const msg = String((e && e.message) || '');
+              if (/Can't disable auto-merge/i.test(msg)) {
+                core.warning(
+                  `PR #${pull_number} 已全绿、GitHub 已进入合并流程，API 无法撤销 auto-merge（422）。` +
+                  `本标签只能保证「不再自动挂」；若必须拦住这次合并，唯一窗口是 Checks 未全绿前，` +
+                  `或把 PR 转回 draft。`,
+                );
+                return;
+              }
+              throw e;
+            }

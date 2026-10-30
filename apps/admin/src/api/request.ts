@@ -21,6 +21,39 @@ function isPublicAuthRequest(config?: InternalAxiosRequestConfig): boolean {
 }
 
 /**
+ * 清掉本地残留的登录凭据（磁盘 + pinia 内存）。
+ *
+ * 为什么要清：公开鉴权接口（登录/注册/刷新）返回 401 时，说明本次凭据交换失败。
+ * 但浏览器 localStorage 里可能还躺着**上一个会话**的旧 token。若不清理，
+ * 下一次登录请求仍会带上它 → gateway 黑名单 Guard 直接 401「令牌已失效（已登出）」
+ * → 用户看到「密码没错却永远登不进去」，且因为该 401 被当作"公开接口凭据错误"
+ * 而不会触发跳转，形成死循环。见 fix/auth-stale-token-blocks-login。
+ */
+function clearStoredAuth(): void {
+  try {
+    const raw = localStorage.getItem('user-store');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.token = '';
+      parsed.refreshToken = '';
+      localStorage.setItem('user-store', JSON.stringify(parsed));
+    }
+  } catch {
+    try {
+      localStorage.removeItem('user-store');
+    } catch {
+      // 静默失败
+    }
+  }
+  // 同步 pinia 内存态：否则 isLoggedIn 仍为 true，界面继续按「已登录」渲染
+  try {
+    useUserStore().logout();
+  } catch {
+    // pinia 未激活（极端时序）：磁盘已清，刷新后即为未登录态
+  }
+}
+
+/**
  * 从 pinia persist 插件存储的 key 中读取 token（避免与 store 产生循环依赖）
  */
 function getStoredToken(): string | null {
@@ -98,9 +131,20 @@ const request: AxiosInstance = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
-    const token = getStoredToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    /**
+     * 公开鉴权请求（登录/注册/刷新）**不得携带 Authorization**。
+     *
+     * 这三个接口本身就是「用凭据换凭据」，调用时必然还没有有效 token。
+     * 而浏览器 localStorage 里可能残留上一个会话的旧 token（已登出 → 进黑名单），
+     * 一旦带上，gateway 的 TokenBlacklistGuard 会在转发前直接拦成
+     * 401「令牌已失效（已登出）」，请求根本到不了 auth-service
+     * → 表现为「密码正确却永远登不进去」。
+     */
+    if (!isPublicAuthRequest(config)) {
+      const token = getStoredToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -130,7 +174,9 @@ request.interceptors.response.use(
 
       if (status === 401) {
         // 公开鉴权接口（登录/注册/刷新）→ 凭据错误，不弹"登录已过期"，不跳转
+        // 但要顺手清掉本地残留的旧 token：否则下一次登录仍会带上它，被网关黑名单拦死
         if (isPublicAuthRequest(error.config as InternalAxiosRequestConfig)) {
+          clearStoredAuth();
           return Promise.reject(error);
         }
 
