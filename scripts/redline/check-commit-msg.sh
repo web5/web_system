@@ -57,6 +57,12 @@ is_passport() {
 
 err() { echo "$@" >&2; }
 
+# 门禁共享判定库（豁免机制 2.7/2.8 + 规格书识别 2.6）
+# 与 CI 的 scan-rules.sh 共用同一份实现 —— 「本地认、CI 不认」正是 2.8 要消灭的摩擦源。
+# ⚠️ 路径按脚本自身位置解析：本 hook 会在任意仓库/任意 worktree 下运行。
+# shellcheck source=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gate-shared.sh"
+
 CM="$(basename "$0")"
 
 staged="$(git diff --cached --name-only --no-renames 2>/dev/null)"
@@ -92,43 +98,74 @@ fi
 
 # 3.5) 微调豁免：与 CI 的 R9b / R10 / R11 同口径（设计：specs/kit-sop-enforcement/design.md §3.5.1）
 #      本地若认、CI 若不认（或反之），"记了豁免还是报错"会成为新的摩擦源。
-if grep -qE '^Micro-exempt:' "$MSG"; then exit 0; fi
+#
+# 卡 2.8：豁免改为**按门分类** —— `Micro-exempt: R11: <理由>` 只放行 R11（Design），
+#   不再顺带放行 R10（Proto）。旧格式 `Micro-exempt: <理由>` 仍是一票否决（向后兼容）。
+#   门号与 CI 侧一一对应：R10 = Proto 凭证，R11 = Design 凭证。
+MSG_BODY="$(cat "$MSG" 2>/dev/null || true)"
+exempt_parse "$MSG_BODY"
+EXEMPT_LEGACY_HINT=""
+if [ "$EXEMPT_PRESENT" = "1" ]; then
+  if [ "$EXEMPT_LEGACY" = "1" ]; then
+    # 旧格式：全门放行（与存量行为一致），但提示改用按门分类格式
+    exit 0
+  fi
+  # 新格式：只放行列出的门
+  if exempt_covers "R10"; then EXEMPT_SKIP_PROTO=1; else EXEMPT_SKIP_PROTO=0; fi
+  if exempt_covers "R11"; then EXEMPT_SKIP_DESIGN=1; else EXEMPT_SKIP_DESIGN=0; fi
+  # 卡 2.7：理由质量不达标 → 豁免不生效（放行 = 不豁免，即继续走下面的凭证校验）
+  if ! exempt_quality "$EXEMPT_REASON" 0 0; then
+    err "$CM 提示：Micro-exempt 理由不达标 —— ${EXEMPT_QUALITY_MSG}"
+    err "  本次豁免不生效，请补充可审计的理由后重写 trailer。"
+    EXEMPT_SKIP_PROTO=0
+    EXEMPT_SKIP_DESIGN=0
+  fi
+fi
 
 # 4) 含 UI 源码 → 须带 Proto 凭证
-sha="$(grep -E '^Proto:[[:space:]]*[0-9a-fA-F]{7,40}' "$MSG" | head -n 1 | awk '{print $2}' | tr -d '\r')"
-if [ -z "$sha" ]; then
-  err "$CM 拒绝：本次改动含 UI 源码（${ui_sample}），但 commit message 缺 Proto 凭证。"
-  err "  请在 message 末尾加一行：Proto: <原型/规格 commit 的 sha>"
-  err "  （§2.5 动作门：原型/规格先单独 commit 并经用户确认；详见 specs/kit-sop-enforcement/design.md §3.8）"
-  exit 1
-fi
+#    卡 2.8：仅当豁免范围含 R10 时才跳过整个 Proto 校验（EXEMPT_SKIP_PROTO）。
+if [ "${EXEMPT_SKIP_PROTO:-0}" != "1" ]; then
+  sha="$(grep -E '^Proto:[[:space:]]*[0-9a-fA-F]{7,40}' "$MSG" | head -n 1 | awk '{print $2}' | tr -d '\r')"
+  if [ -z "$sha" ]; then
+    err "$CM 拒绝：本次改动含 UI 源码（${ui_sample}），但 commit message 缺 Proto 凭证。"
+    err "  请在 message 末尾加一行：Proto: <原型/规格 commit 的 sha>"
+    err "  （§2.5 动作门：原型/规格先单独 commit 并经用户确认；详见 specs/kit-sop-enforcement/design.md §3.8）"
+    exit 1
+  fi
 
-# ① sha 存在
-if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
-  err "$CM 拒绝：Proto: $sha 不是本仓库存在的 commit。"
-  exit 1
-fi
+  # ① sha 存在
+  if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+    err "$CM 拒绝：Proto: $sha 不是本仓库存在的 commit。"
+    exit 1
+  fi
 
-# ② sha 在祖先链上（原型必须已经先落库）
-if ! git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
-  err "$CM 拒绝：Proto: $sha 不在当前 HEAD 的祖先链上（原型必须已经先落库）。"
-  exit 1
-fi
+  # ② sha 在祖先链上（原型必须已经先落库）
+  if ! git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then
+    err "$CM 拒绝：Proto: $sha 不在当前 HEAD 的祖先链上（原型必须已经先落库）。"
+    exit 1
+  fi
 
-# ③ 该 commit 确实改的是原型/规格（不是随便一个祖先 sha）
-found=0
-while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  if is_passport "$f"; then found=1; break; fi
-done < <(git show --name-only --format= "$sha" 2>/dev/null)
+  # ③ 该 commit 确实改的是原型/规格（不是随便一个祖先 sha）
+  #    卡 2.6：规格书识别放宽 —— specs/**/prototype.html 这类「有原型但文件名不符约定」的
+  #    也算数，不再逼执行者用 Micro-exempt 兜底。
+  found=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if is_passport "$f" || is_spec_doc "$f"; then found=1; break; fi
+  done < <(git show --name-only --format= "$sha" 2>/dev/null)
 
-if [ "$found" -ne 1 ]; then
-  err "$CM 拒绝：Proto: $sha 未改动任何原型/规格文件（apps/*/prototype/**、docs/ui/prototypes/**、specs/**/page-spec*.md）。"
-  exit 1
+  if [ "$found" -ne 1 ]; then
+    err "$CM 拒绝：Proto: $sha 未改动任何原型/规格文件（apps/*/prototype/**、docs/ui/prototypes/**、specs/**/page-spec*.md 或 specs/**/prototype*.html）。"
+    exit 1
+  fi
 fi
 
 # 5) 设计评审凭证 Design（error 级 · specs/design-reviewer/design.md §3.7）
 #    UI commit 须带 `Design: pass`，表示 D3 实现一致性评审已过且阻塞项清零。
+#    卡 2.8：仅当豁免范围含 R11 时才跳过（EXEMPT_SKIP_DESIGN）。
+if [ "${EXEMPT_SKIP_DESIGN:-0}" = "1" ]; then
+  exit 0
+fi
 dval="$(grep -E '^Design:[[:space:]]*[^[:space:]]+' "$MSG" | head -n 1 | sed -E 's/^Design:[[:space:]]*//' | tr -d '\r')"
 if [ -z "$dval" ]; then
   err "$CM 拒绝：本次改动含 UI 源码（${ui_sample}），但 commit message 缺 Design 凭证。"

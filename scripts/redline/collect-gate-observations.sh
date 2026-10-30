@@ -36,7 +36,11 @@ trap 'rm -f "$SCAN_OUT"' EXIT
 
 bash scripts/redline/scan-rules.sh diff "$RANGE" --no-color >"$SCAN_OUT" 2>&1 || true
 
-count() { grep -oE "$1" "$SCAN_OUT" | wc -l | tr -d ' '; }
+# 卡 2.5：只数**规则标签行**（形如 "  [R13] ..."），不做全文子串匹配。
+#   旧写法 `grep -oE "R13"` 数的是输出里所有 "R13" 子串 —— 只要某条 commit subject
+#   或提示正文里出现 "R13"（例如提交信息引用了别的门号），这一门的命中数就被虚增。
+#   锚定标签行后，采集数 = 门禁实际报出的条数，与观察期「升 error 后会多拦多少」的问题对齐。
+count() { grep -cE "^[[:space:]]+\[$1\]" "$SCAN_OUT" || true; }
 
 R13=$(count 'R13')
 R14=$(count 'R14')
@@ -50,8 +54,29 @@ R18=$(count 'R18')
 # 只数「豁免声明行」（行首 `Micro-exempt:`），不数「提到关键词」。
 # 2026-10-23 实测：改成行首锚定前，近 20 commit 数出 4 次，逐条核对实际只有 2 次真豁免，
 # 另 2 次是提交正文在**描述**这套机制（新增 R17/R18 的那条）。指标宽 2 倍会让趋势读反。
-MICRO=$(git log "$RANGE" --pretty=%B 2>/dev/null | grep -ci '^[[:space:]]*micro-exempt[[:space:]]*:' || true)
-UIGATE=$(git log "$RANGE" --pretty=%B 2>/dev/null | grep -ci 'ui_gate=off\|ui_gate: *off\|UI_GATE=off' || true)
+#
+# ⚠️ 卡 2.5：口径改为**逐 commit 解析**，与 scan-rules.sh 的豁免判定同口径。
+#   旧写法 `git log "$RANGE" --pretty=%B | grep -c` 把整个范围的 body 拼成一大段文本再数行，
+#   有三个口径漂移点：
+#     ① 一个 commit 里写了多行 Micro-exempt → 被重复计数（scan-rules 只认第一行）
+#     ② body 里的缩进/大小写变体（"  Micro-exempt:" / "MICRO-EXEMPT:"）被算进去，
+#        而 scan-rules 的判定是行首、大小写敏感 → 同一个 commit 两边口径不一致
+#     ③ 计数的是「文本行数」而非「commit 数」，与「豁免被用了多少次」这个语义不对齐
+#   改为逐 commit 解析后，采集数与门禁判定数可直接对齐 —— 这正是本脚本存在的意义
+#   （观察期数据要能用来判断「升 error 后会多拦多少」）。
+MICRO=0
+UIGATE=0
+while IFS= read -r _c; do
+  [ -n "$_c" ] || continue
+  _body="$(git log -1 --format=%B "$_c" 2>/dev/null)"
+  # 与 scan-rules.sh 的 `grep -qE '^Micro-exempt:'` 完全同一判定（行首 + 大小写敏感）
+  if printf '%s\n' "$_body" | grep -qE '^Micro-exempt:'; then
+    MICRO=$((MICRO + 1))
+  fi
+  if printf '%s\n' "$_body" | grep -qiE 'ui_gate=off|ui_gate: *off'; then
+    UIGATE=$((UIGATE + 1))
+  fi
+done < <(git rev-list "$RANGE" 2>/dev/null)
 
 # --first-parent：只数 master 主线上的提交。默认 rev-list 会把从分支合进来的 commit 全算上，
 # 同一个 `master~20..master` 会数出 64（2026-10-23 实测），让「≥20 commit」这条判据凭空容易 3 倍。
