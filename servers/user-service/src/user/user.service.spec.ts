@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { QueryFailedError } from 'typeorm';
 import { UserService } from './user.service';
 
 /**
@@ -179,5 +180,55 @@ describe('UserService 密码能力', () => {
     const created = (repo.create as jest.Mock).mock.calls[0][0];
     expect(created.password).not.toBe('plain123');
     expect(await bcrypt.compare('plain123', created.password)).toBe(true);
+  });
+});
+
+/**
+ * 2026-10-31：唯一约束冲突（ER_DUP_ENTRY=1062）转友好 400。
+ * 背景：手机号/邮箱/用户名撞唯一索引时，TypeORM 抛 QueryFailedError → 全局过滤器按
+ * 500 处理，前端只能看到「服务器内部错误」。修复后应转为字段级 BadRequestException。
+ */
+describe('UserService 唯一约束冲突转友好提示', () => {
+  /** 构造一个带 errno=1062 的 QueryFailedError（模拟 MySQL 撞唯一索引） */
+  function dupError(value: string, key: string): QueryFailedError {
+    const driver = Object.assign(
+      new Error(`Duplicate entry '${value}' for key '${key}'`),
+      { errno: 1062, code: 'ER_DUP_ENTRY' },
+    );
+    return new QueryFailedError('INSERT INTO users', [], driver);
+  }
+
+  function makeDupRepo(error: Error) {
+    return {
+      findOne: jest.fn(async () => ({ id: 1, username: 'admin', roles: ['admin'] })),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async () => { throw error; }),
+      findAndCount: jest.fn(),
+      remove: jest.fn(),
+    };
+  }
+
+  it('create：撞手机号唯一索引 → 提示手机号被占用', async () => {
+    const svc = new UserService(makeDupRepo(dupError('13924648565', 'users.uk_users_phone')) as never);
+    await expect(svc.create({ username: 'x', phone: '13924648565' } as never))
+      .rejects.toThrow('该手机号已被其他用户使用');
+  });
+
+  it('update：撞邮箱唯一索引（哈希名）→ 按重复值含 @ 判为邮箱', async () => {
+    const svc = new UserService(makeDupRepo(dupError('a@b.com', 'users.IDX_97672ac8')) as never);
+    await expect(svc.update('1', { email: 'a@b.com' } as never))
+      .rejects.toThrow('该邮箱已被其他用户使用');
+  });
+
+  it('create：撞用户名唯一索引（哈希名）→ 判为用户名', async () => {
+    const svc = new UserService(makeDupRepo(dupError('admin', 'users.IDX_fe0bb3f6')) as never);
+    await expect(svc.create({ username: 'admin' } as never))
+      .rejects.toThrow('该用户名已被其他用户使用');
+  });
+
+  it('非唯一冲突的普通错误 → 原样抛出，不吞', async () => {
+    const svc = new UserService(makeDupRepo(new Error('some other db error')) as never);
+    await expect(svc.create({ username: 'x' } as never))
+      .rejects.toThrow('some other db error');
   });
 });

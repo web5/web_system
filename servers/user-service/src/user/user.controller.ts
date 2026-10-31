@@ -64,7 +64,7 @@ export class UserController {
   @ApiOperation({ summary: '修改当前用户密码（个人中心）' })
   async changeOwnPassword(@Req() req: AuthedRequest, @Body() dto: ChangeOwnPasswordDto) {
     await this.userService.changeOwnPassword(String(req.user?.id), dto.oldPassword, dto.newPassword);
-    return { code: 200, data: null, message: '密码修改成功' };
+    return { code: 0, data: null, message: '密码修改成功' };
   }
 
   @Post('me/avatar')
@@ -158,7 +158,7 @@ export class UserController {
       target: `user:${id}`,
       ip: req.ip,
     });
-    return { code: 200, data: null, message: '密码重置成功' };
+    return { code: 0, data: null, message: '密码重置成功' };
   }
 
   @Delete(':id')
