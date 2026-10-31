@@ -17,6 +17,7 @@ import { DynamicRouteService } from '../dynamic-route/dynamic-route.service';
 import { IndexHtmlService } from '../deploy-version/index-html.service';
 import { Public } from '../auth/public.decorator';
 import { TokenBlacklistGuard } from '../auth/token-blacklist.guard';
+import { McpAdminGuard } from '../auth/mcp-admin.guard';
 import * as http from 'http';
 import * as url from 'url';
 import { API_TIMEOUT } from '@web-system/shared';
@@ -553,13 +554,22 @@ export class ProxyController {
   }
 
   // 精确匹配 /api/mcp（无尾斜杠）— MCP 网关管理接口
+  //
+  // ⚠️ 只给这两条 /api/mcp* 挂 McpAdminGuard（2026-10-31）：
+  //   本类是 class 级 @Public()，全局 AuthGuard 整类放行，而 mcp-gateway 的 AdminController
+  //   此前一处鉴权都没有 → `GET /api/mcp/modules` 无凭证就 200（线上实测）。
+  //   判据：access token + systems 含 admin，口径与 content-hub JwtAuthGuard 同源。
+  //   不要动 /mcp 的 JSON-RPC 端点（走 client key，自己一套鉴权），也不要把守卫提到 class 上
+  //   —— 那会把 /api/* 全部代理路由一起锁死。
   @All('mcp')
+  @UseGuards(McpAdminGuard)
   proxyMcpExact(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getMcpProxy()(req, res);
   }
 
-  // 通配 /api/mcp/:path(*)
+  // 通配 /api/mcp/:path(*)（覆盖 /api/mcp/modules、/api/mcp/debug 等全部子路径）
   @All('mcp/:path(*)')
+  @UseGuards(McpAdminGuard)
   proxyMcpWildcard(@Req() req: Request, @Res() res: Response) {
     return this.proxyService.getMcpProxy()(req, res);
   }
