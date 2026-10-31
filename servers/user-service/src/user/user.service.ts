@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { hasSystem, isAppSystem } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository, ILike, QueryFailedError } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User } from './user.entity';
 
@@ -16,6 +16,31 @@ function hasSuperAdminRole(roles: unknown): boolean {
       ? roles.split(',')
       : [];
   return list.map((r) => String(r).trim()).includes('super_admin');
+}
+
+/**
+ * 把数据库唯一约束冲突（ER_DUP_ENTRY=1062）转成友好的 400 提示。
+ *
+ * 背景：手机号/邮箱/用户名都有唯一索引，直接 save 撞索引会抛 QueryFailedError，
+ * 被全局过滤器按 500 处理，前端只能看到「服务器内部错误」。这里翻译成明确的
+ * 字段级 BadRequestException，让用户在表单上直接知道是哪个字段重复。
+ */
+function toDupError(e: unknown): Error {
+  if (!(e instanceof QueryFailedError)) return e as Error;
+  const driver = (e as { driverError?: { errno?: number; code?: string } }).driverError;
+  if (driver?.errno !== 1062 && driver?.code !== 'ER_DUP_ENTRY') return e as Error;
+
+  const msg = String(e.message || '');
+  if (msg.includes('uk_users_phone')) {
+    return new BadRequestException('该手机号已被其他用户使用');
+  }
+  // email / username 的唯一索引名是 TypeORM 自动生成的哈希（IDX_xxx），无法按索引名
+  // 精确区分；改用「重复值含 @」粗判邮箱，其余按用户名提示。
+  const dup = msg.match(/Duplicate entry '([^']*)'/)?.[1] ?? '';
+  if (dup.includes('@')) {
+    return new BadRequestException('该邮箱已被其他用户使用');
+  }
+  return new BadRequestException('该用户名已被其他用户使用');
 }
 
 @Injectable()
@@ -95,7 +120,11 @@ export class UserService {
       data.password = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
     }
     const user = this.userRepository.create(data);
-    return this.userRepository.save(user);
+    try {
+      return await this.userRepository.save(user);
+    } catch (e) {
+      throw toDupError(e);
+    }
   }
 
   async update(id: string, userData: Partial<User>): Promise<User> {
@@ -121,7 +150,11 @@ export class UserService {
       // 口径：specs/radius-style-dual/page-spec-pref-sync.md §3.2
       user.preferences = { ...(user.preferences ?? {}), ...preferences };
     }
-    return this.userRepository.save(user);
+    try {
+      return await this.userRepository.save(user);
+    } catch (e) {
+      throw toDupError(e);
+    }
   }
 
   /**
