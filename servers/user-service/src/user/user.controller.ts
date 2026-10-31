@@ -44,18 +44,18 @@ export class UserController {
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取当前登录用户信息' })
-  async getMe(@Req() req: any) {
-    const user = await this.userService.findById(req.user.id);
-    return { code: 200, data: user };
+  async getMe(@Req() req: AuthedRequest) {
+    const user = await this.userService.findById(String(req.user?.id));
+    return { code: 0, data: user };
   }
 
   @Put('me')
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新当前用户资料' })
-  async updateMe(@Req() req: any, @Body() userData: UpdateUserDto) {
-    const user = await this.userService.update(req.user.id, userData);
-    return { code: 200, data: user };
+  async updateMe(@Req() req: AuthedRequest, @Body() userData: UpdateUserDto) {
+    const user = await this.userService.update(String(req.user?.id), userData);
+    return { code: 0, data: user };
   }
 
   @Put('me/password')
@@ -99,15 +99,15 @@ export class UserController {
     }),
   )
   @ApiOperation({ summary: '上传用户头像' })
-  async uploadAvatar(@Req() req: any, @UploadedFile() file: any) {
+  async uploadAvatar(@Req() req: AuthedRequest, @UploadedFile() file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('请上传图片文件');
     }
 
     const avatarUrl = `/api/uploads/avatars/${file.filename}`;
-    await this.userService.update(req.user.id, { avatar: avatarUrl });
+    await this.userService.update(String(req.user?.id), { avatar: avatarUrl });
 
-    return { code: 200, data: { avatarUrl } };
+    return { code: 0, data: { avatarUrl } };
   }
 
   @Get('profile')
