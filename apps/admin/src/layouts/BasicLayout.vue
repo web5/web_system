@@ -151,7 +151,7 @@
             </span>
             <template #overlay>
               <a-menu>
-                <a-menu-item key="profile" @click="router.push('/users')">
+                <a-menu-item key="profile" @click="router.push('/profile')">
                   <UserOutlined /> 个人中心
                 </a-menu-item>
                 <a-menu-divider />

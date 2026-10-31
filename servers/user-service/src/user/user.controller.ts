@@ -6,14 +6,25 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { OperationLogClient } from '../permission/operation-log.client';
 import { PermissionGuard, RequirePermission } from '@web-system/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangeOwnPasswordDto, ResetPasswordDto } from './dto/change-password.dto';
+import type { Request } from 'express';
+
+/** AuthGuard 校验通过后挂到 req.user 的最小结构（绕开 passport 的空 User 类型） */
+interface AuthedRequest extends Request {
+  user?: { id: number; username?: string };
+}
 
 @ApiTags('用户管理')
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly operationLogClient: OperationLogClient,
+  ) {}
 
   @Get()
   @UseGuards(AuthGuard, PermissionGuard)
@@ -45,6 +56,15 @@ export class UserController {
   async updateMe(@Req() req: any, @Body() userData: UpdateUserDto) {
     const user = await this.userService.update(req.user.id, userData);
     return { code: 200, data: user };
+  }
+
+  @Put('me/password')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '修改当前用户密码（个人中心）' })
+  async changeOwnPassword(@Req() req: AuthedRequest, @Body() dto: ChangeOwnPasswordDto) {
+    await this.userService.changeOwnPassword(String(req.user?.id), dto.oldPassword, dto.newPassword);
+    return { code: 200, data: null, message: '密码修改成功' };
   }
 
   @Post('me/avatar')
@@ -123,6 +143,22 @@ export class UserController {
   @ApiOperation({ summary: '更新用户' })
   async update(@Param('id') id: string, @Body() userData: UpdateUserDto) {
     return this.userService.update(id, userData);
+  }
+
+  @Put(':id/password')
+  @UseGuards(AuthGuard, PermissionGuard)
+  @RequirePermission('users:edit')
+  @ApiOperation({ summary: '管理员重置用户密码（用户管理）' })
+  async resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto, @Req() req: AuthedRequest) {
+    await this.userService.resetPassword(id, dto.newPassword);
+    // 高敏感操作：写操作日志（失败不阻断业务，见 OperationLogClient 契约）
+    void this.operationLogClient.write({
+      operator: req.user?.username || String(req.user?.id ?? ''),
+      type: 'user_password_reset',
+      target: `user:${id}`,
+      ip: req.ip,
+    });
+    return { code: 200, data: null, message: '密码重置成功' };
   }
 
   @Delete(':id')

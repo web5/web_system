@@ -54,6 +54,20 @@ export function toggleUserStatus(id: string, enabled: boolean): Promise<UserInfo
   return request.patch(`/users/${id}/status`, { enabled });
 }
 
+/**
+ * 修改当前登录用户密码（个人中心）
+ */
+export function changeMyPassword(oldPassword: string, newPassword: string): Promise<void> {
+  return request.put('/users/me/password', { oldPassword, newPassword });
+}
+
+/**
+ * 管理员重置任意用户密码（用户管理）
+ */
+export function resetPassword(id: string, newPassword: string): Promise<void> {
+  return request.put(`/users/${id}/password`, { newPassword });
+}
+
 /** 用户记忆明细条目（user-service UserMemoryService.list 投影，日期为 ISO 字符串） */
 export interface UserMemoryItem {
   id: number;
@@ -102,5 +116,7 @@ export const userApi = {
   update: updateUser,
   delete: deleteUser,
   toggleStatus: toggleUserStatus,
+  changeMyPassword,
+  resetPassword,
   getUserMemory,
 };

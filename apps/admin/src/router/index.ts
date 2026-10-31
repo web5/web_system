@@ -64,6 +64,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '工作台', permission: 'dashboard:view' },
       },
       {
+        // 个人中心：查看/修改自己的账号信息与密码（登录即可访问，不设 permission 门禁）
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: { title: '个人中心' },
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/Settings.vue'),

@@ -130,4 +130,20 @@ export class User extends BigIntEntity {
    */
   @Column({ type: 'json', nullable: true, comment: '界面偏好（跟账号走）' })
   preferences?: UserPreferences | null;
+
+  /**
+   * 令牌版本号（改密后 +1，用于作废该用户所有旧会话）。
+   *
+   * 背景：JWT 无状态，改密后旧 token 在有效期内仍能通过签名校验，若不引入版本号，
+   * 被重置密码的账号其旧 access/refresh token 仍可用（安全空窗）。签发时把本值写入
+   * payload.ver，验证时（auth-service verifyToken / refreshToken）比对 payload.ver 与
+   * 本列当前值，不一致即拒绝。
+   *
+   * 平滑过渡：老 token 无 ver 字段，验证端按 0 处理；默认值 0，故存量登录会话
+   * 在首次改密前不受影响。
+   *
+   * 生产环境 synchronize=false，需手工 DDL（见 migrations/0023_users_token_version.sql）。
+   */
+  @Column({ type: 'int', nullable: false, default: 0, name: 'token_version', comment: '令牌版本（改密+1）' })
+  tokenVersion: number;
 }

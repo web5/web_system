@@ -196,6 +196,11 @@ export class AuthService {
         throw new UnauthorizedException('用户不存在或已被禁用');
       }
 
+      // 改密后令牌版本 +1，旧 refresh（ver 旧）一律拒绝，禁止用旧凭据续期
+      if ((payload.ver ?? 0) !== (user.tokenVersion ?? 0)) {
+        throw new UnauthorizedException('密码已变更，请重新登录');
+      }
+
       return this.generateToken(user);
     } catch (error) {
       this.logger.warn(
@@ -225,6 +230,11 @@ export class AuthService {
 
       if (!user || user.status !== 'active') {
         throw new UnauthorizedException('用户不存在或已被禁用');
+      }
+
+      // 改密后令牌版本 +1，旧 access token（ver 旧）立即失效
+      if ((payload.ver ?? 0) !== (user.tokenVersion ?? 0)) {
+        throw new UnauthorizedException('密码已变更，请重新登录');
       }
 
       return {
@@ -342,6 +352,8 @@ export class AuthService {
       username: user.username,
       roles: user.roles || ['user'],
       systems: resolvedSystems,
+      // 令牌版本：改密后 +1，验证端据此作废旧会话（见 verifyToken / refreshToken）
+      ver: user.tokenVersion ?? 0,
       // 会话标识：access 与 refresh 共用，登出时按 sid 一次作废两者
       sid: crypto.randomUUID(),
     };
