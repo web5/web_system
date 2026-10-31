@@ -43,7 +43,14 @@ export interface McpModule {
   base_url: string;
   timeout: number;
   auth_type: string;
-  auth_config: Record<string, string> | null;
+  /**
+   * 是否已配置鉴权（`auth_config` 非空）。
+   *
+   * 后端**不再下发 `auth_config` 明文**（2026-10-31 脱敏）：运营后台只需要知道「配没配」，
+   * 密钥值进浏览器内存没有收益、只有泄露面。更新模块时若不想改鉴权，
+   * 传 `auth_config: '__KEEP__'` 或干脆不传该字段（服务端保留原值）。
+   */
+  auth_configured: boolean;
   enabled: number;
   module_type?: string;
   code_key?: string | null;
