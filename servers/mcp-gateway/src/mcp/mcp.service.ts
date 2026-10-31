@@ -310,14 +310,20 @@ const INSTITUTION_HTTP_TOOLS: Array<{
   },
   {
     name: 'get_chip',
-    description: '筹码分布：东财该报表可能不可用，失败时返回 ok:false 并标注「建议人工核对成本区」。用于机构行为「成本区」维度（降级使用）',
+    description:
+      '筹码集中度代理指标（东财 F10 股东研究）：股东户数、较上期变化率、户均持股、前十大股东持股比例、持股集中度文字档位（如「非常分散」「非常集中」）。' +
+      '⚠️ 东财成本分布报表（RPT_CYQ_DEFAULT）与 push2his chip 分时接口均已停止提供，本工具不含获利盘比例、不含成本区间——它是代理指标，不是成本分布。' +
+      '用于「成本区」维度时按股东户数增减 + 户均持股变化方向解读（户数下降 + 户均持股上升 = 筹码趋于集中）。失败时返回 ok:false',
     method: 'GET',
     path: '/api/institution/chip',
     params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
   },
   {
     name: 'get_finance_yoy',
-    description: '业绩同比（营收/净利）：东财 F10 报表已下架，失败时返回 ok:false 并建议用 get_valuation(PE) 与 get_rating(EPS预测) 作业绩代理。用于机构行为「5分钟排雷」维度（降级使用）',
+    description:
+      '业绩同比（东财 RPT_LICO_FN_CPD 最近报告期）：营业总收入及同比、归母净利润及同比、EPS、ROE、毛利率、每股净资产、每股经营现金流、所属板块；' +
+      '金额同时给「元」与「亿元」，返回带 labels 中文映射（不用猜 YSTZ / SJLTZ 这类字段名）。' +
+      '失败时降级为 ok:false，并提示改用 get_valuation / get_rating',
     method: 'GET',
     path: '/api/institution/finance-yoy',
     params: [{ name: 'code', type: 'string', required: true, description: '股票代码，如 600519' }],
