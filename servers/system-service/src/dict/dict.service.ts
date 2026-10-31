@@ -103,6 +103,7 @@ const BUILTIN_DICTS: readonly BuiltinDict[] = [
       { value: 'update_setting', label: '修改设置', sort: 30 },
       { value: 'create_user', label: '创建用户', sort: 40 },
       { value: 'delete', label: '删除', sort: 50 },
+      { value: 'user_password_reset', label: '重置密码', sort: 60 },
     ],
   },
 ];

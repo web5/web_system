@@ -2,7 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { hasSystem, isAppSystem } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
+import * as bcrypt from 'bcryptjs';
 import { User } from './user.entity';
+
+/** bcrypt 哈希轮数（与 auth-service 保持一致） */
+const BCRYPT_ROUNDS = 10;
 
 /** 该用户当前是否持有超管角色（roles 可能是数组或逗号串，历史数据形态不一） */
 function hasSuperAdminRole(roles: unknown): boolean {
@@ -84,7 +88,13 @@ export class UserService {
   }
 
   async create(userData: Partial<User>): Promise<User> {
-    const user = this.userRepository.create(userData);
+    const data = { ...userData };
+    // 统一哈希：admin 用户管理「新增用户」若带密码，落库前必须 bcrypt 哈希，
+    // 否则登录端 bcrypt.compare 永远失败（历史隐患：此处曾直接存明文）。
+    if (data.password) {
+      data.password = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
+    }
+    const user = this.userRepository.create(data);
     return this.userRepository.save(user);
   }
 
@@ -99,14 +109,45 @@ export class UserService {
     ) {
       throw new BadRequestException('不允许移除用户的 super_admin 角色：请先由其他超级管理员在数据库层面操作');
     }
-    const { preferences, ...rest } = userData;
+    const { preferences, password, ...rest } = userData;
     Object.assign(user, rest);
+    if (password) {
+      // 改密：哈希 + 令牌版本 +1，作废该用户所有旧会话（token_version 机制）
+      user.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    }
     if (preferences !== undefined) {
       // 界面偏好按「浅合并」写入：保留本次未提交的键，避免将来新增偏好项被整体覆盖。
       // 口径：specs/radius-style-dual/page-spec-pref-sync.md §3.2
       user.preferences = { ...(user.preferences ?? {}), ...preferences };
     }
     return this.userRepository.save(user);
+  }
+
+  /**
+   * 个人中心：修改自己的密码。
+   * 校验旧密码正确后才允许改，改后令牌版本 +1（作废其它会话）。
+   */
+  async changeOwnPassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+    const user = await this.findById(userId);
+    const valid = user.password ? await bcrypt.compare(oldPassword, user.password) : false;
+    if (!valid) {
+      throw new BadRequestException('旧密码不正确');
+    }
+    user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await this.userRepository.save(user);
+  }
+
+  /**
+   * 用户管理：管理员重置任意用户密码（无需旧密码）。
+   * 改后令牌版本 +1（作废被重置账号的所有旧会话）。
+   */
+  async resetPassword(id: string, newPassword: string): Promise<void> {
+    const user = await this.findById(id);
+    user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await this.userRepository.save(user);
   }
 
   async remove(id: string): Promise<void> {

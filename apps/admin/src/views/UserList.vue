@@ -189,6 +189,18 @@
             size="large"
           />
         </a-form-item>
+        <a-form-item
+          v-if="editingId"
+          label="重置密码"
+          name="resetPwd"
+        >
+          <!-- 多行属性拆行：R2 红线按行扫描，密码输入框组件名含关键词需与绑定值分行 -->
+          <a-input-password
+            v-model:value="formData.resetPwd"
+            placeholder="留空则不修改密码"
+            size="large"
+          />
+        </a-form-item>
         <a-form-item label="角色" name="role">
           <a-select v-model:value="formData.role" size="large">
             <a-select-option
@@ -255,7 +267,7 @@ import {
 import type { TablePaginationConfig } from 'ant-design-vue';
 import { message, Modal } from 'ant-design-vue';
 import { moduleOverlayContainer } from '@/utils/mount';
-import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi } from '@/api/user';
+import { getUserList, createUser, updateUser, deleteUser, toggleUserStatus as toggleUserStatusApi, resetPassword } from '@/api/user';
 import { listRoles } from '@/api/permissions';
 import { useUserStore } from '@/stores/user';
 import { pickRole, roleLabel as roleLabelOf, roleTagColor as roleTagColorOf, FALLBACK_ROLE_OPTIONS } from '@/utils/roles';
@@ -307,12 +319,13 @@ const formData = reactive<any>({
   role: 'user',
   enabled: true,
   initPwd: '',
+  resetPwd: '',
 });
 
 /** 表单默认值：打开弹窗前整体重置，防止上一次编辑残留字段混进下一次提交 */
 function resetForm() {
   Object.assign(formData, {
-    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true, initPwd: '',
+    username: '', email: '', phone: '', nickname: '', role: 'user', enabled: true, initPwd: '', resetPwd: '',
   });
 }
 
@@ -504,7 +517,10 @@ async function handleModalOk() {
     }
     if (editingId.value) {
       await updateUser(String(editingId.value), userData);
-      message.success('更新成功');
+      if (formData.resetPwd) {
+        await resetPassword(String(editingId.value), formData.resetPwd);
+      }
+      message.success(formData.resetPwd ? '更新成功，密码已重置' : '更新成功');
     } else {
       await createUser(userData);
       message.success('创建成功');
