@@ -99,7 +99,7 @@ import { PipelineOrchestrationService } from '../pipeline-orchestration/pipeline
 import { runOrchestration, type EngineStep } from '../pipeline-orchestration/orchestration-engine';
 import type { ConditionVars } from './steps/condition';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
-import { runActionSequence } from './steps/action-sequence';
+import { ActionFailedError, runActionSequence } from './steps/action-sequence';
 // 工作区文件锁（方案 B）：git→package 临界区跨 run/跨模块互斥（2026-10-27 并发抢包根因）
 import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
@@ -148,6 +148,22 @@ export function applyModuleTypeBackfill(
 ): string | null {
   if (current) return current;
   return modType || null;
+}
+
+/**
+ * 工具目录 **shell 工具**的退出码判定（纯函数，便于单测）。
+ *
+ * 背景（2026-11-01 实证）：`runService` 走「工具目录 shell 工具」回落时
+ * 丢弃了 `runShell` 的退出码，导致能力程序报错（exit 1）仍被记成「工具完成」，
+ * 流水线 `succeeded` 但服务根本没生效 —— 典型的假绿。
+ * 抽出为纯函数，是为了让这条判定能被单测与变异验证钉住。
+ */
+export function toolShellFailure(
+  tool: string | undefined,
+  code: number,
+): string | null {
+  if (code === 0) return null;
+  return `工具目录 shell 工具 ${tool ?? '—'} 退出码 ${code}`;
 }
 
 /**
@@ -2728,7 +2744,14 @@ export class PipelineService {
             return;
           }
           p.logs = [...(p.logs ?? []), `[${stage}/${op}] 引用工具目录 shell 工具 ${a.tool}`];
-          await this.runShell(body, { ...env, ...inject }, p, undefined, cwd);
+          // ⚠️ 退出码必须检查：工具目录的 shell 工具与节点脚本是同一类执行体，
+          // 忽略退出码会把「能力程序报错」静默记成「完成」（2026-11-01 实证：
+          // apply-runtime 缺 BACKEND_RUNTIME_ACTION 时报
+          // `Runtime activation requires a service directory`，流水线却是 succeeded）。
+          const toolCode = await this.runShell(body, { ...env, ...inject }, p, undefined, cwd);
+          if (toolShellFailure(a.tool as string | undefined, toolCode)) {
+            throw new ActionFailedError(a, toolCode, op);
+          }
           return;
         }
         const def = this.builtinSteps[stepKey];

@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { artifactsDir, deployRootAbs, deployTargetAbs } from './release-paths';
 import {
@@ -9,6 +10,7 @@ import {
   isRollbackAnchor,
   pickStagePort,
   applyModuleTypeBackfill,
+  toolShellFailure,
   PipelineService,
 } from './pipeline.service';
 import { RUN_TOKEN_PREFIX, __clearRevokedForTest, verifyRunToken } from '../common/run-token';
@@ -643,5 +645,37 @@ describe('applyModuleTypeBackfill（v5 模块类型回填）', () => {
   it('模块登记也没有 → 保持空（守卫仍按不适用处理，行为与修复前一致）', () => {
     expect(applyModuleTypeBackfill(null, undefined)).toBeNull();
     expect(applyModuleTypeBackfill(null, '')).toBeNull();
+  });
+});
+
+/**
+ * 工具目录 shell 工具的失败判定防回归。
+ *
+ * 背景：runService 的 shell 工具回落分支曾丢弃退出码（2026-11-01 实证），
+ * 能力程序报错 exit 1 却被记为「工具完成」，流水线绿而服务未生效。
+ * 这里钉住：退出码非 0 必须产出失败原因（由调用方抛 ActionFailedError）。
+ */
+describe('toolShellFailure（工具目录 shell 工具退出码判定）', () => {
+  it('退出码 0 → 不失败', () => {
+    expect(toolShellFailure('apply-runtime', 0)).toBeNull();
+  });
+
+  it('退出码非 0 → 失败原因含工具名与退出码', () => {
+    const msg = toolShellFailure('apply-runtime', 1);
+    expect(msg).toContain('apply-runtime');
+    expect(msg).toContain('1');
+  });
+
+  it('工具名缺失时仍能定位（占位符 —）', () => {
+    expect(toolShellFailure(undefined, 7)).toContain('—');
+  });
+
+  // 契约级守卫：单测只能证明函数本身正确，证明不了调用方真的用它。
+  // 这里钉住 runService 的 shell 工具回落分支确实调用了判定函数 ——
+  // 否则「把检查注释掉」会静默回到假绿（流水线 succeeded、服务没生效）。
+  it('runService 的 shell 工具分支确实调用了判定（防回调到丢弃退出码）', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'pipeline.service.ts'), 'utf8');
+    // 1 = 定义；>=2 表示除定义外至少有一处调用
+    expect(source.split('toolShellFailure(').length - 1).toBeGreaterThanOrEqual(2);
   });
 });
