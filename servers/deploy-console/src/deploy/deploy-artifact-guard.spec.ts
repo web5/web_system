@@ -1,3 +1,5 @@
+import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+
 /**
  * 产物守卫（P0，2026-09-15）：**版本目录存在 ≠ 有内容**。
  *
@@ -61,6 +63,8 @@ describe('DeployService 产物守卫', () => {
 
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {

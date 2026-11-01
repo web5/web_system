@@ -1,3 +1,5 @@
+import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -179,6 +181,8 @@ async function setup(
 
   const moduleRef: TestingModule = await Test.createTestingModule({
     providers: [
+      // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+      { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
       PipelineService,
       { provide: ConfigService, useValue: { get: cfgGet } },
       { provide: getRepositoryToken(DeployPipelineEntity), useValue: pipelineRepo },

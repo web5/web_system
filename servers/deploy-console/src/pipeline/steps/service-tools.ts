@@ -40,3 +40,39 @@ export const SERVICE_TOOL_OPTIONS: ReadonlyArray<{ tool: string; label: string }
   { tool: 'cleanup', label: '清理旧版本' },
   { tool: 'check', label: '安全基线校验' },
 ];
+
+
+/**
+ * 工具目录里 shell 工具的「可引用正文」（2026-10-31）。
+ *
+ * 为什么需要它：`StageAction{type:'service', tool}` 只认 `SERVICE_TOOL_TO_STEP` 里的
+ * **内置执行器**（7 个，见上）。工具目录里的 **shell 工具**（如 `restart-clean`）此前
+ * 只能被编辑器「一键插入」（= 复制正文进编排），无法被**引用执行**
+ * → 实现被迫复制进每条编排，违背松耦合。
+ *
+ * 本函数让编排可以只写 `tool: restart-clean`，执行时回落到工具目录取正文。
+ * 判定顺序（任一条不满足即返回 null，调用方回落/跳过，**不静默跑旧正文**）：
+ *   1. tool 为空 → null（没写 tool 的 service action 不适用）
+ *   2. 目录里查不到 → null
+ *   3. kind !== 'shell' → null（service 工具的实现在代码里，不在 DB）
+ *   4. available === false → null（停用即不可引用）
+ *   5. 正文空/纯空白 → null（空脚本被当成成功是最坏的结果）
+ */
+export interface ToolShellRow {
+  kind?: string | null;
+  available?: boolean | null;
+  command?: string | null;
+}
+
+/** @returns 可执行的 shell 正文；不可引用返回 null */
+export function resolveToolShellBody(
+  tool?: string | null,
+  row?: ToolShellRow | null,
+): string | null {
+  if (!tool) return null;
+  if (!row) return null;
+  if (row.kind !== 'shell') return null;
+  if (row.available === false) return null;
+  const body = (row.command ?? '').trim();
+  return body.length ? body : null;
+}

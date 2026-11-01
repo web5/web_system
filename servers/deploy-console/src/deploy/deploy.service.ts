@@ -45,6 +45,19 @@ import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { redactSecrets } from '../common/redact';
 import { SshExecService } from '../remote/ssh-exec.service';
 import { GatewayCacheService } from '../common/gateway-cache.service';
+// 工具目录（能力单元）：干净重启的 shell 正文在这里，代码不持有实现
+import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+import { resolveToolShellBody } from '../pipeline/steps/service-tools';
+import {
+  RESTART_CLEAN_TIMEOUT_MS,
+  RESTART_CLEAN_TOOL,
+  buildRestartCleanEnv,
+  parseEnvPort,
+  parsePm2Names,
+  parsePm2Port,
+  pickPm2Name,
+  pm2NameCandidates,
+} from './restart-clean';
 
 /** 远程命令默认 exec 超时（可配 `SSH_EXEC_TIMEOUT_MS`）：与 shell-runner 的 10min 对齐 */
 const DEFAULT_SSH_EXEC_TIMEOUT_MS = 10 * 60 * 1000;
@@ -140,6 +153,8 @@ export class DeployService {
     private readonly splitWriter: EnvSplitWriterService,
     // gateway 版本缓存失效通知（诊断 #16）：实现已下沉到该服务，与 UI 切换 / internal pointer 共用
     private readonly gatewayCache: GatewayCacheService,
+    // 工具目录（能力单元）：重启实现的唯一真相源，平台不内联脚本
+    private readonly toolCatalog: ToolCatalogService,
   ) {
     // 增加 EventEmitter 的最大监听器数
     this.progressEmitter.setMaxListeners(50);
@@ -567,7 +582,7 @@ export class DeployService {
         );
       }
       this.logger.warn(`版本目录 ${src} 不存在，已用备份 ${restored} 恢复 dist`);
-      this.restartPm2(mod, input.moduleKey, ws);
+      await this.restartPm2(mod, input.moduleKey, ws);
       return;
     }
 
@@ -596,7 +611,7 @@ export class DeployService {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.cpSync(src, dst, { recursive: true });
     this.logger.log(`后台落地完成: ${src} -> ${dst}`);
-    this.restartPm2(mod, input.moduleKey, ws);
+    await this.restartPm2(mod, input.moduleKey, ws);
   }
 
   /**
@@ -630,7 +645,125 @@ export class DeployService {
    * 于是「产物已换、进程跑旧代码」这种**半成功**被报成绿灯——是最难排查的一类状态。
    * 抛错后任务终态为 failed，且错误信息直接给出手工修复命令；不回滚 dist（保留现场）。
    */
-  private restartPm2(mod: { pm2?: string }, moduleKey: string, cwd: string): void {
+  /**
+   * 干净重启：从**工具目录**取 `restart-clean` 的 shell 正文执行（唯一实现在 DB）。
+   *
+   * 为什么必须走它（2026-10-31 prod 实测）：
+   *   `pm2 restart` 是 in-place，进程环境 = 上次存下的 pm2_env（**merge 语义**）；
+   *   叠加 `@nestjs/config`「只补不覆盖已存在的键」（config.module.js:188）→
+   *   **新增键生效，改已有键的值永久失效** —— 控制台改了配置，重启后进程还在吃旧值。
+   *   只有 `pm2 delete` + `env -i` 能把进程环境清零，让 `.env` 成为唯一配置源。
+   *
+   * 松耦合：本方法**不持有脚本正文**，正文在 `deploy_tool_catalog.command`；
+   * 编排/控制台都只引用 code。取不到（工具缺失/停用/无正文）或前置不满足
+   * （无产物 / 端口未知 / pm2 未纳管）→ 返回 false，由 `restartPm2` 回落旧行为并 warn。
+   *
+   * @returns true = 已用干净重启；false = 未使用（调用方回落 in-place restart）
+   * @throws 干净重启执行失败（进程已被 delete）；脚本内部会先尝试回滚 dist 并重新拉起
+   */
+  private async restartClean(
+    mod: { pm2?: string; dir?: string },
+    moduleKey: string,
+    ws: string,
+  ): Promise<boolean> {
+    // 一键回退开关：出问题时置 RESTART_CLEAN=0 即回到旧行为（不需要发版）
+    if (this.configService.get<string>('RESTART_CLEAN') === '0') {
+      this.logger.warn('干净重启已关闭（RESTART_CLEAN=0），回落 pm2 restart');
+      return false;
+    }
+
+    const svcDir = path.join(ws, 'servers', mod.dir || moduleKey);
+    if (!fs.existsSync(path.join(svcDir, 'dist', 'main.js'))) {
+      this.logger.warn(`跳过干净重启：${svcDir}/dist/main.js 不存在（产物未落地）`);
+      return false;
+    }
+
+    let body: string | null = null;
+    try {
+      body = resolveToolShellBody(
+        RESTART_CLEAN_TOOL,
+        await this.toolCatalog.get(RESTART_CLEAN_TOOL),
+      );
+    } catch (e) {
+      this.logger.warn(
+        `跳过干净重启：工具目录无可用 ${RESTART_CLEAN_TOOL}（${(e as Error).message}）`,
+      );
+      return false;
+    }
+    if (!body) {
+      this.logger.warn(`跳过干净重启：工具 ${RESTART_CLEAN_TOOL} 无 shell 正文（缺失或已停用）`);
+      return false;
+    }
+
+    // 端口：**服务 .env 是唯一配置源** → 优先；pm2 进程环境兜底
+    let jlist = '';
+    try {
+      jlist = this.commands.exec(`"${this.commands.pm2Bin()}" jlist`, ws, {}, 20000);
+    } catch {
+      /* jlist 失败不阻断：PORT 仍可能从 .env 取到 */
+    }
+    const candidates = pm2NameCandidates(moduleKey, mod.pm2);
+    let port = parseEnvPort(this.readTextIfExists(path.join(svcDir, '.env')));
+    if (!port) port = parsePm2Port(jlist, candidates);
+    // pm2 未纳管不擅自新建（进程名/入口没共识），回落旧行为
+    const name = pickPm2Name(candidates, parsePm2Names(jlist));
+    if (!name) {
+      this.logger.warn(
+        `跳过干净重启：pm2 中未找到 ${candidates.join('/')}（未纳管，不擅自新建）`,
+      );
+      return false;
+    }
+
+    const env = buildRestartCleanEnv({
+      moduleKey,
+      svcDir,
+      port,
+      pm2Name: name,
+      pm2Bin: this.commands.pm2Bin(),
+      releaseDir: ws,
+      healthTimeoutSec: 60,
+    });
+    if (!env) {
+      this.logger.warn(`跳过干净重启：${moduleKey} 端口未知（.env 与 pm2 都没有 PORT）`);
+      return false;
+    }
+
+    const tmp = path.join(os.tmpdir(), `restart-clean-${moduleKey}-${Date.now()}.sh`);
+    fs.writeFileSync(tmp, body, 'utf-8');
+    try {
+      const out = this.commands.exec(`bash "${tmp}"`, ws, env, RESTART_CLEAN_TIMEOUT_MS);
+      this.logger.log(`干净重启完成: ${moduleKey}（${name}）→ ${out.trim().split('\n').slice(-3).join(' | ')}`);
+      return true;
+    } catch (e) {
+      // 进程此时已被 delete；脚本失败前会尝试回滚 dist 并重新拉起（ROLLBACK=1）
+      throw new Error(
+        pm2FailureHint(svcDir, candidates, `干净重启失败：${(e as Error).message}`),
+      );
+    } finally {
+      try {
+        fs.rmSync(tmp, { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** 读文本文件；不存在/读失败返回 null（端口解析用，失败不阻断部署） */
+  private readTextIfExists(file: string): string | null {
+    try {
+      return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async restartPm2(
+    mod: { pm2?: string; dir?: string },
+    moduleKey: string,
+    cwd: string,
+  ): Promise<void> {
+    // 优先走能力单元（干净重启）；前置不满足时回落 in-place pm2 restart
+    if (await this.restartClean(mod, moduleKey, cwd)) return;
     const candidates = Array.from(
       new Set([mod.pm2, `web-${moduleKey}`, moduleKey].filter(Boolean) as string[]),
     );

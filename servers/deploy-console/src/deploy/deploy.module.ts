@@ -27,6 +27,8 @@ import { ConfigCenterModule } from '../config/config.module';
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
 // SSH 目标机解析 + 远程执行（诊断 #15 收敛到一处）
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
+// 工具目录（能力单元）：干净重启 shell 正文的真相源
+import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
 
 /**
  * 部署管理模块
@@ -46,6 +48,8 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     AppsModule,
     CloudDbModule,
     RemoteDeliveryModule,
+    // 工具目录（干净重启 shell 正文）
+    ToolCatalogModule,
     // 配置中心（下发配置到服务 .env.generated）
     ConfigCenterModule,
     TypeOrmModule.forFeature([DeployTaskEntity, DeployVersionEntity, DeployDeploymentEntity]),
