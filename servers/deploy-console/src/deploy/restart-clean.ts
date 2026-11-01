@@ -63,7 +63,8 @@ export function parsePm2Names(json?: string | null): string[] {
   try {
     const arr = JSON.parse(json ?? '');
     if (!Array.isArray(arr)) return [];
-    return arr.map((p: any) => p?.name).filter((n: any) => typeof n === 'string' && n);
+    const rows = arr as Array<{ name?: unknown }>;
+    return rows.map(row => row?.name).filter((name): name is string => typeof name === 'string' && name.length > 0);
   } catch {
     return [];
   }
@@ -75,7 +76,8 @@ export function parsePm2Port(json: string | null | undefined, names: string[]): 
     const arr = JSON.parse(json ?? '');
     if (!Array.isArray(arr)) return null;
     for (const n of names) {
-      const p = arr.find((x: any) => x?.name === n);
+      const rows = arr as Array<{ name?: unknown; pm2_env?: { PORT?: unknown; env?: { PORT?: unknown } } }>;
+      const p = rows.find(row => row?.name === n);
       if (!p) continue;
       const port = p?.pm2_env?.PORT ?? p?.pm2_env?.env?.PORT;
       if (port !== undefined && port !== null && String(port) !== '') return String(port);
