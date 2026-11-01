@@ -8,6 +8,7 @@ import {
   resolveRunStages,
   isRollbackAnchor,
   pickStagePort,
+  applyModuleTypeBackfill,
   PipelineService,
 } from './pipeline.service';
 import { RUN_TOKEN_PREFIX, __clearRevokedForTest, verifyRunToken } from '../common/run-token';
@@ -591,5 +592,27 @@ describe('issueScriptToken（脚本凭据：优先 run 短期令牌）', () => {
   it('撤销幂等：对未知 runId 调用不抛异常（finally 里调用，不能成为新的失败点）', () => {
     const svc = mkSvc({ INTERNAL_API_KEY: STATIC });
     expect(() => svc.revokeScriptTokens('never-existed')).not.toThrow();
+  });
+});
+
+describe('applyModuleTypeBackfill（v5 模块类型回填）', () => {
+  /**
+   * 防回归（2026-11-01 实测）：v5 节点分派此前不回填 moduleType，
+   * 内置 apply 的守卫 `moduleType !== 'backend'` 把后端模块判成「不适用」→ 静默跳过，
+   * 结果是流水线 succeeded 但服务既没落地也没重启（假绿）。
+   */
+  it('moduleType 缺失 → 用模块登记值补齐（后端模块得以走内置 apply）', () => {
+    expect(applyModuleTypeBackfill(null, 'backend')).toBe('backend');
+    expect(applyModuleTypeBackfill(undefined, 'backend')).toBe('backend');
+    expect(applyModuleTypeBackfill('', 'backend')).toBe('backend');
+  });
+
+  it('已有 moduleType → 不覆盖（调用方显式传入优先）', () => {
+    expect(applyModuleTypeBackfill('frontend', 'backend')).toBe('frontend');
+  });
+
+  it('模块登记也没有 → 保持空（守卫仍按不适用处理，行为与修复前一致）', () => {
+    expect(applyModuleTypeBackfill(null, undefined)).toBeNull();
+    expect(applyModuleTypeBackfill(null, '')).toBeNull();
   });
 });
