@@ -6,11 +6,14 @@ const workflows = path.resolve(__dirname, '../../../../.github/workflows');
 
 function evaluateJob(filename: string, branch: string, draft: boolean, sameRepository = true) {
   const source = fs.readFileSync(path.join(workflows, filename), 'utf8');
-  const expression = /^    if: >-\r?\n((?:      .*\r?\n)+)/m.exec(source)?.[1];
-  if (!expression) throw new Error('Workflow job condition unavailable');
+  const raw = /^    if: >-\r?\n((?:      .*\r?\n)+)/m.exec(source)?.[1];
+  if (!raw) throw new Error('Workflow job condition unavailable');
+  // GitHub Actions 的集合投影语法（如 `labels.*.name`）不是合法 JS，vm 求值会抛 SyntaxError。
+  // 求值前归一化成等价的 map 调用；labels 在测试上下文里是空数组，contains 结果为 false。
+  const expression = raw.replace(/([A-Za-z_][\w.]*)\.\*\.(\w+)/g, '$1.map(item => item.$2)');
   const repository = 'web5/web_system';
   return vm.runInNewContext('(' + expression + ')', {
-    github: { repository, ref_name: branch, event: { pull_request: { draft, head: { ref: branch, repo: { full_name: sameRepository ? repository : 'fork/web_system' } } } } },
+    github: { repository, ref_name: branch, event: { pull_request: { draft, labels: [], head: { ref: branch, repo: { full_name: sameRepository ? repository : 'fork/web_system' } } } } },
     startsWith: (value: string, prefix: string) => value.toLowerCase().startsWith(prefix.toLowerCase()),
     contains: (values: string[], value: string) => values.includes(value),
     fromJSON: JSON.parse,
