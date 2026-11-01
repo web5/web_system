@@ -131,6 +131,25 @@ export function resolveStageCwd(ws: string, moduleType?: string, dir?: string): 
 }
 
 /**
+ * v5 路径下「模块类型」的回填判定（纯函数，便于单测）。
+ *
+ * 背景（2026-11-01 实测）：旧编排引擎在 `runOrchestrationMode` 里按模块登记回填过
+ * `p.moduleType`，**v5 节点分派没有这一步**。后果是提交时未带 moduleType 的实例
+ * （UI 通道提交即如此）进入内置执行体时，`apply` 的守卫
+ * `moduleType !== 'backend'` 判成「不适用」→ 静默跳过 ——
+ * 表现为「流水线全绿，但服务既没落地也没重启」。
+ *
+ * 语义：已有值不动（调用方显式传入优先）；缺失时用模块登记值补齐；都没有则保持空。
+ */
+export function applyModuleTypeBackfill(
+  current?: string | null,
+  modType?: string | null,
+): string | null {
+  if (current) return current;
+  return modType || null;
+}
+
+/**
  * 删除构建产物目录（**纯函数，便于单测**；P0-2，2026-09-17）。
  *
  * 根因事故：后台服务 tsconfig 开 `incremental`，`dist` 被清理后只剩 `tsconfig.tsbuildinfo`
@@ -1755,6 +1774,17 @@ export class PipelineService {
         return;
       }
 
+      // moduleType 回填（v5）：与旧编排引擎同一语义，补在这里是因为 v5 分派此前没做，
+      // 缺失会让内置执行体（apply 等）的 moduleType 守卫静默跳过 —— 详见 applyModuleTypeBackfill。
+      const filledModuleType = applyModuleTypeBackfill(
+        p.moduleType,
+        await this.lookupModuleType(p.moduleKey),
+      );
+      if (filledModuleType && filledModuleType !== p.moduleType) {
+        p.moduleType = filledModuleType;
+        await this.save(p);
+      }
+
       // 执行计划 = 实例快照：nodes（v5 platform+script）优先，null=legacy（steps 子集 → 全九阶段）
       const plan = resolveRunStages(p);
       const activeStages = plan.keys;
@@ -2140,6 +2170,16 @@ export class PipelineService {
       p.endTime = Date.now();
     }
     await this.save(p);
+  }
+
+  /** 查模块登记的 type（查不到返回 undefined，不抛 —— 模块未登记时不阻塞发布） */
+  private async lookupModuleType(moduleKey: string): Promise<string | undefined> {
+    try {
+      const mod = await this.moduleRegistry.get(moduleKey);
+      return mod?.type || undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async executeStage(
