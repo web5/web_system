@@ -37,8 +37,13 @@ export interface RunActionsDeps {
   /**
    * 执行 service 操作（design §3：平台能力 = action）。
    * 由调用方按 `a.tool` 分派到内置执行体；不传则 service 操作登记后跳过。
+   *
+   * 返回 `'skipped'` 表示该操作**没有真正执行**（如工具目录里查无此工具）。
+   * 调用方必须据此区分「完成」与「跳过」—— 2026-11-01 实证：
+   * 「未知工具 verify，跳过」之后仍打印「工具 verify 完成」，流水线全绿，
+   * 而校验动作其实一次都没跑。
    */
-  runService?: (a: StepAction, op: string) => Promise<void>;
+  runService?: (a: StepAction, op: string) => Promise<void | 'skipped'>;
   /** 操作结束后读取结果文件（按 key 合并；不含受保护字段） */
   readResult: (op: string) => Record<string, unknown>;
   /** 日志（逐行写流水线 logs） */
@@ -101,7 +106,12 @@ export async function runActionSequence(deps: RunActionsDeps): Promise<RunAction
         continue;
       }
       try {
-        await deps.runService(a, op);
+        const outcome = await deps.runService(a, op);
+        if (outcome === 'skipped') {
+          deps.onLog(`[${deps.stage}/${op}] 工具 ${a.tool} 未执行（未识别的工具，已跳过）`);
+          tolerated.push(a.name);
+          continue;
+        }
         deps.onLog(`[${deps.stage}/${op}] 工具 ${a.tool} 完成`);
       } catch (e) {
         const msg = (e as Error).message;

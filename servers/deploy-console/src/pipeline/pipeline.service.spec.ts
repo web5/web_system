@@ -673,6 +673,14 @@ describe('toolShellFailure（工具目录 shell 工具退出码判定）', () =>
   // 契约级守卫：单测只能证明函数本身正确，证明不了调用方真的用它。
   // 这里钉住 runService 的 shell 工具回落分支确实调用了判定函数 ——
   // 否则「把检查注释掉」会静默回到假绿（流水线 succeeded、服务没生效）。
+  // 契约级守卫：runService 的「未知工具」分支必须回传 'skipped'，
+  // 否则 action-sequence 会把它记成「完成」—— 跳过与成功在日志里无法区分。
+  it('未知工具分支回传 skipped（契约：调用方能据此区分跳过与完成）', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'pipeline.service.ts'), 'utf8');
+    expect(source).toContain("未知工具");
+    expect(source).toContain("return 'skipped';");
+  });
+
   it('runService 的 shell 工具分支确实调用了判定（防回调到丢弃退出码）', () => {
     const source = fs.readFileSync(path.join(__dirname, 'pipeline.service.ts'), 'utf8');
     // 1 = 定义；>=2 表示除定义外至少有一处调用
