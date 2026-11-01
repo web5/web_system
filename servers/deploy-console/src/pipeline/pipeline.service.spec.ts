@@ -182,6 +182,35 @@ describe('resolveStageVars（阶段命令变量）', () => {
     expect(v.MODULE_TYPE).toBe('backend');
   });
 
+  /**
+   * 方案 B（2026-11-01）：目标机 web_system 根必须显式下发为 `WEB_SYSTEM_DIR`。
+   *
+   * 没有它，编排脚本就只能在正文里硬编码 `/data/web_system` —— 那是平台知识的数据副本，
+   * 换机器/换根就要改 57 份脚本（化石脚本的老路）。
+   */
+  it('远端 web_system 根下发为 WEB_SYSTEM_DIR（未配置时为空串，脚本须显式报错）', () => {
+    const withRoot = resolveStageVars({
+      env: 'prod',
+      moduleKey: 'user-service',
+      moduleType: 'backend',
+      dir: 'user-service',
+      releaseWorkspace: ws,
+      commitId: 'abc1234',
+      runtimeRoot: '/data/web_system',
+    });
+    expect(withRoot.WEB_SYSTEM_DIR).toBe('/data/web_system');
+
+    const withoutRoot = resolveStageVars({
+      env: 'prod',
+      moduleKey: 'user-service',
+      moduleType: 'backend',
+      dir: 'user-service',
+      releaseWorkspace: ws,
+      commitId: 'abc1234',
+    });
+    expect(withoutRoot.WEB_SYSTEM_DIR).toBe('');
+  });
+
   it('前端 / 微前端：构建产物落在 apps/<dir>/dist', () => {
     const v = resolveStageVars({
       env: 'local',

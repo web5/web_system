@@ -14,6 +14,8 @@ export const SERVICE_TOOL_TO_STEP: Readonly<Record<string, string>> = {
   // 方案 A（2026-09-17）：后台「部署生效」—— 版本目录 → dist + 重启 + 切指针，
   // 让流水线跑完即生效（此前跑完还得人工去控制台点「部署」，且不可回滚）
   'apply-version': 'apply',
+  // 方案 B（2026-11-01）：把平台能力程序投放到目标机，编排随后用 shell 工具调用它
+  'sync-runtime-program': 'sync-runtime',
   upload: 'upload',
   pull: 'pull',
   cleanup: 'cleanup',
@@ -35,6 +37,7 @@ export const SERVICE_TOOL_OPTIONS: ReadonlyArray<{ tool: string; label: string }
   { tool: 'write-version', label: '写版本记录' },
   { tool: 'switch-pointer', label: '切换版本指针' },
   { tool: 'apply-version', label: '部署生效（后台：版本目录 → dist + 重启 + 切指针）' },
+  { tool: 'sync-runtime-program', label: '投放运行时能力程序（目标机，幂等）' },
   { tool: 'upload', label: '投递产物' },
   { tool: 'pull', label: '拉取代码' },
   { tool: 'cleanup', label: '清理旧版本' },

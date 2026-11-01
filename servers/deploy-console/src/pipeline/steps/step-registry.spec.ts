@@ -25,7 +25,7 @@ describe('step-registry（内置步骤配置化声明）', () => {
 
   it('八步骤齐全（restart / verify 已下沉；prebuild 已去内置 = 普通脚本节点），category 与 commandMode 正确', () => {
     expect(Object.keys(registry).sort()).toEqual(
-      ['apply', 'build', 'check', 'cleanup', 'pointer', 'pull', 'upload', 'version'],
+      ['apply', 'build', 'check', 'cleanup', 'pointer', 'pull', 'sync-runtime', 'upload', 'version'],
     );
     expect(registry.check).toMatchObject({ category: 'semantic', commandMode: 'base' });
     expect(registry.pull).toMatchObject({ category: 'code', commandMode: 'override' });
@@ -35,6 +35,7 @@ describe('step-registry（内置步骤配置化声明）', () => {
     expect(registry.version).toMatchObject({ category: 'semantic', commandMode: 'none' });
     expect(registry.pointer).toMatchObject({ category: 'semantic', commandMode: 'none' });
     expect(registry.cleanup).toMatchObject({ category: 'cleanup', commandMode: 'override' });
+    expect(registry['sync-runtime']).toMatchObject({ category: 'deploy', commandMode: 'none' });
   });
 
   it('restart / verify 不再有内置执行体（下沉为发布节点 DB action，护栏）', () => {
