@@ -15,6 +15,8 @@ export interface BackendRuntimeInput {
   archivePath?: string;
   archiveSha256?: string;
   runtimeStorageRoot?: string;
+  /** 关闭干净重启（回落到 in-place pm2 restart）。远端经 RELEASE_CLEAN_RESTART 注入。 */
+  cleanRestart?: boolean;
 }
 
 export interface BackendRuntimeAdapters {
@@ -309,6 +311,27 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
     }
     throw new Error('Runtime did not become healthy with the expected process and port');
   };
+  // 干净重启：pm2 restart 是 in-place，进程环境沿用 pm2_env（merge 语义），
+  // 叠加 @nestjs/config「只补不覆盖已存在键」后，改 .env 的值重启永不生效。
+  // 只有 delete + 干净环境 start 才能让 .env 成为唯一配置源。
+  // 定义在函数体内是硬要求：本函数会被 toString() 序列化后 ssh 到目标机执行，
+  // 任何定义在函数体外的辅助函数在目标机上都不存在。
+  const cleanRestart = () => {
+    const inPlace = () => run('pm2', ['restart', selected.name], { cwd: service });
+    if (input.cleanRestart === false || process.env.RELEASE_CLEAN_RESTART === '0') return inPlace();
+    const entry = path.join(active, 'main.js');
+    if (!fs.existsSync(entry)) throw new Error('Clean restart entrypoint is unavailable: ' + entry);
+    if (selected.pm2_env.exec_mode === 'cluster_mode' || Number(selected.pm2_env.instances || 1) > 1) return inPlace();
+    const cwd = String(selected.pm2_env.pm_cwd || service);
+    const args = ['start', entry, '--name', selected.name, '--cwd', cwd];
+    const memory = Number(selected.pm2_env.max_memory_restart || 0);
+    if (memory > 0) args.push('--max-memory-restart', String(memory));
+    const environment: Record<string, string> = { PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', HOME: process.env.HOME || '/root', PORT: String(port) };
+    if (process.env.PM2_HOME) environment.PM2_HOME = process.env.PM2_HOME;
+    try { run('pm2', ['delete', selected.name], { cwd: service }); } catch { /* 进程可能已不存在 */ }
+    try { run('pm2', args, { cwd: service, env: environment }); }
+    catch { run('pm2', args, { cwd: service }); }
+  };
   const target = path.join(installed, 'dist');
   if (fs.lstatSync(active).isSymbolicLink() && fs.realpathSync(active) === target) {
     const process = await waitHealthy();
@@ -318,7 +341,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
   fs.renameSync(active, backup);
   try {
     fs.symlinkSync(path.relative(service, target), active, 'dir');
-    run('pm2', ['restart', selected.name], { cwd: service });
+    cleanRestart();
     const process = await waitHealthy();
     return { action: 'activate', unchanged: false, process: process.name, pid: process.pid, port, versionTag: input.versionTag, backup, isolatedDependencies: true, runtimeDirectory: installed };
   } catch (failure) {
@@ -329,7 +352,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       fs.unlinkSync(active);
     }
     fs.renameSync(backup, active);
-    run('pm2', ['restart', selected.name], { cwd: service });
+    cleanRestart();
     await waitHealthy();
     throw new Error('Runtime activation failed; previous dist restored and healthy: ' + (failure as Error).message);
   }
@@ -343,6 +366,6 @@ export function backendRuntimeProgram(): string {
 
 export function backendRuntimeActivationCommand(input: Omit<BackendRuntimeInput, 'action'>): string {
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
-  const environment = { BACKEND_RUNTIME_ACTION: 'activate', MODULE_KEY: input.moduleKey, COMMIT_ID: input.versionTag, RUNTIME_SERVICE_DIR: input.serviceDirectory || '', RUNTIME_VERSION_DIR: input.versionDirectory || '', PM2_NAME: input.processName || '', PORT: input.port || '', BACKEND_RUNTIME_ROOT: input.runtimeStorageRoot || '', RUNTIME_HEALTH_PATH: input.healthPath || '/health' };
+  const environment = { BACKEND_RUNTIME_ACTION: 'activate', MODULE_KEY: input.moduleKey, COMMIT_ID: input.versionTag, RUNTIME_SERVICE_DIR: input.serviceDirectory || '', RUNTIME_VERSION_DIR: input.versionDirectory || '', PM2_NAME: input.processName || '', PORT: input.port || '', BACKEND_RUNTIME_ROOT: input.runtimeStorageRoot || '', RUNTIME_HEALTH_PATH: input.healthPath || '/health', RELEASE_CLEAN_RESTART: input.cleanRestart === false ? '0' : '1' };
   return Object.entries(environment).map(([key, value]) => key + '=' + quote(value)).join(' ') + " node <<'CONSOLE_BACKEND_RUNTIME'\n" + backendRuntimeProgram() + '\nCONSOLE_BACKEND_RUNTIME';
 }
