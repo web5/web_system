@@ -23,6 +23,9 @@ export const PLATFORM_VARS = new Set([
   'RUN_ID',
   // 远端投递四件套（2026-10-13 S1：platform 算好 → 脚本只引用，禁止脚本自行推导）
   'REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR', 'SSH_KEY_PATH',
+  // 目标机 web_system 根（2026-11-01 方案 B）：脚本据此拼远端服务目录/版本目录，
+  // 不硬编码机器路径（硬编码 = 平台知识的数据副本）
+  'WEB_SYSTEM_DIR',
   // shell 内建与脚本内临时量
   'HOME', 'PATH', 'USER', 'PWD', 'SHELL', 'SSH', 'SCP', 'TS',
   'VERSION_TAG', 'VERSION', 'VER', 'BUILD_ENV',

@@ -104,6 +104,7 @@ import { runActionSequence } from './steps/action-sequence';
 import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
 import { resolveServiceStep, resolveToolShellBody } from './steps/service-tools';
+import { resolveRuntimeRoot } from '../deploy/runtime-root';
 // 拉码结果的版本身份与一致性断言（纯函数）
 import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
@@ -266,6 +267,11 @@ export interface StageVarsInput {
    */
   pipelineVars?: Record<string, string>;
   moduleType?: string;
+  /**
+   * 目标机 web_system 根（`resolveRuntimeRoot(config, env)`，如 `/data/web_system`）。
+   * 注入为 `WEB_SYSTEM_DIR`：脚本据此拼远端服务目录/版本目录，不必硬编码机器路径。
+   */
+  runtimeRoot?: string;
   /** 模块部署根路径（相对发布目录根；M2） */
   deployRoot?: string;
   /** 模块默认产物路径（相对版本目录；M2） */
@@ -489,6 +495,9 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     // 调平台（写版本 / 切指针），脚本自包含、不直连数据库
     CONSOLE_API: i.consoleApi ?? '',
     CONSOLE_TOKEN: i.consoleToken ?? '',
+    // 目标机 web_system 根（方案 B，2026-11-01）：脚本用它拼远端服务目录与版本目录，
+    // 避免「怎么生效」的逻辑里硬编码机器路径（硬编码 = 又一份平台知识副本）。
+    WEB_SYSTEM_DIR: i.runtimeRoot || '',
     // ── 远端投递（S1：脚本做 scp/ssh，平台只负责「算对」这几个值）──
     // 空串 = 未配置；脚本必须显式报错，不能带着空串去连 ""（模板已如此）。
     REMOTE_SSH_TARGET: i.remote?.REMOTE_SSH_TARGET || '',
@@ -2036,6 +2045,7 @@ export class PipelineService {
         moduleKey: p.moduleKey,
         // 锁 owner 透传：与流水线 1477 行 acquire 用的 owner 同源（p.id）
         runId: p.id,
+        runtimeRoot: resolveRuntimeRoot(this.configService, p.env),
         moduleType: mod?.type || p.moduleType,
         dir: mod?.dir ?? undefined,
         deployRoot: mod?.deployRoot ?? undefined,
@@ -2594,6 +2604,7 @@ export class PipelineService {
       moduleKey: p.moduleKey,
       // 锁 owner 透传（同上）
       runId: p.id,
+      runtimeRoot: resolveRuntimeRoot(this.configService, p.env),
       moduleType: mod?.type || p.moduleType,
       dir: mod?.dir,
       deployRoot: mod?.deployRoot,

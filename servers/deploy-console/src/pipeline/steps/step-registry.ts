@@ -7,6 +7,7 @@ import { ApplyExecutor } from './apply.executor';
 import { VersionExecutor } from './version.executor';
 import { PointerExecutor } from './pointer.executor';
 import { CleanupExecutor } from './cleanup.executor';
+import { SyncRuntimeExecutor } from './sync-runtime.executor';
 
 /** 内置步骤注册表的 DI token（engine 注入聚合后的 Record） */
 export const PIPELINE_BUILTIN_STEPS = 'PIPELINE_BUILTIN_STEPS';
@@ -28,6 +29,8 @@ export interface BuiltinExecutors {
   version: VersionExecutor;
   pointer: PointerExecutor;
   cleanup: CleanupExecutor;
+  /** 运行时能力程序投放（方案 B）：把当前代码的 backend-runtime 程序写到目标机，供编排脚本调用 */
+  syncRuntime: SyncRuntimeExecutor;
 }
 
 /** 复用磁盘产物的守卫（跳过程码获取/构建/投递/重启） */
@@ -90,6 +93,13 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       category: 'cleanup',
       commandMode: 'override',
       run: (ctx) => ex.cleanup.run(ctx),
+    },
+    'sync-runtime': {
+      category: 'deploy',
+      // 纯内置：程序内容由平台代码生成，编排只能决定「何时投放」，不能改写正文
+      // （改写 = 又把源码副本抄进数据，正是化石脚本的老路）
+      commandMode: 'none',
+      run: (ctx) => ex.syncRuntime.run(ctx),
     },
   };
 }
