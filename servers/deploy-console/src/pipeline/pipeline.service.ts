@@ -2741,7 +2741,9 @@ export class PipelineService {
           const body = resolveToolShellBody(a.tool, toolRow);
           if (!body) {
             p.logs = [...(p.logs ?? []), `[${stage}/${op}] 未知工具 ${a.tool ?? '—'}，跳过`];
-            return;
+            // 必须回传 skipped：否则调用方会把它记成「完成」，
+            // 流水线全绿而该动作一次都没执行（2026-11-01 实证：verify/pointer）。
+            return 'skipped';
           }
           p.logs = [...(p.logs ?? []), `[${stage}/${op}] 引用工具目录 shell 工具 ${a.tool}`];
           // ⚠️ 退出码必须检查：工具目录的 shell 工具与节点脚本是同一类执行体，

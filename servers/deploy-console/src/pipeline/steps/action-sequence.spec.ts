@@ -239,6 +239,43 @@ describe('runActionSequence（节点内多操作顺序执行）', () => {
       expect(res.executed).toBe(2);
     });
 
+    // 2026-11-01 实证：流水线日志出现「未知工具 verify，跳过」之后仍打印
+    // 「工具 verify 完成」，整条流水线 succeeded，而校验动作一次都没执行。
+    // 这里钉住：runService 返回 'skipped' 必须被记成「未执行」并计入 tolerated，
+    // 绝不能打印「完成」—— 否则跳过与成功在日志里无法区分。
+    it('runService 返回 skipped ⇒ 记「未执行」且计入 tolerated，不写「完成」', async () => {
+      const { runShell, readResult } = makeRunner();
+      const logs: string[] = [];
+      const res = await runActionSequence(
+        baseDeps({
+          actions: [service('v1', 'verify')],
+          runShell,
+          readResult,
+          onLog: (line) => logs.push(line),
+          runService: async () => 'skipped',
+        }),
+      );
+      expect(logs.join('\n')).toContain('未执行');
+      expect(logs.join('\n')).not.toContain('完成');
+      expect(res.tolerated).toEqual(['v1']);
+    });
+
+    it('runService 正常返回 ⇒ 仍记「完成」，不计入 tolerated', async () => {
+      const { runShell, readResult } = makeRunner();
+      const logs: string[] = [];
+      const res = await runActionSequence(
+        baseDeps({
+          actions: [service('v1', 'write-version')],
+          runShell,
+          readResult,
+          onLog: (line) => logs.push(line),
+          runService: async () => undefined,
+        }),
+      );
+      expect(logs.join('\n')).toContain('完成');
+      expect(res.tolerated).toEqual([]);
+    });
+
     it('未注入 runService ⇒ 登记后跳过，不阻断节点（保持旧行为）', async () => {
       const { runShell, readResult, calls } = makeRunner();
       const logs: string[] = [];
