@@ -8,7 +8,7 @@
 # 在**目标机本地**执行：
 #   本机:  ./scripts/bootstrap.sh --env local
 #   prod:  ssh <prod> 'cd /data/web_system && ./scripts/bootstrap.sh --env prod'
-#   （不引入额外 SSH 层，从而复用 apply-migrations.sh 与 pipeline/restart-backend.sh）
+#   （不引入额外 SSH 层，从而复用 apply-migrations.sh 与 pipeline/restart-clean.sh）
 #
 # 用法:
 #   --env <local|dev|prod>   必填
@@ -190,13 +190,13 @@ else
 fi
 
 # ---------- 5. 启动（干净环境 + 依赖校验） ----------
-step "5/7 启动服务（pipeline/restart-backend.sh，PM2_ALLOW_NEW=1 支持首次纳管）"
+step "5/7 启动服务（pipeline/restart-clean.sh，PM2_ALLOW_NEW=1 支持首次纳管）"
 FAILED_STEP="启动服务"
 if [ "$DO_START" = "1" ]; then
   for s in "${SERVICES[@]}"; do
     p="$(port_of "$s")"
     echo "    $s (PORT=${p:-未解析})"
-    run "RELEASE_DIR='$ROOT' MODULE_KEY='$s' MODULE_DIR='$s' MODULE_TYPE=backend PORT='${p:-}' PM2_ALLOW_NEW=1 DRY_RUN=$DRY_RUN bash '$ROOT/scripts/pipeline/restart-backend.sh'"
+    run "RELEASE_DIR='$ROOT' MODULE_KEY='$s' MODULE_DIR='$s' MODULE_TYPE=backend PORT='${p:-}' PM2_ALLOW_NEW=1 DRY_RUN=$DRY_RUN bash '$ROOT/scripts/pipeline/restart-clean.sh'"
   done
 else
   y ">>> --no-start，跳过（进程未变更）"

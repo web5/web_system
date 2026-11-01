@@ -31,6 +31,8 @@ describe('DeployService 模块级回滚边界', () => {
       {} as never, {} as never, {} as never, {} as never, {} as never, {} as never,
       {} as never, apps as never, {} as never, {} as never, registry as never,
       {} as never, {} as never,
+      // 工具目录（干净重启 shell 正文来源）；本套件不触发重启，空对象即可
+      {} as never,
     );
     legacyScript = jest.spyOn(service as unknown as {
       executeRollbackScript: (...args: unknown[]) => Promise<void>;

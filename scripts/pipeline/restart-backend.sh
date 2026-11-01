@@ -1,3 +1,10 @@
+# ⚠️ DEPRECATED（2026-11-01）—— 已被 restart-clean.sh 取代，请勿新用
+#
+#   取代原因：本脚本缺探活、缺失败时 dist 回滚、且 cwd 固定为 SVC_DIR
+#   （会把 ai-service 的运行目录 /data/web_system 改成 servers/ai-service）。
+#   restart-clean.sh 补齐这三点，参数完全兼容（RELEASE_DIR/MODULE_DIR/PORT/
+#   PM2_ALLOW_NEW/DRY_RUN），bootstrap.sh 已改指 restart-clean.sh。
+#   本文件保留仅为回滚参考，回滚方式：把 bootstrap.sh:199 改回本文件名。
 #!/usr/bin/env bash
 # ⚠️ DEPRECATED（2026-09-14）：**流水线不再使用本文件**。
 #    发布流水线的 restart 阶段改由 deploy-console 自带的副本执行

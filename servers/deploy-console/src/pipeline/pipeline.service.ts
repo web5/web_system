@@ -103,7 +103,7 @@ import { runActionSequence } from './steps/action-sequence';
 // 工作区文件锁（方案 B）：git→package 临界区跨 run/跨模块互斥（2026-10-27 并发抢包根因）
 import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
-import { resolveServiceStep } from './steps/service-tools';
+import { resolveServiceStep, resolveToolShellBody } from './steps/service-tools';
 // 拉码结果的版本身份与一致性断言（纯函数）
 import { buildVersionRef, assertCommitMatch } from './git-identity';
 import {
@@ -561,6 +561,8 @@ export interface SubmitPipelineDto {
  *
  * 任务状态落库（deploy_pipelines），可查询/可取消；执行为后台异步，不阻塞提交请求。
  */
+import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+
 @Injectable()
 export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
@@ -633,6 +635,8 @@ export class PipelineService {
     private readonly serviceEnvRepo: Repository<DeployServiceEnvEntity>,
     // SSH 目标机（主机管理 → 服务器管理）：远端投递变量 REMOTE_SSH_TARGET / SSH_KEY_PATH 的真相源
     private readonly sshExec: SshExecService,
+    // 工具目录（能力单元）：编排只写 tool code，正文在这里取（松耦合，实现只有一份）
+    private readonly toolCatalog: ToolCatalogService,
   ) {}
 
   /**
@@ -2658,7 +2662,22 @@ export class PipelineService {
       runService: async (a, op) => {
         const stepKey = resolveServiceStep(a.tool);
         if (!stepKey) {
-          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 未知工具 ${a.tool ?? '—'}，跳过`];
+          // 回落：工具目录里的 **shell 工具**（如 restart-clean）——
+          // 编排只写 `tool: <code>`，正文在 deploy_tool_catalog，实现只有一份。
+          // 取不到（不存在/非 shell/已停用/无正文）才记「未知工具，跳过」。
+          let toolRow: { kind?: string; available?: boolean; command?: string } | null = null;
+          try {
+            toolRow = await this.toolCatalog.get(a.tool as string);
+          } catch {
+            toolRow = null;
+          }
+          const body = resolveToolShellBody(a.tool, toolRow);
+          if (!body) {
+            p.logs = [...(p.logs ?? []), `[${stage}/${op}] 未知工具 ${a.tool ?? '—'}，跳过`];
+            return;
+          }
+          p.logs = [...(p.logs ?? []), `[${stage}/${op}] 引用工具目录 shell 工具 ${a.tool}`];
+          await this.runShell(body, { ...env, ...inject }, p, undefined, cwd);
           return;
         }
         const def = this.builtinSteps[stepKey];

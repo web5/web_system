@@ -192,7 +192,7 @@ describe('isolated backend runtime', () => {
     expect(fs.existsSync(destination)).toBe(false);
   });
 
-  async function activationFixture(unhealthy = false) {
+  async function activationFixture(unhealthy = false, envPatch: Record<string, unknown> = {}) {
     await executeBackendRuntime(packageInput(), { run: packager() });
     const service = path.join(runtime, 'servers/todo-service');
     const version = path.join(service, versionTag);
@@ -205,7 +205,14 @@ describe('isolated backend runtime', () => {
       if (file === 'ss') return 'users:(("node",pid=' + pid + ',fd=18))';
       if (file !== 'pm2') throw new Error('Unexpected command');
       if (args[0] === 'restart') { expect(args[1]).toBe('todo-service'); pid++; return ''; }
-      return JSON.stringify([{ name: 'todo-service', pid, pm2_env: { pm_cwd: service, status: 'online' } }]);
+      if (args[0] === 'delete') { expect(args[1]).toBe('todo-service'); return ''; }
+      if (args[0] === 'start') {
+        expect(args[1]).toBe(path.join(service, 'dist/main.js'));
+        expect(args).toEqual(expect.arrayContaining(['--name', 'todo-service']));
+        pid++;
+        return '';
+      }
+      return JSON.stringify([{ name: 'todo-service', pid, pm2_env: { pm_cwd: service, status: 'online', ...envPatch } }]);
     });
     const probe = jest.fn(async () => unhealthy && fs.lstatSync(path.join(service, 'dist')).isSymbolicLink() ? 500 : 200);
     const storage = path.join(temporary, 'isolated-runtimes');
@@ -240,7 +247,7 @@ describe('isolated backend runtime', () => {
     await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/previous dist restored and healthy/);
     expect(fs.lstatSync(path.join(fixture.service, 'dist')).isSymbolicLink()).toBe(false);
     expect(fs.readFileSync(path.join(fixture.service, 'dist/main.js'), 'utf8')).toBe('old-runtime');
-    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(2);
+    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'start')).toHaveLength(2);
   });
 
   it('accepts only the original service environment binding on installed-runtime retries', async () => {
@@ -253,7 +260,7 @@ describe('isolated backend runtime', () => {
     fs.unlinkSync(path.join(installed, '.env'));
     fs.symlinkSync(foreign, path.join(installed, '.env'));
     await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/unsigned runtime entry/);
-    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(1);
+    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'start')).toHaveLength(1);
   });
 
   it('preserves generated-config removal fallback without rejecting its original dangling binding', async () => {
@@ -262,7 +269,7 @@ describe('isolated backend runtime', () => {
     await executeBackendRuntime(fixture.input, fixture.adapters);
     fs.unlinkSync(path.join(fixture.service, '.env.generated'));
     await expect(executeBackendRuntime(fixture.input, fixture.adapters)).resolves.toMatchObject({ unchanged: true });
-    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'restart')).toHaveLength(1);
+    expect(fixture.commands.mock.calls.filter(([, args]) => args[0] === 'start')).toHaveLength(1);
   });
 
   it('rejects port drift before touching the active service', async () => {
@@ -293,4 +300,57 @@ describe('isolated backend runtime', () => {
     expect(command).toContain("service'\\''s-folder");
     execFileSync('bash', ['-n'], { input: command });
   });
+
+  const recorded = (fixture: { commands: jest.Mock }) => fixture.commands.mock.calls as unknown as Array<[string, string[], { env?: Record<string, string> }]>;
+
+  it('starts the activated runtime with a clean environment instead of an in-place restart', async () => {
+    const fixture = await activationFixture();
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const log = recorded(fixture);
+    expect(log.some(([, args]) => args[0] === 'delete')).toBe(true);
+    expect(log.some(([, args]) => args[0] === 'restart')).toBe(false);
+    const start = log.find(([, args]) => args[0] === 'start');
+    expect(start).toBeDefined();
+    expect(start![1][1]).toBe(path.join(fixture.service, 'dist/main.js'));
+    expect(start![1]).toEqual(expect.arrayContaining(['--cwd', fixture.service]));
+    expect(Object.keys(start![2].env!).sort()).toEqual(['HOME', 'PATH', 'PORT']);
+    expect(start![2].env!.PORT).toBe('6005');
+  });
+
+  it('reuses the previous process working directory and memory limit on a clean start', async () => {
+    const fixture = await activationFixture(false, { max_memory_restart: 536870912 });
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const start = recorded(fixture).find(([, args]) => args[0] === 'start');
+    expect(start![1]).toEqual(expect.arrayContaining(['--max-memory-restart', '536870912', '--cwd', fixture.service]));
+  });
+
+  it('falls back to in-place restart when clean restart is switched off', async () => {
+    const fixture = await activationFixture();
+    await executeBackendRuntime({ ...fixture.input, cleanRestart: false }, fixture.adapters);
+    const log = recorded(fixture);
+    expect(log.some(([, args]) => args[0] === 'restart')).toBe(true);
+    expect(log.some(([, args]) => args[0] === 'delete')).toBe(false);
+  });
+
+  it('falls back to in-place restart for multi-instance cluster processes', async () => {
+    const fixture = await activationFixture(false, { exec_mode: 'cluster_mode', instances: 2 });
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const log = recorded(fixture);
+    expect(log.some(([, args]) => args[0] === 'restart')).toBe(true);
+    expect(log.some(([, args]) => args[0] === 'delete')).toBe(false);
+  });
+
+  it('keeps clean-restart logic inside the serialized remote program', () => {
+    const program = backendRuntimeProgram();
+    expect(program).toContain('RELEASE_CLEAN_RESTART');
+    expect(program).toContain("'delete'");
+    expect(program).toContain('--max-memory-restart');
+    expect(program).toContain('--cwd');
+  });
+
+  it('carries the clean-restart switch into the remote activation command', () => {
+    expect(backendRuntimeActivationCommand({ moduleKey: 'todo-service', versionTag, cleanRestart: false })).toContain("RELEASE_CLEAN_RESTART='0'");
+    expect(backendRuntimeActivationCommand({ moduleKey: 'todo-service', versionTag })).toContain("RELEASE_CLEAN_RESTART='1'");
+  });
+
 });

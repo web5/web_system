@@ -40,6 +40,8 @@ import { ReleaseGitModule } from '../git/release-git.module';
 import { ArtifactStoreModule } from '../artifact/artifact-store.module';
 import { ReleaseRegistryModule } from '../registry/release-registry.module';
 import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
+// 工具目录（能力单元）：shell 工具正文的真相源，编排按 code 引用
+import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
 // 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
 
 @Module({
@@ -87,6 +89,8 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
     ReleaseRegistryModule,
     // 远程投递（upload remote 执行体）
     RemoteDeliveryModule,
+    // 工具目录（shell 工具正文引用执行）
+    ToolCatalogModule,
   ],
   controllers: [PipelineController, PipelineVarController],
   providers: [

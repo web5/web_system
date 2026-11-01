@@ -1,3 +1,5 @@
+import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -79,6 +81,8 @@ describe('DeployService.recordDeployment (P0-2 upsert)', () => {
     };
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         { provide: ConfigService, useValue: { get: jest.fn() } },
@@ -194,6 +198,8 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
 
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
@@ -335,6 +341,8 @@ describe('DeployService 后台部署 · pm2 进程名回退', () => {
 
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
@@ -413,6 +421,8 @@ describe('DeployService.rollbackVersion（T2 回滚）', () => {
 
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
@@ -529,6 +539,8 @@ describe('DeployService.rollbackVersion · 指定目标版本（UI「回滚到�
     commands = { pm2Bin: jest.fn(() => '/usr/local/bin/pm2'), exec: jest.fn(() => 'ok') };
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
@@ -623,6 +635,8 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
 
     const module = await Test.createTestingModule({
       providers: [
+        // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
+        { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
         DeployService,
         { provide: EnvSplitWriterService, useValue: splitWriterStub() },
         {
