@@ -129,21 +129,18 @@ if [ -z "$NAME" ]; then
   fi
 fi
 
-# 运行目录：**默认沿用进程现有 cwd**，不擅自改变。
-# 实测（2026-10-31 prod）：9 个服务 cwd = servers/<svc>，仅 ai-service
-# 是 /data/web_system（历史 ecosystem 遗留）。bianbian 的 temp-images 用
-# process.cwd() 拼路径 —— 盲改 cwd 会让已落盘的临时图读不到。
-# 需要迁移目录时由调用方显式传 PM2_CWD。
-current_cwd="$("$PM2" jlist 2>/dev/null | NAME="$NAME" python3 -c '
-import sys, json, os
-name = os.environ.get("NAME", "")
-try:
-    print(next(p["pm2_env"].get("pm_cwd", "") for p in json.load(sys.stdin) if p["name"] == name))
-except Exception:
-    print("")
-' 2>/dev/null || true)"
-CWD="${PM2_CWD:-${current_cwd:-$SVC_DIR}}"
-log "运行目录 cwd=${CWD}（沿用现状${PM2_CWD:+ · 由 PM2_CWD 覆盖}）"
+# 运行目录：**默认服务目录**（2026-11-02 修正）。
+# 旧行为是「沿用进程现有 cwd」，看起来稳妥，实际是把污染固化：
+# ecosystem.config.js 的全局 cwd 曾把 ai-service 起在 /data/web_system，
+# 沿用现状 → 每次重启都继承这个错误身份 → 平台 identity 校验每次都撞。
+# 平台侧判据是 pm_cwd == 服务目录，所以这里以服务目录为准；
+# 确有例外时由调用方显式传 PM2_CWD 覆盖（保留逃生口）。
+#
+# 附：ai-service 的 bianbian 用 process.cwd() 拼 temp-images/uploads，
+# 已在 prod 上用软链 `servers/ai-service/{temp-images,uploads} -> /data/web_system/...`
+# 对齐到服务目录（2026-11-02 止血），因此改用服务目录不会丢存量文件。
+CWD="${PM2_CWD:-$SVC_DIR}"
+log "运行目录 cwd=${CWD}${PM2_CWD:+ （由 PM2_CWD 显式覆盖）}"
 
 # ════════════════════════════════════════════════════════════
 # ③ 版本目录 → dist（可选；给了 VER_DIR 才做，含备份与回滚）

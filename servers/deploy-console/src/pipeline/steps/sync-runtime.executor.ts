@@ -11,6 +11,8 @@ import { StepContext } from './step.types';
 export const RUNTIME_PROGRAM_BIN_DIR = 'web_system_runtimes/bin';
 /** 能力程序文件名 */
 export const RUNTIME_PROGRAM_FILE = 'apply-runtime.js';
+/** 回收程序文件名（与 apply-runtime 同一 bin 目录，投放逻辑复用） */
+export const GC_PROGRAM_FILE = 'gc-runtime.js';
 
 /**
  * 生成「把能力程序投放到目标机」的远端命令（纯函数，便于单测）。
@@ -26,10 +28,14 @@ export const RUNTIME_PROGRAM_FILE = 'apply-runtime.js';
  * 幂等：先比对 `.sha256` 印记，一致则跳过写入（避免每次发布都传一遍 ~30KB）。
  * 完整性：base64 落临时文件 → sha256 校验 → 失败即删临时文件并 `exit 1`（**不静默**）→ `mv` 原子替换。
  */
-export function syncRuntimeProgramCommand(program: string, sha256: string): string {
+export function syncRuntimeProgramCommand(
+  program: string,
+  sha256: string,
+  fileName: string = RUNTIME_PROGRAM_FILE,
+): string {
   const encoded = Buffer.from(program, 'utf8').toString('base64');
   const dir = `$HOME/${RUNTIME_PROGRAM_BIN_DIR}`;
-  const file = `${dir}/${RUNTIME_PROGRAM_FILE}`;
+  const file = `${dir}/${fileName}`;
   const tmp = `${file}.tmp.$$`;
   const stamp = `${file}.sha256`;
   return [
@@ -59,9 +65,10 @@ export function syncRuntimeProgramLocal(
   program: string,
   sha256: string,
   home: string,
+  fileName: string = RUNTIME_PROGRAM_FILE,
 ): 'updated' | 'unchanged' {
   const dir = join(home, RUNTIME_PROGRAM_BIN_DIR);
-  const file = join(dir, RUNTIME_PROGRAM_FILE);
+  const file = join(dir, fileName);
   const stamp = file + '.sha256';
   // 判据 = 文件本身（同远端）：印记对得上但正文坏了的情况必须能自愈
   if (existsSync(file)) {
