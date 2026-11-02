@@ -20,6 +20,7 @@ import { VersionExecutor } from './steps/version.executor';
 import { PointerExecutor } from './steps/pointer.executor';
 import { CleanupExecutor } from './steps/cleanup.executor';
 import { SyncRuntimeExecutor } from './steps/sync-runtime.executor';
+import { GcRuntimeExecutor } from './steps/gc-runtime.executor';
 import { PIPELINE_BUILTIN_STEPS, buildBuiltinSteps, BuiltinExecutors } from './steps/step-registry';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
 import { CanaryModule } from '../canary/canary.module';
@@ -106,6 +107,7 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
     PointerExecutor,
     CleanupExecutor,
     SyncRuntimeExecutor,
+    GcRuntimeExecutor,
     // 步骤注册表：按步骤元数据（category/commandMode/守卫/执行体）组装，engine 数据驱动分派
     {
       provide: PIPELINE_BUILTIN_STEPS,
@@ -118,8 +120,9 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
         pointer: PointerExecutor,
         cleanup: CleanupExecutor,
         syncRuntime: SyncRuntimeExecutor,
+        gcRuntime: GcRuntimeExecutor,
       ) =>
-        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup, syncRuntime } as BuiltinExecutors),
+        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup, syncRuntime, gcRuntime } as BuiltinExecutors),
       inject: [
         CheckExecutor,
         PullExecutor,
@@ -129,6 +132,7 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
         PointerExecutor,
         CleanupExecutor,
         SyncRuntimeExecutor,
+    GcRuntimeExecutor,
       ],
     },
   ],

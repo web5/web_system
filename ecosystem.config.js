@@ -87,6 +87,9 @@ const logBase = process.env.LOG_BASE || `${WEB_SYSTEM_DIR}/logs`;
 const commonConfig = {
   instances: 1,
   exec_mode: 'fork',
+  // ⚠️ 2026-11-02：这里曾是「全局 cwd = 运行根」，任何人跑 `pm2 start ecosystem.config.js`
+  // 都会把所有服务的 pm_cwd 写成 /data/web_system —— 平台侧 identity 校验要求 pm_cwd = 服务目录，
+  // 于是每次发布都撞 identity mismatch（ai-service 实证）。每个 app 下面已显式覆盖为 servers/<name>。
   cwd: WEB_SYSTEM_DIR,
   time: true,
   merge_logs: true,
@@ -102,6 +105,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'gateway',
+      cwd: `${WEB_SYSTEM_DIR}/servers/gateway`,
       script: './servers/gateway/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -129,6 +133,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'auth-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/auth-service`,
       script: './servers/auth-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -149,6 +154,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'user-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/user-service`,
       script: './servers/user-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -164,6 +170,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'ai-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/ai-service`,
       script: './servers/ai-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -183,6 +190,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'system-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/system-service`,
       script: './servers/system-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -197,6 +205,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'todo-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/todo-service`,
       script: './servers/todo-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -213,6 +222,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'upload-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/upload-service`,
       script: './servers/upload-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -227,6 +237,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'mcp-gateway',
+      cwd: `${WEB_SYSTEM_DIR}/servers/mcp-gateway`,
       script: './servers/mcp-gateway/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -261,6 +272,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'content-hub',
+      cwd: `${WEB_SYSTEM_DIR}/servers/content-hub`,
       script: './servers/content-hub/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -285,6 +297,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'knowledge-service',
+      cwd: `${WEB_SYSTEM_DIR}/servers/knowledge-service`,
       script: './servers/knowledge-service/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -315,6 +328,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'ai-agent',
+      cwd: `${WEB_SYSTEM_DIR}/servers/ai-agent`,
       script: './servers/ai-agent/dist/main.js',
       env: {
         NODE_ENV: 'production',
@@ -327,6 +341,7 @@ module.exports = {
     {
       ...commonConfig,
       name: 'deploy-console',
+      cwd: `${WEB_SYSTEM_DIR}/servers/deploy-console`,
       script: './servers/deploy-console/dist/main.js',
       env: {
         NODE_ENV: 'production',

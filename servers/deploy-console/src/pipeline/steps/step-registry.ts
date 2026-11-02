@@ -8,6 +8,7 @@ import { VersionExecutor } from './version.executor';
 import { PointerExecutor } from './pointer.executor';
 import { CleanupExecutor } from './cleanup.executor';
 import { SyncRuntimeExecutor } from './sync-runtime.executor';
+import { GcRuntimeExecutor } from './gc-runtime.executor';
 
 /** 内置步骤注册表的 DI token（engine 注入聚合后的 Record） */
 export const PIPELINE_BUILTIN_STEPS = 'PIPELINE_BUILTIN_STEPS';
@@ -31,6 +32,8 @@ export interface BuiltinExecutors {
   cleanup: CleanupExecutor;
   /** 运行时能力程序投放（方案 B）：把当前代码的 backend-runtime 程序写到目标机，供编排脚本调用 */
   syncRuntime: SyncRuntimeExecutor;
+  /** 历史版本目录回收（方案 B）：投放 gc 程序并执行，保护集 = pm2 引用 + 软链目标 */
+  gcRuntime: GcRuntimeExecutor;
 }
 
 /** 复用磁盘产物的守卫（跳过程码获取/构建/投递/重启） */
@@ -100,6 +103,13 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       // （改写 = 又把源码副本抄进数据，正是化石脚本的老路）
       commandMode: 'none',
       run: (ctx) => ex.syncRuntime.run(ctx),
+    },
+    'gc-runtime': {
+      category: 'cleanup',
+      // 纯内置：回收的保护集判据是平台知识，抄进编排 = 冻结成 15 份化石。
+      // 编排只能决定「这条流水线要不要回收节点」，不能改写它怎么删。
+      commandMode: 'none',
+      run: (ctx) => ex.gcRuntime.run(ctx),
     },
   };
 }
