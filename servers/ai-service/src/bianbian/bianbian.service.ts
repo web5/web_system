@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { DataSource, Repository, MoreThanOrEqual, FindOptionsWhere } from 'typeorm';
-import { API_TIMEOUT } from '@web-system/shared';
+import { API_TIMEOUT, dataDir } from '@web-system/shared';
 import { firstValueFrom } from 'rxjs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -499,7 +499,7 @@ export class BianbianService {
   /** 确保临时图片目录存在 */
   private async ensureTempDir(): Promise<void> {
     if (!this.tempImagesDir) {
-      this.tempImagesDir = path.join(process.cwd(), 'temp-images');
+      this.tempImagesDir = dataDir('temp-images');
     }
     if (!fs.existsSync(this.tempImagesDir)) {
       await fs.promises.mkdir(this.tempImagesDir, { recursive: true });

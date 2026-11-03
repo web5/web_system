@@ -17,6 +17,9 @@ export {
 } from './storage-path';
 export type { ResolveStoragePathOptions } from './storage-path';
 
+// 运行数据根目录（uploads/temp-images 等，唯一实现，禁止各服务用 process.cwd() 自拼）
+export { dataRoot, dataDir } from './data-root';
+
 // 合同翻译官 — 共享类型 / IRR / 法定标准库
 export * from './contract';
 

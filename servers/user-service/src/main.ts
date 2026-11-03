@@ -7,7 +7,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
-import { missingRequiredServiceUrls, serviceUrlFailFastHint } from '@web-system/shared';
+import { missingRequiredServiceUrls, serviceUrlFailFastHint, dataDir } from '@web-system/shared';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -44,7 +44,8 @@ async function bootstrap() {
   });
 
   // 静态文件服务（头像上传目录）
-  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
+  // 数据目录走运行根解析（WEB_SYSTEM_DIR 优先，未配置回退 cwd），禁止 process.cwd() 自拼
+  app.useStaticAssets(dataDir('uploads'), {
     prefix: '/uploads',
   });
 
