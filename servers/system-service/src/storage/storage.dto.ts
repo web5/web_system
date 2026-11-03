@@ -1,4 +1,4 @@
-import { IsString, Length } from 'class-validator';
+import { IsOptional, IsString, Length } from 'class-validator';
 
 /**
  * 存储目录入参（保存 / 校验共用）。
@@ -11,6 +11,18 @@ export class StorageDirDto {
   @IsString()
   @Length(1, 512, { message: 'uploadDir 长度需在 1~512 之间' })
   uploadDir!: string;
+
+  /**
+   * 临时图目录；**省略或空字符串 = 不改动**（不会清空已有配置）。
+   *
+   * 为什么不支持「清空回到默认」：临时图目录未配置时的取值是派生默认，
+   * 随上传根目录变化；页面用「使用默认目录」按钮把派生值显式存下来即可，
+   * 再开一个「清除配置」的口子只会多出一种说不清的状态。
+   */
+  @IsOptional()
+  @IsString()
+  @Length(0, 512, { message: 'tempDir 长度需在 0~512 之间' })
+  tempDir?: string;
 }
 
 /** 目录浏览入参（query） */

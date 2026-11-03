@@ -10,8 +10,11 @@ import {
   StorageService,
   STORAGE_ALLOWED_ROOTS_ENV,
   STORAGE_BROWSE_ENABLED_KEY,
+  STORAGE_TEMP_DIR_ENV,
+  STORAGE_TEMP_DIR_KEY,
   STORAGE_UPLOAD_DIR_KEY,
   STORAGE_UPLOAD_DIR_ENV,
+  TEMP_DIR_SEGMENT,
 } from './storage.service';
 
 /** 配置表桩：只实现本次用到的 get / getBoolean / set */
@@ -89,6 +92,79 @@ describe('StorageService（A2：存储配置读写 / 校验 / 安全目录浏览
       await expect(service.resolveConfiguredUploadDir()).rejects.toMatchObject({
         response: { code: 'UPLOAD_DIR_OUT_OF_SCOPE' },
       });
+    });
+  });
+
+  describe('resolveConfiguredTempDir：三级优先级 + 派生默认', () => {
+    /** 上传根目录固定为 <tmp>/uploads，则派生默认 = <tmp>/temp-images（**同级**，不是 uploads 之下） */
+    const uploads = () => path.join(tmp, 'uploads');
+
+    beforeEach(() => {
+      setEnv(STORAGE_TEMP_DIR_ENV, undefined);
+      settings.store[STORAGE_UPLOAD_DIR_KEY] = uploads();
+    });
+
+    it('配置键优先 → source=system_configs，且标记为「已显式配置」', async () => {
+      const configured = path.join(tmp, 'temp-from-db');
+      settings.store[STORAGE_TEMP_DIR_KEY] = configured;
+
+      await expect(service.resolveConfiguredTempDir()).resolves.toEqual({
+        path: path.resolve(configured),
+        source: 'system_configs',
+        configured: true,
+        derivedBase: null,
+      });
+    });
+
+    it('配置缺失 → env 兜底（source=env，仍算「未显式配置」）', async () => {
+      setEnv(STORAGE_TEMP_DIR_ENV, path.join(tmp, 'temp-from-env'));
+      const r = await service.resolveConfiguredTempDir();
+      expect(r.path).toBe(path.resolve(tmp, 'temp-from-env'));
+      expect(r.source).toBe('env');
+      expect(r.configured).toBe(false);
+      expect(r.derivedBase).toBe(path.dirname(uploads()));
+    });
+
+    it('都没配 → 派生默认 = 上传根目录的**同级** temp-images', async () => {
+      const r = await service.resolveConfiguredTempDir();
+      expect(r).toEqual({
+        path: path.join(tmp, TEMP_DIR_SEGMENT),
+        source: 'default',
+        configured: false,
+        derivedBase: tmp,
+      });
+    });
+
+    it('未配置时派生默认随上传根目录变化（页面必须显示「未配置」的原因）', async () => {
+      const before = await service.resolveConfiguredTempDir();
+      const newUploads = path.join(tmp, 'data', 'uploads');
+      settings.store[STORAGE_UPLOAD_DIR_KEY] = newUploads;
+      const after = await service.resolveConfiguredTempDir();
+
+      expect(before.path).toBe(path.join(tmp, TEMP_DIR_SEGMENT));
+      expect(after.path).toBe(path.join(tmp, 'data', TEMP_DIR_SEGMENT));
+      // 显式配过之后就不再跟着变
+      settings.store[STORAGE_TEMP_DIR_KEY] = path.join(tmp, 'pinned');
+      settings.store[STORAGE_UPLOAD_DIR_KEY] = uploads();
+      const pinned = await service.resolveConfiguredTempDir();
+      expect(pinned.path).toBe(path.resolve(tmp, 'pinned'));
+      expect(pinned.configured).toBe(true);
+    });
+
+    it('配置指向允许根之外 → 400 且带稳定错误码（与上传目录同一套穿越防护）', async () => {
+      settings.store[STORAGE_TEMP_DIR_KEY] = '/etc';
+      await expect(service.resolveConfiguredTempDir()).rejects.toMatchObject({
+        response: { code: 'UPLOAD_DIR_OUT_OF_SCOPE' },
+      });
+    });
+  });
+
+  describe('setTempDir：写入权威临时图目录', () => {
+    it('写 storage.temp_dir（只写配置，不碰文件系统）', async () => {
+      const target = path.join(tmp, 'temp-written');
+      await service.setTempDir(target);
+      expect(settings.set).toHaveBeenCalledWith(STORAGE_TEMP_DIR_KEY, target);
+      expect(fs.existsSync(target)).toBe(false);
     });
   });
 
