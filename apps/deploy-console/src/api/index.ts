@@ -1089,6 +1089,15 @@ export interface StorageConfig {
   /** 权威配置值（upload-service 下次启动采纳）＝「待生效目录」 */
   uploadDir: string
   source: 'system_configs' | 'env' | 'default'
+  /** 临时图目录权威值（ai-service 下次启动采纳）＝「待生效目录」 */
+  tempDir: string
+  tempSource: 'system_configs' | 'env' | 'default'
+  /** 是否显式配过临时图目录：false = 用的是派生默认值，会随上传根目录变化 */
+  tempConfigured: boolean
+  /** 派生默认值（`<上传根目录的同级>/temp-images`），「使用默认目录」按钮填它 */
+  defaultTempDir: string
+  /** 环境变量是否在兜底（STORAGE_TEMP_DIR） */
+  tempEnvOverride: boolean
   /** upload-service 本进程实际生效目录（内存值）；取不到为 null */
   effectivePath: string | null
   effectiveSource: string | null
@@ -1138,8 +1147,17 @@ export interface StorageSaveResult {
   uploadDir: string
   previousDir: string
   check: StorageDirCheck
+  /** 只有提交过 tempDir 才返回（未提交 = 未改动，后端不写该键） */
+  tempDir?: string
+  previousTempDir?: string
+  tempCheck?: StorageDirCheck
   restartRequired: boolean
   message: string
+}
+
+/** 校验结果：上传目录为本体，带了 tempDir 时额外回它的结果 */
+export interface StorageValidateResult extends StorageDirCheck {
+  tempDir?: StorageDirCheck
 }
 
 /**
@@ -1156,12 +1174,14 @@ function unwrapBody<T>(p: Promise<any>): Promise<T> {
 export const storageSettingsApi = {
   /** 读配置（权威值 + 当前生效值 + 能否浏览） */
   get: () => unwrapBody<StorageConfig>(sysHttp.get('/admin/settings/storage')),
-  /** 保存前校验（不落库、不创建目录） */
-  validate: (uploadDir: string) =>
-    unwrapBody<StorageDirCheck>(sysHttp.post('/admin/settings/storage/validate', { uploadDir })),
-  /** 保存（不存在会自动创建；返回 restartRequired=true） */
-  save: (uploadDir: string) =>
-    unwrapBody<StorageSaveResult>(sysHttp.put('/admin/settings/storage', { uploadDir })),
+  /** 保存前校验（不落库、不创建目录）；传 tempDir 则一并校验 */
+  validate: (uploadDir: string, tempDir?: string) =>
+    unwrapBody<StorageValidateResult>(
+      sysHttp.post('/admin/settings/storage/validate', { uploadDir, tempDir }),
+    ),
+  /** 保存（不存在会自动创建；返回 restartRequired=true）；不传 tempDir = 不改动它 */
+  save: (uploadDir: string, tempDir?: string) =>
+    unwrapBody<StorageSaveResult>(sysHttp.put('/admin/settings/storage', { uploadDir, tempDir })),
   /** 列目录（只列目录；非 super_admin → 403） */
   browse: (path?: string) =>
     unwrapBody<StorageBrowseResult>(

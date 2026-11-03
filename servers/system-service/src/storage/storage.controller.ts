@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
+import * as path from 'path';
 import { ROLE_PERMISSIONS } from '@web-system/types';
 import { RequirePermission } from '../auth/decorators';
 import { OperationLogsService } from '../operation-logs/operation-logs.service';
@@ -17,7 +18,9 @@ import { StorageDirDto } from './storage.dto';
 import {
   DEFAULT_UPLOAD_DIR,
   StorageService,
+  STORAGE_TEMP_DIR_ENV,
   STORAGE_UPLOAD_DIR_ENV,
+  TEMP_DIR_SEGMENT,
 } from './storage.service';
 
 /** 当前请求的登录用户是否持有某权限码（口径与 PermissionsGuard 一致：按角色展开） */
@@ -46,8 +49,12 @@ function auditContext(req: Request): { operator: string; ip: string } {
  * - 读配置 / 校验 / 保存 → `settings:view` / `settings:edit`
  * - **列服务器目录 → `storage:browse`（仅 super_admin）**，见 design §1.5
  *
- * 「保存成功」不等于「已生效」：upload-service 只在**启动时**读配置（design §1.2 已定），
+ * 「保存成功」不等于「已生效」：消费服务只在**启动时**读配置（design §1.2 已定），
  * 因此保存接口显式返回 `restartRequired: true`，前端必须提示重启。
+ *
+ * 两个目录、两个消费服务：
+ * - 上传根目录 → upload-service；
+ * - 临时图目录 → ai-service（变变 AI 图等中间产物，W4 接入）。
  */
 @ApiTags('存储配置')
 @Controller('admin/settings/storage')
@@ -62,6 +69,7 @@ export class StorageController {
   @ApiOperation({ summary: '读取存储配置（权威值 + 当前生效值 + 来源）' })
   async getConfig(@Req() req: Request) {
     const configured = await this.storage.resolveConfiguredUploadDir();
+    const temp = await this.storage.resolveConfiguredTempDir();
     // 当前生效值：由本服务代问 upload-service（前端不持内部密钥、不直连内部接口）。
     // 取不到就是 null —— 页面降级为「只展示权威值 + 重启提示」，不影响读配置。
     const effective = await this.storage.fetchEffectiveUploadDir();
@@ -72,6 +80,15 @@ export class StorageController {
         uploadDir: configured.path,
         /** 这个值从哪来：system_configs / env / default */
         source: configured.source,
+        /** 临时图目录权威值（ai-service 下次启动会采纳它） */
+        tempDir: temp.path,
+        tempSource: temp.source,
+        /** 是否显式配过：false 表示用的是派生默认值，会随上传根目录变化 */
+        tempConfigured: temp.configured,
+        /** 派生默认值（页面「使用默认目录」按钮填它）：`<上传根目录的同级>/temp-images` */
+        defaultTempDir: path.join(path.dirname(configured.path), TEMP_DIR_SEGMENT),
+        /** 环境变量是否在兜底（展示用，避免运维误以为「改了配置中心却没生效」） */
+        tempEnvOverride: Boolean((process.env[STORAGE_TEMP_DIR_ENV] || '').trim()),
         /** upload-service **本进程实际生效**的目录（内存值）；取不到为 null ＝「当前生效目录」 */
         effectivePath: effective?.path ?? null,
         effectiveSource: effective?.source ?? null,
@@ -88,32 +105,54 @@ export class StorageController {
         /** 环境变量是否在兜底（展示用，避免运维误以为「改了配置中心却没生效」） */
         envOverride: Boolean((process.env[STORAGE_UPLOAD_DIR_ENV] || '').trim()),
         allowedRoots: this.storage.allowedRoots(),
-        restartHint: '保存后需重启 upload-service 才切换目录（重启生效，不做热切换）',
+        restartHint:
+          '保存后需重启上传目录→upload-service、临时图目录→ai-service（重启生效，不做热切换）',
       },
     };
   }
 
   @Put()
   @RequirePermission('settings:edit')
-  @ApiOperation({ summary: '保存上传根目录（写前校验，不存在则创建）' })
+  @ApiOperation({ summary: '保存存储目录（写前校验，不存在则创建）' })
   async save(@Body() dto: StorageDirDto, @Req() req: Request) {
-    const before = await this.storage.resolveConfiguredUploadDir();
+    const beforeUpload = await this.storage.resolveConfiguredUploadDir();
+    const beforeTemp = await this.storage.resolveConfiguredTempDir();
+    const wantTemp = dto.tempDir?.trim() || '';
+
+    // 先**全部校验通过**再落库（design §1.4 方案 A）：
+    // 否则会出现「上传目录已改、临时图目录校验失败被拒」的半改状态。
     const check = await this.storage.checkStorageDir(dto.uploadDir, { create: true });
     if (!check.ok || !check.resolvedPath) {
-      // 校验不通过禁止保存（design §1.4 方案 A：校验是保存的前置门）
       throw new BadRequestException({
         code: check.code ?? 'UPLOAD_DIR_INVALID',
         message: check.message,
         data: check,
       });
     }
+    let tempCheck: Awaited<ReturnType<StorageService['checkStorageDir']>> | undefined;
+    if (wantTemp) {
+      tempCheck = await this.storage.checkStorageDir(wantTemp, { create: true });
+      if (!tempCheck.ok || !tempCheck.resolvedPath) {
+        throw new BadRequestException({
+          code: tempCheck.code ?? 'TEMP_DIR_INVALID',
+          message: tempCheck.message,
+          data: tempCheck,
+        });
+      }
+    }
 
     await this.storage.setUploadDir(check.resolvedPath);
+    const changes = [`上传根目录 ${beforeUpload.path} → ${check.resolvedPath}`];
+    if (tempCheck?.resolvedPath) {
+      await this.storage.setTempDir(tempCheck.resolvedPath);
+      changes.push(`临时图目录 ${beforeTemp.path} → ${tempCheck.resolvedPath}`);
+    }
+
     const { operator, ip } = auditContext(req);
     await this.logsService.log({
       operator,
       type: 'update_storage_dir',
-      target: `${before.path} → ${check.resolvedPath}`,
+      target: changes.join('；'),
       ip,
     });
 
@@ -121,22 +160,40 @@ export class StorageController {
       code: 0,
       data: {
         uploadDir: check.resolvedPath,
-        previousDir: before.path,
+        previousDir: beforeUpload.path,
         check,
-        /** 关键语义：已保存，但 upload-service 重启后才生效 */
+        /** 未提交 tempDir（省略/空串）时不返回这两个字段：表示「未改动」 */
+        ...(tempCheck?.resolvedPath
+          ? {
+              tempDir: tempCheck.resolvedPath,
+              previousTempDir: beforeTemp.path,
+              tempCheck,
+            }
+          : {}),
+        /** 关键语义：已保存，但消费服务重启后才生效 */
         restartRequired: true,
-        message: '已保存，将在 upload-service 重启后生效',
+        message: tempCheck
+          ? '已保存，将在 upload-service / ai-service 重启后生效'
+          : '已保存，将在 upload-service 重启后生效',
       },
     };
   }
 
   @Post('validate')
   @RequirePermission('settings:edit')
-  @ApiOperation({ summary: '校验上传根目录（只校验，不保存、不创建）' })
+  @ApiOperation({ summary: '校验存储目录（只校验，不保存、不创建）' })
   async validate(@Body() dto: StorageDirDto) {
+    const upload = await this.storage.checkStorageDir(dto.uploadDir, { create: false });
+    const wantTemp = dto.tempDir?.trim() || '';
     return {
       code: 0,
-      data: await this.storage.checkStorageDir(dto.uploadDir, { create: false }),
+      data: {
+        ...upload,
+        /** 带了 tempDir 才返回它的校验结果（形状与上传目录一致，前端可复用同一套展示） */
+        ...(wantTemp
+          ? { tempDir: await this.storage.checkStorageDir(wantTemp, { create: false }) }
+          : {}),
+      },
     };
   }
 

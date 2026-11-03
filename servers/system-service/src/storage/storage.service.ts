@@ -19,14 +19,34 @@ import { SettingsService } from '../settings/settings.service';
 
 /** 上传根目录（**权威源**，系统管理页面可改；upload-service 启动时读它） */
 export const STORAGE_UPLOAD_DIR_KEY = 'storage.upload_dir';
+/**
+ * 临时图目录（变变 AI 图等中间产物；ai-service 启动时读它）。
+ *
+ * 与上传根目录的分工：uploads 是**对外交付**的长期文件（头像、素材），
+ * temp-images 是**中间产物**（生成后可回收）。两者都必须是平台级配置 ——
+ * 否则 ai-service 会回到 `process.cwd()/temp-images`，而 cwd 是 pm2 的启动目录，
+ * 换个启动方式目录就换（11-03 实测 prod 的 pm_cwd 曾为 `/data/web_system`）。
+ */
+export const STORAGE_TEMP_DIR_KEY = 'storage.temp_dir';
 /** 目录浏览降级开关（'1' 开 / '0' 关，默认开）—— 异常时一键回到纯文本输入 */
 export const STORAGE_BROWSE_ENABLED_KEY = 'storage.browse_enabled';
 /** 允许根白名单（逗号分隔，**追加**在用户家目录之后，用于放开数据盘） */
 export const STORAGE_ALLOWED_ROOTS_ENV = 'STORAGE_ALLOWED_ROOTS';
 /** 兜底上传目录（系统配置缺失时使用） */
 export const STORAGE_UPLOAD_DIR_ENV = 'STORAGE_UPLOAD_DIR';
+/** 兜底临时图目录（系统配置缺失时使用） */
+export const STORAGE_TEMP_DIR_ENV = 'STORAGE_TEMP_DIR';
 /** 跨平台默认上传根：`~/web_system/uploads` */
 export const DEFAULT_UPLOAD_DIR = path.join(os.homedir(), 'web_system', 'uploads');
+/**
+ * 临时图目录的段名（派生默认 = `<上传根目录的同级>/temp-images`）。
+ *
+ * 为什么是**同级**而不是 `<上传根目录>/temp-images`：
+ * dev / prod 存量都是 `/data/web_system/temp-images`（与 `/data/web_system/uploads` 同级），
+ * 派生默认若落在 uploads 之下，存量临时图会全部 404（11-02 刚踩过同类坑），
+ * 且每次部署都得靠「记得补配置键」兜底 —— 默认就该落在存量位置。
+ */
+export const TEMP_DIR_SEGMENT = 'temp-images';
 /** 上传服务地址（读它的「本进程实际生效目录」用；缺省取 SERVICE_URL_DEFAULTS.upload） */
 export const UPLOAD_SERVICE_URL_ENV = 'UPLOAD_SERVICE_URL';
 /** 服务间内部密钥（调用 upload-service 内部接口用） */
@@ -49,6 +69,20 @@ export type UploadDirSource = 'system_configs' | 'env' | 'default';
 export interface ConfiguredUploadDir {
   path: string;
   source: UploadDirSource;
+}
+
+/**
+ * 临时图目录的解析结果。
+ *
+ * 比上传根目录多两个字段，是为了让页面能回答「这个值是不是有人配过」——
+ * 派生默认值**随上传根目录变化**，若页面把它显示成「已配置」，
+ * 运维改了 uploads 后会产生「临时图目录怎么也跟着变了」的困惑。
+ */
+export interface ConfiguredTempDir extends ConfiguredUploadDir {
+  /** 是否显式配过（false = 用的是派生默认值，会随上传根目录变化） */
+  configured: boolean;
+  /** 派生默认值的基准目录（未配置时为上传根目录的父目录；已配置时为 null） */
+  derivedBase: string | null;
 }
 
 /**
@@ -220,20 +254,43 @@ export class StorageService {
    * 两者在改配置后、重启前会不一致（design §1.2 明确要求页面展示双值）。
    */
   async resolveConfiguredUploadDir(): Promise<ConfiguredUploadDir> {
-    const configured = (await this.settings.get(STORAGE_UPLOAD_DIR_KEY))?.trim();
-    if (configured) {
-      return { path: this.resolveOrThrow(configured), source: 'system_configs' };
-    }
-    const fromEnv = (process.env[STORAGE_UPLOAD_DIR_ENV] || '').trim();
-    if (fromEnv) {
-      return { path: this.resolveOrThrow(fromEnv), source: 'env' };
-    }
-    return { path: path.resolve(DEFAULT_UPLOAD_DIR), source: 'default' };
+    return this.resolveConfigured(STORAGE_UPLOAD_DIR_KEY, STORAGE_UPLOAD_DIR_ENV, () =>
+      path.resolve(DEFAULT_UPLOAD_DIR),
+    );
+  }
+
+  /**
+   * 解析**权威**临时图目录：系统配置 → `STORAGE_TEMP_DIR` → 派生默认。
+   *
+   * 派生默认 = `<上传根目录的同级>/temp-images`（如 uploads 为 `/data/web_system/uploads`
+   * 时得到 `/data/web_system/temp-images`，与 dev/prod 存量一致）。
+   *
+   * 三级链共用 {@link resolveConfigured}，与上传根目录保持同一套口径 ——
+   * 不允许 temp 自己搞一套「环境变量优先还是配置优先」。
+   */
+  async resolveConfiguredTempDir(): Promise<ConfiguredTempDir> {
+    const upload = await this.resolveConfiguredUploadDir();
+    const derivedBase = path.dirname(upload.path);
+    const resolved = await this.resolveConfigured(
+      STORAGE_TEMP_DIR_KEY,
+      STORAGE_TEMP_DIR_ENV,
+      () => path.join(derivedBase, TEMP_DIR_SEGMENT),
+    );
+    return {
+      ...resolved,
+      configured: resolved.source === 'system_configs',
+      derivedBase: resolved.source === 'system_configs' ? null : derivedBase,
+    };
   }
 
   /** 写入权威上传目录（只写配置，不碰文件系统；调用方须先 checkStorageDir） */
   async setUploadDir(resolvedPath: string): Promise<void> {
     await this.settings.set(STORAGE_UPLOAD_DIR_KEY, resolvedPath);
+  }
+
+  /** 写入权威临时图目录（只写配置，不碰文件系统；调用方须先 checkStorageDir） */
+  async setTempDir(resolvedPath: string): Promise<void> {
+    await this.settings.set(STORAGE_TEMP_DIR_KEY, resolvedPath);
   }
 
   /**
@@ -417,6 +474,30 @@ export class StorageService {
   }
 
   /* ── 内部工具 ────────────────────────────────────────────────── */
+
+  /**
+   * 权威目录解析的**唯一实现**：系统配置 → 环境变量 → fallback。
+   *
+   * upload / temp 两类目录共用它，避免各自演化出不同优先级
+   * （「环境变量到底排第几」一旦分裂，页面展示的 source 就说不清了）。
+   *
+   * @param fallback 兜底值（上传根目录用平台默认；临时图目录用「派生自上传根目录」）
+   */
+  private async resolveConfigured(
+    configKey: string,
+    envKey: string,
+    fallback: () => string,
+  ): Promise<ConfiguredUploadDir> {
+    const configured = (await this.settings.get(configKey))?.trim();
+    if (configured) {
+      return { path: this.resolveOrThrow(configured), source: 'system_configs' };
+    }
+    const fromEnv = (process.env[envKey] || '').trim();
+    if (fromEnv) {
+      return { path: this.resolveOrThrow(fromEnv), source: 'env' };
+    }
+    return { path: path.resolve(fallback()), source: 'default' };
+  }
 
   /** 解析路径并做范围校验；失败抛 400（带稳定 code） */
   private resolveOrThrow(input: string): string {
