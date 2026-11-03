@@ -18,6 +18,7 @@ import { StorageDirDto } from './storage.dto';
 import {
   DEFAULT_UPLOAD_DIR,
   StorageService,
+  STORAGE_ALLOWED_ROOTS_ENV,
   STORAGE_TEMP_DIR_ENV,
   STORAGE_UPLOAD_DIR_ENV,
   TEMP_DIR_SEGMENT,
@@ -55,6 +56,9 @@ function auditContext(req: Request): { operator: string; ip: string } {
  * 两个目录、两个消费服务：
  * - 上传根目录 → upload-service；
  * - 临时图目录 → ai-service（变变 AI 图等中间产物，W4 接入）。
+ *
+ * 加一项**判据**（R1）：允许根白名单 `storage.allowed_roots` —— 它是「哪些目录合法」
+ * 的基准，原先散在各服务的 `.env` 里（漂移源），现收归配置表，随上面两项一起维护。
  */
 @ApiTags('存储配置')
 @Controller('admin/settings/storage')
@@ -73,6 +77,7 @@ export class StorageController {
     // 当前生效值：由本服务代问 upload-service（前端不持内部密钥、不直连内部接口）。
     // 取不到就是 null —— 页面降级为「只展示权威值 + 重启提示」，不影响读配置。
     const effective = await this.storage.fetchEffectiveUploadDir();
+    const allowed = await this.storage.resolveConfiguredAllowedRoots();
     return {
       code: 0,
       data: {
@@ -104,9 +109,14 @@ export class StorageController {
         defaultDir: DEFAULT_UPLOAD_DIR,
         /** 环境变量是否在兜底（展示用，避免运维误以为「改了配置中心却没生效」） */
         envOverride: Boolean((process.env[STORAGE_UPLOAD_DIR_ENV] || '').trim()),
-        allowedRoots: this.storage.allowedRoots(),
+        /** 当前生效的允许根（目录越界校验的基准；家目录恒定在列） */
+        allowedRoots: allowed.roots,
+        /** 允许根从哪来：system_configs（页面改过）/ env（system-service 的环境变量在兜底）/ default */
+        allowedRootsSource: allowed.source,
+        /** 环境变量是否在兜底（展示用：页面改了配置却不生效时，多半是它在兜底） */
+        allowedRootsEnvOverride: Boolean((process.env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim()),
         restartHint:
-          '保存后需重启上传目录→upload-service、临时图目录→ai-service（重启生效，不做热切换）',
+          '保存后需重启：上传目录→upload-service、临时图目录→ai-service、允许根→所有消费服务（重启生效，不做热切换）',
       },
     };
   }
@@ -118,6 +128,7 @@ export class StorageController {
     const beforeUpload = await this.storage.resolveConfiguredUploadDir();
     const beforeTemp = await this.storage.resolveConfiguredTempDir();
     const wantTemp = dto.tempDir?.trim() || '';
+    const wantRoots = dto.allowedRoots?.trim() || '';
 
     // 先**全部校验通过**再落库（design §1.4 方案 A）：
     // 否则会出现「上传目录已改、临时图目录校验失败被拒」的半改状态。
@@ -141,11 +152,38 @@ export class StorageController {
       }
     }
 
+    /**
+     * 允许根先**校验**（与目录一样，先全校验再落库）：
+     * 它必须仍覆盖保存后会生效的目录 —— 否则下次启动这些目录被判越界，服务起不来。
+     * 注意：放宽允许根与搬迁目录不能同一次完成（新目录要先在旧允许根内才校验得过），
+     * 必须「先放宽 → 重启 → 再搬迁」，这也是报错文案给出的路径。
+     */
+    let rootsCheck: Awaited<ReturnType<StorageService['checkAllowedRoots']>> | undefined;
+    if (wantRoots) {
+      rootsCheck = await this.storage.checkAllowedRoots(wantRoots, [
+        check.resolvedPath,
+        ...(tempCheck?.resolvedPath ? [tempCheck.resolvedPath] : []),
+        // 本次没提交 tempDir 时，已配置的临时图目录仍在生效（派生默认会随 uploads 变）
+        ...(!tempCheck?.resolvedPath && beforeTemp.configured ? [beforeTemp.path] : []),
+      ]);
+      if (!rootsCheck.ok) {
+        throw new BadRequestException({
+          code: rootsCheck.code ?? 'ALLOWED_ROOTS_INVALID',
+          message: rootsCheck.message,
+          data: rootsCheck,
+        });
+      }
+    }
+
     await this.storage.setUploadDir(check.resolvedPath);
     const changes = [`上传根目录 ${beforeUpload.path} → ${check.resolvedPath}`];
     if (tempCheck?.resolvedPath) {
       await this.storage.setTempDir(tempCheck.resolvedPath);
       changes.push(`临时图目录 ${beforeTemp.path} → ${tempCheck.resolvedPath}`);
+    }
+    if (rootsCheck?.ok) {
+      await this.storage.setAllowedRoots(rootsCheck.roots);
+      changes.push(`允许根白名单 → ${rootsCheck.roots.join('、')}`);
     }
 
     const { operator, ip } = auditContext(req);
@@ -170,6 +208,8 @@ export class StorageController {
               tempCheck,
             }
           : {}),
+        /** 未提交 allowedRoots 时不返回：表示「未改动」 */
+        ...(rootsCheck?.ok ? { allowedRoots: rootsCheck.roots.join(',') } : {}),
         /** 关键语义：已保存，但消费服务重启后才生效 */
         restartRequired: true,
         message: tempCheck

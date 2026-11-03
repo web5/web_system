@@ -8,6 +8,7 @@ import { StorageController } from './storage.controller';
 import {
   StorageService,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_ALLOWED_ROOTS_KEY,
   STORAGE_TEMP_DIR_ENV,
   STORAGE_TEMP_DIR_KEY,
   STORAGE_UPLOAD_DIR_ENV,
@@ -95,6 +96,22 @@ describe('StorageController（系统管理页面：读 / 校验 / 保存）', ()
       expect(res.data.tempConfigured).toBe(true);
       expect(res.data.defaultTempDir).toBe(path.join(tmp, TEMP_DIR_SEGMENT));
     });
+
+    it('允许根回给页面，并说清它从哪来（配置表 / env 兜底）', async () => {
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = tmp;
+      const res = await controller.getConfig(reqStub());
+      expect(res.data.allowedRoots).toContain(tmp);
+      expect(res.data.allowedRootsSource).toBe('system_configs');
+      // system-service 的 env 里也有一份 → 页面要提示「改了配置中心可能不生效」
+      expect(res.data.allowedRootsEnvOverride).toBe(true);
+    });
+
+    it('允许根没配 → source=default（页面提示「没人配过」）', async () => {
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, undefined);
+      const res = await controller.getConfig(reqStub());
+      expect(res.data.allowedRootsSource).toBe('default');
+      expect(res.data.allowedRootsEnvOverride).toBe(false);
+    });
   });
 
   describe('PUT：两个目录一起保存，且不允许「改了一半」', () => {
@@ -139,6 +156,38 @@ describe('StorageController（系统管理页面：读 / 校验 / 保存）', ()
     it('保存成功仍必须回 restartRequired=true（重启才生效）', async () => {
       const res = await controller.save({ uploadDir: path.join(tmp, 'uploads') }, reqStub());
       expect(res.data.restartRequired).toBe(true);
+    });
+
+    it('带 allowedRoots → 一起落库，审计日志记录', async () => {
+      const res = await controller.save(
+        { uploadDir: path.join(tmp, 'uploads'), allowedRoots: tmp },
+        reqStub(),
+      );
+      expect(res.data.allowedRoots).toBe(tmp);
+      expect(settings.store[STORAGE_ALLOWED_ROOTS_KEY]).toBe(tmp);
+      expect((logs.log as unknown as jest.Mock).mock.calls[0][0].target).toContain('允许根');
+    });
+
+    it('allowedRoots 传空串 → 视为「未提交」，不改动已有配置', async () => {
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = tmp;
+      const res = await controller.save(
+        { uploadDir: path.join(tmp, 'uploads'), allowedRoots: '' },
+        reqStub(),
+      );
+      expect(res.data.allowedRoots).toBeUndefined();
+      expect(settings.store[STORAGE_ALLOWED_ROOTS_KEY]).toBe(tmp);
+    });
+
+    /** 🔴 prod 事故防护：允许根收窄到不含已配置目录 → 不落库（否则下次启动全员越界） */
+    it('🔴 allowedRoots 收窄 → 400，上传目录也不落库', async () => {
+      await expect(
+        controller.save(
+          { uploadDir: path.join(tmp, 'uploads'), allowedRoots: path.join(tmp, 'elsewhere') },
+          reqStub(),
+        ),
+      ).rejects.toMatchObject({ response: { code: 'ALLOWED_ROOTS_EXCLUDE_CONFIGURED_DIRS' } });
+      expect(settings.set).not.toHaveBeenCalled();
+      expect(settings.store[STORAGE_UPLOAD_DIR_KEY]).toBeUndefined();
     });
   });
 

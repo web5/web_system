@@ -10,6 +10,7 @@ import {
 import {
   StorageService,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_ALLOWED_ROOTS_KEY,
   STORAGE_TEMP_DIR_KEY,
   STORAGE_UPLOAD_DIR_KEY,
   TEMP_DIR_SEGMENT,
@@ -92,6 +93,40 @@ describe('InternalStorageController（服务间读取权威存储目录）', () 
     expect(res.data.source).toBe('default');
   });
 
+  describe('?key=storage.allowed_roots（R1：允许根由配置表统一下发）', () => {
+    it('配置表里配了 → 回逗号分隔的允许根，source=system_configs', async () => {
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = `${tmp},${path.join(tmp, 'data')}`;
+
+      const res = await controller.getPath(STORAGE_ALLOWED_ROOTS_KEY);
+      expect(res.data.key).toBe(STORAGE_ALLOWED_ROOTS_KEY);
+      expect(res.data.source).toBe('system_configs');
+      // 回的是配置值本身（逗号分隔），消费侧按同一规则补上恒定的家目录
+      expect(res.data.path).toBe(`${tmp},${path.join(tmp, 'data')}`);
+    });
+
+    it('配置表没配 → env 兜底，source=env（system-service 的环境变量仍在生效）', async () => {
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, tmp);
+      const res = await controller.getPath(STORAGE_ALLOWED_ROOTS_KEY);
+      expect(res.data.source).toBe('env');
+      expect(res.data.path).toBe(tmp);
+    });
+
+    it('都没配 → source=default，path 仅家目录（消费侧据此拒绝启动）', async () => {
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, undefined);
+      const res = await controller.getPath(STORAGE_ALLOWED_ROOTS_KEY);
+      expect(res.data.source).toBe('default');
+      expect(res.data.path).toBe(path.resolve(os.homedir()));
+    });
+
+    it('🔴 白名单同步新增键（否则消费侧拿到 400 才知道）', () => {
+      expect([...INTERNAL_STORAGE_KEYS]).toEqual([
+        STORAGE_UPLOAD_DIR_KEY,
+        STORAGE_TEMP_DIR_KEY,
+        STORAGE_ALLOWED_ROOTS_KEY,
+      ]);
+    });
+  });
+
   it('?key= 传空串 → 回落上传根目录（trim 后为空，不算未知键）', async () => {
     settings.store[STORAGE_UPLOAD_DIR_KEY] = path.join(tmp, 'uploads');
     const res = await controller.getPath('   ');
@@ -103,7 +138,5 @@ describe('InternalStorageController（服务间读取权威存储目录）', () 
     await expect(controller.getPath('system.some_secret')).rejects.toMatchObject({
       response: { code: 'STORAGE_KEY_UNSUPPORTED' },
     });
-    // 白名单只此两项（新增键必须同步这里，否则消费侧拿到 400 才知道）
-    expect([...INTERNAL_STORAGE_KEYS]).toEqual([STORAGE_UPLOAD_DIR_KEY, STORAGE_TEMP_DIR_KEY]);
   });
 });

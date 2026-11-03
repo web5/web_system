@@ -2,7 +2,12 @@ import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/decorators';
 import { InternalGuard } from '../auth/internal.guard';
-import { StorageService, STORAGE_TEMP_DIR_KEY, STORAGE_UPLOAD_DIR_KEY } from './storage.service';
+import {
+  StorageService,
+  STORAGE_ALLOWED_ROOTS_KEY,
+  STORAGE_TEMP_DIR_KEY,
+  STORAGE_UPLOAD_DIR_KEY,
+} from './storage.service';
 
 /**
  * 内部接口可查询的存储配置键（**白名单**）。
@@ -14,6 +19,7 @@ import { StorageService, STORAGE_TEMP_DIR_KEY, STORAGE_UPLOAD_DIR_KEY } from './
 export const INTERNAL_STORAGE_KEYS: readonly string[] = [
   STORAGE_UPLOAD_DIR_KEY,
   STORAGE_TEMP_DIR_KEY,
+  STORAGE_ALLOWED_ROOTS_KEY,
 ] as const;
 
 /**
@@ -30,6 +36,11 @@ export const INTERNAL_STORAGE_KEYS: readonly string[] = [
  * ⚠️ `storage.temp_dir` **未配时返回派生默认值**（`<上传根目录的同级>/temp-images`），
  * `source='default'`。消费侧在集群形态下自行决定「default 能不能接受」：
  * 上传根目录是必需的（没人配过就该拒绝启动），临时图目录是派生的（允许用默认值）。
+ *
+ * ⚠️ `storage.allowed_roots` 回传的是**逗号分隔的允许根**（不是单个目录）：
+ * 允许根是「哪些目录合法」的判据，本身不是目录 —— 形状仍沿用 `data.path`，
+ * 消费侧用 `parseAllowedRoots` 解析。集群形态下它没配（`source='default'`）
+ * 等于全员收窄到家目录，消费侧据此拒绝启动（显式配置的数据盘会被判越界）。
  */
 @ApiTags('存储（内部）')
 @Controller('internal/storage')
@@ -51,7 +62,9 @@ export class InternalStorageController {
     const configured =
       requested === STORAGE_TEMP_DIR_KEY
         ? await this.storage.resolveConfiguredTempDir()
-        : await this.storage.resolveConfiguredUploadDir();
+        : requested === STORAGE_ALLOWED_ROOTS_KEY
+          ? await this.storage.resolveConfiguredAllowedRoots()
+          : await this.storage.resolveConfiguredUploadDir();
     return {
       code: 0,
       data: {

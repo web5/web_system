@@ -40,6 +40,20 @@ export const STORAGE_TEMP_DIR_ENV = 'STORAGE_TEMP_DIR';
 export const STORAGE_ALLOWED_ROOTS_ENV = 'STORAGE_ALLOWED_ROOTS';
 export const SYSTEM_SERVICE_URL_ENV = 'SYSTEM_SERVICE_URL';
 /**
+ * 系统配置键：允许根白名单（**目录越界校验的基准**，页面可改）。
+ *
+ * 为什么收归配置表（而不是每个服务各自 `.env` 的私有配置）：
+ * - prod 的允许根曾比 dev 窄（`/data/web_system/uploads`），于是显式配置的
+ *   `storage.temp_dir`（`/data/web_system/temp-images`）被判越界 —— 同一份权威
+ *   配置在不同服务上有不同的合法性判定，就是漂移；
+ * - 改 `.env` 会触发发布守卫③（配置指纹 `PROD_RUNTIME_CONFIG_SHA256` 漂移），
+ *   每次都要人工重采指纹回填。
+ *
+ * 现在由 system-service 统一下发：cluster 下消费侧只认配置表，
+ * 只有 standalone 形态仍用 env 兜底（见 {@link resolveAllowedRootsAtStartup}）。
+ */
+export const STORAGE_ALLOWED_ROOTS_KEY = 'storage.allowed_roots';
+/**
  * 服务间内部密钥的**环境变量名**（只是键名，本文件永不出现密钥值）。
  * 用拼接构造是为了避免把它写成看起来像凭据的字面量。
  */
@@ -117,33 +131,60 @@ export interface FetchConfiguredDirOptions {
   /** 便于单测注入；默认全局 fetch */
   fetchImpl?: typeof fetch;
   env?: NodeJS.ProcessEnv;
+  /**
+   * 已解析好的允许根（目录越界校验的基准）。
+   *
+   * 缺省时按形态自行解析：cluster 取配置表 `storage.allowed_roots`、standalone 取 env。
+   * 组合入口（{@link resolveStorageDirsAtStartup} / `resolveAndHoldStorageDirs`）
+   * 会先解析一次再下传 —— 允许根必须**两个目录用同一份**，否则就是一个目录按新根、
+   * 另一个按旧根判。
+   */
+  allowRoots?: string[];
 }
 
 /* ── 允许根 / 路径校验 ────────────────────────────────────────── */
 
-/** 允许根：当前用户家目录 + `STORAGE_ALLOWED_ROOTS`（逗号分隔，用于放开数据盘） */
-export function allowedRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+/**
+ * 解析**逗号分隔**的允许根串：展开 `~` / `~/`，resolve 成绝对路径。
+ *
+ * 只解析白名单本身（**不含**家目录、不去重）—— 家目录恒定在列，由调用方拼接，
+ * 这样「配置里写了几个根」与「实际生效几个根」就分得清。
+ */
+export function parseAllowedRoots(raw: string): string[] {
   const home = os.homedir();
-  const raw = (env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim();
-  const extra = raw
-    ? raw
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => {
-          const expanded = s === '~' ? home : s.startsWith('~/') ? home + s.slice(1) : s;
-          return nodePath.resolve(expanded);
-        })
-    : [];
-  return [...new Set([nodePath.resolve(home), ...extra])];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const expanded = s === '~' ? home : s.startsWith('~/') ? home + s.slice(1) : s;
+      return nodePath.resolve(expanded);
+    });
 }
 
-/** 解析一个候选目录（唯一实现走 resolveStoragePath，越界即抛） */
+/** 允许根：当前用户家目录 + `STORAGE_ALLOWED_ROOTS`（逗号分隔，用于放开数据盘） */
+export function allowedRoots(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = (env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim();
+  return [...new Set([nodePath.resolve(os.homedir()), ...parseAllowedRoots(raw)])];
+}
+
+/** 解析一个候选目录（唯一实现走 resolveStoragePath，越界即抛）；允许根取自 env */
 export function resolveStorageDirInput(
   input: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  return resolveStoragePath(input, { allowRoots: allowedRoots(env) });
+  return resolveStorageDirWithRoots(input, allowedRoots(env));
+}
+
+/**
+ * 用**已解析好的允许根**校验一个候选目录（越界即抛）。
+ *
+ * 为什么与 {@link resolveStorageDirInput} 分开：cluster 形态下允许根来自配置表
+ * （先取 `storage.allowed_roots`、再校验目录），本服务 env 里根本没有；
+ * 若混在一个函数里就会退化成「越界校验用 env 的旧值」—— 正是本次要消灭的漂移。
+ */
+export function resolveStorageDirWithRoots(input: string, allowRoots: string[]): string {
+  return resolveStoragePath(input, { allowRoots });
 }
 
 /* ── 读取系统配置 ─────────────────────────────────────────────── */
@@ -155,7 +196,8 @@ export function resolveStorageDirInput(
  *          `source` 是上游自报的来源 —— **cluster 形态下调用方必须据此过闸门**。
  */
 export async function fetchConfiguredDir(
-  spec: StorageDirSpec,
+  // 只需要配置键（允许根这类「不是目录」的键没有段名，故不要求完整 StorageDirSpec）
+  spec: Pick<StorageDirSpec, 'configKey'>,
   options: FetchConfiguredDirOptions = {},
 ): Promise<{ path: string | null; source?: ConfigSource; error?: string }> {
   const env = options.env ?? process.env;
@@ -203,6 +245,101 @@ export async function fetchConfiguredDir(
   }
 }
 
+/* ── 允许根解析（形态分派） ─────────────────────────────────── */
+
+/**
+ * 允许根白名单规格。
+ *
+ * 它不是目录（没有「段名」），所以只取 {@link StorageDirSpec} 的键字段 ——
+ * 但仍走同一套「配置表 → env」的形态分派，不允许为它单独造一条链。
+ */
+export const ALLOWED_ROOTS_SPEC: Pick<
+  StorageDirSpec,
+  'configKey' | 'envKey' | 'label'
+> = {
+  configKey: STORAGE_ALLOWED_ROOTS_KEY,
+  envKey: STORAGE_ALLOWED_ROOTS_ENV,
+  label: '允许根白名单',
+};
+
+export interface AllowedRootsResolution {
+  /** 解析后的允许根绝对路径（家目录恒定在列） */
+  roots: string[];
+  source: StorageDirSource;
+  /** 本次生效的部署形态 —— 回答「为什么走了这条链」 */
+  mode: DeployMode;
+  modeSource: 'explicit' | 'default';
+  notes: string[];
+}
+
+/**
+ * 按部署形态解析「目录越界校验的基准」—— 允许根。
+ *
+ * ```
+ * DEPLOY_MODE=cluster    → 内部接口 ?key=storage.allowed_roots（配置表为权威）
+ *                          拿不到 / 权威源在用默认值 → 拒绝启动
+ * DEPLOY_MODE=standalone → env STORAGE_ALLOWED_ROOTS（唯一保留的合法来源）
+ * ```
+ *
+ * 为什么 cluster 下**不回落 env**：各服务 env 里的允许根正是漂移源（prod 比 dev 窄、
+ * 改一次就要重采配置指纹）。允许根是「哪些目录合法」的判据，判据本身必须只有一份。
+ *
+ * @throws DeployModeError cluster 形态下拿不到权威值 / 权威源在用默认值
+ */
+export async function resolveAllowedRootsAtStartup(
+  options: FetchConfiguredDirOptions = {},
+): Promise<AllowedRootsResolution> {
+  const env = options.env ?? process.env;
+  const modeRes = resolveDeployMode(env);
+  const notes: string[] = [describeDeployMode(modeRes)];
+
+  /* ── standalone：env 是唯一保留的合法来源 ── */
+  if (modeRes.mode === 'standalone') {
+    const raw = (env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim();
+    notes.push(
+      raw
+        ? `standalone 形态：允许根取本服务 ${STORAGE_ALLOWED_ROOTS_ENV}=${raw}（不查询系统配置表）`
+        : `standalone 形态：未配置 ${STORAGE_ALLOWED_ROOTS_ENV}，允许根仅为用户家目录`,
+    );
+    return {
+      roots: allowedRoots(env),
+      source: raw ? 'env' : 'default',
+      mode: modeRes.mode,
+      modeSource: modeRes.source,
+      notes,
+    };
+  }
+
+  /* ── cluster：配置表唯一权威 ── */
+  const configured = await fetchConfiguredDir(ALLOWED_ROOTS_SPEC, options);
+  if (!configured.path) {
+    notes.push(`读取系统配置失败：${configured.error ?? '未返回允许根'}`);
+    assertClusterConfigured(undefined, ALLOWED_ROOTS_SPEC.label);
+  }
+  // 允许根没有「派生默认」可言：没人配过就等于全员收窄到家目录，
+  // 显式配置的 /data/web_system 会被判越界（2026-11-03 prod 事故）—— 必须有人拍板。
+  assertClusterConfigured(configured.source, ALLOWED_ROOTS_SPEC.label);
+
+  const origin =
+    configured.source === 'system_configs'
+      ? `配置表 ${STORAGE_ALLOWED_ROOTS_KEY}`
+      : 'system-service 的环境变量';
+  notes.push(`允许根经 system-service 取得（其来源：${origin}）`);
+
+  return {
+    roots: [
+      ...new Set([
+        nodePath.resolve(os.homedir()),
+        ...parseAllowedRoots(configured.path as string),
+      ]),
+    ],
+    source: 'system_service',
+    mode: modeRes.mode,
+    modeSource: modeRes.source,
+    notes,
+  };
+}
+
 /* ── 启动期解析（形态分派） ───────────────────────────────────── */
 
 /**
@@ -224,10 +361,11 @@ export async function resolveStorageDirAtStartup(
     notes.push(
       'standalone 形态：不查询系统配置表（即使配置了服务间内部密钥也不发请求）',
     );
+    const roots = options.allowRoots ?? allowedRoots(env);
     const fromEnv = (env[spec.envKey] || '').trim();
     if (fromEnv) {
       return {
-        dir: resolveStorageDirInput(fromEnv, env),
+        dir: resolveStorageDirWithRoots(fromEnv, roots),
         source: 'env',
         mode: modeRes.mode,
         modeSource: modeRes.source,
@@ -238,7 +376,7 @@ export async function resolveStorageDirAtStartup(
     if (root) {
       notes.push(`单机运行根 ${WEB_SYSTEM_DIR_ENV}=${root}`);
       return {
-        dir: resolveStorageDirInput(nodePath.join(root, spec.segment), env),
+        dir: resolveStorageDirWithRoots(nodePath.join(root, spec.segment), roots),
         source: 'env',
         mode: modeRes.mode,
         modeSource: modeRes.source,
@@ -255,6 +393,9 @@ export async function resolveStorageDirAtStartup(
   }
 
   /* ── cluster：系统表唯一权威，拿不到就拒绝启动 ── */
+  // 先定「哪些目录合法」（允许根），再判「这个目录合不合法」——顺序反了就会
+  // 拿旧判据去校验新配置。组合入口会传 allowRoots 进来，保证两个目录同一份判据。
+  const roots = options.allowRoots ?? (await resolveAllowedRootsAtStartup(options)).roots;
   const configured = await fetchConfiguredDir(spec, options);
   if (!configured.path) {
     notes.push(`读取系统配置失败：${configured.error ?? '未返回路径'}`);
@@ -282,7 +423,7 @@ export async function resolveStorageDirAtStartup(
 
   // 越界即抛（StoragePathError）—— 非法配置不能被静默接受
   return {
-    dir: resolveStorageDirInput(configured.path as string, env),
+    dir: resolveStorageDirWithRoots(configured.path as string, roots),
     source: 'system_service',
     mode: modeRes.mode,
     modeSource: modeRes.source,
@@ -332,10 +473,19 @@ export function resolveTempDirAtStartup(
  */
 export async function resolveStorageDirsAtStartup(
   options: FetchConfiguredDirOptions = {},
-): Promise<{ upload: StorageDirResolution; temp: StorageDirResolution }> {
-  const upload = await resolveStorageDirAtStartup(UPLOAD_DIR_SPEC, options);
-  const temp = await resolveStorageDirAtStartup(TEMP_DIR_SPEC, options);
-  return { upload, temp };
+): Promise<{
+  upload: StorageDirResolution;
+  temp: StorageDirResolution;
+  allowedRoots: AllowedRootsResolution;
+}> {
+  // 允许根**先解析一次**并下传给两个目录：判据必须同源，且只查一次接口
+  const allowedRoots = await resolveAllowedRootsAtStartup(options);
+  const shared = { ...options, allowRoots: allowedRoots.roots };
+  const upload = await resolveStorageDirAtStartup(UPLOAD_DIR_SPEC, shared);
+  const temp = await resolveStorageDirAtStartup(TEMP_DIR_SPEC, shared);
+  // 允许根的解析说明并入 upload.notes（跳过首条形态说明，避免与 upload 的重复）
+  upload.notes = [...allowedRoots.notes.slice(1), ...upload.notes];
+  return { upload, temp, allowedRoots };
 }
 
 /* ── 启动自检 ─────────────────────────────────────────────────── */

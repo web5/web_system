@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   isWithinRoot,
+  parseAllowedRoots,
   resolveStoragePath,
   SERVICE_URL_DEFAULTS,
   StoragePathError,
@@ -28,9 +29,21 @@ export const STORAGE_UPLOAD_DIR_KEY = 'storage.upload_dir';
  * 换个启动方式目录就换（11-03 实测 prod 的 pm_cwd 曾为 `/data/web_system`）。
  */
 export const STORAGE_TEMP_DIR_KEY = 'storage.temp_dir';
+/**
+ * 允许根白名单（**权威源**，系统管理页面可改；消费服务启动时经内部接口读它）。
+ *
+ * 为什么从「每个服务各自的 `.env`」收归配置表：
+ * - 各服务各写一份，prod 的允许根曾比 dev 窄（`/data/web_system/uploads`），
+ *   于是显式配置的 `storage.temp_dir`（`/data/web_system/temp-images`）被判越界 ——
+ *   同一份权威配置在不同服务上有不同的合法性判定，就是漂移；
+ * - 改 `.env` 会触发发布守卫③（配置指纹 `PROD_RUNTIME_CONFIG_SHA256` 漂移）。
+ *
+ * 收归后：cluster 下消费侧只认这里下发的值；standalone 才用本服务 env 兜底。
+ */
+export const STORAGE_ALLOWED_ROOTS_KEY = 'storage.allowed_roots';
 /** 目录浏览降级开关（'1' 开 / '0' 关，默认开）—— 异常时一键回到纯文本输入 */
 export const STORAGE_BROWSE_ENABLED_KEY = 'storage.browse_enabled';
-/** 允许根白名单（逗号分隔，**追加**在用户家目录之后，用于放开数据盘） */
+/** 允许根白名单的**环境兜底键**（逗号分隔，**追加**在用户家目录之后，用于放开数据盘） */
 export const STORAGE_ALLOWED_ROOTS_ENV = 'STORAGE_ALLOWED_ROOTS';
 /** 兜底上传目录（系统配置缺失时使用） */
 export const STORAGE_UPLOAD_DIR_ENV = 'STORAGE_UPLOAD_DIR';
@@ -78,6 +91,31 @@ export interface ConfiguredUploadDir {
  * 派生默认值**随上传根目录变化**，若页面把它显示成「已配置」，
  * 运维改了 uploads 后会产生「临时图目录怎么也跟着变了」的困惑。
  */
+/**
+ * 允许根白名单的解析结果。
+ *
+ * 与目录类配置的差别：值不是单个目录，而是**逗号分隔的多个根**（家目录恒定在列）。
+ * 内部接口仍走 `data.path` 回传这个串 —— 消费侧用 `parseAllowedRoots` 解析，
+ * 这样「允许根」与「目录」在内部接口上是同一套形状（同一个 `?key=` 通道）。
+ */
+export interface ConfiguredAllowedRoots {
+  /** 生效的允许根（家目录恒定在列，已去重） */
+  roots: string[];
+  /** 逗号分隔形式（内部接口 `data.path` 回传；消费侧自行解析） */
+  path: string;
+  source: UploadDirSource;
+}
+
+/** 允许根白名单的校验结果（保存前置；不落库） */
+export interface AllowedRootsCheck {
+  ok: boolean;
+  /** 解析后的允许根（不含恒定在列的家目录） */
+  roots: string[];
+  /** 失败时的稳定错误码 */
+  code?: string;
+  message: string;
+}
+
 export interface ConfiguredTempDir extends ConfiguredUploadDir {
   /** 是否显式配过（false = 用的是派生默认值，会随上传根目录变化） */
   configured: boolean;
@@ -134,13 +172,6 @@ export interface BrowseResult {
   truncated: boolean;
 }
 
-/** 展开 `~` / `~/`（与 shared 的 storage-path 语义一致，仅用于允许根白名单解析） */
-function expandHome(input: string, home = os.homedir()): string {
-  if (input === '~') return home;
-  if (input.startsWith('~/') || input.startsWith('~\\')) return home + input.slice(1);
-  return input;
-}
-
 function formatBytes(n: number | null): string {
   if (n === null) return '未知';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -171,19 +202,43 @@ function formatBytes(n: number | null): string {
 export class StorageService {
   constructor(private readonly settings: SettingsService) {}
 
-  /** 允许根列表：当前用户家目录 + `STORAGE_ALLOWED_ROOTS`（逗号分隔） */
-  allowedRoots(env: Record<string, string | undefined> = process.env): string[] {
-    const home = os.homedir();
-    const raw = (env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim();
-    const extra = raw
-      ? raw
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .map((s) => path.resolve(expandHome(s, home)))
-      : [];
-    const roots = [path.resolve(home), ...extra];
-    return [...new Set(roots)];
+  /**
+   * 允许根列表（**目录越界校验的基准**）：家目录 + 权威白名单。
+   *
+   * 现在是异步的：白名单的权威源是配置表 `storage.allowed_roots`（页面可改），
+   * 读它必须走 `SettingsService`。同步签名会逼着「允许根」永远只能来自 env ——
+   * 那正是本次要消灭的漂移源。
+   */
+  async allowedRoots(): Promise<string[]> {
+    return (await this.resolveConfiguredAllowedRoots()).roots;
+  }
+
+  /**
+   * 解析**权威**允许根白名单：系统配置 → `STORAGE_ALLOWED_ROOTS` → 仅家目录。
+   *
+   * 与上传根目录同一套三级链（`settings` → `process.env` → 兜底），
+   * 不允许允许根自己搞一套优先级 —— 否则页面上的 source 就说不清了。
+   */
+  async resolveConfiguredAllowedRoots(): Promise<ConfiguredAllowedRoots> {
+    const home = path.resolve(os.homedir());
+    const configured = (await this.settings.get(STORAGE_ALLOWED_ROOTS_KEY))?.trim();
+    if (configured) {
+      // path 回传**配置值本身**（与上传根目录一致：回的是配置值，不是「配置值 + 家目录」）；
+      // 家目录恒定在列属于「生效规则」，由消费侧按同一规则补，不进配置值。
+      return { roots: this.rootsFrom(configured), path: configured, source: 'system_configs' };
+    }
+    const fromEnv = (process.env[STORAGE_ALLOWED_ROOTS_ENV] || '').trim();
+    if (fromEnv) {
+      return { roots: this.rootsFrom(fromEnv), path: fromEnv, source: 'env' };
+    }
+    // 没人配过：生效值就是家目录（回空串会让消费侧误判为「接口没返回」，
+    // 掩盖真正的原因 —— 「集群里没人配过允许根」）
+    return { roots: [home], path: home, source: 'default' };
+  }
+
+  /** 逗号分隔串 → 允许根（家目录恒定在列、去重）；解析规则与 shared 唯一实现一致 */
+  private rootsFrom(raw: string): string[] {
+    return [...new Set([path.resolve(os.homedir()), ...parseAllowedRoots(raw)])];
   }
 
   /** 目录浏览是否开启（默认开；`storage.browse_enabled=0` 关闭） */
@@ -294,6 +349,46 @@ export class StorageService {
   }
 
   /**
+   * 校验待保存的允许根白名单（**不落库**）。
+   *
+   * 两道关：
+   * 1. 至少要有一个根（空值等于「把所有目录判为越界」，直接拒绝）；
+   * 2. 🔴 新白名单必须仍覆盖 `mustCover` 里的目录 —— 这是 prod 事故的复发防护：
+   *    允许根比别处窄时，已配置的目录会在下次启动被判越界（服务起不来）。
+   *
+   * @param mustCover 保存后仍在生效的目录（本次要保存的 / 已配置的）
+   */
+  async checkAllowedRoots(raw: string, mustCover: string[] = []): Promise<AllowedRootsCheck> {
+    const roots = [...new Set(parseAllowedRoots(raw))];
+    if (!roots.length) {
+      return {
+        ok: false,
+        roots: [],
+        code: 'ALLOWED_ROOTS_EMPTY',
+        message: '允许根白名单不能为空（空值会让所有数据目录都被判越界）',
+      };
+    }
+    const effective = [...new Set([path.resolve(os.homedir()), ...roots])];
+    const dropped = [...new Set(mustCover)].filter((d) => !isWithinRoot(d, effective));
+    if (dropped.length) {
+      return {
+        ok: false,
+        roots,
+        code: 'ALLOWED_ROOTS_EXCLUDE_CONFIGURED_DIRS',
+        message:
+          `新的允许根（${roots.join('、')}）不包含这些已配置的目录：${dropped.join('、')} —— ` +
+          '收窄会让它们在下次启动时被判越界（服务拒绝启动）。请先扩到包含它们的根，再改目录。',
+      };
+    }
+    return { ok: true, roots, message: `允许根 ${roots.join('、')}` };
+  }
+
+  /** 写入权威允许根白名单（只写配置，不碰文件系统；调用方须先 checkAllowedRoots） */
+  async setAllowedRoots(roots: string[]): Promise<void> {
+    await this.settings.set(STORAGE_ALLOWED_ROOTS_KEY, roots.join(','));
+  }
+
+  /**
    * 校验一个待保存的目录：解析 → 存在 → 可写（真写一个临时文件）→ 剩余空间。
    *
    * @param create 不存在时是否创建（保存路径用 true：新挂的盘往往还是空目录；
@@ -316,7 +411,7 @@ export class StorageService {
 
     let resolved: string;
     try {
-      resolved = this.resolveOrThrow(input);
+      resolved = await this.resolveOrThrow(input);
     } catch (e) {
       const err = e as BadRequestException;
       const payload = err.getResponse() as { code?: string; message?: string };
@@ -415,8 +510,10 @@ export class StorageService {
       throw new ForbiddenException('目录浏览已关闭（storage.browse_enabled=0）');
     }
 
-    const roots = this.allowedRoots();
-    const target = rawPath?.trim() ? this.resolveOrThrow(rawPath) : path.resolve(roots[0]);
+    const roots = await this.allowedRoots();
+    const target = rawPath?.trim()
+      ? await this.resolveOrThrow(rawPath)
+      : path.resolve(roots[0]);
     // 命中「最深」的允许根：白名单可能包含家目录的父级，取最长匹配才不会被上一级吞掉
     const root =
       roots.filter((r) => isWithinRoot(target, [r])).sort((a, b) => b.length - a.length)[0] ??
@@ -490,19 +587,19 @@ export class StorageService {
   ): Promise<ConfiguredUploadDir> {
     const configured = (await this.settings.get(configKey))?.trim();
     if (configured) {
-      return { path: this.resolveOrThrow(configured), source: 'system_configs' };
+      return { path: await this.resolveOrThrow(configured), source: 'system_configs' };
     }
     const fromEnv = (process.env[envKey] || '').trim();
     if (fromEnv) {
-      return { path: this.resolveOrThrow(fromEnv), source: 'env' };
+      return { path: await this.resolveOrThrow(fromEnv), source: 'env' };
     }
     return { path: path.resolve(fallback()), source: 'default' };
   }
 
   /** 解析路径并做范围校验；失败抛 400（带稳定 code） */
-  private resolveOrThrow(input: string): string {
+  private async resolveOrThrow(input: string): Promise<string> {
     try {
-      return resolveStoragePath(input, { allowRoots: this.allowedRoots() });
+      return resolveStoragePath(input, { allowRoots: await this.allowedRoots() });
     } catch (e) {
       if (e instanceof StoragePathError) {
         const code =

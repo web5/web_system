@@ -2,6 +2,7 @@ import * as nodePath from 'path';
 import type { DeployMode } from './deploy-mode';
 import {
   ensureWritableDir,
+  resolveAllowedRootsAtStartup,
   resolveStorageDirsAtStartup,
   resolveUploadDirAtStartup,
 } from './storage-dir';
@@ -45,6 +46,16 @@ export interface ResolvedStorageDirs {
   /** 两个目录各自经哪一级取得（cluster 下都是 `system_service`） */
   uploadSource: StorageDirSource;
   tempSource: StorageDirSource | null;
+  /**
+   * 本次生效的**允许根**（两个目录越界校验的基准）。
+   *
+   * 为什么要带在结果里：允许根是「哪些目录合法」的判据，cluster 下来自配置表
+   * `storage.allowed_roots`。启动日志必须能回答「按哪几个根判的」——
+   * 否则 prod 上出现「temp 目录被判越界」时无从查起（2026-11-03 事故）。
+   */
+  allowedRoots: string[];
+  /** 允许根经哪一级取得（cluster 下是 `system_service`，standalone 下是 env / default） */
+  allowedRootsSource: StorageDirSource;
   /** 本次生效的部署形态 —— 回答「为什么走了这条链」 */
   mode: DeployMode;
   /** 过程性说明（形态判定依据 + 解析过程），启动期应打日志 */
@@ -59,6 +70,7 @@ export function setResolvedStorageDirs(dirs: ResolvedStorageDirs): void {
     ...dirs,
     uploadDir: nodePath.resolve(dirs.uploadDir),
     tempDir: dirs.tempDir ? nodePath.resolve(dirs.tempDir) : null,
+    allowedRoots: [...new Set(dirs.allowedRoots.map((r) => nodePath.resolve(r)))],
   };
 }
 
@@ -123,7 +135,8 @@ export async function resolveAndHoldStorageDirs(
   const notes: string[] = [];
 
   if (withTempDir) {
-    const { upload, temp } = await resolveStorageDirsAtStartup(fetchOpts);
+    // 组合入口内部已把允许根解析好并下传给两个目录（只查一次接口）
+    const { upload, temp, allowedRoots } = await resolveStorageDirsAtStartup(fetchOpts);
     ensureWritableDir(upload.dir);
     ensureWritableDir(temp.dir);
     notes.push(...upload.notes, ...temp.notes);
@@ -132,6 +145,8 @@ export async function resolveAndHoldStorageDirs(
       tempDir: temp.dir,
       uploadSource: upload.source,
       tempSource: temp.source,
+      allowedRoots: allowedRoots.roots,
+      allowedRootsSource: allowedRoots.source,
       mode: upload.mode,
       notes,
     };
@@ -139,14 +154,21 @@ export async function resolveAndHoldStorageDirs(
     return dirs;
   }
 
-  const upload = await resolveUploadDirAtStartup(fetchOpts);
+  // 只要上传根目录：允许根仍要先定（cluster 下取配置表），再下传给目录解析
+  const allowedRoots = await resolveAllowedRootsAtStartup(fetchOpts);
+  const upload = await resolveUploadDirAtStartup({
+    ...fetchOpts,
+    allowRoots: allowedRoots.roots,
+  });
   ensureWritableDir(upload.dir);
-  notes.push(...upload.notes);
+  notes.push(...allowedRoots.notes.slice(1), ...upload.notes);
   const dirs: ResolvedStorageDirs = {
     uploadDir: upload.dir,
     tempDir: null,
     uploadSource: upload.source,
     tempSource: null,
+    allowedRoots: allowedRoots.roots,
+    allowedRootsSource: allowedRoots.source,
     mode: upload.mode,
     notes,
   };

@@ -23,6 +23,19 @@ export class StorageDirDto {
   @IsString()
   @Length(0, 512, { message: 'tempDir 长度需在 0~512 之间' })
   tempDir?: string;
+
+  /**
+   * 允许根白名单（**逗号分隔**，如 `/data/web_system,/mnt/data`）；
+   * **省略或空字符串 = 不改动**（不会清空已有配置）。
+   *
+   * 与目录类的差别：它是「哪些目录合法」的判据，不是目录本身，
+   * 因此不做「存在 / 可写」检查 —— 但会挡住「收窄到不含已配置目录」
+   * （那会让服务下次启动被判越界，见 `StorageService.checkAllowedRoots`）。
+   */
+  @IsOptional()
+  @IsString()
+  @Length(0, 512, { message: 'allowedRoots 长度需在 0~512 之间' })
+  allowedRoots?: string;
 }
 
 /** 目录浏览入参（query） */
