@@ -20,6 +20,44 @@ export type { ResolveStoragePathOptions } from './storage-path';
 // 运行数据根目录（uploads/temp-images 等，唯一实现，禁止各服务用 process.cwd() 自拼）
 export { dataRoot, dataDir } from './data-root';
 
+// 部署形态判定（cluster / standalone，唯一实现；禁止各服务按「有没有凭证」自行推断形态）
+export {
+  DEPLOY_MODE_ENV,
+  DEPLOY_MODES,
+  DeployModeError,
+  resolveDeployMode,
+  assertClusterConfigured,
+  describeDeployMode,
+} from './deploy-mode';
+export type { DeployMode, ConfigSource, DeployModeResolution } from './deploy-mode';
+
+// 数据目录解析（上提自 upload-service，唯一实现）：形态分派 + 系统表权威 + 启动自检
+export {
+  DEFAULT_STORAGE_BASE,
+  DEFAULT_UPLOAD_DIR,
+  CONFIG_FETCH_TIMEOUT_MS,
+  INTERNAL_API_KEY_ENV,
+  STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_UPLOAD_DIR_ENV,
+  STORAGE_UPLOAD_DIR_KEY,
+  SYSTEM_SERVICE_URL_ENV,
+  UPLOAD_DIR_SPEC,
+  WEB_SYSTEM_DIR_ENV,
+  allowedRoots,
+  describePathError,
+  ensureWritableDir,
+  fetchConfiguredDir,
+  resolveStorageDirAtStartup,
+  resolveStorageDirInput,
+  resolveUploadDirAtStartup,
+} from './storage-dir';
+export type {
+  FetchConfiguredDirOptions,
+  StorageDirResolution,
+  StorageDirSource,
+  StorageDirSpec,
+} from './storage-dir';
+
 // 合同翻译官 — 共享类型 / IRR / 法定标准库
 export * from './contract';
 

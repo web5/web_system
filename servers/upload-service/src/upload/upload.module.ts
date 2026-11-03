@@ -10,6 +10,7 @@ import { UPLOAD_ROOT } from './upload-root.token';
 import { setUploadRoot } from './upload-root';
 import {
   DEFAULT_UPLOAD_DIR,
+  describePathError,
   ensureWritableDir,
   resolveUploadDirAtStartup,
   STORAGE_UPLOAD_DIR_ENV,
@@ -44,8 +45,18 @@ import {
           );
         }
 
-        const resolved = await resolveUploadDirAtStartup({ env: process.env });
-        for (const note of resolved.notes) logger.warn(note);
+        // 形态分派 + 权威值解析。集群形态下拿不到权威值会**抛错**（不回落到单机路径），
+        // 这里是 fail-fast 的唯一出口：解析不了目录就别起来，否则文件会写错地方。
+        let resolved: Awaited<ReturnType<typeof resolveUploadDirAtStartup>>;
+        try {
+          resolved = await resolveUploadDirAtStartup({ env: process.env });
+        } catch (e) {
+          logger.error(`上传根目录解析失败：${describePathError(e)}`);
+          logger.error('无法决定上传根目录，拒绝启动（不做静默回落）');
+          process.exit(1);
+        }
+        // notes[0] 是形态判定依据（正常信息），其余是过程性说明（值得留意）
+        resolved.notes.forEach((note, i) => (i === 0 ? logger.log(note) : logger.warn(note)));
 
         try {
           ensureWritableDir(resolved.dir);
@@ -56,7 +67,9 @@ import {
         }
 
         setUploadRoot(resolved.dir, resolved.source);
-        logger.log(`上传根目录: ${resolved.dir}（来源 ${resolved.source}）`);
+        logger.log(
+          `上传根目录: ${resolved.dir}（来源 ${resolved.source}，形态 ${resolved.mode}）`,
+        );
         return resolved.dir;
       },
     },
