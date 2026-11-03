@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { HttpService } from '@nestjs/axios';
 import { DataSource, Repository, MoreThanOrEqual, FindOptionsWhere } from 'typeorm';
-import { API_TIMEOUT, dataDir } from '@web-system/shared';
+import { API_TIMEOUT, STORAGE_DIRS } from '@web-system/shared';
+import type { ResolvedStorageDirs } from '@web-system/shared';
 import { firstValueFrom } from 'rxjs';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -25,8 +26,25 @@ export class BianbianService {
   private readonly logger = new Logger(BianbianService.name);
   /** 动态配置缓存 */
   private settingsCache = new Map<string, { value: string; ts: number }>();
-  /** 临时图片存储目录（延迟初始化） */
-  private tempImagesDir: string | null = null;
+
+  /**
+   * 临时图片目录 —— **不再延迟初始化，也不再自己拼路径**。
+   *
+   * 旧实现是 `dataDir('temp-images')`，即「运行根 + 段名」：它不区分部署形态、
+   * 不查系统配置表，集群里就是漂移的来源（页面改了临时图目录，本服务不认）。
+   * 现在由 `StorageDirsModule` 在启动期按形态解析一次（cluster 下取 system-service
+   * 的 `storage.temp_dir` / 其派生默认值），进程内是常量。
+   */
+  private get tempImagesDir(): string {
+    const dir = this.storageDirs?.tempDir ?? null;
+    if (!dir) {
+      throw new Error(
+        '临时图目录未解析：ai-service 应由 StorageDirsModule 以 withTempDir: true 启动' +
+          '（集群形态下取系统配置 storage.temp_dir）',
+      );
+    }
+    return dir;
+  }
 
   constructor(
     @InjectRepository(BianbianRecord)
@@ -37,6 +55,9 @@ export class BianbianService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly uploadStore: UploadStoreClient,
+    /** 启动期解析出的存储目录（形态分派：cluster 取系统配置表，standalone 取 env/默认） */
+    @Inject(STORAGE_DIRS)
+    private readonly storageDirs: ResolvedStorageDirs,
   ) {}
 
   /** 微服务地址（统一从 ConfigService 读取，兼容 localhost/Docker/生产环境） */
@@ -480,7 +501,7 @@ export class BianbianService {
     const filename = `bb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
     await this.ensureTempDir();
-    await fs.promises.writeFile(path.join(this.tempImagesDir!, filename), buffer);
+    await fs.promises.writeFile(path.join(this.tempImagesDir, filename), buffer);
 
     return { url: this.getPublicUrl(filename), filename };
   }
@@ -488,7 +509,7 @@ export class BianbianService {
   /** 删除临时图片文件（MaaS 下载完成后调用） */
   private async cleanupTempImage(filename: string): Promise<void> {
     await this.ensureTempDir();
-    const filePath = path.join(this.tempImagesDir!, filename);
+    const filePath = path.join(this.tempImagesDir, filename);
     try {
       await fs.promises.unlink(filePath);
     } catch {
@@ -498,9 +519,6 @@ export class BianbianService {
 
   /** 确保临时图片目录存在 */
   private async ensureTempDir(): Promise<void> {
-    if (!this.tempImagesDir) {
-      this.tempImagesDir = dataDir('temp-images');
-    }
     if (!fs.existsSync(this.tempImagesDir)) {
       await fs.promises.mkdir(this.tempImagesDir, { recursive: true });
     }

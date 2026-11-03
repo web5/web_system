@@ -7,11 +7,25 @@ import * as fs from 'fs';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { OperationLogClient } from '../permission/operation-log.client';
-import { PermissionGuard, RequirePermission, dataDir } from '@web-system/shared';
+import { PermissionGuard, RequirePermission, getUploadDir } from '@web-system/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangeOwnPasswordDto, ResetPasswordDto } from './dto/change-password.dto';
 import type { Request } from 'express';
+
+/**
+ * 头像落盘目录 = 上传根目录 + `avatars`。
+ *
+ * 为什么抽成纯函数：Multer 的 `destination` 在**装饰器求值期**执行，拿不到 DI，
+ * 只能读进程内持有者；抽出来后这个函数可以被单测直接钉住口径 ——
+ * 否则「头像写到哪个目录」这件事没有任何自动化证据。
+ *
+ * 上传根目录是启动期按形态解析出的进程常量（cluster 取系统配置表 storage.upload_dir），
+ * 不再用「运行根 + 段名」自己拼（那正是漂移的来源）。
+ */
+export function avatarUploadDir(): string {
+  return path.join(getUploadDir(), 'avatars');
+}
 
 /** AuthGuard 校验通过后挂到 req.user 的最小结构（绕开 passport 的空 User 类型） */
 interface AuthedRequest extends Request {
@@ -75,7 +89,7 @@ export class UserController {
     FileInterceptor('avatar', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const uploadDir = dataDir('uploads', 'avatars');
+          const uploadDir = avatarUploadDir();
           if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
           }

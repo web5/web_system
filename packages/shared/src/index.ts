@@ -38,9 +38,14 @@ export {
   CONFIG_FETCH_TIMEOUT_MS,
   INTERNAL_API_KEY_ENV,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_TEMP_DIR_ENV,
+  STORAGE_TEMP_DIR_KEY,
   STORAGE_UPLOAD_DIR_ENV,
   STORAGE_UPLOAD_DIR_KEY,
   SYSTEM_SERVICE_URL_ENV,
+  TEMP_DIR_SPEC,
+  TEMP_DIR_SEGMENT,
+  DEFAULT_TEMP_DIR,
   UPLOAD_DIR_SPEC,
   WEB_SYSTEM_DIR_ENV,
   allowedRoots,
@@ -49,6 +54,8 @@ export {
   fetchConfiguredDir,
   resolveStorageDirAtStartup,
   resolveStorageDirInput,
+  resolveStorageDirsAtStartup,
+  resolveTempDirAtStartup,
   resolveUploadDirAtStartup,
 } from './storage-dir';
 export type {
@@ -57,6 +64,19 @@ export type {
   StorageDirSource,
   StorageDirSpec,
 } from './storage-dir';
+
+// 存储目录进程内持有者（装饰器求值期 / main.ts 静态挂载用）
+export {
+  STORAGE_DIRS,
+  getStorageDirs,
+  getTempDir,
+  getUploadDir,
+  hasStorageDirs,
+  resetStorageDirsForTest,
+  resolveAndHoldStorageDirs,
+  setResolvedStorageDirs,
+} from './storage-dirs';
+export type { ResolvedStorageDirs } from './storage-dirs';
 
 // 合同翻译官 — 共享类型 / IRR / 法定标准库
 export * from './contract';

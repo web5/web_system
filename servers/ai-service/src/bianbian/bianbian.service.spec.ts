@@ -9,6 +9,15 @@ import { BianbianService } from './bianbian.service';
 describe('BianbianService.downloadAndSaveImage（A8）', () => {
   const storeImage = jest.fn();
   const httpGet = jest.fn();
+  /** 启动期解析出的存储目录（形态分派后的进程常量） */
+  const storageDirs = {
+    uploadDir: '/data/web_system/uploads',
+    tempDir: '/data/web_system/temp-images',
+    uploadSource: 'system_service',
+    tempSource: 'system_service',
+    mode: 'cluster',
+    notes: [],
+  } as never;
   const service = new BianbianService(
     {} as never,
     {} as never,
@@ -16,6 +25,7 @@ describe('BianbianService.downloadAndSaveImage（A8）', () => {
     { get: httpGet } as never,
     { get: () => undefined } as never,
     { storeImage } as never,
+    storageDirs,
   );
   const invoke = (url: string) => (service as unknown as { downloadAndSaveImage(a: string, b: string): Promise<string> })
     .downloadAndSaveImage(url, 'rec-1');
@@ -56,5 +66,48 @@ describe('BianbianService.downloadAndSaveImage（A8）', () => {
     httpGet.mockReturnValue(of({ status: 502, data: Buffer.from('') }));
     await expect(invoke('https://cdn.example.com/gen/abc.jpg')).rejects.toThrow(/下载图片失败/);
     expect(storeImage).not.toHaveBeenCalled();
+  });
+});
+
+describe('BianbianService 临时图目录口径（W4：形态分派后的进程常量）', () => {
+  const dirs = (tempDir: string | null) =>
+    ({
+      uploadDir: '/data/web_system/uploads',
+      tempDir,
+      uploadSource: 'system_service',
+      tempSource: tempDir ? 'system_service' : null,
+      mode: 'cluster',
+      notes: [],
+    }) as never;
+
+  const make = (d: unknown) =>
+    new BianbianService(
+      {} as never,
+      {} as never,
+      {} as never,
+      { get: () => undefined } as never,
+      { get: () => undefined } as never,
+      { storeImage: jest.fn() } as never,
+      d as never,
+    );
+
+  const tempOf = (s: BianbianService) => (s as unknown as { tempImagesDir: string }).tempImagesDir;
+
+  it('目录 = 启动期注入的解析结果（不是「运行根 + 段名」自己拼）', () => {
+    expect(tempOf(make(dirs('/data/web_system/temp-images')))).toBe(
+      '/data/web_system/temp-images',
+    );
+  });
+
+  it('改了系统配置并重启 → 用新目录（证明它是注入值而非常量）', () => {
+    expect(tempOf(make(dirs('/mnt/data/temp-images')))).toBe('/mnt/data/temp-images');
+  });
+
+  it('🔴 只解析了上传根目录（tempDir=null）→ 抛错，绝不静默回落到 cwd', () => {
+    expect(() => tempOf(make(dirs(null)))).toThrow(/未解析|未启用/);
+  });
+
+  it('🔴 注入对象缺失（模块没装）→ 抛错而不是 undefined 参与路径拼接', () => {
+    expect(() => tempOf(make(undefined))).toThrow(/未解析|未启用|Cannot read/);
   });
 });

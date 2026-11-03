@@ -5,14 +5,19 @@ import { DeployModeError } from './deploy-mode';
 import {
   allowedRoots,
   DEFAULT_STORAGE_BASE,
+  DEFAULT_TEMP_DIR,
   ensureWritableDir,
   fetchConfiguredDir,
   INTERNAL_API_KEY_ENV,
   resolveStorageDirAtStartup,
+  resolveStorageDirsAtStartup,
+  resolveTempDirAtStartup,
   resolveUploadDirAtStartup,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_TEMP_DIR_ENV,
   STORAGE_UPLOAD_DIR_ENV,
   SYSTEM_SERVICE_URL_ENV,
+  TEMP_DIR_SPEC,
   UPLOAD_DIR_SPEC,
   WEB_SYSTEM_DIR_ENV,
 } from './storage-dir';
@@ -262,6 +267,154 @@ describe('storage-dir：数据目录解析（形态分派 + 启动自检）', ()
       const dir = path.join(tmp, 'clean');
       ensureWritableDir(dir);
       expect(fs.readdirSync(dir)).toEqual([]);
+    });
+  });
+
+  describe('临时图目录（TEMP_DIR_SPEC）：可选键，接受上游派生默认值', () => {
+    beforeEach(() => {
+      delete env[STORAGE_TEMP_DIR_ENV];
+    });
+
+    it('cluster + 上游 source=default → 用派生值（不拒绝启动），并说清是派生的', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const derived = path.join(tmp, 'temp-images');
+      const res = await resolveTempDirAtStartup({
+        env,
+        fetchImpl: fetchStub({ data: { path: derived, source: 'default' } }),
+      });
+      expect(res.dir).toBe(derived);
+      expect(res.source).toBe('system_service');
+      expect(res.notes.some((n) => n.includes('派生默认值'))).toBe(true);
+    });
+
+    it('cluster + 上游 source=system_configs → 用配置表值', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const configured = path.join(tmp, 'conf-temp');
+      const res = await resolveTempDirAtStartup({
+        env,
+        fetchImpl: fetchStub({ data: { path: configured, source: 'system_configs' } }),
+      });
+      expect(res.dir).toBe(configured);
+      expect(res.notes.some((n) => n.includes('配置表 storage.temp_dir'))).toBe(true);
+    });
+
+    it('🔴 cluster + 上游不可达 → 仍拒绝启动（「接受派生默认」不等于「可接受失败」）', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      await expect(
+        resolveTempDirAtStartup({ env, fetchImpl: fetchStub({}, { ok: false, status: 500 }) }),
+      ).rejects.toBeInstanceOf(DeployModeError);
+    });
+
+    it('🔴 cluster + 上游返回空路径 → 仍拒绝启动', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      await expect(
+        resolveTempDirAtStartup({ env, fetchImpl: fetchStub({ data: { path: '' } }) }),
+      ).rejects.toBeInstanceOf(DeployModeError);
+    });
+
+    it('🔴 cluster + 上游返回越界路径 → 抛 StoragePathError（派生默认也不能越界）', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      await expect(
+        resolveTempDirAtStartup({
+          env,
+          fetchImpl: fetchStub({ data: { path: '/definitely/not/allowed', source: 'default' } }),
+        }),
+      ).rejects.toThrow(/OUT_OF_SCOPE|越界/);
+    });
+
+    it('standalone → 默认 ~/web_system/temp-images（不查系统表）', async () => {
+      env.DEPLOY_MODE = 'standalone';
+      env[INTERNAL_API_KEY_ENV] = 'k'; // 即使配了内部密钥也不发请求
+      const spy = jest.fn(fetchStub({ data: { path: path.join(tmp, 'x') } }));
+      const res = await resolveTempDirAtStartup({ env, fetchImpl: fetch as never });
+      expect(spy).not.toHaveBeenCalled();
+      expect(res.dir).toBe(path.resolve(DEFAULT_TEMP_DIR));
+      expect(res.source).toBe('default');
+    });
+
+    it('standalone + env → 用 env', async () => {
+      env.DEPLOY_MODE = 'standalone';
+      const fromEnv = path.join(tmp, 'env-temp');
+      env[STORAGE_TEMP_DIR_ENV] = fromEnv;
+      const res = await resolveTempDirAtStartup({ env });
+      expect(res.dir).toBe(fromEnv);
+      expect(res.source).toBe('env');
+    });
+
+    it('🔴 规格本身必须声明 allowDerivedDefault（否则与上传根目录同闸门）', () => {
+      expect(TEMP_DIR_SPEC.allowDerivedDefault).toBe(true);
+      expect(UPLOAD_DIR_SPEC.allowDerivedDefault).toBeFalsy();
+    });
+
+    it('🔴 上传根目录不享受派生默认：上游 source=default → 拒绝启动', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      await expect(
+        resolveUploadDirAtStartup({
+          env,
+          fetchImpl: fetchStub({ data: { path: path.join(tmp, 'uploads'), source: 'default' } }),
+        }),
+      ).rejects.toBeInstanceOf(DeployModeError);
+    });
+  });
+
+  describe('resolveStorageDirsAtStartup：两个目录同一份 env，任一失败即失败', () => {
+    beforeEach(() => {
+      delete env[STORAGE_TEMP_DIR_ENV];
+    });
+
+    it('两个都取到 → 分别返回，形态一致', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const upload = path.join(tmp, 'uploads');
+      const temp = path.join(tmp, 'temp-images');
+      // 按 key 区分应答：upload 无 key 参数，temp 带 key=storage.temp_dir
+      const spy = jest.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () =>
+          url.includes('storage.temp_dir')
+            ? { data: { path: temp, source: 'system_configs' } }
+            : { data: { path: upload, source: 'system_configs' } },
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+      const res = await resolveStorageDirsAtStartup({ env, fetchImpl: spy as never });
+      expect(res.upload.dir).toBe(upload);
+      expect(res.temp.dir).toBe(temp);
+      expect(res.upload.mode).toBe(res.temp.mode);
+      expect(res.temp.dir).not.toBe(res.upload.dir);
+    });
+
+    it('🔴 上传根目录失败 → 整体失败（不允许「一半新口径」）', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const spy = jest.fn(async (url: string) => ({
+        ok: !url.includes('storage.temp_dir'),
+        status: url.includes('storage.temp_dir') ? 200 : 500,
+        json: async () => ({ data: { path: path.join(tmp, 'temp-images'), source: 'system_configs' } }),
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+      await expect(resolveStorageDirsAtStartup({ env, fetchImpl: spy as never })).rejects.toBeInstanceOf(
+        DeployModeError,
+      );
+    });
+
+    it('🔴 临时图目录失败 → 整体失败', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const spy = jest.fn(async (url: string) => ({
+        ok: !url.includes('storage.temp_dir'),
+        status: url.includes('storage.temp_dir') ? 500 : 200,
+        json: async () => ({ data: { path: path.join(tmp, 'uploads'), source: 'system_configs' } }),
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+      await expect(resolveStorageDirsAtStartup({ env, fetchImpl: spy as never })).rejects.toBeInstanceOf(
+        DeployModeError,
+      );
+    });
+
+    it('standalone → 两个目录都不查系统表，按段名拼在同一运行根下', async () => {
+      env.DEPLOY_MODE = 'standalone';
+      env[WEB_SYSTEM_DIR_ENV] = tmp;
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const spy = jest.fn(fetchStub({ data: { path: path.join(tmp, 'x') } }));
+      const res = await resolveStorageDirsAtStartup({ env, fetchImpl: spy as never });
+      expect(spy).not.toHaveBeenCalled();
+      expect(res.upload.dir).toBe(path.join(tmp, 'uploads'));
+      expect(res.temp.dir).toBe(path.join(tmp, TEMP_DIR_SPEC.segment));
     });
   });
 });

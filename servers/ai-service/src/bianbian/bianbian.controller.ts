@@ -8,7 +8,7 @@ import { TransformDto } from './dto/transform.dto';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { AuthGuard } from '../auth/auth.guard';
 import { Public } from '../auth/public.decorator';
-import { dataDir } from '@web-system/shared';
+import { getTempDir } from '@web-system/shared';
 
 @ApiTags('变变 AI 变身')
 @Controller('bianbian')
@@ -115,7 +115,8 @@ export class BianbianController {
   @ApiOperation({ summary: '获取临时参考图片（内部使用）' })
   async serveTempImage(@Param('filename') filename: string, @Res() res: Response) {
     const safeName = path.basename(filename);
-    const filePath = dataDir('temp-images', safeName);
+    // 临时图目录 = 启动期按形态解析出的进程常量（不再用「运行根 + 段名」自己拼）
+    const filePath = path.join(getTempDir(), safeName);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ code: 404, message: '图片不存在或已过期' });
     }

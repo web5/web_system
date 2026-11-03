@@ -6,7 +6,12 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
 import * as path from 'path';
-import { missingRequiredServiceUrls, serviceUrlFailFastHint, dataDir } from '@web-system/shared';
+import {
+  missingRequiredServiceUrls,
+  serviceUrlFailFastHint,
+  STORAGE_DIRS,
+} from '@web-system/shared';
+import type { ResolvedStorageDirs } from '@web-system/shared';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -41,8 +46,11 @@ async function bootstrap() {
   });
 
   // 静态资源服务 — AI 生成的图片通过 /uploads/ 访问
-  // 数据目录走运行根解析（WEB_SYSTEM_DIR 优先，未配置回退 cwd），禁止 process.cwd() 自拼
-  app.useStaticAssets(dataDir('uploads'), {
+  // 上传根目录 = 启动期按形态解析出的进程常量（cluster 取系统配置表 storage.upload_dir；
+  // standalone 取 env/默认）。StorageDirsModule 解析不了就 process.exit(1)，
+  // 这里拿到的一定是已通过可写性自检的目录。
+  const uploadDir = app.get<ResolvedStorageDirs>(STORAGE_DIRS).uploadDir;
+  app.useStaticAssets(uploadDir, {
     prefix: '/uploads',
   });
 
