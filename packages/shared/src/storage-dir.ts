@@ -35,6 +35,8 @@ import { resolveStoragePath, StoragePathError } from './storage-path';
 /* ── 环境变量 / 默认 ───────────────────────────────────────────── */
 
 export const STORAGE_UPLOAD_DIR_ENV = 'STORAGE_UPLOAD_DIR';
+/** 本服务 env 兜底键：临时图目录（standalone 形态下生效） */
+export const STORAGE_TEMP_DIR_ENV = 'STORAGE_TEMP_DIR';
 export const STORAGE_ALLOWED_ROOTS_ENV = 'STORAGE_ALLOWED_ROOTS';
 export const SYSTEM_SERVICE_URL_ENV = 'SYSTEM_SERVICE_URL';
 /**
@@ -47,11 +49,22 @@ export const WEB_SYSTEM_DIR_ENV = 'WEB_SYSTEM_DIR';
 
 /** 系统配置键：上传根目录（权威，页面可改） */
 export const STORAGE_UPLOAD_DIR_KEY = 'storage.upload_dir';
+/**
+ * 系统配置键：临时图目录（**可选**，页面可改）。
+ *
+ * 未配时 system-service 返回**派生默认值**（上传根目录的同级 `temp-images`），
+ * 此时上游 `source='default'` —— 见 {@link StorageDirSpec.allowDerivedDefault}。
+ */
+export const STORAGE_TEMP_DIR_KEY = 'storage.temp_dir';
 
 /** 跨平台默认基目录：`~/web_system` */
 export const DEFAULT_STORAGE_BASE = nodePath.join(os.homedir(), 'web_system');
 /** 跨平台默认上传根：`~/web_system/uploads` */
 export const DEFAULT_UPLOAD_DIR = nodePath.join(DEFAULT_STORAGE_BASE, 'uploads');
+/** 临时图目录段名（standalone 下拼在运行根之后；cluster 下由 system-service 派生） */
+export const TEMP_DIR_SEGMENT = 'temp-images';
+/** 跨平台默认临时图目录：`~/web_system/temp-images`（仅 standalone 用得到） */
+export const DEFAULT_TEMP_DIR = nodePath.join(DEFAULT_STORAGE_BASE, TEMP_DIR_SEGMENT);
 
 /** 启动时查系统配置的超时（ms）—— system-service 慢/挂了不能拖住本服务启动 */
 export const CONFIG_FETCH_TIMEOUT_MS = 3000;
@@ -71,6 +84,19 @@ export interface StorageDirSpec {
   segment: string;
   /** 用途标签，用于日志与报错文案 */
   label: string;
+  /**
+   * cluster 形态下**是否接受上游的派生默认值**（`source='default'`）。
+   *
+   * - `false`（如上传根目录）：上游没人配过 → 拒绝启动。
+   *   理由：集群里全员静默落到默认路径就是数据分裂，必须有人显式拍板。
+   * - `true`（如临时图目录）：上游没配 → 用其派生默认值。
+   *   理由：temp 是**中间产物**（生成后可回收），且派生规则（上传根目录的同级）
+   *   由 system-service 统一算，消费侧不自己推 —— 否则就是第二套算法。
+   *
+   * 注意：**只有 `default` 这一级被放行**。上游不可达 / 返回空 / 其它来源
+   * 仍按 {@link assertClusterConfigured} 处理（不可达就是不可达，没有「默认」可言）。
+   */
+  allowDerivedDefault?: boolean;
 }
 
 export interface StorageDirResolution {
@@ -234,15 +260,24 @@ export async function resolveStorageDirAtStartup(
     notes.push(`读取系统配置失败：${configured.error ?? '未返回路径'}`);
     assertClusterConfigured(undefined, spec.label);
   }
-  // 闸门：权威源必须真的来自「有人配过」，否则集群里全员会静默使用单机默认路径
-  assertClusterConfigured(configured.source, spec.label);
+  // 闸门：权威源必须真的来自「有人配过」，否则集群里全员会静默使用单机默认路径。
+  // 例外：规格声明「接受派生默认值」的目录（如临时图目录）放行 `default` 这一级。
+  const derived = configured.source === 'default' && spec.allowDerivedDefault === true;
+  if (derived) {
+    notes.push(
+      `${spec.label}未配置，采用 system-service 的派生默认值 ${configured.path}（规格允许；` +
+        `派生规则由 system-service 统一计算，本进程不自行推导）`,
+    );
+  } else {
+    assertClusterConfigured(configured.source, spec.label);
+  }
 
   const origin =
     configured.source === 'system_configs'
       ? `配置表 ${spec.configKey}`
       : configured.source === 'env'
         ? 'system-service 的环境变量'
-        : 'system-service 的默认值';
+        : 'system-service 的派生默认值';
   notes.push(`${spec.label}经 system-service 取得（其来源：${origin}）`);
 
   // 越界即抛（StoragePathError）—— 非法配置不能被静默接受
@@ -268,6 +303,39 @@ export function resolveUploadDirAtStartup(
   options: FetchConfiguredDirOptions = {},
 ): Promise<StorageDirResolution> {
   return resolveStorageDirAtStartup(UPLOAD_DIR_SPEC, options);
+}
+
+/** 临时图目录规格（`allowDerivedDefault`：上游没配就用它算出的派生默认） */
+export const TEMP_DIR_SPEC: StorageDirSpec = {
+  configKey: STORAGE_TEMP_DIR_KEY,
+  envKey: STORAGE_TEMP_DIR_ENV,
+  segment: TEMP_DIR_SEGMENT,
+  label: '临时图目录',
+  allowDerivedDefault: true,
+};
+
+/** 临时图目录解析（ai-service 的变变中间产物等） */
+export function resolveTempDirAtStartup(
+  options: FetchConfiguredDirOptions = {},
+): Promise<StorageDirResolution> {
+  return resolveStorageDirAtStartup(TEMP_DIR_SPEC, options);
+}
+
+/**
+ * 一次解析「上传根目录 + 临时图目录」。
+ *
+ * 为什么提供组合入口：ai-service 两个都要，若各调一次就得各自拼 notes、
+ * 各自接一次 fail-fast，很容易出现「一个起来了另一个用旧口径」。
+ * 组合入口保证**两个目录的形态判定用的是同一份 env**（同一个 `options.env`）。
+ *
+ * @throws 任一个解析失败即抛（调用方 fail-fast）—— 不允许「一半新口径一半旧口径」
+ */
+export async function resolveStorageDirsAtStartup(
+  options: FetchConfiguredDirOptions = {},
+): Promise<{ upload: StorageDirResolution; temp: StorageDirResolution }> {
+  const upload = await resolveStorageDirAtStartup(UPLOAD_DIR_SPEC, options);
+  const temp = await resolveStorageDirAtStartup(TEMP_DIR_SPEC, options);
+  return { upload, temp };
 }
 
 /* ── 启动自检 ─────────────────────────────────────────────────── */

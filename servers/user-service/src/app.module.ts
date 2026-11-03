@@ -13,6 +13,7 @@ import { UserMemoryModule } from './memory/user-memory.module';
 import { UserTasteModule } from './user-taste/user-taste.module';
 import { InternalModule } from './internal/internal.module';
 import { HealthModule } from './health/health.module';
+import { StorageDirsModule } from './storage/storage-dirs.module';
 import { User } from './user/user.entity';
 import { McpApiKeyEntity } from './api-key/entities/mcp-api-key.entity';
 import { McpKeyCodeEntity } from './api-key/entities/mcp-key-code.entity';
@@ -27,6 +28,9 @@ import { EmailVerificationCodeEntity } from './email/entities/email-verification
 
 @Module({
   imports: [
+    // 存储目录（上传根目录）：启动期按部署形态解析一次，失败即拒绝启动
+    StorageDirsModule,
+
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [

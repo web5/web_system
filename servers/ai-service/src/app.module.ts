@@ -16,9 +16,14 @@ import { AgentLogModule } from './agent-log/agent-log.module';
 import { AgentDefModule } from './agent-def/agent-def.module';
 import { SkillModule } from './skill/skill.module';
 import { HealthModule } from './health/health.module';
+import { StorageDirsModule } from './storage/storage-dirs.module';
 
 @Module({
   imports: [
+    // 存储目录（上传根目录 + 临时图目录）：启动期按部署形态解析一次，失败即拒绝启动。
+    // 放在最前 —— 它是后续一切文件读写的口径来源，且必须早于任何用到它的模块。
+    StorageDirsModule,
+
     // 配置模块
     // 注意：PM2 启动时 cwd 是项目根（不是本服务子目录），所以相对路径 '.env' 找不到
     // 用 path.resolve(__dirname, '../.env') 同时支持 dist 和 src 运行（两者 __dirname 都在 servers/<svc>/dist 或 /src，../.env 都能定位到正确位置）
