@@ -41,12 +41,23 @@
 **接口契约（已实现，勿改形状）**
 
 ```
-GET  /api/admin/settings/storage          → { code:0, data:{ uploadDir, source, browseEnabled, defaultDir, envOverride, allowedRoots, restartHint } }
-PUT  /api/admin/settings/storage          ← { uploadDir } → { code:0, data:{ uploadDir, previousDir, check, restartRequired:true, message } }
-POST /api/admin/settings/storage/validate ← { uploadDir } → { code:0, data:{ ok, resolvedPath, exists, isDirectory, writable, freeSpace, created, code?, message } }
+GET  /api/admin/settings/storage          → { code:0, data:{ uploadDir, source, tempDir, tempSource, tempConfigured, defaultTempDir, tempEnvOverride, browseEnabled, defaultDir, envOverride, allowedRoots, restartHint } }
+PUT  /api/admin/settings/storage          ← { uploadDir, tempDir? } → { code:0, data:{ uploadDir, previousDir, check, tempDir?, previousTempDir?, tempCheck?, restartRequired:true, message } }
+POST /api/admin/settings/storage/validate ← { uploadDir, tempDir? } → { code:0, data:{ ok, resolvedPath, exists, isDirectory, writable, freeSpace, created, code?, message, tempDir? } }
 GET  /api/admin/settings/storage/browse?path= → { code:0, data:{ path, root, parent, depth, entries:[{name,path,symlink}], truncated } }
-GET  /internal/storage/path（×2：system-service 权威值 / upload-service 内存值，x-internal-key）
+GET  /internal/storage/path?key=storage.upload_dir|storage.temp_dir（system-service 权威值；x-internal-key）
 ```
+
+### 临时图目录（2026-11-03 增补）
+
+| 项 | 内容 |
+|---|---|
+| 配置键 | `storage.temp_dir`（**可选**；未配时取派生默认值） |
+| 派生默认 | `<上传根目录的同级>/temp-images` —— dev/prod 存量正是 `/data/web_system/temp-images`，与 `/data/web_system/uploads` 同级；落在 uploads 之下会让存量临时图 404 |
+| 页面标签 | 未配置时显示「未配置（随上传根目录变化）」——因为它会随上传根目录改动而变化，不能显示成「已配置」 |
+| 生效服务 | ai-service（变变 AI 图等中间产物）；W3 只做配置侧落地，消费侧接入见 W4 |
+| 保存语义 | `tempDir` 省略或空串 = **不改动**（不会清空）；两个目录**先全校验再一起落库**，杜绝「改了一半」 |
+| 内部接口 | `GET /internal/storage/path?key=storage.temp_dir`（键走白名单，其余键 400 `STORAGE_KEY_UNSUPPORTED`） |
 
 权限：读 + 校验 + 保存 → `settings:view` / `settings:edit`；**浏览目录 → `storage:browse`（仅 super_admin）**。
 
