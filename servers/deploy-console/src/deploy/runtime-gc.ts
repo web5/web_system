@@ -17,8 +17,31 @@
  *   1. pm2 正在引用的路径（pm_exec_path / pm_cwd）—— 拿不到就**拒绝删除**
  *   2. 保护目录下所有软链的 realpath（含 `servers/<m>/dist`）
  *   3. 只删形如 git sha 的版本目录（`runtime-checkpoint` 之类永不命中）
+ *
+ * ⚠️ 作用域（2026-11-03，A6）：本程序 = **流水线 gc 节点**的能力程序，**只回收单模块**。
+ *   `scope.module` 必带；缺失即抛错拒绝，绝不退化成「扫全根」。
+ *   为什么：并发发布时全根扫描会碰到别的模块 —— pm2 引用保护只覆盖已注册进程，
+ *   `runtime-checkpoint` 之类目录根本不在保护集里，误删会毁掉别的模块的历史版本。
+ *   作用域外的模块目录**连遍历都不做**：直接定位 `<root>/<scope.module>`，
+ *   不 readdir 根（readdir 根会把别的模块暴露出来，是越界的第一步）。
+ *   作用域按**模块**整棵生效（覆盖该模块下所有 `<env>` 子目录）：磁盘上的环境目录名
+ *   （如 `todo-service-dev`）并不等于流水线环境（`dev`），故刻意不按环境收窄 ——
+ *   模块级已严格保证「不触碰其它任何模块」。
+ *
+ * ⚠️ 两层职责，代码里不要耦合：
+ *   ① 流水线 gc 节点（本程序）：带作用域、发布流程内触发，只收本次发布的模块。
+ *   ② 全量运维回收（独立运维动作 `gc_runtimes.py`）：扫全根是合法的，
+ *      但那是人工运维脚本，**不是流水线节点、不经过本程序、也不由本程序调用**。
+ *      本程序不具备、也不提供「全根扫描」模式 —— 全根只能是那个运维动作。
  */
+export interface RuntimeGcScope {
+  /** 作用域模块名（= 本次发布模块 moduleKey）。只允许回收 `<root>/<module>` 下的版本目录 */
+  module: string;
+}
+
 export interface RuntimeGcInput {
+  /** 作用域（流水线 gc 节点必带）：缺 module 即抛错拒绝，绝不退化成全根扫描 */
+  scope?: RuntimeGcScope;
   /** 待回收的根（结构 `<root>/<module>/<env>/<version>`） */
   roots?: string[];
   /** 需要扫描软链以建立保护集的目录（软链目标永不删除） */
@@ -38,6 +61,8 @@ export interface RuntimeGcResult {
   action: 'gc';
   dryRun: boolean;
   keep: number;
+  /** 本次作用域模块（审计用；缺作用域会抛错，成功结果里必有值） */
+  scopeModule: string;
   scanned: number;
   deleted: Array<{ path: string; bytes: number }>;
   kept: Array<{ path: string; reason: 'recent' | 'protected' }>;
@@ -74,6 +99,24 @@ export async function executeRuntimeGc(
   const protectDirs = input.protectDirs ?? ['/data/web_system', '/data/web_system_static'];
   const keep = input.keep ?? 3;
   const apply = input.apply !== false;
+
+  // ── 作用域（硬门禁）────────────────────────────────────────────────
+  // 流水线 gc 节点 = 单模块回收。没有作用域就拒绝，绝不「默认扫全根」。
+  // 全根扫描是独立运维动作（gc_runtimes.py）的事，不属于本程序。
+  // 放在保护集之前 = fail-fast：还没确定「只收谁」就别去读 pm2、别碰任何目录。
+  const scopeModule =
+    input.scope && typeof input.scope.module === 'string' ? input.scope.module.trim() : '';
+  if (
+    !scopeModule ||
+    scopeModule === '.' ||
+    scopeModule === '..' ||
+    !/^[A-Za-z0-9_.-]+$/.test(scopeModule)
+  ) {
+    throw new Error(
+      '拒绝回收：缺少有效作用域 GC_SCOPE_MODULE。流水线 gc 节点必须带本模块作用域，禁止全根扫描' +
+        '（全量回收是独立运维动作 gc_runtimes.py，不在本程序职责内；并发发布全根扫描会误删别的模块）',
+    );
+  }
 
   // ── 保护集 ───────────────────────────────────────────────────────────
   // 1) pm2 引用。读不到就必须放弃：保护集不完整时的「成功删除」比不删更糟。
@@ -171,6 +214,7 @@ export async function executeRuntimeGc(
     action: 'gc',
     dryRun: !apply,
     keep,
+    scopeModule,
     scanned: 0,
     deleted: [],
     kept: [],
@@ -178,55 +222,58 @@ export async function executeRuntimeGc(
     protectedPaths,
   };
 
+  // 日志可证：把作用域与「不遍历其它模块」写进 stdout，随结果 JSON 回传给节点。
+  log(
+    `[gc] 作用域锁定：module=${scopeModule}（roots=${roots.join(',')}）；` +
+      `仅遍历 <root>/${scopeModule}，其它模块目录不遍历、不删除`,
+  );
+
   for (const root of roots) {
     if (!fs.existsSync(root)) continue;
-    let modules: string[];
+    // 作用域外的模块目录连遍历都不做：直接定位 `<root>/<scope.module>`，
+    // 不 readdir 根（readdir 根会把别的模块暴露出来，是越界的第一步）。
+    const moduleDir = path.join(root, scopeModule);
+    if (!fs.existsSync(moduleDir) || !fs.statSync(moduleDir).isDirectory()) {
+      log(`[gc] 作用域模块 ${scopeModule} 在根 ${root} 下不存在，跳过该根`);
+      continue;
+    }
+    let envs: string[];
     try {
-      modules = fs.readdirSync(root).sort();
+      envs = fs.readdirSync(moduleDir).sort();
     } catch {
       continue;
     }
-    for (const module of modules) {
-      const moduleDir = path.join(root, module);
-      if (module === 'bin' || !fs.statSync(moduleDir).isDirectory()) continue;
-      let envs: string[];
-      try {
-        envs = fs.readdirSync(moduleDir).sort();
-      } catch {
-        continue;
-      }
-      for (const env of envs) {
-        const envDir = path.join(moduleDir, env);
-        if (!fs.statSync(envDir).isDirectory()) continue;
-        const versions = fs
-          .readdirSync(envDir)
-          .filter(name => VERSION_NAME.test(name))
-          .map(name => path.join(envDir, name))
-          .filter(file => fs.lstatSync(file).isDirectory())
-          .map(file => ({ file, mtime: fs.statSync(file).mtimeMs }))
-          .sort((a, b) => b.mtime - a.mtime);
-        const recent = versions.slice(0, keep).map(v => v.file);
-        for (const version of versions) {
-          result.scanned += 1;
-          if (recent.indexOf(version.file) >= 0) {
-            result.kept.push({ path: version.file, reason: 'recent' });
-            continue;
-          }
-          if (isProtected(version.file)) {
-            result.kept.push({ path: version.file, reason: 'protected' });
-            continue;
-          }
-          const bytes = sizeOf(version.file);
-          if (apply) fs.rmSync(version.file, { recursive: true, force: true });
-          result.deleted.push({ path: version.file, bytes });
-          result.freedBytes += bytes;
+    for (const env of envs) {
+      const envDir = path.join(moduleDir, env);
+      if (!fs.statSync(envDir).isDirectory()) continue;
+      const versions = fs
+        .readdirSync(envDir)
+        .filter(name => VERSION_NAME.test(name))
+        .map(name => path.join(envDir, name))
+        .filter(file => fs.lstatSync(file).isDirectory())
+        .map(file => ({ file, mtime: fs.statSync(file).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      const recent = versions.slice(0, keep).map(v => v.file);
+      for (const version of versions) {
+        result.scanned += 1;
+        if (recent.indexOf(version.file) >= 0) {
+          result.kept.push({ path: version.file, reason: 'recent' });
+          continue;
         }
+        if (isProtected(version.file)) {
+          result.kept.push({ path: version.file, reason: 'protected' });
+          continue;
+        }
+        const bytes = sizeOf(version.file);
+        if (apply) fs.rmSync(version.file, { recursive: true, force: true });
+        result.deleted.push({ path: version.file, bytes });
+        result.freedBytes += bytes;
       }
     }
   }
 
   log(
-    `[gc] 扫描 ${result.scanned} 个版本目录，删除 ${result.deleted.length} 个` +
+    `[gc] 作用域 ${scopeModule}：扫描 ${result.scanned} 个版本目录，删除 ${result.deleted.length} 个` +
       `（释放 ${(result.freedBytes / 1024 / 1024).toFixed(1)} MiB），保留 ${result.kept.length} 个` +
       `${apply ? '' : '（dry-run，未实际删除）'}`,
   );
@@ -237,13 +284,15 @@ export async function executeRuntimeGc(
  * 生成能力程序正文（纯字符串，可独立落盘）。
  *
  * 与 `backendRuntimeProgram()` 同构：把函数体序列化 + 环境变量入参 + 输出约定。
- * 入参全部走环境变量，编排可通过 `GC_KEEP` / `GC_DRY_RUN` 调整，不必改代码。
+ * 入参全部走环境变量，编排可通过 `GC_SCOPE_MODULE` / `GC_KEEP` / `GC_DRY_RUN`
+ * 调整，不必改代码。`GC_SCOPE_MODULE` 是作用域硬门禁：不传 → 程序内抛错 → 非零退出。
  */
 export function runtimeGcProgram(): string {
   return (
     '(' +
     executeRuntimeGc.toString() +
     ')({' +
+    'scope:(process.env.GC_SCOPE_MODULE?{module:process.env.GC_SCOPE_MODULE}:undefined),' +
     'roots:(process.env.GC_ROOTS?process.env.GC_ROOTS.split(",").filter(Boolean):[]),' +
     'protectDirs:(process.env.GC_PROTECT_DIRS?process.env.GC_PROTECT_DIRS.split(",").filter(Boolean):[]),' +
     'keep:Number(process.env.GC_KEEP||3),' +

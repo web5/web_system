@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -7,11 +7,13 @@ import {
   gcRuntimeCommand,
   gcSyncCommand,
   gcKeep,
+  gcScopeFromPipeline,
 } from './gc-runtime.executor';
 import { GC_PROGRAM_FILE, RUNTIME_PROGRAM_BIN_DIR } from './sync-runtime.executor';
 import { runtimeGcProgram } from '../../deploy/runtime-gc';
 import { SshExecService } from '../../remote/ssh-exec.service';
 import { StepContext } from './step.types';
+import { DeployPipelineEntity } from '../../entities/deploy-pipeline.entity';
 
 const buildCtx = (env: string) => {
   const lines: string[] = [];
@@ -27,22 +29,48 @@ const buildCtx = (env: string) => {
   };
 };
 
+const SCOPE = { module: 'user-service' };
+
+describe('gcScopeFromPipeline', () => {
+  const p = (moduleKey: string) => ({ moduleKey } as DeployPipelineEntity);
+
+  it('默认作用域 = 本次发布模块 moduleKey', () => {
+    expect(gcScopeFromPipeline(p('user-service'))).toEqual({ module: 'user-service' });
+    expect(gcScopeFromPipeline(p('todo-service'))).toEqual({ module: 'todo-service' });
+  });
+
+  it('缺 / 空 / 非法 moduleKey 返回 null（调用方据此拒绝，绝不退化全根扫描）', () => {
+    expect(gcScopeFromPipeline({} as DeployPipelineEntity)).toBeNull();
+    expect(gcScopeFromPipeline(p(''))).toBeNull();
+    expect(gcScopeFromPipeline(p('   '))).toBeNull();
+    expect(gcScopeFromPipeline(p('..'))).toBeNull();
+    expect(gcScopeFromPipeline(p('a/b'))).toBeNull();
+    expect(gcScopeFromPipeline(p('a b'))).toBeNull();
+  });
+});
+
 describe('gcRuntimeCommand', () => {
   it('只写调用：命令里不含程序源码', () => {
-    const cmd = gcRuntimeCommand(3);
+    const cmd = gcRuntimeCommand(3, SCOPE);
     expect(cmd).not.toContain('function executeRuntimeGc');
     expect(cmd).not.toContain(Buffer.from(runtimeGcProgram(), 'utf8').toString('base64'));
     expect(cmd).toContain(`$HOME/${RUNTIME_PROGRAM_BIN_DIR}/${GC_PROGRAM_FILE}`);
   });
 
   it('程序缺失即失败，不静默成功', () => {
-    expect(gcRuntimeCommand(2)).toContain('exit 1');
-    expect(gcRuntimeCommand(2)).toContain('[error]');
+    expect(gcRuntimeCommand(2, SCOPE)).toContain('exit 1');
+    expect(gcRuntimeCommand(2, SCOPE)).toContain('[error]');
   });
 
   it('保留份数通过 GC_KEEP 传入（编排可调，不必改代码）', () => {
-    expect(gcRuntimeCommand(5)).toContain('GC_KEEP=5');
-    expect(gcRuntimeCommand(1, true)).toContain('GC_DRY_RUN=1');
+    expect(gcRuntimeCommand(5, SCOPE)).toContain('GC_KEEP=5');
+    expect(gcRuntimeCommand(1, SCOPE, true)).toContain('GC_DRY_RUN=1');
+  });
+
+  it('作用域通过 GC_SCOPE_MODULE 注入远端命令（缺不得、不可退化全根扫描）', () => {
+    expect(gcRuntimeCommand(3, SCOPE)).toContain("GC_SCOPE_MODULE='user-service'");
+    expect(gcRuntimeCommand(3, { module: 'todo-service' })).toContain("GC_SCOPE_MODULE='todo-service'");
+    expect(gcRuntimeCommand(3, SCOPE)).not.toContain('GC_ROOTS='); // 不靠全根参数兜底
   });
 });
 
@@ -99,6 +127,44 @@ describe('GcRuntimeExecutor', () => {
     await expect(new GcRuntimeExecutor(ssh).run(ctx as unknown as StepContext)).rejects.toThrow(
       /拒绝回收/,
     );
+  });
+
+  it('缺作用域（moduleKey 缺失）→ 拒绝执行并写日志，不投放、不 ssh', async () => {
+    const run = jest.fn();
+    const ssh = { run } as unknown as SshExecService;
+    const ctx = buildCtx('prod');
+    await expect(
+      new GcRuntimeExecutor(ssh).run({
+        ...ctx,
+        pipeline: { ...ctx.pipeline, moduleKey: '' },
+      } as unknown as StepContext),
+    ).rejects.toThrow(/拒绝执行|作用域|禁止全根扫描/);
+    expect(run).not.toHaveBeenCalled(); // 在投放/回收之前就 fail-fast
+    expect(ctx.lines.join('\n')).toContain('拒绝执行');
+    expect(ctx.lines.join('\n')).toContain('禁止全根扫描');
+  });
+
+  it('作用域非法（moduleKey=..）→ 拒绝执行', async () => {
+    const run = jest.fn();
+    const ssh = { run } as unknown as SshExecService;
+    const ctx = buildCtx('prod');
+    await expect(
+      new GcRuntimeExecutor(ssh).run({
+        ...ctx,
+        pipeline: { ...ctx.pipeline, moduleKey: '..' },
+      } as unknown as StepContext),
+    ).rejects.toThrow(/拒绝执行|作用域/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('enterStage 文案写明作用域（日志可证只收本模块）', async () => {
+    const run = jest.fn(async (_env: string, _cmd: string, label?: string) =>
+      label === 'sync-gc-program' ? 'updated' : '{"action":"gc","deleted":[]}',
+    );
+    const ssh = { run } as unknown as SshExecService;
+    const ctx = buildCtx('prod');
+    await new GcRuntimeExecutor(ssh).run(ctx as unknown as StepContext);
+    expect(ctx.lines.join('\n')).toContain('作用域 user-service');
   });
 });
 
