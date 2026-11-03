@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { OperationLogClient } from '../permission/operation-log.client';
-import { PermissionGuard, RequirePermission } from '@web-system/shared';
+import { PermissionGuard, RequirePermission, dataDir } from '@web-system/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangeOwnPasswordDto, ResetPasswordDto } from './dto/change-password.dto';
@@ -75,7 +75,7 @@ export class UserController {
     FileInterceptor('avatar', {
       storage: diskStorage({
         destination: (req, file, cb) => {
-          const uploadDir = path.join(process.cwd(), 'uploads', 'avatars');
+          const uploadDir = dataDir('uploads', 'avatars');
           if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
           }

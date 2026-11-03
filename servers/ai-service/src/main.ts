@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { UnifiedExceptionFilter } from './common/filters/unified-exception.filter';
 import * as path from 'path';
-import { missingRequiredServiceUrls, serviceUrlFailFastHint } from '@web-system/shared';
+import { missingRequiredServiceUrls, serviceUrlFailFastHint, dataDir } from '@web-system/shared';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -41,7 +41,8 @@ async function bootstrap() {
   });
 
   // 静态资源服务 — AI 生成的图片通过 /uploads/ 访问
-  app.useStaticAssets(path.join(process.cwd(), 'uploads'), {
+  // 数据目录走运行根解析（WEB_SYSTEM_DIR 优先，未配置回退 cwd），禁止 process.cwd() 自拼
+  app.useStaticAssets(dataDir('uploads'), {
     prefix: '/uploads',
   });
 
