@@ -36,6 +36,8 @@ describe('storage-dirs：存储目录进程内持有者', () => {
         tempDir: '/data/web_system/temp-images',
         uploadSource: 'system_service',
         tempSource: 'system_service',
+        allowedRoots: ['/data/web_system'],
+        allowedRootsSource: 'system_service',
         mode: 'cluster',
         notes: ['形态=cluster（平台默认）'],
       });
@@ -64,10 +66,17 @@ describe('storage-dirs：存储目录进程内持有者', () => {
         tempDir: '/other/temp-images',
         uploadSource: 'env',
         tempSource: 'env',
+        allowedRoots: ['/other'],
+        allowedRootsSource: 'env',
         mode: 'standalone',
         notes: [],
       });
       expect(getUploadDir()).toBe('/other/uploads');
+    });
+
+    it('🔴 允许根随结果一起持有（排查「目录被判越界」时要能回答按哪个根判的）', () => {
+      expect(getStorageDirs().allowedRoots).toEqual(['/data/web_system']);
+      expect(getStorageDirs().allowedRootsSource).toBe('system_service');
     });
   });
 });

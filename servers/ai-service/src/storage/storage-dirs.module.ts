@@ -29,6 +29,10 @@ import type { ResolvedStorageDirs } from '@web-system/shared';
             `上传根目录: ${dirs.uploadDir}（来源 ${dirs.uploadSource}）；` +
               `临时图目录: ${dirs.tempDir}（来源 ${dirs.tempSource}）；形态 ${dirs.mode}`,
           );
+          // 允许根是「越界」判定的基准 —— 目录被判越界时，先看的就应该是这一行
+          logger.log(
+            `允许根: ${dirs.allowedRoots.join('、')}（来源 ${dirs.allowedRootsSource}）`,
+          );
           return dirs;
         } catch (e) {
           logger.error(`存储目录解析失败：${(e as Error).message}`);

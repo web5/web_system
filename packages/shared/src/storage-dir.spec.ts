@@ -4,16 +4,20 @@ import * as path from 'path';
 import { DeployModeError } from './deploy-mode';
 import {
   allowedRoots,
+  ALLOWED_ROOTS_SPEC,
   DEFAULT_STORAGE_BASE,
   DEFAULT_TEMP_DIR,
   ensureWritableDir,
   fetchConfiguredDir,
   INTERNAL_API_KEY_ENV,
+  parseAllowedRoots,
+  resolveAllowedRootsAtStartup,
   resolveStorageDirAtStartup,
   resolveStorageDirsAtStartup,
   resolveTempDirAtStartup,
   resolveUploadDirAtStartup,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_ALLOWED_ROOTS_KEY,
   STORAGE_TEMP_DIR_ENV,
   STORAGE_UPLOAD_DIR_ENV,
   SYSTEM_SERVICE_URL_ENV,
@@ -21,13 +25,27 @@ import {
   UPLOAD_DIR_SPEC,
   WEB_SYSTEM_DIR_ENV,
 } from './storage-dir';
+import type { ConfigSource } from './deploy-mode';
+
+/**
+ * 单应答桩对 `?key=storage.allowed_roots` 的回答。
+ *
+ * 为什么需要：允许根已收归配置表，cluster 下解析目录**之前**会先取允许根；
+ * 单应答桩若不区分 key，就会把「目录路径」当成「允许根」回答回去，
+ * 用例的意图（如「上游返回越界路径」）会被这个副作用掩盖。
+ */
+let stubRoots: string;
+let stubRootsSource: ConfigSource | undefined;
 
 /** 构造一个只回答 `/internal/storage/path` 的 fetch 桩 */
 function fetchStub(payload: unknown, init: { ok?: boolean; status?: number } = {}) {
-  return jest.fn(async () => ({
+  return jest.fn(async (url: string) => ({
     ok: init.ok ?? true,
     status: init.status ?? 200,
-    json: async () => payload,
+    json: async () =>
+      String(url).includes(STORAGE_ALLOWED_ROOTS_KEY)
+        ? { data: { path: stubRoots, source: stubRootsSource } }
+        : payload,
   })) as unknown as jest.MockedFunction<typeof fetch>;
 }
 
@@ -48,6 +66,8 @@ describe('storage-dir：数据目录解析（形态分派 + 启动自检）', ()
       delete env[k];
     }
     env[STORAGE_ALLOWED_ROOTS_ENV] = tmp;
+    stubRoots = tmp;
+    stubRootsSource = 'system_configs';
   });
 
   afterEach(() => {
@@ -243,6 +263,122 @@ describe('storage-dir：数据目录解析（形态分派 + 启动自检）', ()
     });
   });
 
+  describe('允许根（storage.allowed_roots）：收归配置表', () => {
+    it('解析：逗号分隔 + `~` 展开 + 去重（家目录恒定在列）', () => {
+      expect(parseAllowedRoots('/data/web_system, ~/extra,,')).toEqual([
+        '/data/web_system',
+        path.join(os.homedir(), 'extra'),
+      ]);
+      const roots = allowedRoots({ [STORAGE_ALLOWED_ROOTS_ENV]: `${tmp},${tmp}` });
+      expect(roots.filter((r) => r === tmp)).toHaveLength(1);
+      expect(roots).toContain(path.resolve(os.homedir()));
+    });
+
+    it('🔴 cluster：允许根取自配置表（source=system_configs），本服务 env 被忽略', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      // 旧的漂移源：本服务 env 里也写了一份允许根（dev/prod 各写各的，指纹还会漂移）
+      env[STORAGE_ALLOWED_ROOTS_ENV] = path.join(tmp, 'env-root');
+      stubRoots = path.join(tmp, 'config-root');
+
+      const res = await resolveAllowedRootsAtStartup({ env, fetchImpl: fetchStub({}) });
+      expect(res.roots).toContain(path.join(tmp, 'config-root'));
+      expect(res.roots).not.toContain(path.join(tmp, 'env-root'));
+      expect(res.source).toBe('system_service');
+      expect(res.notes.join()).toContain(`配置表 ${STORAGE_ALLOWED_ROOTS_KEY}`);
+    });
+
+    it('🔴 cluster：消费侧 .env 里没有 STORAGE_ALLOWED_ROOTS 也能正常启动', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      delete env[STORAGE_ALLOWED_ROOTS_ENV];
+      stubRoots = tmp;
+
+      const r = await resolveUploadDirAtStartup({
+        env,
+        fetchImpl: fetchStub({ data: { path: path.join(tmp, 'uploads'), source: 'system_configs' } }),
+      });
+      expect(r.dir).toBe(path.join(tmp, 'uploads'));
+      expect(r.source).toBe('system_service');
+    });
+
+    it('cluster：允许根走内部接口 ?key=storage.allowed_roots', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const fetchImpl = fetchStub({});
+      await resolveAllowedRootsAtStartup({ env, fetchImpl });
+      const [url] = fetchImpl.mock.calls[0];
+      expect(String(url)).toContain(`key=${STORAGE_ALLOWED_ROOTS_KEY}`);
+    });
+
+    /** 🔴 prod 事故（2026-11-03）：允许根比 dev 窄 → 显式配置的目录被判越界 */
+    it('🔴 cluster：允许根窄于已配置目录 → 拒绝启动（不做静默放宽）', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      delete env[STORAGE_ALLOWED_ROOTS_ENV];
+      stubRoots = path.join(tmp, 'narrow-root');
+
+      await expect(
+        resolveUploadDirAtStartup({
+          env,
+          fetchImpl: fetchStub({
+            data: { path: path.join(tmp, 'uploads'), source: 'system_configs' },
+          }),
+        }),
+      ).rejects.toThrow(/越界|OUT_OF_SCOPE/);
+    });
+
+    it('🔴 cluster：允许根未配置（上游 source=default）→ 拒绝启动', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      stubRootsSource = 'default';
+
+      await expect(
+        resolveAllowedRootsAtStartup({ env, fetchImpl: fetchStub({}) }),
+      ).rejects.toThrow(DeployModeError);
+      await expect(
+        resolveAllowedRootsAtStartup({ env, fetchImpl: fetchStub({}) }),
+      ).rejects.toThrow(/数据分裂|没有人真正设过/);
+    });
+
+    it('🔴 cluster：允许根接口不可达（500）→ 拒绝启动，不回落 env', async () => {
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      env[STORAGE_ALLOWED_ROOTS_ENV] = tmp;
+
+      await expect(
+        resolveAllowedRootsAtStartup({
+          env,
+          fetchImpl: fetchStub({}, { ok: false, status: 500 }),
+        }),
+      ).rejects.toThrow(/不允许回落/);
+    });
+
+    /** 🔴 唯一保留的合法来源：standalone 形态下 env STORAGE_ALLOWED_ROOTS 仍生效 */
+    it('standalone：允许根取本服务 env（不查询系统配置表）', async () => {
+      env.DEPLOY_MODE = 'standalone';
+      env[STORAGE_ALLOWED_ROOTS_ENV] = path.join(tmp, 'standalone-root');
+      env[INTERNAL_API_KEY_ENV] = 'k';
+      const fetchImpl = fetchStub({});
+
+      const res = await resolveAllowedRootsAtStartup({ env, fetchImpl });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(res.roots).toContain(path.join(tmp, 'standalone-root'));
+      expect(res.source).toBe('env');
+      expect(res.mode).toBe('standalone');
+    });
+
+    it('standalone：未配 env → 仅家目录，来源记为 default（仍不查表）', async () => {
+      env.DEPLOY_MODE = 'standalone';
+      delete env[STORAGE_ALLOWED_ROOTS_ENV];
+      const fetchImpl = fetchStub({});
+
+      const res = await resolveAllowedRootsAtStartup({ env, fetchImpl });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(res.roots).toEqual([path.resolve(os.homedir())]);
+      expect(res.source).toBe('default');
+    });
+
+    it('🔴 规格声明了配置键与 env 键（新增键必须同步 system-service 白名单）', () => {
+      expect(ALLOWED_ROOTS_SPEC.configKey).toBe('storage.allowed_roots');
+      expect(ALLOWED_ROOTS_SPEC.envKey).toBe(STORAGE_ALLOWED_ROOTS_ENV);
+    });
+  });
+
   describe('ensureWritableDir：fail-fast 的最后一道防线', () => {
     it('目录不存在 → 递归创建', () => {
       const dir = path.join(tmp, 'a', 'b');
@@ -366,20 +502,30 @@ describe('storage-dir：数据目录解析（形态分派 + 启动自检）', ()
       env[INTERNAL_API_KEY_ENV] = 'k';
       const upload = path.join(tmp, 'uploads');
       const temp = path.join(tmp, 'temp-images');
-      // 按 key 区分应答：upload 无 key 参数，temp 带 key=storage.temp_dir
+      // 按 key 区分应答：upload 无 key 参数，temp / allowed_roots 带各自的 key
       const spy = jest.fn(async (url: string) => ({
         ok: true,
         status: 200,
-        json: async () =>
-          url.includes('storage.temp_dir')
+        json: async () => {
+          if (url.includes(STORAGE_ALLOWED_ROOTS_KEY))
+            return { data: { path: tmp, source: 'system_configs' } };
+          return url.includes('storage.temp_dir')
             ? { data: { path: temp, source: 'system_configs' } }
-            : { data: { path: upload, source: 'system_configs' } },
+            : { data: { path: upload, source: 'system_configs' } };
+        },
       })) as unknown as jest.MockedFunction<typeof fetch>;
       const res = await resolveStorageDirsAtStartup({ env, fetchImpl: spy as never });
       expect(res.upload.dir).toBe(upload);
       expect(res.temp.dir).toBe(temp);
       expect(res.upload.mode).toBe(res.temp.mode);
       expect(res.temp.dir).not.toBe(res.upload.dir);
+      // 🔴 允许根只查一次（下传给两个目录，不允许各查各的）
+      const rootCalls = spy.mock.calls.filter(([u]) =>
+        String(u).includes(STORAGE_ALLOWED_ROOTS_KEY),
+      );
+      expect(rootCalls).toHaveLength(1);
+      expect(res.allowedRoots.roots).toContain(tmp);
+      expect(res.allowedRoots.source).toBe('system_service');
     });
 
     it('🔴 上传根目录失败 → 整体失败（不允许「一半新口径」）', async () => {

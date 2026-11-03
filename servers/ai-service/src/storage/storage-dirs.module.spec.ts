@@ -39,6 +39,19 @@ describe('StorageDirsModule（ai-service）', () => {
     await mod.close();
   });
 
+  /**
+   * 🔴 R1：允许根收归配置表后，standalone 形态仍用本服务 env 兜底 ——
+   * 这是唯一保留的合法来源，必须钉住（cluster 下改由 system-service 下发）。
+   */
+  it('standalone：允许根取本服务 env（不发任何请求）', async () => {
+    const mod = await Test.createTestingModule({ imports: [StorageDirsModule] }).compile();
+    const dirs = mod.get<ResolvedStorageDirs>(STORAGE_DIRS);
+    expect(dirs.mode).toBe('standalone');
+    expect(dirs.allowedRoots).toContain(path.resolve(root));
+    expect(dirs.allowedRootsSource).toBe('env');
+    await mod.close();
+  });
+
   it('🔴 临时图目录与上传根目录**同级**（落在 uploads 之下会让存量临时图 404）', async () => {
     const mod = await Test.createTestingModule({ imports: [StorageDirsModule] }).compile();
     const dirs = mod.get<ResolvedStorageDirs>(STORAGE_DIRS);

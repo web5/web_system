@@ -9,6 +9,7 @@ import {
   DEFAULT_UPLOAD_DIR,
   StorageService,
   STORAGE_ALLOWED_ROOTS_ENV,
+  STORAGE_ALLOWED_ROOTS_KEY,
   STORAGE_BROWSE_ENABLED_KEY,
   STORAGE_TEMP_DIR_ENV,
   STORAGE_TEMP_DIR_KEY,
@@ -165,6 +166,100 @@ describe('StorageService（A2：存储配置读写 / 校验 / 安全目录浏览
       await service.setTempDir(target);
       expect(settings.set).toHaveBeenCalledWith(STORAGE_TEMP_DIR_KEY, target);
       expect(fs.existsSync(target)).toBe(false);
+    });
+  });
+
+  describe('允许根白名单（R1：收归配置表 storage.allowed_roots）', () => {
+    it('配置表优先 → source=system_configs，家目录恒定在列', async () => {
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = path.join(tmp, 'data');
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, path.join(tmp, 'from-env'));
+
+      const r = await service.resolveConfiguredAllowedRoots();
+      expect(r.roots).toContain(path.resolve(path.join(tmp, 'data')));
+      expect(r.roots).not.toContain(path.resolve(path.join(tmp, 'from-env')));
+      expect(r.roots).toContain(path.resolve(os.homedir()));
+      expect(r.source).toBe('system_configs');
+      // 内部接口回传的是逗号分隔串，消费侧能原样还原（家目录由消费侧按同一规则补）
+      expect(r.path).toBe(path.join(tmp, 'data'));
+      expect([...new Set([path.resolve(os.homedir()), ...r.path.split(',')])]).toEqual(r.roots);
+    });
+
+    it('配置缺失 → env 兜底（source=env）', async () => {
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, tmp);
+      const r = await service.resolveConfiguredAllowedRoots();
+      expect(r.roots).toContain(tmp);
+      expect(r.source).toBe('env');
+    });
+
+    it('都没有 → 仅家目录（source=default）', async () => {
+      setEnv(STORAGE_ALLOWED_ROOTS_ENV, undefined);
+      const r = await service.resolveConfiguredAllowedRoots();
+      expect(r.roots).toEqual([path.resolve(os.homedir())]);
+      expect(r.source).toBe('default');
+    });
+
+    it('🔴 allowedRoots() 跟随配置表（判据不再写死在 .env 里）', async () => {
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = path.join(tmp, 'data');
+      await expect(service.allowedRoots()).resolves.toContain(
+        path.resolve(path.join(tmp, 'data')),
+      );
+    });
+
+    it('🔴 允许根收窄 → 已配置的目录会被判越界（越界校验真的按新根走）', async () => {
+      // prod 事故形态：允许根是 <root>/uploads（窄），而上传目录在 <root>/data 下
+      settings.store[STORAGE_UPLOAD_DIR_KEY] = path.join(tmp, 'data', 'uploads');
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = path.join(tmp, 'uploads');
+      await expect(service.resolveConfiguredUploadDir()).rejects.toMatchObject({
+        response: { code: 'UPLOAD_DIR_OUT_OF_SCOPE' },
+      });
+    });
+
+    it('允许根覆盖得住 → 正常解析（放宽后同一份配置就合法了）', async () => {
+      settings.store[STORAGE_UPLOAD_DIR_KEY] = path.join(tmp, 'data', 'uploads');
+      settings.store[STORAGE_ALLOWED_ROOTS_KEY] = tmp;
+      await expect(service.resolveConfiguredUploadDir()).resolves.toEqual({
+        path: path.join(tmp, 'data', 'uploads'),
+        source: 'system_configs',
+      });
+    });
+
+    describe('checkAllowedRoots：保存前置校验', () => {
+      it('空值 → ALLOWED_ROOTS_EMPTY（空白名单等于把所有目录判越界）', async () => {
+        const check = await service.checkAllowedRoots('  ,  ');
+        expect(check.ok).toBe(false);
+        expect(check.code).toBe('ALLOWED_ROOTS_EMPTY');
+      });
+
+      it('正常 → ok，且 roots 不含家目录（家目录恒定在列，不需要落库）', async () => {
+        const check = await service.checkAllowedRoots(`${path.join(tmp, 'a')},${tmp}`);
+        expect(check.ok).toBe(true);
+        expect(check.roots).toEqual([path.join(tmp, 'a'), tmp]);
+        expect(check.roots).not.toContain(path.resolve(os.homedir()));
+      });
+
+      /** 🔴 prod 事故复发防护：允许根比别处窄 → 已配置目录下次启动被判越界 */
+      it('🔴 收窄到不含已配置目录 → ALLOWED_ROOTS_EXCLUDE_CONFIGURED_DIRS', async () => {
+        const configured = path.join(tmp, 'uploads');
+        const check = await service.checkAllowedRoots(path.join(tmp, 'elsewhere'), [
+          configured,
+        ]);
+        expect(check.ok).toBe(false);
+        expect(check.code).toBe('ALLOWED_ROOTS_EXCLUDE_CONFIGURED_DIRS');
+        expect(check.message).toContain(configured);
+      });
+
+      it('覆盖得住 → ok（含家目录这一恒定根）', async () => {
+        const check = await service.checkAllowedRoots(tmp, [path.join(tmp, 'uploads')]);
+        expect(check.ok).toBe(true);
+      });
+    });
+
+    it('setAllowedRoots：逗号分隔写入 storage.allowed_roots', async () => {
+      await service.setAllowedRoots([path.join(tmp, 'a'), tmp]);
+      expect(settings.set).toHaveBeenCalledWith(
+        STORAGE_ALLOWED_ROOTS_KEY,
+        `${path.join(tmp, 'a')},${tmp}`,
+      );
     });
   });
 

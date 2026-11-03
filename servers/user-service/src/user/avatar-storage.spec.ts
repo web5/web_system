@@ -22,6 +22,8 @@ describe('avatarUploadDir：头像目录 = 上传根目录 + avatars', () => {
       tempDir: null, // user-service 不需要临时图目录
       uploadSource: 'system_service',
       tempSource: null,
+      allowedRoots: ['/data/web_system'],
+      allowedRootsSource: 'system_service',
       mode: 'cluster',
       notes: [],
     });
@@ -34,6 +36,8 @@ describe('avatarUploadDir：头像目录 = 上传根目录 + avatars', () => {
       tempDir: null,
       uploadSource: 'system_service',
       tempSource: null,
+      allowedRoots: ['/mnt/data'],
+      allowedRootsSource: 'system_service',
       mode: 'cluster',
       notes: [],
     });
@@ -52,6 +56,8 @@ describe('avatarUploadDir：头像目录 = 上传根目录 + avatars', () => {
       tempDir: null,
       uploadSource: 'env',
       tempSource: null,
+      allowedRoots: [path.resolve(root)],
+      allowedRootsSource: 'env',
       mode: 'standalone',
       notes: [],
     });
