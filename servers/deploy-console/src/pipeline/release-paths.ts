@@ -276,6 +276,27 @@ export function resolveCdnTarget(get: CdnConfigGetter, env: string): CdnTarget {
   return { env, root, sshTarget: ssh || null };
 }
 
+/**
+ * CDN 对外 origin（**带域名的完整 URL base**，如 `https://dev.kedouai.com/cdn`）。
+ *
+ * 与 {@link resolveCdnTarget} 分开：root 是入口机磁盘路径（投递/GC 用），origin 是外部
+ * 可达地址（verify 用）。两者刻意不互相推导 —— 「磁盘对了但 nginx 没配」正是要被抓出来的场景。
+ *
+ * 未配置返回 null：调用方在 cdn 模式下必须 fail-fast，**不允许「没配就跳过校验」**（那就是假绿）。
+ */
+export function resolveCdnOrigin(get: CdnConfigGetter, env: string): string | null {
+  const raw = (get(`CDN_ORIGIN_${envSuffix(env)}`) || get('CDN_ORIGIN') || '').trim();
+  if (!raw) return null;
+  const base = trimSlash(raw);
+  if (!/^https?:\/\/[^\s/]+/i.test(base)) {
+    throw new Error(`CDN_ORIGIN 必须是带域名的完整 URL base（如 https://dev.kedouai.com/cdn），实际: ${JSON.stringify(raw)}`);
+  }
+  if (/[?#]/.test(base)) {
+    throw new Error(`CDN_ORIGIN 不能带 query / hash: ${JSON.stringify(raw)}`);
+  }
+  return base;
+}
+
 /** 布局开关：`legacy`（默认，逐字节零变化）/ `cdn`（Phase 2 新布局） */
 export type CdnLayoutMode = 'legacy' | 'cdn';
 
