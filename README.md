@@ -313,7 +313,7 @@ packages/shared/src/api.ts
 
 ## 9 文档地图（**总索引 = `docs/INDEX.md`**）
 
-> 🔴 仓库有 **338 份 md**（docs 208 + specs 125 + 根 3 + wiki 2，2026-11-04 实测），本表只留最高频 7 条。
+> 🔴 仓库现有 **257 份活跃 md**（docs 141 + specs 112 + 根 2 + wiki 2，2026-11-04 删 80 桩 + 2 废弃入口后实测）；80 份史料另存 `archive/`，不计入。本表只留最高频 7 条。
 > **完整「按问句 → 真源」路由表见 [`docs/INDEX.md`](./docs/INDEX.md)** —— 先查它再检索，别全仓 grep。
 
 | 主题 | 入口 |
@@ -329,12 +329,12 @@ packages/shared/src/api.ts
 
 **目录边界（防检索到旧事实）**：`docs/plans/`、`docs/reviews/`、`docs/development/*review*`、
 `specs/*/tasks.md`、`.workbuddy/memory/2026-*.md` 都是**历史快照**。
-🔴 其中 **80 份史料正文已于 2026-11-04 物理移入 `archive/` 存档目录**，原位置只留纯指针桩（防断链）；
+🔴 其中 **80 份史料正文已于 2026-11-04 物理移入 `archive/` 存档目录**，原位置指针桩同日由用户拍板删除（活跃区零副本；48 处历史链接失效清单见治理目录 `史料桩删除后断链清单.txt`）；
 **全仓事实检索一律排除 `archive/`**（`grep -R --exclude-dir=archive`）。
 🔴 **本文档地图不给存档文件建索引**：史料不承载当前事实，无路径、无链接；
 问「当时为什么这么定」属考古，只有人显式指定路径时才追溯，AI 不得据此判断线上现状。
 当前事实只认 `README.md` / `docs/INDEX.md` / `docs/architecture/system-overview.md` / 对应 skill。
-`DEPLOYMENT.md` 已瘦身为纯指针文件，历史正文留在 git。
+`DEPLOYMENT.md` 已于 2026-11-04 **删除**（旧正文只在 git `84667dee`）；活跃区不得再建链接或「参考 / 详见」推荐语。
 
 ---
 

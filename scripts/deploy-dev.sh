@@ -5,7 +5,7 @@
 # 本脚本是 2026-08 的 scp + pm2 手工通道，与现状不符：
 #   - 依赖不存在的 scripts/.env.dev（见 docs/development/release-infra-review-2026-09-25.md P-16）
 #   - 只覆盖部分服务，且用 pm2 restart 旧通道，不是 deploy-console 流水线
-#   - 曾被已废弃的 DEPLOYMENT.md 旧正文推荐，该正文已于 2026-11-04 移除
+#   - 曾被 DEPLOYMENT.md（2026-11-04 已删除）旧正文推荐，旧正文只在 git 84667dee
 #
 # 🔴 当前发布入口（统一 MCP，后端 10 服务与前端 admin/portal 都支持）：~/skills/web-system-deploy/SKILL.md
 #    A/B 是调用方式不是模块二分：后端推荐 bash ~/skills/web-system-deploy/scripts/publish.sh dev|prod|plan|rollback <svc>

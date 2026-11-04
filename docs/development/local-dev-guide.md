@@ -282,7 +282,7 @@ curl -X POST http://127.0.0.1:6200/api/services/gateway/deploy \
 | Agent 能力体验与走查 | `docs/development/agent-capability-playbook.md` |
 | 自动发布（GH Actions） | `docs/development/gh-actions-release.md` + `gh-actions-setup.md` |
 | 三区分离工作流 / 集成分支 | `docs/development/dev-workflow.md`、`integration-branch.md`（后者已停用） |
-| 架构总览 / 网络拓扑 / URL 规划 / 微前端设计 | `docs/architecture/技术架构.md`、`kedou-network-architecture.md`、`网关URL规划.md`、`micro-frontend-technical-design.md` |
+| 架构总览 / 网络拓扑 / URL 规划 / 微前端设计 | `docs/architecture/技术架构.md`、`system-overview.md` §9、`网关URL规划.md`、`micro-frontend-technical-design.md`（旧 `kedou-network-architecture.md` 已删除） |
 | 静态产物缓存与保留策略 | `docs/architecture/static-artifact-cache-and-retention.md` |
 
 ---

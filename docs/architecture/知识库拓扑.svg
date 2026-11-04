@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1170" viewBox="0 0 1400 1170" role="img">
+<title>web_system 开发维护知识库拓扑 · AI 防跑偏总图</title>
+<desc>五层知识载体 L0 注入域到 L4 史料隔离，右侧为门禁、冲突优先级、禁止路径与已知缺口，底部为正确执行路径。</desc>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect x="0" y="0" width="1400" height="1170" rx="0" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="0"/>
+<rect x="40" y="30" width="7" height="44" rx="3" fill="#F97316" stroke="#F97316" stroke-width="0"/>
+<text x="60" y="50" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" font-weight="500" fill="#1A1A1F" text-anchor="start">web_system 开发维护知识库拓扑 · AI 防跑偏总图</text>
+<text x="60" y="74" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="400" fill="#4B5563" text-anchor="start">先判层 → 再找唯一真源 → 过门禁 → 才执行　｜　绿色 = 正确路径　红色 = 已踩过的跑偏路径　灰色 = 未确认缺口</text>
+<text x="1360" y="50" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="end">盘点 2026-11-04</text>
+<text x="1360" y="74" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11" font-weight="400" fill="#0EA5A4" text-anchor="end">真源 docs/知识库拓扑.md</text>
+<rect x="40" y="110" width="960" height="118" rx="14" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+<text x="56" y="131" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L0 · 注入域</text>
+<text x="186" y="131" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">每次会话自动加载，不靠人跳转；指针只放判据 + 绝对路径</text>
+<rect x="56" y="142" width="224.5" height="70" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="148" width="3" height="58" rx="1.5" fill="#534AB7" stroke="#534AB7" stroke-width="0"/>
+<text x="68" y="161" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">项目级 MEMORY.md</text>
+<text x="68" y="178" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">.workbuddy/memory/MEMORY.md</text>
+<text x="68" y="193" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">≤4KB 索引 · 每次注入 · 判据 + 真源</text>
+<rect x="290.5" y="142" width="224.5" height="70" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="290.5" y="148" width="3" height="58" rx="1.5" fill="#534AB7" stroke="#534AB7" stroke-width="0"/>
+<text x="302.5" y="161" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">总控域 MEMORY.md</text>
+<text x="302.5" y="178" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">~/AiWorkspace/.workbuddy/memory/</text>
+<text x="302.5" y="193" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">cwd=总控时注入 · R1 另一份指针</text>
+<rect x="525" y="142" width="224.5" height="70" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="525" y="148" width="3" height="58" rx="1.5" fill="#534AB7" stroke="#534AB7" stroke-width="0"/>
+<text x="537" y="161" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">CODEBUDDY.md</text>
+<text x="537" y="178" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">.codebuddy/CODEBUDDY.md</text>
+<text x="537" y="193" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">CodeBuddy 常驻 · 只放规则与入口</text>
+<rect x="759.5" y="142" width="224.5" height="70" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="759.5" y="148" width="3" height="58" rx="1.5" fill="#534AB7" stroke="#534AB7" stroke-width="0"/>
+<text x="771.5" y="161" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">SessionStart hooks</text>
+<text x="771.5" y="178" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">scripts/redline/hook-*.py</text>
+<text x="771.5" y="193" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">注入 UI 动作门摘要 · Claude 域无此钩</text>
+<rect x="40" y="240" width="960" height="104" rx="14" fill="#E6F1FB" stroke="#185FA5" stroke-width="1"/>
+<text x="56" y="261" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L1 · 入口层</text>
+<text x="186" y="261" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">只指路、不复制数值；出现第二份事实即漂移</text>
+<rect x="56" y="272" width="302.6666666666667" height="56" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="278" width="3" height="44" rx="1.5" fill="#185FA5" stroke="#185FA5" stroke-width="0"/>
+<text x="68" y="291" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">README.md</text>
+<text x="68" y="308" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">§5 端口 · §7.1 发布路由 · §9 文档地图</text>
+<rect x="368.6666666666667" y="272" width="302.6666666666667" height="56" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="368.6666666666667" y="278" width="3" height="44" rx="1.5" fill="#185FA5" stroke="#185FA5" stroke-width="0"/>
+<text x="380.6666666666667" y="291" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">.codebuddy/rules/</text>
+<text x="380.6666666666667" y="308" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">4×RULE.mdc + 最佳实践</text>
+<rect x="681.3333333333334" y="272" width="302.6666666666667" height="56" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="681.3333333333334" y="278" width="3" height="44" rx="1.5" fill="#185FA5" stroke="#185FA5" stroke-width="0"/>
+<text x="693.3333333333334" y="291" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">协作指令速查.md</text>
+<text x="693.3333333333334" y="308" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">红线 · 动作门 · commit trailer</text>
+<rect x="40" y="356" width="960" height="100" rx="14" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+<text x="56" y="377" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L2 · 总索引</text>
+<text x="186" y="377" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">先查这一层，再打开唯一真源；不要一上来全仓 grep</text>
+<rect x="56" y="388" width="459" height="52" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="394" width="3" height="40" rx="1.5" fill="#0F6E56" stroke="#0F6E56" stroke-width="0"/>
+<text x="68" y="407" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">docs/INDEX.md — 唯一「分」入口</text>
+<text x="68" y="424" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">338 份 md · 按问句 → 唯一真源 · 只路由</text>
+<rect x="525" y="388" width="459" height="52" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="525" y="394" width="3" height="40" rx="1.5" fill="#0F6E56" stroke="#0F6E56" stroke-width="0"/>
+<text x="537" y="407" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">docs/知识库拓扑.md — 本图真源</text>
+<text x="537" y="424" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">五层载体 · 门禁 · 禁止路径 · 冲突优先级</text>
+<rect x="40" y="468" width="960" height="388" rx="14" fill="#FAEEDA" stroke="#BA7517" stroke-width="1"/>
+<text x="56" y="489" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L3 · 真源</text>
+<text x="186" y="489" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">当前事实与能力的落点；跨仓资产也在这一层，按绝对路径取用</text>
+<rect x="56" y="500" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="506" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="68" y="519" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">发布能力（仓库外）</text>
+<text x="68" y="536" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">~/skills/web-system-deploy/SKILL.md</text>
+<text x="68" y="551" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">publish.sh · mcp-deploy.sh · references/</text>
+<text x="68" y="566" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">先判 moduleKey；判不准用 list_modules</text>
+<rect x="368.6666666666667" y="500" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="368.6666666666667" y="506" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="380.6666666666667" y="519" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">工程事实</text>
+<text x="380.6666666666667" y="536" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">docs/architecture/system-overview.md</text>
+<text x="380.6666666666667" y="551" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">§3 三环境端口矩阵</text>
+<text x="380.6666666666667" y="566" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">端口/服务/库名以代码与配置为准</text>
+<rect x="681.3333333333334" y="500" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="681.3333333333334" y="506" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="693.3333333333334" y="519" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">开发 · 接口 · UI 规范</text>
+<text x="693.3333333333334" y="536" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">docs/development/** · api/contracts.md</text>
+<text x="693.3333333333334" y="551" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">docs/ui/design-system.md</text>
+<text x="693.3333333333334" y="566" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">判据清单 · 事故复盘 · 排障速查</text>
+<rect x="56" y="616.6666666666666" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="622.6666666666666" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="68" y="635.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">规格（设计态）</text>
+<text x="68" y="652.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">specs/*/design.md（41 份）</text>
+<text x="68" y="667.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">设计定稿 ≠ 已上线，须查落地状态</text>
+<text x="68" y="682.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">specs/*/tasks.md 正文已归档（原位已删）</text>
+<rect x="368.6666666666667" y="616.6666666666666" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="368.6666666666667" y="622.6666666666666" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="380.6666666666667" y="635.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">门禁实现</text>
+<text x="380.6666666666667" y="652.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">scripts/redline/scan-rules.sh（R1–R16）</text>
+<text x="380.6666666666667" y="667.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">scripts/verify/ · .githooks/</text>
+<text x="380.6666666666667" y="682.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">S7：能力源 → 运行源单向同步</text>
+<rect x="681.3333333333334" y="616.6666666666666" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="681.3333333333334" y="622.6666666666666" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="693.3333333333334" y="635.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">AI 技能（能力源 / 运行源）</text>
+<text x="693.3333333333334" y="652.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">.codebuddy/agent-kit/（80 文件）</text>
+<text x="693.3333333333334" y="667.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">→ .codebuddy/skills/（61 文件）</text>
+<text x="693.3333333333334" y="682.6666666666666" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">IDE 加载运行源；禁手改（S7 会拦）</text>
+<rect x="56" y="733.3333333333334" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="739.3333333333334" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="68" y="752.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">脚本与生成物</text>
+<text x="68" y="769.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">scripts/（132 文件）· gen-*.mjs</text>
+<text x="68" y="784.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">→ docs/architecture/*.svg / *-diagrams.html</text>
+<text x="68" y="799.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">改图改脚本重跑，禁手改 SVG/HTML</text>
+<rect x="368.6666666666667" y="733.3333333333334" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="368.6666666666667" y="739.3333333333334" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="380.6666666666667" y="752.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">小程序 · 运维 · 产品</text>
+<text x="380.6666666666667" y="769.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">docs/miniprogram/ · docs/operations/</text>
+<text x="380.6666666666667" y="784.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">docs/products/ · docs/admin/</text>
+<text x="380.6666666666667" y="799.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">出码走固定出口 IP 的 CI 执行机</text>
+<rect x="681.3333333333334" y="733.3333333333334" width="302.6666666666667" height="106.66666666666667" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="681.3333333333334" y="739.3333333333334" width="3" height="94.66666666666667" rx="1.5" fill="#BA7517" stroke="#BA7517" stroke-width="0"/>
+<text x="693.3333333333334" y="752.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">台账与规范（仓库外）</text>
+<text x="693.3333333333334" y="769.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">30-任务产物/_待验证清单.md</text>
+<text x="693.3333333333334" y="784.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">20-私域资产/记忆索引化验收规范.md</text>
+<text x="693.3333333333334" y="799.3333333333334" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">2026-11-04-web_system文档治理/</text>
+<rect x="40" y="868" width="960" height="138" rx="14" fill="#FCEBEB" stroke="#A32D2D" stroke-width="1"/>
+<text x="56" y="889" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L4 · 史料（物理隔离）</text>
+<text x="186" y="889" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">只解释「当时为什么」，不用于「现在是什么」</text>
+<rect x="56" y="900" width="302.6666666666667" height="72" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="56" y="906" width="3" height="60" rx="1.5" fill="#A32D2D" stroke="#A32D2D" stroke-width="0"/>
+<text x="68" y="919" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">archive/docs-history/</text>
+<text x="68" y="936" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">80 份史料正文 + README（81 md）</text>
+<text x="68" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">物理隔离 · 逐字节未改动 · 非当前事实</text>
+<rect x="368.6666666666667" y="900" width="302.6666666666667" height="72" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="368.6666666666667" y="906" width="3" height="60" rx="1.5" fill="#A32D2D" stroke="#A32D2D" stroke-width="0"/>
+<text x="380.6666666666667" y="919" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">原位桩已删（11-04）</text>
+<text x="380.6666666666667" y="936" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">活跃区零副本 · 备份在治理 backup/</text>
+<text x="380.6666666666667" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">48 处历史链接失效已列清单</text>
+<rect x="681.3333333333334" y="900" width="302.6666666666667" height="72" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
+<rect x="681.3333333333334" y="906" width="3" height="60" rx="1.5" fill="#A32D2D" stroke="#A32D2D" stroke-width="0"/>
+<text x="693.3333333333334" y="919" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">记忆深水区（不进 archive）</text>
+<text x="693.3333333333334" y="936" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">2026-*.md（19 份 append-only 日志）</text>
+<text x="693.3333333333334" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">topics/ 工程长期记忆全文（26735B）</text>
+<text x="56" y="1000" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#A32D2D" text-anchor="start">事实检索一律 grep -R --exclude-dir=archive　·　R7：入口层不给存档建索引、不列路径</text>
+<path d="M520 228 L520 240" fill="none" stroke="#0EA5A4" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M520 344 L520 356" fill="none" stroke="#0EA5A4" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M520 456 L520 468" fill="none" stroke="#0EA5A4" stroke-width="1.2" marker-end="url(#arr)"/>
+<path d="M520 856 L520 868" fill="none" stroke="#0EA5A4" stroke-width="1.2" marker-end="url(#arr)"/>
+<rect x="1020" y="110" width="340" height="238" rx="12" fill="#EAF3DE" stroke="#3B6D11" stroke-width="1"/>
+<text x="1034" y="133" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">门禁带 · 动手前必过</text>
+<text x="1034" y="153" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">记忆索引化 R1–R7</text>
+<text x="1034" y="170.2" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">R1 跨注入域各存一份指针  R2 问句反查</text>
+<text x="1034" y="187.4" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">R3 入口带路由  R4 废弃正文清零</text>
+<text x="1034" y="204.6" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">R5 不复制数值  R6 史料物理隔离+零副本</text>
+<text x="1034" y="221.8" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">R7 入口层不给存档建索引</text>
+<text x="1034" y="239" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start"></text>
+<text x="1034" y="256.2" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">红线 R1–R16 · scan-rules.sh</text>
+<text x="1034" y="273.4" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">动作门：UI D2/D3 · 发布 R14</text>
+<text x="1034" y="290.6" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">契约 R13 · 新增接口 R15 · 机检 R16</text>
+<text x="1034" y="307.79999999999995" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">trailer：Release / Contract / Code</text>
+<text x="1034" y="325" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">Proto / Design / Micro-exempt</text>
+<rect x="1020" y="358" width="340" height="190" rx="12" fill="#E6F1FB" stroke="#185FA5" stroke-width="1"/>
+<text x="1034" y="381" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">冲突时以谁为准（高 → 低）</text>
+<text x="1034" y="401" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">1 运行时事实：代码 / 配置 / DB 实况</text>
+<text x="1034" y="421" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">2 能力入口：web-system-deploy skill</text>
+<text x="1034" y="441" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">3 工程事实：README → system-overview</text>
+<text x="1034" y="461" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">4 专题规范：docs/development · api</text>
+<text x="1034" y="481" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">5 设计定稿：specs/*/design.md</text>
+<text x="1034" y="501" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">6 历史快照：archive · 日志（桩已删）</text>
+<text x="1034" y="521" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">互斥结论必须写显式覆盖声明</text>
+<rect x="1020" y="558" width="340" height="230" rx="12" fill="#FCEBEB" stroke="#A32D2D" stroke-width="1"/>
+<text x="1034" y="581" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">禁止路径（AI 实际踩过）</text>
+<text x="1034" y="601" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× 全仓 grep 不带 --exclude-dir=archive</text>
+<text x="1034" y="621" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× 顺 2026-09 旧手册找发布入口</text>
+<text x="1034" y="641" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× 自签 JWT 打 POST /api/pipelines</text>
+<text x="1034" y="661" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× status=succeeded 当成已生效</text>
+<text x="1034" y="681" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× specs/*/design.md 当成已上线</text>
+<text x="1034" y="701" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">× 把 archive 索引当成真源</text>
+<text x="1034" y="721" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start"></text>
+<text x="1034" y="741" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">证据门槛：verdict=verified / 探活</text>
+<text x="1034" y="761" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#A32D2D" text-anchor="start">进程目录 · 目标 HEAD · 端口占用 pid</text>
+<rect x="1020" y="798" width="340" height="208" rx="12" fill="#F1EFE8" stroke="#888780" stroke-width="1"/>
+<text x="1034" y="821" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">已知缺口（不猜，已落台账）</text>
+<text x="1034" y="841" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8441 release-deploy-console.sh</text>
+<text x="1034" y="863" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">  被 README / MEMORY 引用但文件不存在</text>
+<text x="1034" y="885" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8442 wiki/index.md 仍写 350 份</text>
+<text x="1034" y="907" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">  实测口径 338 份</text>
+<text x="1034" y="929" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8443 21 个 SVG 中 13 个生成源未确认</text>
+<text x="1034" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">~/WorkBuddy/chase 个人 AI 工作空间</text>
+<text x="1034" y="973" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">≡ ~/AiWorkspace（symlink，勿当两份）</text>
+<rect x="40" y="1020" width="1320" height="62" rx="12" fill="#EAF3DE" stroke="#3B6D11" stroke-width="1"/>
+<rect x="56" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="155" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">① 问句</text>
+<path d="M256 1051 L266 1051" fill="none" stroke="#3B6D11" stroke-width="1.2"  marker-end="url(#arr)"/>
+<rect x="270" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="369" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">② L0 判据</text>
+<path d="M470 1051 L480 1051" fill="none" stroke="#3B6D11" stroke-width="1.2"  marker-end="url(#arr)"/>
+<rect x="484" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="583" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">③ INDEX 路由</text>
+<path d="M684 1051 L694 1051" fill="none" stroke="#3B6D11" stroke-width="1.2"  marker-end="url(#arr)"/>
+<rect x="698" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="797" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">④ 唯一真源</text>
+<path d="M898 1051 L908 1051" fill="none" stroke="#3B6D11" stroke-width="1.2"  marker-end="url(#arr)"/>
+<rect x="912" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="1011" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">⑤ 过门禁</text>
+<path d="M1112 1051 L1122 1051" fill="none" stroke="#3B6D11" stroke-width="1.2"  marker-end="url(#arr)"/>
+<rect x="1126" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
+<text x="1225" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">⑥ 执行 + 证据</text>
+<text x="40" y="1104" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">绿色实线 = 正确执行路径　·　红虚线 = 已踩过的跑偏路径　·　灰框 = 未确认缺口，不作为事实使用</text>
+<text x="40" y="1128" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">改图改脚本重跑：node scripts/gen-kb-topology.mjs　｜　自检：--check　｜　新增 md 必须在 docs/INDEX.md §1 登记一行（R5）</text>
+<text x="40" y="1152" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">载体实测（11-04 删桩后）：docs 141 md · specs 112 md · 根 2 md · wiki 2 md = 257 份活跃；archive 80 份史料另存</text>
+</svg>
