@@ -317,6 +317,36 @@ describe('isolated backend runtime', () => {
     expect(start![2].env!.PORT).toBe('6005');
   });
 
+  it('inherits the module env block from ecosystem.config.js on clean restart', async () => {
+    const fixture = await activationFixture();
+    // project = path.resolve(service, '..', '..') = runtime（servers/todo-service 上两级）
+    write(
+      path.join(runtime, 'ecosystem.config.js'),
+      [
+        "module.exports = { apps: [",
+        "  { name: 'other-service', env: { NODE_ENV: 'production', OTHER: 'x' } },",
+        "  { name: 'todo-service', env: { NODE_ENV: 'production', STATIC_PUBLIC_ROOT: '/srv/public', JWT_SECRET: 's3cret', PORT: 9999, NULLABLE: null, UNDEF: undefined } },",
+        '] };',
+      ].join('\n'),
+    );
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const start = recorded(fixture).find(([, args]) => args[0] === 'start');
+    const env = start![2].env!;
+    // 继承 ecosystem env 块
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.STATIC_PUBLIC_ROOT).toBe('/srv/public');
+    expect(env.JWT_SECRET).toBe('s3cret');
+    // PORT 不继承 ecosystem 的 9999，保留 activate 解析值
+    expect(env.PORT).toBe('6005');
+    // null / undefined 被过滤；其他服务的 env 不串台
+    expect(env.NULLABLE).toBeUndefined();
+    expect(env.UNDEF).toBeUndefined();
+    expect(env.OTHER).toBeUndefined();
+    // 基础键仍在
+    expect(env.PATH).toBeDefined();
+    expect(env.HOME).toBeDefined();
+  });
+
   it('reuses the previous process working directory and memory limit on a clean start', async () => {
     const fixture = await activationFixture(false, { max_memory_restart: 536870912 });
     await executeBackendRuntime(fixture.input, fixture.adapters);
