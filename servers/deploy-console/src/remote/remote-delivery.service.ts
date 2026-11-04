@@ -3,6 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as releasePaths from '../pipeline/release-paths';
+import {
+  cdnAssetDir,
+  cdnLayoutMode,
+  resolveCdnTarget,
+  toCommitId,
+} from '../pipeline/release-paths';
 import { CommandService } from '../shell/command.service';
 import { SshExecService, SshTarget } from './ssh-exec.service';
 
@@ -96,6 +102,13 @@ export interface RemoteScriptVars {
   REMOTE_MODULES_ROOT: string;
   REMOTE_DEST_DIR: string;
   SSH_KEY_PATH: string;
+  /**
+   * Phase 2（`CDN_LAYOUT_MODE=cdn` 时才出现，默认 legacy 时**三个键完全不存在**，
+   * 保证存量输出逐字段不变）。语义与上面四件套一致：平台算好，脚本只引用。
+   */
+  REMOTE_CDN_SSH_TARGET?: string;
+  REMOTE_CDN_ROOT?: string;
+  REMOTE_CDN_DEST?: string;
 }
 
 export function resolveRemoteScriptVars(
@@ -116,12 +129,21 @@ export function resolveRemoteScriptVars(
   const root = resolveRemoteModulesRoot(get, input.env);
   const sshTarget = input.ssh?.target ?? '';
   const keyPath = input.ssh?.keyPath ?? '';
-  return {
+  const vars: RemoteScriptVars = {
     REMOTE_SSH_TARGET: sshTarget,
     REMOTE_MODULES_ROOT: root,
     REMOTE_DEST_DIR: root && input.version ? `${root}/${input.moduleKey}/${input.version}` : '',
     SSH_KEY_PATH: keyPath,
   };
+  // Phase 2：新布局变量只在显式开启时注入。未开启 → 不新增任何键（默认零变化）。
+  if (cdnLayoutMode(get) === 'cdn') {
+    const t = resolveCdnTarget(get, input.env);
+    const commit = input.version ? toCommitId(input.version) : undefined;
+    vars.REMOTE_CDN_SSH_TARGET = t.sshTarget ?? '';
+    vars.REMOTE_CDN_ROOT = t.root;
+    vars.REMOTE_CDN_DEST = commit ? cdnAssetDir(t.root, input.env, input.moduleKey, commit) : '';
+  }
+  return vars;
 }
 
 /**
@@ -183,8 +205,12 @@ export class RemoteDeliveryService {
   /**
    * 远程投递 dist 产物：tar → scp → ssh 解压到远端
    * `<远端静态产物根>/<moduleKey>/<version>`，返回远端目标（供日志/result）。
+   *
+   * Phase 2：`CDN_LAYOUT_MODE=cdn` 时走 {@link uploadDistToCdn}（入口机 `<env>/<app>/<commit>`，
+   * 全新目录 + 判重 fail-fast，**不再 `rm -rf ./*`**）。默认 legacy 分支逐字节保持原样。
    */
   async uploadDist(input: { env: string; moduleKey: string; version: string; srcDir: string }): Promise<RemoteDeliveryResult> {
+    if (this.isCdnLayout()) return this.uploadDistToCdn(input);
     // `user@host` 的拼法复用脚本变量那一份（同一个 helper），避免投递执行体与脚本变量两种写法
     const { target: sshTarget } = toRemoteScriptSsh(await this.sshExec.resolve(input.env));
     const dest = `${this.remoteModulesRoot(input.env)}/${input.moduleKey}/${input.version}`;
@@ -209,5 +235,93 @@ export class RemoteDeliveryService {
     );
     fs.rmSync(tar, { force: true });
     return { sshTarget, dest };
+  }
+
+  /** 布局开关（`CDN_LAYOUT_MODE`，缺省 legacy） */
+  private isCdnLayout(): boolean {
+    return cdnLayoutMode((k) => this.configService.get<string>(k)) === 'cdn';
+  }
+
+  /**
+   * Phase 2 CDN 投递：入口机 `/data/cdn/<env>/<app>/<commit>`。
+   *
+   * 与原实现的三个关键差异（都是 P0）：
+   * 1. **全新目录、判重 fail-fast**：目标已存在直接拒绝，不 `rm -rf` 覆盖 ——
+   *    覆盖会破坏 `immutable` 缓存的语义（同 URL 内容变了，客户端永远拿旧的）。
+   * 2. **失败只删本次新建目录**：旧版本目录全程保留，DB 指针不动（切指针是发布链路最后一步）。
+   * 3. **落点来自 `resolveCdnTarget`**：root 与 sshTarget 同一次解析，
+   *    杜绝「路径算在一处、删除执行在另一处」。
+   */
+  private async uploadDistToCdn(input: {
+    env: string;
+    moduleKey: string;
+    version: string;
+    srcDir: string;
+  }): Promise<RemoteDeliveryResult> {
+    const t = resolveCdnTarget((k) => this.configService.get<string>(k), input.env);
+    if (!t.sshTarget) {
+      throw new Error(
+        `CDN 投递缺少入口机配置：请设置 CDN_SSH_TARGET 或 CDN_SSH_TARGET_${input.env.toUpperCase()}`,
+      );
+    }
+    // 版本引用（`default/1a2b3c4`）含 `/`，必须先归一化，否则会被段校验直接拒（fail-fast，不静默降级）
+    const commit = toCommitId(input.version);
+    if (!commit) throw new Error(`CDN 投递缺少 commit（version=${JSON.stringify(input.version)}）`);
+    const dest = cdnAssetDir(t.root, input.env, input.moduleKey, commit);
+    const tar = `/tmp/${input.moduleKey}-${commit}.tar.gz`;
+    const cwd = process.cwd();
+
+    // 判重：已存在即拒绝（脚本用 `if` 保证退出码 0，避免把"不存在"当失败）
+    const probe = this.command.exec(
+      `ssh -o ConnectTimeout=15 ${t.sshTarget} "if [ -d '${dest}' ]; then echo EXISTS; else echo ABSENT; fi"`,
+      cwd,
+      {},
+      this.timeoutMs('ssh'),
+    );
+    if (probe.includes('EXISTS')) {
+      throw new Error(`CDN 目标目录已存在，拒绝覆盖（immutable）: ${dest}`);
+    }
+    // 只认显式 ABSENT：ssh 输出异常时宁可不投，也不能赌「应该是空的」——赌错的代价是覆盖线上产物
+    if (!probe.includes('ABSENT')) {
+      throw new Error(`CDN 目标目录状态无法确认（期望 ABSENT，实际 ${JSON.stringify(probe.trim())}）: ${dest}`);
+    }
+
+    let created = false;
+    try {
+      if (fs.existsSync(tar)) fs.rmSync(tar);
+      this.command.exec(`tar czf ${tar} -C ${input.srcDir} .`, cwd, {}, this.timeoutMs('tar'));
+      this.command.exec(
+        `scp -o ConnectTimeout=15 ${tar} ${t.sshTarget}:/tmp/`,
+        cwd,
+        {},
+        this.timeoutMs('scp'),
+      );
+      // 全新目录：不需要 rm -rf；只有本目录是自己刚建的，失败清理才安全
+      this.command.exec(
+        `ssh -o ConnectTimeout=15 ${t.sshTarget} "mkdir -p ${dest} && tar xzf /tmp/${path.basename(
+          tar,
+        )} -C ${dest} && rm -f /tmp/${path.basename(tar)}"`,
+        cwd,
+        {},
+        this.timeoutMs('ssh'),
+      );
+      created = true;
+    } finally {
+      fs.rmSync(tar, { force: true });
+      if (!created) {
+        // 只清本次新建目录；旧版本目录与其他 app 不受影响
+        try {
+          this.command.exec(
+            `ssh -o ConnectTimeout=15 ${t.sshTarget} "rm -rf '${dest}'"`,
+            cwd,
+            {},
+            this.timeoutMs('ssh'),
+          );
+        } catch {
+          /* 清理失败不掩盖原始错误：dest 已判重不存在，残留只会让下次发布 fail-fast */
+        }
+      }
+    }
+    return { sshTarget: t.sshTarget, dest };
   }
 }

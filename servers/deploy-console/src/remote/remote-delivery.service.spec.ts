@@ -126,6 +126,91 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
   });
 
   /**
+   * Phase 2 CDN 布局：入口机 `/data/cdn/<env>/<app>/<commit>`。
+   *
+   * 三个 P0 断言（缺任一都会在生产上静默出事）：
+   * ① 顺序 `<env>/<app>`（不是 legacy 的 `<app>/<env>`）；
+   * ② **绝不 `rm -rf ./*`** —— 覆盖同 URL 目录会破坏 immutable 缓存语义；
+   * ③ 同 commit 已存在 → fail-fast，且不得继续 tar/scp。
+   */
+  describe('uploadDist · CDN 布局（CDN_LAYOUT_MODE=cdn）', () => {
+    const cdnCfg = (over: Record<string, string | undefined> = {}) => {
+      const bag: Record<string, string | undefined> = {
+        CDN_LAYOUT_MODE: 'cdn',
+        CDN_SSH_TARGET: 'root@cdn-entry.local',
+        ...over,
+      };
+      cfg.get.mockImplementation((k: string) => bag[k]);
+    };
+
+    it('落到 <env>/<app>/<commit>，且不调用 rm -rf', async () => {
+      cdnCfg();
+      const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
+      fs.writeFileSync(path.join(src, 'index.js'), 'x');
+      command.exec.mockReturnValueOnce('ABSENT\n'); // 判重探针：目标不存在
+
+      const res = await svc.uploadDist({
+        env: 'prod',
+        moduleKey: 'portal',
+        version: 'default/624bfa46',
+        srcDir: src,
+      });
+      expect(res.dest).toBe('/data/cdn/prod/portal/624bfa46');
+      // 目标机是入口机，不是应用机（应用机解析根本不该被调用）
+      expect(res.sshTarget).toBe('root@cdn-entry.local');
+      expect(sshExec.resolve).not.toHaveBeenCalled();
+
+      const cmds = command.exec.mock.calls.map((c) => c[0] as string);
+      expect(cmds[0]).toContain('if [ -d \'/data/cdn/prod/portal/624bfa46\' ]');
+      const sshCmd = cmds[cmds.length - 1];
+      expect(sshCmd).toContain('mkdir -p /data/cdn/prod/portal/624bfa46');
+      expect(sshCmd).toContain('-C /data/cdn/prod/portal/624bfa46');
+      expect(sshCmd).not.toContain('rm -rf');
+      fs.rmSync(src, { recursive: true, force: true });
+    });
+
+    it('同 commit 已存在 → 抛错且不 tar/scp（immutable，拒绝覆盖）', async () => {
+      cdnCfg();
+      command.exec.mockReturnValueOnce('EXISTS\n');
+      await expect(
+        svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'abc1234', srcDir: '/tmp/none' }),
+      ).rejects.toThrow(/已存在/);
+      // 只有探针那一次执行
+      expect(command.exec).toHaveBeenCalledTimes(1);
+      expect(command.exec.mock.calls[0][0]).not.toContain('tar czf');
+    });
+
+    it('解压失败 → 只清本次新建目录，错误照实抛出（旧版本不受影响）', async () => {
+      cdnCfg();
+      const src = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
+      fs.writeFileSync(path.join(src, 'index.js'), 'x');
+      command.exec
+        .mockReturnValueOnce('ABSENT\n') // 探针
+        .mockReturnValueOnce('') // tar
+        .mockReturnValueOnce('') // scp
+        .mockImplementationOnce(() => {
+          throw new Error('disk full');
+        });
+
+      await expect(
+        svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'abc1234', srcDir: src }),
+      ).rejects.toThrow(/disk full/);
+
+      const cleanup = command.exec.mock.calls.map((c) => c[0] as string).pop() as string;
+      expect(cleanup).toContain("rm -rf '/data/cdn/dev/admin/abc1234'");
+      fs.rmSync(src, { recursive: true, force: true });
+    });
+
+    it('未配入口机 → 直接报「缺少 CDN_SSH_TARGET」，不带着空目标机 scp', async () => {
+      cdnCfg({ CDN_SSH_TARGET: undefined });
+      await expect(
+        svc.uploadDist({ env: 'dev', moduleKey: 'admin', version: 'abc1234', srcDir: '/tmp/none' }),
+      ).rejects.toThrow(/CDN_SSH_TARGET/);
+      expect(command.exec).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
    * S1（2026-10-13）边界脚本化：upload/cleanup 节点改由**脚本**做 scp/ssh，
    * 但「投到哪台机器、落到哪个目录」仍由平台裁决 —— 这四个变量就是裁决结果。
    *
@@ -185,6 +270,47 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
         ssh: null,
       });
       expect(v.REMOTE_SSH_TARGET).toBe('');
+    });
+
+    /**
+     * Phase 2：CDN 三件套**只在显式开启时出现**。
+     * 默认（legacy）下连键都不能存在 —— 否则「没开开关却多出变量」本身就会让脚本走新分支，
+     * 破坏「默认零变化」这条发布前提。
+     */
+    it('默认 legacy → 输出不含任何 CDN 键（逐字段零变化）', () => {
+      const v = resolveRemoteScriptVars(getter({}), {
+        env: 'dev',
+        moduleKey: 'admin',
+        version: 'v1',
+        ssh: toRemoteScriptSsh(target()),
+      });
+      expect(Object.keys(v).sort()).toEqual([
+        'REMOTE_DEST_DIR',
+        'REMOTE_MODULES_ROOT',
+        'REMOTE_SSH_TARGET',
+        'SSH_KEY_PATH',
+      ]);
+    });
+
+    it('CDN_LAYOUT_MODE=cdn → 注入 <env>/<app>/<commit> 与入口机目标', () => {
+      const get = getter({
+        CDN_LAYOUT_MODE: 'cdn',
+        CDN_SSH_TARGET: 'root@cdn-entry.local',
+      });
+      const v = resolveRemoteScriptVars(get, {
+        env: 'prod',
+        moduleKey: 'portal',
+        version: 'default/624bfa46',
+        ssh: toRemoteScriptSsh(target()),
+      });
+      expect(v.REMOTE_CDN_SSH_TARGET).toBe('root@cdn-entry.local');
+      expect(v.REMOTE_CDN_ROOT).toBe('/data/cdn');
+      // 顺序 env → app，且版本引用已归一化为纯 commit
+      expect(v.REMOTE_CDN_DEST).toBe('/data/cdn/prod/portal/624bfa46');
+      // 旧四件套保持不变（双投期两套并存，不是替换）
+      expect(v.REMOTE_DEST_DIR).toBe(
+        '/data/web_system/servers/gateway/public/static/modules/portal/default/624bfa46',
+      );
     });
   });
 

@@ -23,6 +23,8 @@ export const PLATFORM_VARS = new Set([
   'RUN_ID',
   // 远端投递四件套（2026-10-13 S1：platform 算好 → 脚本只引用，禁止脚本自行推导）
   'REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR', 'SSH_KEY_PATH',
+  // Phase 2 CDN 三件套（`CDN_LAYOUT_MODE=cdn` 时才注入；与上面四件套同源，勿在脚本里自行拼环境/应用顺序）
+  'REMOTE_CDN_SSH_TARGET', 'REMOTE_CDN_ROOT', 'REMOTE_CDN_DEST',
   // 目标机 web_system 根（2026-11-01 方案 B）：脚本据此拼远端服务目录/版本目录，
   // 不硬编码机器路径（硬编码 = 平台知识的数据副本）
   'WEB_SYSTEM_DIR',

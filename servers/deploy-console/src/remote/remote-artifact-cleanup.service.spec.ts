@@ -203,4 +203,72 @@ describe('RemoteArtifactCleanupService', () => {
       expect(r.reason).toContain('scan-failed');
     });
   });
+
+  /**
+   * Phase 2 CDN 布局（`CDN_LAYOUT_MODE=cdn`）。
+   *
+   * 这里锁的是「删错目录」这条 P0：顺序由 `<app>/<env>` 换成 `<env>/<app>` 后，
+   * ① 目录必须换序；② 执行必须打到入口机（不是应用机）；③ 没配入口机时 fail-closed，
+   * 绝不回落到应用机执行 `rm -rf`；④ 删除前必须有 realpath 归属断言。
+   */
+  describe('CDN 布局（CDN_LAYOUT_MODE=cdn）', () => {
+    function makeCdnSvc(cfgMap: Record<string, string | undefined>, sshOut: string | Error) {
+      const config = { get: (k: string) => cfgMap[k] } as never;
+      const run = jest.fn();
+      const execOn = jest.fn(async (_cfg: unknown, _cmd: string, _tag?: string) => {
+        if (sshOut instanceof Error) throw sshOut;
+        return sshOut;
+      });
+      const configForHost = jest.fn((h: { host: string; sshUser: string }) => ({
+        host: h.host,
+        port: 22,
+        username: h.sshUser,
+        privateKey: Buffer.from('K'),
+        keyPath: '/home/u/.ssh/id_ed25519_servers',
+      }));
+      const ssh = { run, execOn, configForHost } as never;
+      return { svc: new RemoteArtifactCleanupService(config, ssh), run, execOn, configForHost };
+    }
+
+    const base = { CDN_LAYOUT_MODE: 'cdn', CDN_SSH_TARGET: 'root@cdn-entry.local' };
+
+    it('目录换成 <env>/<app>，且执行走入口机（不碰应用机）', async () => {
+      const { svc, run, execOn, configForHost } = makeCdnSvc(base, '1700000000\tabc1234\n');
+      const entries = await svc.scan('prod', 'portal');
+      expect(entries.length).toBe(1);
+      expect(String(execOn.mock.calls[0][1])).toContain('cd \'/data/cdn/prod/portal\'');
+      expect(run).not.toHaveBeenCalled();
+      expect(configForHost).toHaveBeenCalledWith(
+        expect.objectContaining({ host: 'cdn-entry.local', sshUser: 'root' }),
+      );
+    });
+
+    it('未配入口机 → fail-closed：不扫、不删、绝不回落应用机（防删错目录）', async () => {
+      const { svc, run, execOn } = makeCdnSvc(
+        { CDN_LAYOUT_MODE: 'cdn', REMOTE_CLEANUP_ENABLED: 'true' },
+        '1700000000\tabc1234\n',
+      );
+      expect(await svc.scan('prod', 'portal')).toEqual([]);
+      const r = await svc.cleanup('prod', 'portal', { keep: 0 });
+      expect(r.applied).toBe(false);
+      expect(r.remove).toEqual([]);
+      expect(r.reason).toContain('CDN_SSH_TARGET');
+      expect(run).not.toHaveBeenCalled();
+      expect(execOn).not.toHaveBeenCalled();
+    });
+
+    it('删除命令带 realpath 归属断言（pwd -P 不等就 exit 9）', async () => {
+      const { svc, execOn } = makeCdnSvc(
+        { ...base, REMOTE_CLEANUP_ENABLED: 'true' },
+        '1700000000\tabc1234\n1600000000\t0011223\n',
+      );
+      const r = await svc.cleanup('prod', 'portal', { keep: 1, minAgeMs: 0 });
+      expect(r.applied).toBe(true);
+      const delCmd = String(execOn.mock.calls[1][1]);
+      expect(delCmd).toContain('pwd -P');
+      expect(delCmd).toContain("!= '/data/cdn/prod/portal'");
+      expect(delCmd).toContain("rm -rf -- '0011223'");
+      expect(delCmd).not.toContain('static/modules');
+    });
+  });
 });
