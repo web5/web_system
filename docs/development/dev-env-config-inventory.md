@@ -15,7 +15,7 @@
 | **备份** | 写远端库前一律 `mysqldump` 受影响表到 `~/backups`（本机亦可 `/tmp`） |
 | **冲突不动** | 远端现值 ≠ 预期值 → **不覆盖**，记录并交人工确认（覆盖可能打断正在工作的服务） |
 | **密钥不复制** | `is_secret=1` 的项、JWT/内部密钥、webhook 里的 key —— **不从别处复制值**，由该环境 `.env` 或人工提供；文档与聊天中不得出现明文 |
-| **端口按环境** | local 6101 / dev 6001 / prod 3001（auth 为例，见 runbook §1.1）。**远端探活取 `deploy_service_envs.port`，绝不回落编排者本机 pm2**（runbook §4.10） |
+| **端口按环境** | ⚠️ **本行 prod=3001 是 2026-09-22 旧口径**：`local-release-runbook.md` §1.1 已于 2026-09-26 按实测更正为「dev/prod 一律 6000 系」（auth prod=6001）。**远端探活取 `deploy_service_envs.port`，绝不回落编排者本机 pm2**（runbook §4.10）这条仍有效 |
 | **幂等** | 写入一律带 `WHERE NOT EXISTS (...) SELECT ...`，可重复执行 |
 
 ## 1. 配置中心 `config_items`（控制台库 `web_system_deploy`）

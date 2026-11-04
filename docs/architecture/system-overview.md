@@ -217,7 +217,12 @@
 **构建**：`build-all.sh`、`build-module.mjs`、`build-externals.mjs`、`build-public-assets.mjs`
 **迁移/数据**：`apply-migrations.sh`、`sync-schema.sh`、`db-shadow.mjs`
 **密钥**：`provision-master-key.sh`、`verify-config-master-key.mjs`
-**已弃用**：`deploy-local.sh`、`deploy-prod.sh`
+**已弃用**（勿用于发布）：`deploy-local.sh`、`deploy-prod.sh`、`deploy-dev.sh`（2026-11-04 补标）
+
+> 🔴 **Agent 发布入口不在此清单**：先判 `moduleKey` → `~/skills/web-system-deploy/SKILL.md`；
+> 后端 `publish.sh`（`X-Mcp-Key` → `/api/mcp/*`）、前端 `admin`/`portal` 走 mcp-gateway tools/call、
+> `deploy-console` 自身永远手动。详见 `README.md` §7.1 / `docs/INDEX.md`。
+> **禁自签 JWT 打 `POST /api/pipelines`**（agent 无审批权限 → 403）。
 
 ## 13. 云数据库分流改造路线图的落地状态
 

@@ -1,7 +1,10 @@
 # 工程首次运行 · 初始化数据清单
 
 > 适用：换机 / 新环境 / 新部署点从零跑起。
-> 定位：**「要准备什么数据」的唯一清单**。启动步骤的权威教程见 `local-dev-setup.md`（本机，注意其端口章节已过时），生产部署见 `prod-release-plan.md`。
+> 定位：**「要准备什么数据」的唯一清单**。启动步骤的权威教程见 `local-dev-setup.md`（本机，注意其端口章节已过时）。
+> ⚠️ 原文此处指向 `prod-release-plan.md`，**该文件已不存在（断链，2026-11-04 核实）**；
+> 生产/发布入口改看 [`../INDEX.md`](../INDEX.md) 第 1 行 → `~/skills/web-system-deploy/SKILL.md`，
+> 链路考古见 `local-release-runbook.md`。
 > 结论口径：**开发环境靠 TypeORM `synchronize` 自动建表 + 各服务 `onModuleInit` 自动 seed；生产环境 `synchronize=false`，必须先跑 `apply-migrations.sh`**。
 
 ---

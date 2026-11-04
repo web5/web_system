@@ -1,10 +1,23 @@
 #!/bin/bash
 # ===========================================================
-# Web System - Dev 环境一键部署脚本
-# 服务器配置见 scripts/.env.dev
-# TODO: 与 deploy.sh / deploy-prod.sh 代码重复率高，后续应统一为 deploy.sh + 环境变量
+# ⚠️ DEPRECATED（2026-11-04 标注）—— 请勿用于任何发布
 #
-# 用法:
+# 本脚本是 2026-08 的 scp + pm2 手工通道，与现状不符：
+#   - 依赖不存在的 scripts/.env.dev（见 docs/development/release-infra-review-2026-09-25.md P-16）
+#   - 只覆盖部分服务，且用 pm2 restart 旧通道，不是 deploy-console 流水线
+#   - 曾被已废弃的 DEPLOYMENT.md 旧正文推荐，该正文已于 2026-11-04 移除
+#
+# 🔴 当前发布入口（统一 MCP，后端 10 服务与前端 admin/portal 都支持）：~/skills/web-system-deploy/SKILL.md
+#    A/B 是调用方式不是模块二分：后端推荐 bash ~/skills/web-system-deploy/scripts/publish.sh dev|prod|plan|rollback <svc>
+#    前端常用 mcp-gateway /mcp/deploy tools/call（后端同样可调）；deploy-console 自身永远手动
+#    详见 README.md §7.1 与 docs/INDEX.md
+#
+# 保留本文件只因历史评审文档与红线路径规则引用，不作为可执行入口。
+# ===========================================================
+# 原头部（历史，勿复用）：Web System - Dev 环境一键部署脚本
+# 服务器配置见 scripts/.env.dev
+#
+# 用法（历史）:
 #   ./scripts/deploy-dev.sh              # 部署全部
 #   ./scripts/deploy-dev.sh auth         # 只部署 auth-service
 #   ./scripts/deploy-dev.sh portal       # 只部署 portal 前端

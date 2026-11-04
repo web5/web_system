@@ -1,5 +1,14 @@
 # 本地发布运维手册（Local Release Runbook）
 
+> 🔴 **2026-11-04 订正（覆盖本文所有 curl 示例）**：本文是 2026-09 口径的**平台侧语义手册**，
+> 其中 `POST /api/pipelines` + `Authorization: Bearer $JWT` 是**控制台 UI 手工通道**，
+> **Agent 禁止照抄**：能提交但无 `deploy:pipeline:approve` → 403 卡 `awaiting-approval`。
+> **Agent 发布唯一入口 = `web-system-deploy` skill**（`~/skills/web-system-deploy/SKILL.md`）：
+> 先判模块 → 后端 `bash ~/skills/web-system-deploy/scripts/publish.sh plan dev <svc>`，
+> 前端 `admin`/`portal` 走 mcp-gateway `/mcp/deploy` tools/call，`deploy-console` 自身永远手动；
+> 发布后看 `verify_release` 的 `verdict`。路由见 `README.md` §7.1 / `docs/INDEX.md`。
+> 本文其余内容**只作链路考古**，不作为当前调用入口。
+
 > 2026-09-01 服务迁移后固化。核心：**所有服务统一从发布目录（`~/web_system_release`）运行**，
 > 发布动作走**发布流水线**（deploy-console `deploy_pipelines`），`deploy-console` 自身走**传统发布**。
 > 发布基于 git 拉取（发布目录按「分支 + commit」从远程仓库拉代码构建），不基于当前工作区。
@@ -147,12 +156,14 @@ DRY_RUN=1 ./scripts/publish-deploy-console.sh
 环境变量 `DRY_RUN=1` 预览、`RELEASE_DIR=` 覆盖发布目录。
 
 > 旧链路（2026-09-08 已废弃，勿用）：`POST /api/deploy/deploy` —— deploy.sh 体系，
-> 已知缺陷：无 micro-frontend 分支（必然 exit 1）、版本表写错库。发布统一走 `POST /api/pipelines`。
+> 已知缺陷：无 micro-frontend 分支（必然 exit 1）、版本表写错库。
+> ⚠️ 原文写「发布统一走 `POST /api/pipelines`」是**平台内部语义**，不是 agent 入口 ——
+> agent 调用入口以本文顶部 2026-11-04 订正为准（skill / `X-Mcp-Key`）。
 
-### 2.2 其余模块 —— 发布流水线
+### 2.2 其余模块 —— 发布流水线（❌ 下方 HTTP 段为历史快照，见顶部订正）
 
 ```bash
-# HTTP（控制台 JWT）
+# ❌ HTTP（控制台 JWT 通道，agent 禁用；保留仅作平台语义考古）
 curl -X POST http://127.0.0.1:6200/api/pipelines \
   -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" \
   -d '{"env":"local","moduleKey":"gateway","branch":"feature/contract-risk-ai"}'
