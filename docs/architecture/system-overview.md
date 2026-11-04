@@ -257,6 +257,6 @@
 | [`static-artifact-cache-and-retention.md`](./static-artifact-cache-and-retention.md) | ✅ | 静态产物与缓存 |
 | [`gateway`](../../specs/gateway) / [`release-platform`](../../specs/release-platform) | ✅ | 规格原稿 |
 | [`aiops-console-target-architecture.md`](./aiops-console-target-architecture.md) | 🎯 **目标态** | 与现状差距大，勿混读 |
-| [`DEPLOYMENT.md`](../../DEPLOYMENT.md) | ❌ **已废弃** | 3000 系端口、scp 部署，已被本文取代 |
-| [`kedou-network-architecture.md`](./kedou-network-architecture.md) | ❌ **已废弃** | 2026-08 拓扑（6 个 pm2 进程），已被本文 §9 取代 |
+| ~~`DEPLOYMENT.md`~~ | ❌ **已删除（2026-11-04）** | 旧正文只在 git `84667dee`，勿引用；已被本文取代 |
+| ~~`kedou-network-architecture.md`~~ | ❌ **已删除（2026-11-04）** | 2026-08 拓扑旧正文只在 git；已被本文 §9 取代，勿引用 |
 | [`release-system-design.md`](./release-system-design.md) | ⚠️ **内容最旧** | 仍以 legacy 七表为现状，已被本文 §7 取代 |
