@@ -217,7 +217,12 @@
 **构建**：`build-all.sh`、`build-module.mjs`、`build-externals.mjs`、`build-public-assets.mjs`
 **迁移/数据**：`apply-migrations.sh`、`sync-schema.sh`、`db-shadow.mjs`
 **密钥**：`provision-master-key.sh`、`verify-config-master-key.mjs`
-**已弃用**：`deploy-local.sh`、`deploy-prod.sh`
+**已弃用**（勿用于发布）：`deploy-local.sh`、`deploy-prod.sh`、`deploy-dev.sh`（2026-11-04 补标）
+
+> 🔴 **Agent 发布入口不在此清单**：先判 `moduleKey` → `~/skills/web-system-deploy/SKILL.md`；
+> 后端 `publish.sh`（`X-Mcp-Key` → `/api/mcp/*`）、前端 `admin`/`portal` 走 mcp-gateway tools/call、
+> `deploy-console` 自身永远手动。详见 `README.md` §7.1 / `docs/INDEX.md`。
+> **禁自签 JWT 打 `POST /api/pipelines`**（agent 无审批权限 → 403）。
 
 ## 13. 云数据库分流改造路线图的落地状态
 
@@ -252,6 +257,6 @@
 | [`static-artifact-cache-and-retention.md`](./static-artifact-cache-and-retention.md) | ✅ | 静态产物与缓存 |
 | [`gateway`](../../specs/gateway) / [`release-platform`](../../specs/release-platform) | ✅ | 规格原稿 |
 | [`aiops-console-target-architecture.md`](./aiops-console-target-architecture.md) | 🎯 **目标态** | 与现状差距大，勿混读 |
-| [`DEPLOYMENT.md`](../../DEPLOYMENT.md) | ❌ **已废弃** | 3000 系端口、scp 部署，已被本文取代 |
-| [`kedou-network-architecture.md`](./kedou-network-architecture.md) | ❌ **已废弃** | 2026-08 拓扑（6 个 pm2 进程），已被本文 §9 取代 |
+| ~~`DEPLOYMENT.md`~~ | ❌ **已删除（2026-11-04）** | 旧正文只在 git `84667dee`，勿引用；已被本文取代 |
+| ~~`kedou-network-architecture.md`~~ | ❌ **已删除（2026-11-04）** | 2026-08 拓扑旧正文只在 git；已被本文 §9 取代，勿引用 |
 | [`release-system-design.md`](./release-system-design.md) | ⚠️ **内容最旧** | 仍以 legacy 七表为现状，已被本文 §7 取代 |

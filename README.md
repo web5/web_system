@@ -4,7 +4,9 @@
 一个仓库装四类资产：**产品代码**（`apps/` `servers/` `packages/`）、**人读文档**（`docs/`）、**知识库**（`raw/` → `wiki/`）、**数字人体系**（`.codebuddy/`）。
 
 > AI 常驻加载的项目总入口在 [.codebuddy/CODEBUDDY.md](./.codebuddy/CODEBUDDY.md)（工程文档一律从本 README 进）；
-> 完整开发指南见 [docs/development-guide.md](./docs/development-guide.md)。
+> **文档总索引**见 [docs/INDEX.md](./docs/INDEX.md)；本地开发指南见
+> [docs/development/local-dev-guide.md](./docs/development/local-dev-guide.md)。
+> ⚠️ `docs/development-guide.md` 是 2026-09 历史版（仅作链路考古，勿据此取值）。
 
 ### 资产构成与知识库边界（`raw/` + `wiki/`）
 
@@ -153,6 +155,9 @@ JWT_SECRET=<随机 48 字节 hex>
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 
+> ⚠️ 上表是**本机**示例。`DB_DATABASE` 三环境不同（dev `web_system_deploy`、prod 云库 `web_system`），
+> 照抄到服务器会连错库；见 §5 与 [docs/协作指令速查.md](./docs/协作指令速查.md) §4。
+
 初始账号不内置，由 seed 生成：
 
 ```bash
@@ -223,14 +228,36 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 > **小程序不走这条链路**（无 pm2、无发布目录）：出预览码 / 上传体验版见
 > [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md)。
 
-### 7.1 三条发布通道（别混用）
+### 7.1 发布通道（统一 MCP，A / B 只是调用方式）
 
-| 发布对象 | 通道 | 操作 |
+> 🔴 **Agent 发布唯一入口 = `web-system-deploy` skill**（真源 `~/skills/web-system-deploy/SKILL.md`）。
+> 凡「让新代码在 dev / prod 生效」，**先读本 skill**，与措辞无关（「按建议继续」「上线 R1/A6」也算）。
+> 🔴 **统一通道 = deploy-console MCP 流水线：后端 10 服务与前端 `admin`/`portal` 都支持**（2026-11-04 用户拍板订正）。
+> A / B 是**调用方式**，不是模块二分：后端推荐 A（封装 prod 闸门），前端常用 B；**两端都能走两种**。
+>
+> | 方式 | 适用 | 入口 |
+> |---|---|---|
+> | **A · `publish.sh`（封装式）** | 后端 10 服务（user/ai/gateway/auth/content-hub/mcp-gateway/system/upload/ai-agent/todo）；前端同样可走 B | `bash ~/skills/web-system-deploy/scripts/publish.sh dev\|prod\|plan\|rollback\|status <svc>` → SSH dev 机 → `/console/api/mcp/*` + `X-Mcp-Key`，封装 prod 闸门绑定 |
+> | **B · MCP tools/call（直调式）** | 前端 `admin` / `portal`；后端同样可调工具面（prod 闸门需另绑） | mcp-gateway `/mcp/deploy` tools/call（`release_plan` → `publish_pipeline` → `approve` → `verify_release`，**必传 versionTag**） |
+> | `shell` / `mini-contract` | 手动，暂不支持流水线 | — |
+> | **`deploy-console` 自身** | 🔴 **永远手动**（流水线 `enabled=0`，自部署会杀掉执行者） | `scripts/release-deploy-console.sh` |
+> | `finnews` | 已删除，无恢复路径 | — |
+>
+> ❌ 别把 A / B 写成「后端只能 `publish.sh`、前端只能 tools/call」的模块二分。
+> 🔴 **禁止自签 JWT 打 `POST /api/pipelines`** —— 那是控制台 UI 通道，能提交但 agent 无 `deploy:pipeline:approve` → 403 卡 `awaiting-approval`（2026-11-04 实测）。
+> 🔴 `status=succeeded` ≠ 生效，唯一判据 = `verify_release` 的 `verdict`（`verified` 才算完）。
+> 判不准模块类型 → `list_modules` 查，**不要猜**。
+
+下表是**平台侧通道语义**（供理解链路），不是 agent 调用入口；小程序与本地调试不走该链路。
+
+| 发布对象 | 通道 | 说明 |
 |---|---|---|
-| 后端服务 + admin/portal 前端 | **发布流水线** | `POST /api/pipelines`（deploy-console 6200，env=local，branch=feature/xxx）→ 轮询至 succeeded |
-| deploy-console 自身（6200） | **传统发布** | 仓库根 `./scripts/publish-deploy-console.sh`（⚠️ 勿走流水线，会自杀式重启执行者） |
-| admin/portal 前端微前端模块 | 四步铁律 | 见下 |
+| 后端服务 | 发布流水线 · 模式 A | 由 `publish.sh` 经 MCP 端点发起；动作链 `sync → restart → verify` |
+| `admin` / `portal` | MCP 工具面 · 模式 B | 流水线只投递版本目录，须再调生效接口并传完整 `versionTag` |
+| deploy-console 自身（6200） | **传统发布 · 手动** | `~/skills/web-system-deploy/scripts/release-deploy-console.sh`；⚠️ 勿走流水线 |
 | 微信小程序（kedou-ai-minigram） | **CI 出码** | 固定出口 IP 的执行机上跑 `scripts/preview.js`（预览码）/ `scripts/upload.js`（体验版）；完整前置与排错见 [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
+
+> ⚠️ **§7.2 四步铁律仅用于本地调试**：它是手工更新本地微前端产物的旧做法，**不是线上发布入口**；线上生效一律走上面的 skill 路由。
 
 ### 7.2 微前端模块更新四步铁律
 
@@ -284,20 +311,20 @@ packages/shared/src/api.ts
 
 ---
 
-## 9 文档地图
+## 9 文档地图（**唯一分入口 = `docs/INDEX.md`**）
 
-| 主题 | 入口 |
-|---|---|
-| **本地开发总指南（服务清单 + 基础能力 + 脚本索引）** | [docs/development/local-dev-guide.md](./docs/development/local-dev-guide.md) |
-| 开发总指南 | [docs/development-guide.md](./docs/development-guide.md) |
-| 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
-| admin 微前端开发 | [docs/development/admin-dev.md](./docs/development/admin-dev.md) |
-| 本地发布运维 | [docs/development/local-release-runbook.md](./docs/development/local-release-runbook.md) |
-| **小程序出码（预览码 / 体验版）** | [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
-| 小程序 AI 对话技术实现 | [docs/miniprogram/ai-chat-miniprogram.md](./docs/miniprogram/ai-chat-miniprogram.md) |
-| 发布流水线设计 | [docs/development/deploy-pipeline-dev.md](./docs/development/deploy-pipeline-dev.md) |
-| Agent 能力体验手册 | [docs/development/agent-capability-playbook.md](./docs/development/agent-capability-playbook.md) |
-| Whistle 本地代理 | [docs/development/whistle-local-dev.md](./docs/development/whistle-local-dev.md) |
+> **先查 [`docs/INDEX.md`](./docs/INDEX.md) 再检索**，别全仓 grep —— 它是唯一的「按问句 → 真源」路由表，本层不复制。
+> **开发维护知识库全貌 / AI 防跑偏总图** → [`docs/知识库拓扑.md`](./docs/知识库拓扑.md)（图片版 `docs/architecture/知识库拓扑.svg`，由 `scripts/gen-kb-topology.mjs` 生成，禁手改）。
+> 工程事实（§4.5 env / §5 端口 / §7.1 发布通道）只在本文件，且只此一份；活跃文档数等统计口径见 `docs/INDEX.md` 顶部。
+
+**目录边界（防检索到旧事实）**：`docs/plans/`、`docs/reviews/`、`docs/development/*review*`、
+`specs/*/tasks.md`、`.workbuddy/memory/2026-*.md` 都是**历史快照**。
+🔴 其中 **80 份史料正文已于 2026-11-04 物理移入 `archive/` 存档目录**，原位置指针桩同日由用户拍板删除（活跃区零副本；48 处历史链接失效清单见治理目录 `史料桩删除后断链清单.txt`）；
+**全仓事实检索一律排除 `archive/`**（`grep -R --exclude-dir=archive`）。
+🔴 **本文档地图不给存档文件建索引**：史料不承载当前事实，无路径、无链接；
+问「当时为什么这么定」属考古，只有人显式指定路径时才追溯，AI 不得据此判断线上现状。
+当前事实只认 `README.md` / `docs/INDEX.md` / `docs/architecture/system-overview.md` / 对应 skill。
+`DEPLOYMENT.md` 已于 2026-11-04 **删除**（旧正文只在 git `84667dee`）；活跃区不得再建链接或「参考 / 详见」推荐语。
 
 ---
 
