@@ -175,3 +175,28 @@ function assertSegment(v: string, label: string): void {
     throw new Error(`[gateway] 非法的 ${label} 段：${JSON.stringify(v)}`);
   }
 }
+
+/**
+ * 完整版本引用 → 纯 commit（G1 归一化）。
+ *
+ * 背景：`deploy_app_env_versions.currentVersion` 历史上允许存完整引用
+ * `admin-dev/cdb055bc`（`<pipelineKey>/<commit>` 命名空间）。而 `assertSegment`
+ * 拒绝 `/`（这是设计意图，不要放宽 —— cdn 布局的 commit 段必须是纯短哈希）。
+ * 含斜杠值一旦直接进入 `moduleAssetRel('cdn', { commit })` 会抛错 → 上层
+ * `buildManifest` 组装失败 → 整站白屏（方案 §2 门禁 G1）。
+ *
+ * 故在 manifest 组装入口统一归一化：完整引用取末段纯 commit，纯短哈希原样，
+ * 空值 → undefined（= 无版本，跳过该模块）。语义与 deploy-console
+ * `release-paths.toCommitId` 完全一致。
+ */
+export function toCommitId(ref?: string | null): string | undefined {
+  const v = String(ref ?? '').trim();
+  if (!v) return undefined;
+  const idx = v.indexOf('/');
+  if (idx < 0) return v;
+  const pipelineKey = v.slice(0, idx);
+  const version = v.slice(idx + 1);
+  // 首段或末段为空（`/abc`、`abc/`）→ 原样返回，交给 assertSegment 显式抛错
+  if (!pipelineKey || !version) return v;
+  return version;
+}

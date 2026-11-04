@@ -123,14 +123,10 @@ describe('IndexHtmlService.buildManifest（读取源 = NEW 域）', () => {
     expect(deployRepo.findOne).not.toHaveBeenCalled();
   });
 
-  it('新表读失败：返回空清单（source=new:error），不回落 legacy', async () => {
+  it('新表读失败：fail-fast 抛错（不再静默降级空清单），不回落 legacy', async () => {
     const { svc, appVersionRepo, deployRepo } = build();
     appVersionRepo.find.mockRejectedValue(new Error('db down'));
-    const m = await svc.buildManifest(req);
-
-    expect(m.source).toBe('new:error');
-    expect(m.modules).toEqual([]);
-    expect(m.byEnv).toEqual({});
+    await expect(svc.buildManifest(req)).rejects.toThrow('db down');
     expect(deployRepo.findOne).not.toHaveBeenCalled();
   });
 });
@@ -323,6 +319,32 @@ describe('Phase 1 · ASSET_ORIGIN 全 URL base / 去指针化', () => {
     // 兼容字段 modules[] 同步走同一出口
     expect(m.modules[0].entry).toBe(`${CDN}dev/admin/3d5ce61/index.js`);
     expect(m.modules[0].assetsBase).toBe(`${CDN}dev/admin/3d5ce61/`);
+  });
+
+  it('G1 归一化：currentVersion 含斜杠（历史 admin-dev/cdb055bc）→ 取末段纯 commit，不白屏', async () => {
+    const { svc, appVersionRepo } = build(cdnOpts);
+    appVersionRepo.find.mockResolvedValue([
+      { appKey: 'admin', envId: 'dev', currentVersion: 'admin-dev/cdb055bc' },
+      { appKey: 'portal', envId: 'dev', currentVersion: '7a6be04' },
+      { appKey: 'shell', envId: 'dev', currentVersion: '7a6be04' },
+    ]);
+    // 不再抛错（含斜杠值被归一化），manifest 正常组装
+    const m = await svc.buildManifest(req);
+    expect(m.byEnv.dev.admin.entry).toBe(`${CDN}dev/admin/cdb055bc/index.js`);
+    expect(m.byEnv.dev.admin.version).toBe('cdb055bc');
+    expect(JSON.stringify(m)).not.toContain('admin-dev/cdb055bc');
+  });
+
+  it('G1 归一化：legacy 模式下含斜杠值同样取末段（modules 兼容字段）', async () => {
+    const { svc, appVersionRepo } = build();
+    appVersionRepo.find.mockResolvedValue([
+      { appKey: 'admin', envId: 'dev', currentVersion: 'admin-dev/cdb055bc' },
+      { appKey: 'portal', envId: 'dev', currentVersion: '7a6be04' },
+      { appKey: 'shell', envId: 'dev', currentVersion: '7a6be04' },
+    ]);
+    const m = await svc.buildManifest(req);
+    expect(m.modules[0].version).toBe('cdb055bc');
+    expect(m.modules[0].entry).toBe('/static/modules/admin/dev/cdb055bc/index.js');
   });
 
   it('css 判定不再依赖应用机磁盘（existsSync 全 false 仍返回 css）', async () => {

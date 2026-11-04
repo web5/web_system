@@ -6,6 +6,7 @@ import {
   resolveStaticTarget,
   sshPrefix,
 } from './static-target';
+import { cdnAppDir, cdnAssetDir } from '../pipeline/release-paths';
 
 /** 配置桩：只认传入的键值对 */
 function cfg(map: Record<string, string>) {
@@ -78,6 +79,21 @@ describe('静态落点解析（诊断 #3：落点是环境的一等属性）', (
 
   it('远端产物相对路径（posix）', () => {
     expect(envArtifactsRel('portal', 'prod')).toBe('static/modules/portal/prod');
+  });
+
+  it('Phase 2 顺序分界：envArtifactsRel 保持 legacy <app>/<env>，CDN <env>/<app> 只在 release-paths', () => {
+    // legacy 布局：app 在前、env 在后（诊断 #3 的既有契约，不得动）
+    expect(envArtifactsRel('portal', 'prod')).toBe('static/modules/portal/prod');
+    // CDN 布局：env 在前、app 在后，且顺序只此一处（cdnAppDir 复用）
+    expect(cdnAppDir('/data/cdn', 'prod', 'portal')).toBe('/data/cdn/prod/portal');
+    expect(cdnAssetDir('/data/cdn', 'prod', 'portal', 'abc1234')).toBe(
+      '/data/cdn/prod/portal/abc1234',
+    );
+    // 反向断言：两者顺序相反，绝不能在 static-target 里把 legacy 也换成 <env>/<app>
+    expect(envArtifactsRel('portal', 'prod')).not.toBe('static/modules/prod/portal');
+    expect(cdnAssetDir('/data/cdn', 'prod', 'portal', 'abc1234')).not.toBe(
+      '/data/cdn/portal/prod/abc1234',
+    );
   });
 
   it('ssh 前缀带 BatchMode（不可达时快速失败，不卡密码输入）', () => {

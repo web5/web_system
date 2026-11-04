@@ -25,6 +25,7 @@ import {
   commonAssetUrl,
   moduleAssetRel,
   moduleAssetsBaseRel,
+  toCommitId,
 } from '../static/asset-url';
 
 interface VersionCache {
@@ -330,7 +331,8 @@ export class IndexHtmlService {
    *   （`modules[].version` 取自 `deploy_app_env_versions`，路径为整包目录
    *   `<appKey>/<envId>/<version>/`），供尚未刷新的旧 shell bundle 使用。
    *
-   * `source` 仅为排障标注（`new` / `new:nosite` / `new:error` / `legacy`），前端不依赖。
+   * `source` 仅为排障标注（`new` / `new:nosite` / `legacy`），前端不依赖。
+   * Phase 2：组装失败不再静默返回空清单，而是 fail-fast 抛错（不再有 `new:error`）。
    * 唯一仍走 legacy 的通道是应急开关 `DEPLOY_LEGACY_READ=1`（见 `legacyRead`）。
    */
   async buildManifest(req?: any): Promise<Record<string, any>> {
@@ -346,9 +348,13 @@ export class IndexHtmlService {
       const site = await this.resolveSite(req);
       return await this.buildNewManifest(envId, site ?? null, req);
     } catch (e) {
-      // 不再回落旧表：旧表数据可能已漂移，回落只会掩盖问题（且会让两轨再次分叉）
+      // 不回落旧表（旧表数据可能已漂移，回落只会掩盖问题且让两轨再次分叉）。
+      // Phase 2 不再静默降级为空清单：空清单 = 前端拿到 `byEnv:{}` → 整站白屏，
+      // 却以 200 + source:new:error 的姿态对外，探针/监控看不见故障（方案 §10 P0）。
+      // 故 fail-fast 抛出，让 /__manifest__ 返回 500、render('shell') 走 sendIndex 兜底
+      // （日志 + 可观测），而不是把「组装失败」伪装成「空站点」。
       this.logger.error(`manifest 组装失败（NEW 域读取源）：${(e as Error).message}`);
-      return this.emptyManifest(envId, 'new:error');
+      throw e;
     }
   }
 
@@ -376,7 +382,10 @@ export class IndexHtmlService {
       this.appVersionRepo.find(),
     ]);
     const currentOf = new Map<string, string | null>();
-    for (const v of versions) currentOf.set(`${v.appKey}@${v.envId}`, v.currentVersion);
+    // G1 归一化：currentVersion 可能是历史完整引用 `admin-dev/cdb055bc`，取末段纯 commit，
+    // 否则 cdn 模式下 `moduleAssetRel('cdn', { commit })` 的 assertSegment 会拒绝 `/` 抛错
+    // → buildManifest 组装失败 → 整站白屏（方案 §2 门禁 G1）。
+    for (const v of versions) currentOf.set(`${v.appKey}@${v.envId}`, toCommitId(v.currentVersion) ?? null);
 
     // 基座（site-version）不纳入 env 切换（Q107）
     const envDirApps = apps.filter((a) => a.deployMode === 'env-dir');
@@ -458,21 +467,6 @@ export class IndexHtmlService {
       modules,
       canary: await this.resolveCanaryAny(defaultEnv, envDirApps, currentOf, req),
       source: site ? 'new' : 'new:nosite',
-    };
-  }
-
-  /** 组装失败 / 无数据时的空清单（结构完整，避免前端 undefined 崩溃） */
-  private emptyManifest(envId: string, source: string): Record<string, any> {
-    return {
-      site: null,
-      defaultEnv: envId,
-      switchable: false,
-      envs: [{ id: envId, name: envId, isProd: envId === 'prod' }],
-      byEnv: {},
-      env: envId,
-      modules: [],
-      canary: null,
-      source,
     };
   }
 
@@ -740,7 +734,9 @@ export class IndexHtmlService {
     let version: string | undefined;
     try {
       const row = await this.appVersionRepo.findOne({ where: { appKey, envId } });
-      version = row?.currentVersion ?? undefined;
+      // G1 归一化：currentVersion 可能是历史完整引用 `admin-dev/cdb055bc`，取末段纯 commit，
+      // 否则 cdn 模式下进 `moduleAssetRel('cdn', { commit })` 会被 assertSegment 拒绝 `/` 抛错。
+      version = toCommitId(row?.currentVersion) ?? undefined;
     } catch (e) {
       this.logger.warn(`查询应用版本失败(${key}): ${e.message}`);
     }

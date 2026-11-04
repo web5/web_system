@@ -143,7 +143,8 @@ module.exports = {
         ...(process.env.ASSET_ORIGIN ? { ASSET_ORIGIN: process.env.ASSET_ORIGIN } : {}),
         ...(process.env.ASSET_URL_MODE ? { ASSET_URL_MODE: process.env.ASSET_URL_MODE } : {}),
         ...(process.env.ASSET_CSS_APPS ? { ASSET_CSS_APPS: process.env.ASSET_CSS_APPS } : {}),
-        JWT_SECRET,
+        // 🔴 JWT_SECRET 不再在此注入（2026-11-04 收库表）：由配置中心下发 .env.generated 优先、
+        // 服务 .env 兜底；求值期校验仍读 .env.production 兜底。
       },
       error_file: `${logBase}/gateway-error.log`,
       out_file: `${logBase}/gateway-out.log`,
@@ -158,7 +159,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6001,
         ...baseDbConfig,
-        JWT_SECRET,
+        // 🔴 JWT_SECRET 不再在此注入（2026-11-04 收库表）：由配置中心下发 .env.generated 优先、服务 .env 兜底。
         JWT_EXPIRES_IN: '7d',
         MINI_PROGRAM_APP_ID,
         MINI_PROGRAM_SECRET,
@@ -230,7 +231,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 6005,
         ...baseDbConfig,
-        JWT_SECRET,
+        // 🔴 JWT_SECRET 不再在此注入（2026-11-04 收库表）：由配置中心下发 .env.generated 优先、服务 .env 兜底。
         AUTH_SERVICE_URL,
         SYSTEM_SERVICE_URL,
       },

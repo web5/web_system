@@ -6,6 +6,7 @@ import {
   moduleAssetRel,
   moduleAssetsBaseRel,
   normalizeAssetOrigin,
+  toCommitId,
 } from './asset-url';
 
 /**
@@ -131,6 +132,37 @@ describe('moduleAssetRel / 去指针化', () => {
   it('拒绝非法 app/env/commit 段', () => {
     expect(() => moduleAssetRel('cdn', { ...base, app: '../admin' })).toThrow(/非法的 app 段/);
     expect(() => moduleAssetRel('cdn', { ...base, commit: 'a/b' })).toThrow(/非法的 commit 段/);
+  });
+});
+
+/**
+ * G1 归一化（方案 §2 门禁 G1）：`deploy_app_env_versions.currentVersion` 历史上
+ * 允许存完整引用 `admin-dev/cdb055bc`，而 `assertSegment` 拒绝 `/`。含斜杠值一旦
+ * 直接进 `moduleAssetRel('cdn', { commit })` 会抛错 → 整站白屏。故入口统一归一化。
+ */
+describe('toCommitId（G1 归一化）', () => {
+  it('完整版本引用 → 取末段纯 commit（历史口径 admin-dev/cdb055bc）', () => {
+    expect(toCommitId('admin-dev/cdb055bc')).toBe('cdb055bc');
+    expect(toCommitId('default/91f744b')).toBe('91f744b');
+  });
+
+  it('纯短哈希 / 前后空格 → 原样（去空格）', () => {
+    expect(toCommitId('624bfa46')).toBe('624bfa46');
+    expect(toCommitId(' 624bfa46 ')).toBe('624bfa46');
+  });
+
+  it('空值 → undefined（= 无版本，跳过该模块）', () => {
+    expect(toCommitId(undefined)).toBeUndefined();
+    expect(toCommitId(null)).toBeUndefined();
+    expect(toCommitId('')).toBeUndefined();
+    expect(toCommitId('   ')).toBeUndefined();
+  });
+
+  it('归一化结果能通过 assertSegment（不含 /）—— 与 moduleAssetRel cdn 分支闭环', () => {
+    const commit = toCommitId('admin-dev/cdb055bc') as string;
+    expect(moduleAssetRel('cdn', { app: 'admin', env: 'dev', commit })).toBe(
+      'dev/admin/cdb055bc/index.js',
+    );
   });
 });
 

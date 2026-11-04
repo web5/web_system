@@ -58,7 +58,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     };
     legacyModuleRepo = { find: jest.fn(async () => []) };
     envsService = { getEnv: jest.fn(async () => ({ envId: 'prod' })) };
-    configService = { get: jest.fn(() => '/ws') };
+    configService = { get: jest.fn((k: string) => (k === 'RELEASE_WORKSPACE' ? '/ws' : undefined)) };
     mirror = { mirrorRow: jest.fn(), deleteMirror: jest.fn() };
     gatewayCache = { notifyVersionChange: jest.fn(async () => ({ ok: true, reason: 'notified' })) };
     // 任务留痕桩：默认直接执行被包装的函数（不传 recordTask 时压根不会用到它）

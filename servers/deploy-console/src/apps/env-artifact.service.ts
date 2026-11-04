@@ -3,7 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CommandService } from '../shell/command.service';
-import { defaultReleaseWorkspace } from '../pipeline/release-paths';
+import {
+  cdnAppDir,
+  cdnAssetDir,
+  cdnLayoutMode,
+  defaultReleaseWorkspace,
+  resolveCdnTarget,
+  toCommitId,
+} from '../pipeline/release-paths';
 import {
   entryPointerCss,
   entryPointerJs,
@@ -56,6 +63,20 @@ export class EnvArtifactService {
     return this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace();
   }
 
+  /** 配置读取器（`ConfigService.get<string>` 的形状，供纯函数使用） */
+  private cfg = (key: string): string | undefined => this.configService.get<string>(key);
+
+  /**
+   * 是否处于 CDN 布局（Phase 2）。
+   *
+   * CDN 只覆盖**微前端产物（`index.js`）**；shell 基座（`index.html`）留在应用机
+   * `TEMPLATE_ROOT`、不进 CDN（方案 §3.1），所以 CDN 分流只对 `entry === 'index.js'` 生效，
+   * `index.html` 永远走 legacy 布局。
+   */
+  private isCdnLayout(): boolean {
+    return cdnLayoutMode(this.cfg) === 'cdn';
+  }
+
   /** 某环境的静态落点（配置驱动，未配置回落本机发布目录） */
   target(env: string): StaticTarget {
     return resolveStaticTarget(env, (k) => this.configService.get<string>(k), this.workspace);
@@ -73,6 +94,23 @@ export class EnvArtifactService {
     version: string,
     entry: 'index.js' | 'index.html' = 'index.js',
   ): Promise<boolean> {
+    // Phase 2：微前端（index.js）走入口机 `<env>/<app>/<commit>` 布局（去指针化，无磁盘指针）。
+    // shell 基座（index.html）不进 CDN，仍走下方 legacy 布局。
+    if (this.isCdnLayout() && entry === 'index.js') {
+      const commit = toCommitId(version);
+      if (!commit) return false;
+      const t = resolveCdnTarget(this.cfg, env);
+      const abs = `${cdnAssetDir(t.root, env, appKey, commit)}/index.js`;
+      if (!t.sshTarget) return fs.existsSync(abs);
+      const r = await this.command.execAsync(
+        `${sshPrefix(t.sshTarget)} "test -f '${abs}'"`,
+        process.cwd(),
+        {},
+        REMOTE_TIMEOUT_MS,
+      );
+      return r.ok;
+    }
+
     const t = this.target(env);
     if (!t.sshTarget) {
       return fs.existsSync(
@@ -91,6 +129,35 @@ export class EnvArtifactService {
 
   /** 该环境的可用版本（mtime 倒序）；远端不可达返回空数组 */
   async listVersions(env: string, appKey: string, entry: 'index.js' | 'index.html' = 'index.js'): Promise<string[]> {
+    // Phase 2：微前端（index.js）CDN 布局下，`<env>/<app>/` 的下一级直接是 commit 目录。
+    if (this.isCdnLayout() && entry === 'index.js') {
+      const t = resolveCdnTarget(this.cfg, env);
+      const base = cdnAppDir(t.root, env, appKey);
+      if (!t.sshTarget) return listCdnCommitDirs(base, entry);
+      const script = [
+        `cd '${base}' 2>/dev/null || exit 0`,
+        // CDN 布局无命名空间二级，commit 目录直接含 index.js（mindepth 2 = <commit>/index.js）
+        `find . -mindepth 2 -maxdepth 2 -name '${entry}' -printf '%T@\\t%h\\n' | sort -rn | cut -f2- | sed 's|^\\./||'`,
+        '',
+      ].join('\n');
+      const r = await this.command.execAsync(
+        `${sshPrefix(t.sshTarget)} "echo ${b64(script)} | base64 -d | bash"`,
+        process.cwd(),
+        {},
+        REMOTE_TIMEOUT_MS,
+      );
+      if (!r.ok) {
+        this.logger.warn(
+          `列远端 CDN 产物版本失败（${t.sshTarget}:${base} ${appKey}@${env}）：${r.stderr}`,
+        );
+        return [];
+      }
+      return r.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    }
+
     const t = this.target(env);
     if (!t.sshTarget) return listEnvVersions(t.root, appKey, env, entry);
     const script = [
@@ -119,6 +186,8 @@ export class EnvArtifactService {
 
   /** 读回磁盘入口指针当前指向（展示 / 排障用；读不到返回 null） */
   async readPointer(env: string, appKey: string): Promise<string | null> {
+    // Phase 2 去指针化：CDN 模式磁盘无指针，manifest 直接给完整 URL，读指针无意义。
+    if (this.isCdnLayout()) return null;
     const t = this.target(env);
     if (!t.sshTarget) return readEnvEntryPointer(t.root, appKey, env);
     const rel = path.posix.join(envArtifactsRel(appKey, env), 'index.js');
@@ -141,6 +210,11 @@ export class EnvArtifactService {
     appKey: string,
     version: string,
   ): Promise<PointerWriteResult> {
+    // Phase 2 去指针化：CDN 模式不存在磁盘指针可写（调用方 `AppsService` 已跳过此步）。
+    // 这里 fail-fast 防误用，避免「以为写了指针、实际线上按 DB 直给 URL」的假成功。
+    if (this.isCdnLayout()) {
+      throw new Error('CDN 布局下不存在磁盘入口指针（去指针化），不应调用 writePointer');
+    }
     const t = this.target(env);
     if (!t.sshTarget) return writeEnvEntryPointer(t.root, appKey, env, version);
 
@@ -183,4 +257,23 @@ export class EnvArtifactService {
 /** base64（远端脚本传递用，避免多层引号转义） */
 function b64(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64');
+}
+
+/**
+ * CDN 布局下本机列出 commit 目录（mtime 倒序）。
+ *
+ * 与 legacy `listEnvVersions` 对齐但布局不同：`<base>/<commit>/<entry>`（一级即 commit，
+ * 无命名空间二级）。仅在本机（`CDN_SSH_TARGET` 未配）时用，抽出便于单测。
+ */
+export function listCdnCommitDirs(base: string, entry: string): string[] {
+  if (!fs.existsSync(base)) return [];
+  return fs
+    .readdirSync(base, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(base, d.name, entry)))
+    .sort(
+      (a, b) =>
+        fs.statSync(path.join(base, b.name)).mtimeMs -
+        fs.statSync(path.join(base, a.name)).mtimeMs,
+    )
+    .map((d) => d.name);
 }

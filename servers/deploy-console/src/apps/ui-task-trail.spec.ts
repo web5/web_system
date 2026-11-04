@@ -25,7 +25,7 @@ describe('UI 切换/回滚的任务留痕', () => {
     const versionRepo = { findOne: jest.fn(async () => null), save: jest.fn(), create: jest.fn(), find: jest.fn(async () => []) };
     const legacyModuleRepo = { find: jest.fn(async () => []) };
     const envsService = { getEnv: jest.fn(async () => ({ envId: 'prod' })) };
-    const configService = { get: jest.fn(() => '/ws') };
+    const configService = { get: jest.fn((k: string) => (k === 'RELEASE_WORKSPACE' ? '/ws' : undefined)) };
     const mirror = { mirrorRow: jest.fn(), deleteMirror: jest.fn() };
     const artifacts = {
       hasVersion: jest.fn(async () => true),

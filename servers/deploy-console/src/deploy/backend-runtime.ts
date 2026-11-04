@@ -328,6 +328,54 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
     if (memory > 0) args.push('--max-memory-restart', String(memory));
     const environment: Record<string, string> = { PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', HOME: process.env.HOME || '/root', PORT: String(port) };
     if (process.env.PM2_HOME) environment.PM2_HOME = process.env.PM2_HOME;
+    // 引导键继承（2026-11-04 终态）：优先读 .bootstrap/ecosystem.generated.json —— 配置中心
+    // config_items infra 层渲染产物（seed/渲染脚本产出，chmod 600 + sha256），缺失或解析失败时
+    // 回落现场 require ecosystem.config.js（方案 A）；两者都拿不到时仅 PATH/HOME/PORT。
+    // 背景：只传 PATH/HOME/PORT 会丢「必须进程 env」的键（STATIC_PUBLIC_ROOT / NODE_ENV /
+    // ASSET_ORIGIN 等 import 期求值）——gateway 的 assertPublicRoot 因此 fail-fast 回滚
+    // （2026-11-04 dev portal 全白屏根因）。引导键真源在 config_items，产物只是其渲染镜像。
+    const generatedFile = path.join(project, '.bootstrap', 'ecosystem.generated.json');
+    let inherited = false;
+    if (fs.existsSync(generatedFile)) {
+      try {
+        const generated = JSON.parse(fs.readFileSync(generatedFile, 'utf8')) as {
+          apps?: Record<string, Record<string, unknown>>;
+        };
+        const block = (generated && generated.apps && generated.apps[selected.name]) || {};
+        for (const [key, value] of Object.entries(block)) {
+          if (key === 'PORT') continue; // 端口以 activate 解析的 port 为准（.env 可覆盖）
+          if (value === undefined || value === null) continue;
+          environment[key] = String(value);
+        }
+        inherited = true;
+      } catch (error) {
+        console.error('[clean-restart] 读 ecosystem.generated.json 失败，回落现场 require：' + (error as Error).message);
+      }
+    }
+    if (!inherited) {
+      const ecosystemFile = path.join(project, 'ecosystem.config.js');
+      if (fs.existsSync(ecosystemFile)) {
+        try {
+          const ecosystemConfig = require(ecosystemFile) as {
+            apps?: Array<{ name?: string; env?: Record<string, unknown> }>;
+          };
+          const apps = ecosystemConfig ? ecosystemConfig.apps : undefined;
+          const app = Array.isArray(apps)
+            ? apps.find((candidate) => candidate && candidate.name === selected.name)
+            : undefined;
+          const block = (app && app.env) || {};
+          for (const [key, value] of Object.entries(block)) {
+            if (key === 'PORT') continue; // 端口以 activate 解析的 port 为准（.env 可覆盖）
+            if (value === undefined || value === null) continue;
+            environment[key] = String(value);
+          }
+        } catch (error) {
+          // 读 ecosystem env 失败：回落到仅 PATH/HOME/PORT（旧行为），不阻断激活；
+          // 缺失的进程 env 键由服务自身 .env / ConfigModule 兜底（import 期求值键除外）。
+          console.error('[clean-restart] 继承 ecosystem env 失败，回落 PATH/HOME/PORT：' + (error as Error).message);
+        }
+      }
+    }
     try { run('pm2', ['delete', selected.name], { cwd: service }); } catch { /* 进程可能已不存在 */ }
     try { run('pm2', args, { cwd: service, env: environment }); }
     catch { run('pm2', args, { cwd: service }); }

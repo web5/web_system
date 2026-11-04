@@ -19,7 +19,9 @@ describe('isolated backend runtime', () => {
   };
 
   beforeEach(() => {
-    temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'backend-runtime-'));
+    // macOS /var → /private/var 软链：realpath 后与 backend-runtime.ts 内
+    // fs.realpathSync(input.serviceDirectory) 的路径一致，否则路径断言全红（环境性）。
+    temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'backend-runtime-')));
     workspace = path.join(temporary, 'build');
     runtime = path.join(temporary, 'runtime');
     output = path.join(workspace, 'servers/todo-service/dist');
@@ -315,6 +317,71 @@ describe('isolated backend runtime', () => {
     expect(start![1]).toEqual(expect.arrayContaining(['--cwd', fixture.service]));
     expect(Object.keys(start![2].env!).sort()).toEqual(['HOME', 'PATH', 'PORT']);
     expect(start![2].env!.PORT).toBe('6005');
+  });
+
+  it('prefers the generated bootstrap artifact over requiring ecosystem.config.js', async () => {
+    const fixture = await activationFixture();
+    // project = path.resolve(service, '..', '..') = runtime（servers/todo-service 上两级）
+    write(
+      path.join(runtime, '.bootstrap', 'ecosystem.generated.json'),
+      JSON.stringify({
+        schema: 'web-system-ecosystem-env-v1',
+        apps: {
+          'other-service': { NODE_ENV: 'staging', OTHER: 'y' },
+          'todo-service': { NODE_ENV: 'production', STATIC_PUBLIC_ROOT: '/srv/public', JWT_SECRET: 'from-artifact', PORT: 9999, NULLABLE: null },
+        },
+      }),
+    );
+    // 同放一份会「串台」的 ecosystem.config.js，验证产物优先、ecosystem 不被读
+    write(
+      path.join(runtime, 'ecosystem.config.js'),
+      "module.exports = { apps: [{ name: 'todo-service', env: { NODE_ENV: 'staging', STATIC_PUBLIC_ROOT: '/wrong', JWT_SECRET: 'from-ecosystem' } }] };",
+    );
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const start = recorded(fixture).find(([, args]) => args[0] === 'start');
+    const env = start![2].env!;
+    // 产物值优先，ecosystem 的 staging//wrong//from-ecosystem 均被忽略
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.STATIC_PUBLIC_ROOT).toBe('/srv/public');
+    expect(env.JWT_SECRET).toBe('from-artifact');
+    // PORT 不继承产物的 9999，保留 activate 解析值
+    expect(env.PORT).toBe('6005');
+    // null 被过滤；其他服务的 env 不串台
+    expect(env.NULLABLE).toBeUndefined();
+    expect(env.OTHER).toBeUndefined();
+    // 基础键仍在
+    expect(env.PATH).toBeDefined();
+    expect(env.HOME).toBeDefined();
+  });
+
+  it('falls back to requiring ecosystem.config.js when no generated artifact exists', async () => {
+    const fixture = await activationFixture();
+    // project = path.resolve(service, '..', '..') = runtime（servers/todo-service 上两级）
+    write(
+      path.join(runtime, 'ecosystem.config.js'),
+      [
+        "module.exports = { apps: [",
+        "  { name: 'other-service', env: { NODE_ENV: 'production', OTHER: 'x' } },",
+        "  { name: 'todo-service', env: { NODE_ENV: 'production', STATIC_PUBLIC_ROOT: '/srv/public', JWT_SECRET: 's3cret', PORT: 9999, NULLABLE: null, UNDEF: undefined } },",
+        '] };',
+      ].join('\n'),
+    );
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const start = recorded(fixture).find(([, args]) => args[0] === 'start');
+    const env = start![2].env!;
+    // 继承 ecosystem env 块
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.STATIC_PUBLIC_ROOT).toBe('/srv/public');
+    expect(env.JWT_SECRET).toBe('s3cret');
+    // PORT 不继承 ecosystem 的 9999，保留 activate 解析值
+    expect(env.PORT).toBe('6005');
+    // null / undefined 被过滤；其他服务的 env 不串台
+    expect(env.NULLABLE).toBeUndefined();
+    expect(env.UNDEF).toBeUndefined();
+    expect(env.OTHER).toBeUndefined();
+    // 基础键仍在
+    expect(env.PATH).toBeDefined();
+    expect(env.HOME).toBeDefined();
   });
 
   it('reuses the previous process working directory and memory limit on a clean start', async () => {
