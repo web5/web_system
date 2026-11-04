@@ -307,6 +307,8 @@ describe('RemoteDeliveryService（远程投递工具）', () => {
       expect(v.REMOTE_CDN_ROOT).toBe('/data/cdn');
       // 顺序 env → app，且版本引用已归一化为纯 commit
       expect(v.REMOTE_CDN_DEST).toBe('/data/cdn/prod/portal/624bfa46');
+      // 版本目录层（cleanup 用）= DEST 的父层，同样 env → app 顺序
+      expect(v.REMOTE_CDN_VERSIONS_DIR).toBe('/data/cdn/prod/portal');
       // 旧四件套保持不变（双投期两套并存，不是替换）
       expect(v.REMOTE_DEST_DIR).toBe(
         '/data/web_system/servers/gateway/public/static/modules/portal/default/624bfa46',

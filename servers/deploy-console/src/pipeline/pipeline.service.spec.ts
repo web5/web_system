@@ -321,6 +321,75 @@ describe('resolveStageVars（阶段命令变量）', () => {
     expect(v.WS_SAFE_DELETE).toBe('mv');
   });
 
+  /**
+   * Phase 2 CDN 透传缺口修复（2026-11-04）：`resolveRemoteScriptVars` 在 CDN 模式会产出
+   * CDN 三件套 + 版本目录层，但 `resolveStageVars` 此前只透传 legacy 四件套 ——
+   * 导致脚本里 `${REMOTE_CDN_ROOT:-}` 静默空串、CDN 分支永远不走（改了模板仍按旧布局）。
+   */
+  it('CDN 四件套透传（resolveRemoteScriptVars 产出 → 脚本变量），缺省时为空串而非 undefined', () => {
+    const cdnRemote = {
+      REMOTE_SSH_TARGET: 'deploy@10.0.0.1',
+      REMOTE_MODULES_ROOT: '/data/mods',
+      REMOTE_DEST_DIR: '/data/mods/portal/624bfa46',
+      SSH_KEY_PATH: '/k',
+      REMOTE_CDN_SSH_TARGET: 'root@cdn-entry.local',
+      REMOTE_CDN_ROOT: '/data/cdn',
+      REMOTE_CDN_DEST: '/data/cdn/prod/portal/624bfa46',
+      REMOTE_CDN_VERSIONS_DIR: '/data/cdn/prod/portal',
+    };
+    const withCdn = resolveStageVars({
+      env: 'prod',
+      moduleKey: 'portal',
+      releaseWorkspace: ws,
+      commitId: '624bfa46',
+      remote: cdnRemote,
+    });
+    expect(withCdn.REMOTE_CDN_SSH_TARGET).toBe('root@cdn-entry.local');
+    expect(withCdn.REMOTE_CDN_ROOT).toBe('/data/cdn');
+    expect(withCdn.REMOTE_CDN_DEST).toBe('/data/cdn/prod/portal/624bfa46');
+    expect(withCdn.REMOTE_CDN_VERSIONS_DIR).toBe('/data/cdn/prod/portal');
+
+    // legacy（remote 无 CDN 键）→ 四个 CDN 变量都展开成空串（与 legacy 输出逐字段一致）
+    const legacy = resolveStageVars({
+      env: 'prod',
+      moduleKey: 'portal',
+      releaseWorkspace: ws,
+      commitId: '624bfa46',
+      remote: {
+        REMOTE_SSH_TARGET: 'deploy@10.0.0.1',
+        REMOTE_MODULES_ROOT: '/data/mods',
+        REMOTE_DEST_DIR: '/data/mods/portal/624bfa46',
+        SSH_KEY_PATH: '/k',
+      },
+    });
+    expect(legacy.REMOTE_CDN_SSH_TARGET).toBe('');
+    expect(legacy.REMOTE_CDN_ROOT).toBe('');
+    expect(legacy.REMOTE_CDN_DEST).toBe('');
+    expect(legacy.REMOTE_CDN_VERSIONS_DIR).toBe('');
+  });
+
+  it('CDN 四件套是保护键：流水线变量/配置中心同名键不得覆盖', () => {
+    const v = resolveStageVars({
+      env: 'prod',
+      moduleKey: 'portal',
+      releaseWorkspace: ws,
+      commitId: '624bfa46',
+      remote: {
+        REMOTE_SSH_TARGET: 'deploy@10.0.0.1',
+        REMOTE_MODULES_ROOT: '/data/mods',
+        REMOTE_DEST_DIR: '/data/mods/portal/624bfa46',
+        SSH_KEY_PATH: '/k',
+        REMOTE_CDN_SSH_TARGET: 'root@cdn-entry.local',
+        REMOTE_CDN_ROOT: '/data/cdn',
+        REMOTE_CDN_DEST: '/data/cdn/prod/portal/624bfa46',
+        REMOTE_CDN_VERSIONS_DIR: '/data/cdn/prod/portal',
+      },
+      config: { REMOTE_CDN_ROOT: 'hijacked-by-config' },
+      pipelineVars: { REMOTE_CDN_ROOT: 'hijacked-by-pipeline-var' },
+    });
+    expect(v.REMOTE_CDN_ROOT).toBe('/data/cdn');
+  });
+
   describe('P0 配置中心全量注入（2026-09-20）', () => {
     const base = { env: 'local', moduleKey: 'admin', releaseWorkspace: ws, commitId: 'abc1234' };
 

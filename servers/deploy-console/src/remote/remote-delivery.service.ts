@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as releasePaths from '../pipeline/release-paths';
 import {
+  cdnAppDir,
   cdnAssetDir,
   cdnLayoutMode,
   resolveCdnTarget,
@@ -108,7 +109,10 @@ export interface RemoteScriptVars {
    */
   REMOTE_CDN_SSH_TARGET?: string;
   REMOTE_CDN_ROOT?: string;
+  /** 本次投递的 commit 目录 `<root>/<env>/<app>/<commit>`（upload 节点脚本用） */
   REMOTE_CDN_DEST?: string;
+  /** 版本目录层 `<root>/<env>/<app>`（cleanup 节点脚本用，其下直接是 `<commit>/`） */
+  REMOTE_CDN_VERSIONS_DIR?: string;
 }
 
 export function resolveRemoteScriptVars(
@@ -141,6 +145,9 @@ export function resolveRemoteScriptVars(
     const commit = input.version ? toCommitId(input.version) : undefined;
     vars.REMOTE_CDN_SSH_TARGET = t.sshTarget ?? '';
     vars.REMOTE_CDN_ROOT = t.root;
+    // 版本目录层（cleanup 用）与本次落点（upload 用）都从同一份 t.root 派生，
+    // env/app 顺序只写在 cdnAppDir / cdnAssetDir 一处，脚本不做推导。
+    vars.REMOTE_CDN_VERSIONS_DIR = cdnAppDir(t.root, input.env, input.moduleKey);
     vars.REMOTE_CDN_DEST = commit ? cdnAssetDir(t.root, input.env, input.moduleKey, commit) : '';
   }
   return vars;
