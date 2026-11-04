@@ -1,5 +1,9 @@
 # 微前端平台技术设计
 
+> 🔴 **局部过时声明（2026-11-04，覆盖下方一切旧描述）**：本文出现的 `apps/admin-web/`
+> 与 `apps/admin-web/vite.config.ts` 是 2026-09 旧目录名，**实际目录为 `apps/admin/`**（见 `README.md` §1）。
+> 当前事实以 `docs/INDEX.md` → `README.md` / `architecture/system-overview.md` 为准；逐行订正见台账 #8435。
+
 > 架构基线见 `micro-frontend-architecture.drawio` / 腾讯文档三张图。本文聚焦三个技术模块的详细设计：
 > 1. 微前端 js 加载（自研 loader）
 > 2. js 版本管理加载（清单协议 + gateway 改造）

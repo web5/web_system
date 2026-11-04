@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 # ============================================================
-# publish.sh — web_system 统一发布入口
+# ⚠️ DEPRECATED / 同名歧义警告（2026-11-04 标注）
+#
+# 🔴 本文件 scripts/publish.sh 是 2026-10 的「本地封装 → rsync/scp + pm2」旧通道，
+#    与官方 skill 的 ~/skills/web-system-deploy/scripts/publish.sh **同名但完全不同**：
+#      本文件       → 本地 rsync 直推服务器 / 旧 pm2 通道（已废弃）
+#      skill 那份   → SSH dev 机 → /console/api/mcp/* + X-Mcp-Key → deploy-console 流水线
+#    package.json 的 pub:dev / pub:prod 曾指向本文件，2026-11-04 已改为废弃提示。
+#
+# 🔴 Agent 发布唯一入口 = ~/skills/web-system-deploy/SKILL.md（先判模块再选通道）。
+#    详见 README.md §7.1 / docs/INDEX.md。保留本文件只作历史参考，勿执行。
+# ============================================================
+# 原头部（历史）：publish.sh — web_system 统一发布入口
 #
 # 目标：把「预检 → 构建 → 部署 → 复检」收成一条命令，
 #       避免发布时反复弹权限确认（一次授权跑完全部）。

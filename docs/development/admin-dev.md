@@ -1,5 +1,9 @@
 # Admin Web（管理后台）开发指南
 
+> 🔴 **局部过时声明（2026-11-04，覆盖下方一切旧描述）**：本文的 `apps/admin-web/dist`
+> 是 2026-09 旧目录名，**实际为 `apps/admin/dist`**（`README.md` §1）。
+> 端口与启动方式以 `docs/INDEX.md` → `development/local-dev-guide.md` / `README.md` §5 为准；逐行订正见台账 #8435。
+
 > 面向：需要启动 / 调试 / 扩展 admin 后台的开发者（含 AI 编程助手）。
 > 目的：让"启动 admin + 访问调试页"这类高频操作，不需要翻代码就能一次跑对。
 

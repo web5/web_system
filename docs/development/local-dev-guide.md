@@ -80,9 +80,12 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 | knowledge-service | **6011** | `web-knowledge` | `dev` | **独立库 `web_system_knowledge`** + TokenHub embedding Key | `/api-docs` | ❌ |
 | deploy-console | **6200** | `web-deploy-console` | `start:dev`（无 `dev`） | MySQL(`web_system_deploy`) + SSH 私钥 + node 路径 | `/api/docs`（非 prod） | `/api/monitor/health`（需 JWT）、`/api/monitor/local/health` |
 
-> ⚠️ **端口三轨（别混）**：上表是**本机**端口。dev 的 auth=6001（本机 6001 被其它项目占用才改 6101），
-> **prod 走 3000 系列**（gateway 3000 / auth 3001 …）。三环境完整矩阵与「服务指向」语义见
-> `local-release-runbook.md` §1.1；权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。
+> ⚠️ **端口三轨（别混）**：上表是**本机**端口（auth=6101 因本机 6001 被占用）。
+> 🔴 **dev / prod 一律 6000 系**（gateway 6000 / auth 6001 / … / deploy-console 6200），
+> **3000 系从未用于 dev/prod** —— 2026-11-04 订正：本行原写「prod 走 3000 系列」是错的，
+> 与 `README.md` §5、`docs/协作指令速查.md` §4 及实测均矛盾，勿再引用。
+> 三环境完整矩阵见 `docs/architecture/system-overview.md` §3 与 `README.md` §5；
+> 权威源：本机 `ecosystem.config.cjs`、服务器 `ecosystem.config.js`。
 
 ### 2.1 `/api/*` → 服务映射（gateway 侧）
 
@@ -156,11 +159,19 @@ sudo $HOME/local/nginx/sbin/nginx -s reload  # 重载
 
 #### 用流水线做本地验证
 
+> 🔴 **2026-11-04 订正：下方 curl 是「控制台 UI 手工通道」快照，Agent 禁用。**
+> 自签 JWT 打 `POST /api/pipelines` 能提交，但 agent 无 `deploy:pipeline:approve` → 403 卡 `awaiting-approval`。
+> **Agent 发布唯一入口 = `web-system-deploy` skill**：先判模块 → 后端
+> `bash ~/skills/web-system-deploy/scripts/publish.sh plan dev <svc>`；前端 `admin`/`portal`
+> 走 mcp-gateway `/mcp/deploy` tools/call；`deploy-console` 自身永远手动。
+> 完整路由见 `README.md` §7.1 / `~/skills/web-system-deploy/SKILL.md` / `docs/INDEX.md`。
+> 下面仅作**平台侧语义**考古，不要照抄执行。
+
 ```bash
+# ❌ 历史快照（控制台 UI 通道，agent 不要用）
 curl -X POST http://127.0.0.1:6200/api/pipelines \
   -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
   -d '{"env":"local","moduleKey":"admin","branch":"<你的分支>","mode":"direct"}'
-# 轮询 GET /api/pipelines/:jobId；遇 gate 节点需审批：POST /api/pipelines/:id/approve
 ```
 
 #### 部署：发布之后的第二个动作
