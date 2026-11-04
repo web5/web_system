@@ -1,9 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SshExecService } from './ssh-exec.service';
+import { SshExecService, SshTarget } from './ssh-exec.service';
 import { resolveRuntimeRoot } from '../deploy/runtime-root';
 import { resolveStaticTarget } from '../apps/static-target';
-import { defaultReleaseWorkspace } from '../pipeline/release-paths';
+import {
+  cdnAppDir,
+  cdnLayoutMode,
+  defaultReleaseWorkspace,
+  resolveCdnTarget,
+} from '../pipeline/release-paths';
 import { KEEP_MIN_AGE_MS, KEEP_VERSIONS } from '../artifact/artifact-store.service';
 
 /**
@@ -107,8 +112,51 @@ export class RemoteArtifactCleanupService {
     return { root: t.root, remote: !!t.sshTarget };
   }
 
-  /** 远端版本目录：`<staticRoot>/static/modules/<moduleKey>/<envId>` */
+  /** Phase 2 布局开关（`CDN_LAYOUT_MODE`，缺省 legacy） */
+  private cdnMode(): boolean {
+    return cdnLayoutMode((k) => this.configService.get<string>(k)) === 'cdn';
+  }
+
+  /**
+   * 入口机 SSH 配置（Phase 2）。**只认 `CDN_SSH_TARGET`**，不回落应用机。
+   *
+   * 为什么必须 fail-closed：顺序互换后，用应用机的 `ssh.run(env)` 去执行
+   * `<cdnRoot>/<env>/<app>` 下的 `rm -rf`，等于「拿 A 机的凭据删 B 机的路径」——
+   * 一旦 CDN 根恰好也存在同名目录，就是静默删错。宁可清理不动，也不能猜。
+   */
+  private cdnSshConfig(env: string): SshTarget {
+    const t = resolveCdnTarget((k) => this.configService.get<string>(k), env);
+    if (!t.sshTarget) {
+      throw new Error(
+        `CDN 模式缺少入口机配置 CDN_SSH_TARGET / CDN_SSH_TARGET_${env.toUpperCase()}，拒绝回落到应用机执行（防删错目录）`,
+      );
+    }
+    const at = t.sshTarget.lastIndexOf('@');
+    const sshUser = at > 0 ? t.sshTarget.slice(0, at) : 'root';
+    const host = at > 0 ? t.sshTarget.slice(at + 1) : t.sshTarget;
+    return this.ssh.configForHost({
+      host,
+      sshUser,
+      sshKeyPath: this.configService.get<string>('CDN_SSH_KEY') || undefined,
+    });
+  }
+
+  /** 统一远端执行入口：legacy 走应用机，CDN 走入口机（同一次解析，不各拼一遍） */
+  private runRemote(env: string, cmd: string, tag: string): Promise<string> {
+    if (!this.cdnMode()) return this.ssh.run(env, cmd, tag);
+    return this.ssh.execOn(this.cdnSshConfig(env), cmd, tag);
+  }
+
+  /**
+   * 版本目录。
+   * - legacy：`<staticRoot>/static/modules/<moduleKey>/<envId>`
+   * - CDN：`<cdnRoot>/<envId>/<moduleKey>` —— 顺序**互换**，且必须与投递同源
+   */
   private versionDir(env: string, moduleKey: string, envId: string): string {
+    if (this.cdnMode()) {
+      const t = resolveCdnTarget((k) => this.configService.get<string>(k), env);
+      return cdnAppDir(t.root, envId, moduleKey);
+    }
     const { root } = this.staticRootOf(env);
     return `${root}/static/modules/${moduleKey}/${envId}`;
   }
@@ -118,6 +166,16 @@ export class RemoteArtifactCleanupService {
    * 目录不存在返回空数组（不抛错 —— 清理不该让流水线红掉）。
    */
   async scan(env: string, moduleKey: string, envId = env): Promise<RemoteEntry[]> {
+    // CDN 模式：远端性由入口机配置决定（不是应用机的静态根）
+    if (this.cdnMode()) {
+      if (!resolveCdnTarget((k) => this.configService.get<string>(k), env).sshTarget) {
+        this.logger.warn(
+          `CDN 模式未配置 CDN_SSH_TARGET_${env.toUpperCase()}，无法扫描入口机产物（拒绝回落到应用机）`,
+        );
+        return [];
+      }
+      return this.scanDir(env, this.versionDir(env, moduleKey, envId), `cleanup-scan:${moduleKey}@${envId}`);
+    }
     // env-dir 的静态根没配 SSH 目标 = 本机目录，不该走 ssh 去扫（否则本机发布会被误连）
     const { remote } = this.staticRootOf(env);
     if (!remote) {
@@ -141,7 +199,7 @@ export class RemoteArtifactCleanupService {
       `cd '${dir}' 2>/dev/null || { echo ""; exit 0; }; ` +
       `for d in */; do n="\${d%/}"; [ -d "$n" ] || continue; ` +
       `printf '%s\\t%s\\n' "$(stat -c %Y "$n")" "$n"; done`;
-    const out = await this.ssh.run(env, cmd, tag);
+    const out = await this.runRemote(env, cmd, tag);
     return out
       .split('\n')
       .map((l) => l.trim())
@@ -266,13 +324,20 @@ export class RemoteArtifactCleanupService {
       return { ...plan, remove: [], scanned: entries.length, applied: true, dir };
     }
 
+    // CDN 模式加一道 realpath 归属断言：`cd` 进目标目录后 `pwd -P` 必须等于期望路径，
+    // 否则拒绝删除（exit 9）。防的是「路径被 symlink 改写 / 顺序改错却恰好同名」这类
+    // 能通过 `isSafeVersionName` 的误删。
+    const guard = this.cdnMode()
+      ? `real=$(pwd -P) || exit 1; if [ "$real" != '${dir}' ]; then echo "REFUSE: $real"; exit 9; fi; `
+      : '';
     const cmd =
       `cd '${dir}' || exit 1; ` +
+      guard +
       safe
         .map((n) => `if [ -d '${n}' ] && [ '${n}' != dist ] && [ '${n}' != '.' ]; then rm -rf -- '${n}'; fi;`)
         .join(' ');
     try {
-      await this.ssh.run(env, cmd, `cleanup:${tag}`);
+      await this.runRemote(env, cmd, `cleanup:${tag}`);
     } catch (e) {
       this.logger.error(`远端产物清理失败（${tag}）：${(e as Error).message}`);
       return {

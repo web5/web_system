@@ -142,3 +142,150 @@ export function toCommitId(ref?: string | null): string | undefined {
   if (!v) return undefined;
   return parseReleaseRef(v).version;
 }
+
+// ── Phase 2：CDN 布局（`<env>/<app>/<commit>`）─────────────────
+// 设计见 specs/static-cdn-phase2/design.md。
+//
+// 为什么单独长出一层：Phase 2 把落点从「应用机 gateway 静态根」搬到「入口机 /data/cdn」，
+// 且目录顺序由 `<app>/<env>` **互换**为 `<env>/<app>`。顺序互换不是改名——只换根不换顺序时，
+// GC 扫到的下一级恰好是 commit 哈希，能通过 `isSafeVersionName` 真删成功（静默删错目录）。
+// 故所有路径必须经下面这组函数产出，禁止任何调用方再手拼字符串。
+//
+// 默认零变化：未设 `CDN_LAYOUT_MODE=cdn` 时，这些函数不参与任何存量路径计算。
+
+/** 入口机 CDN 根（磁盘绝对路径）；可用 `CDN_ROOT` / `CDN_ROOT_<ENV>` 覆盖 */
+export const CDN_ROOT = '/data/cdn';
+
+/** 单段白名单（与 commit 白名单同口径，避免 `/` 进入路径） */
+export const CDN_SEGMENT_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** 路径段是否安全（空 / `.` / `..` / 含 `/` 或空格一律 false） */
+export function isSafeSegment(s: string | null | undefined): boolean {
+  const v = (s ?? '').trim();
+  if (!v || v === '.' || v === '..') return false;
+  return CDN_SEGMENT_RE.test(v);
+}
+
+function assertSegment(kind: string, s: string | null | undefined): string {
+  const v = (s ?? '').trim();
+  if (!isSafeSegment(v)) {
+    throw new Error(`CDN 路径段非法（${kind}）: ${JSON.stringify(s ?? '')}`);
+  }
+  return v;
+}
+
+/** 相对文件路径（允许 `chunks/x.js` 这样的子路径，但每段都要安全） */
+function assertRelFile(file: string): string {
+  const segs = (file ?? '').split('/').filter((x) => x !== '');
+  if (!segs.length) throw new Error('CDN 文件名为空');
+  for (const s of segs) assertSegment('file', s);
+  return segs.join('/');
+}
+
+function trimSlash(s: string): string {
+  return (s ?? '').trim().replace(/\/+$/, '');
+}
+
+/**
+ * 资产目录（入口机磁盘，posix 分隔符 —— 远端 shell 用）。
+ * `/data/cdn/<env>/<app>`
+ *
+ * 与 {@link cdnAssetDir} 分开是因为「清理」只看 app 层（其下才是 commit 目录），
+ * 而投递/校验要到 commit 层。两者必须共用同一顺序，故 cdnAssetDir 复用它。
+ */
+export function cdnAppDir(
+  root: string | null | undefined,
+  env: string,
+  app: string,
+): string {
+  const base = trimSlash(root || CDN_ROOT) || CDN_ROOT;
+  return `${base}/${assertSegment('env', env)}/${assertSegment('app', app)}`;
+}
+
+/** 某个 commit 的产物目录：`<root>/<env>/<app>/<commit>`（复用 cdnAppDir，顺序只此一处） */
+export function cdnAssetDir(
+  root: string | null | undefined,
+  env: string,
+  app: string,
+  commit: string,
+): string {
+  return `${cdnAppDir(root, env, app)}/${assertSegment('commit', commit)}`;
+}
+
+/**
+ * 资产 HTTP URL（verify 阶段 200 + sha256 探活用）。
+ * `<origin>/<env>/<app>/<commit>/<file>`；`origin` 是**带域名的完整 URL base**（如 `https://kedouai.com/cdn`）。
+ */
+export function cdnAssetUrl(
+  origin: string,
+  env: string,
+  app: string,
+  commit: string,
+  file = 'index.js',
+): string {
+  const base = trimSlash(origin);
+  if (!base) throw new Error('cdnAssetUrl: origin 为空（需完整 URL base）');
+  return `${base}/${assertSegment('env', env)}/${assertSegment('app', app)}/${assertSegment('commit', commit)}/${assertRelFile(file)}`;
+}
+
+/** 公共依赖 URL：`<origin>/common/{libs,pub}/<file>` */
+export function cdnCommonUrl(
+  origin: string,
+  group: 'libs' | 'pub',
+  file: string,
+): string {
+  const base = trimSlash(origin);
+  if (!base) throw new Error('cdnCommonUrl: origin 为空（需完整 URL base）');
+  if (group !== 'libs' && group !== 'pub') {
+    throw new Error(`cdnCommonUrl: 未知分组 ${JSON.stringify(group)}（只接受 libs / pub）`);
+  }
+  return `${base}/common/${group}/${assertRelFile(file)}`;
+}
+
+// ── 落点解析（投递 / 校验 / GC 同源）────────────────────────
+
+/** 配置读取器（`ConfigService.get<string>` 的形状；抽出来便于纯函数单测） */
+export type CdnConfigGetter = (key: string) => string | undefined;
+
+/** 环境 → 配置键后缀（`staging-1` → `STAGING_1`） */
+function envSuffix(env: string): string {
+  return (env || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+}
+
+export interface CdnTarget {
+  env: string;
+  /** 入口机 CDN 根（磁盘绝对路径） */
+  root: string;
+  /** ssh 目标 `user@host`；null = 控制台本机 */
+  sshTarget: string | null;
+}
+
+/**
+ * 唯一落点解析（**P0**）。
+ *
+ * 历史上 `staticRootOf()` 取 `STATIC_PUBLIC_ROOT_<ENV>`，而 `rm -rf` 走 `ssh.run(env)`
+ * （`SshExecService.resolve` 另算一份目标机）——两套独立配置，于是「路径算在一处、删除执行在另一处」。
+ * Phase 2 收口为**一个函数同时返回 root 与 sshTarget**，投递 / verify / GC 全部调它，
+ * 从结构上消灭这份重复推导。
+ */
+export function resolveCdnTarget(get: CdnConfigGetter, env: string): CdnTarget {
+  const e = envSuffix(env);
+  const root =
+    trimSlash(get(`CDN_ROOT_${e}`) || '') || trimSlash(get('CDN_ROOT') || '') || CDN_ROOT;
+  const ssh = (get(`CDN_SSH_TARGET_${e}`) || get('CDN_SSH_TARGET') || '').trim();
+  return { env, root, sshTarget: ssh || null };
+}
+
+/** 布局开关：`legacy`（默认，逐字节零变化）/ `cdn`（Phase 2 新布局） */
+export type CdnLayoutMode = 'legacy' | 'cdn';
+
+/**
+ * 读布局开关。取值非法直接 throw —— 拼错成 `cnd` 时静默回退 legacy 会让
+ * 「以为已切新布局、实际按旧布局投递」变成不可见的假成功。
+ */
+export function cdnLayoutMode(get: CdnConfigGetter): CdnLayoutMode {
+  const raw = (get('CDN_LAYOUT_MODE') || '').trim().toLowerCase();
+  if (!raw || raw === 'legacy') return 'legacy';
+  if (raw === 'cdn') return 'cdn';
+  throw new Error(`CDN_LAYOUT_MODE 取值非法: ${JSON.stringify(raw)}（只接受 legacy / cdn）`);
+}
