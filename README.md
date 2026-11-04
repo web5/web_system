@@ -311,21 +311,11 @@ packages/shared/src/api.ts
 
 ---
 
-## 9 文档地图（**总索引 = `docs/INDEX.md`**）
+## 9 文档地图（**唯一分入口 = `docs/INDEX.md`**）
 
-> 🔴 仓库现有 **257 份活跃 md**（docs 141 + specs 112 + 根 2 + wiki 2，2026-11-04 删 80 桩 + 2 废弃入口后实测）；80 份史料另存 `archive/`，不计入。本表只留最高频 7 条。
-> **完整「按问句 → 真源」路由表见 [`docs/INDEX.md`](./docs/INDEX.md)** —— 先查它再检索，别全仓 grep。
-
-| 主题 | 入口 |
-|---|---|
-| **全部文档总索引（先读这个）** | [docs/INDEX.md](./docs/INDEX.md) |
-| **知识库拓扑（AI 防跑偏总图）** | [docs/知识库拓扑.md](./docs/知识库拓扑.md) · 图 `docs/architecture/知识库拓扑.svg` |
-| 架构与部署现状总览 | [docs/architecture/system-overview.md](./docs/architecture/system-overview.md) |
-| **发布能力入口（统一 MCP，A / B 只是调用方式）** | `~/skills/web-system-deploy/SKILL.md`；命令见 §7.1 |
-| 红线 / 动作门 / commit trailer | [docs/协作指令速查.md](./docs/协作指令速查.md) |
-| 本地开发总指南 | [docs/development/local-dev-guide.md](./docs/development/local-dev-guide.md) |
-| 新机器从零启动 | [docs/development/local-dev-setup.md](./docs/development/local-dev-setup.md) |
-| 小程序出码（预览码 / 体验版） | [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
+> **先查 [`docs/INDEX.md`](./docs/INDEX.md) 再检索**，别全仓 grep —— 它是唯一的「按问句 → 真源」路由表，本层不复制。
+> **开发维护知识库全貌 / AI 防跑偏总图** → [`docs/知识库拓扑.md`](./docs/知识库拓扑.md)（图片版 `docs/architecture/知识库拓扑.svg`，由 `scripts/gen-kb-topology.mjs` 生成，禁手改）。
+> 工程事实（§4.5 env / §5 端口 / §7.1 发布通道）只在本文件，且只此一份；活跃文档数等统计口径见 `docs/INDEX.md` 顶部。
 
 **目录边界（防检索到旧事实）**：`docs/plans/`、`docs/reviews/`、`docs/development/*review*`、
 `specs/*/tasks.md`、`.workbuddy/memory/2026-*.md` 都是**历史快照**。

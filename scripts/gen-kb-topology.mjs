@@ -56,9 +56,9 @@ const LAYERS = [
   },
   {
     y: 240, h: 104, cols: 3, rows: 1, fill: C.l1, stroke: C.l1s,
-    name: 'L1 · 入口层', note: '只指路、不复制数值；出现第二份事实即漂移',
+    name: 'L1 · 入口层', note: '= 工程事实真源，可含数值且只此一份；L0 注入层只放指针',
     cards: [
-      { t: 'README.md', l: ['§5 端口 · §7.1 发布路由 · §9 文档地图'] },
+      { t: 'README.md', l: ['§4.5 env · §5 端口 · §7.1 发布路由', '§9 只留指针，不复制路由表'] },
       { t: '.codebuddy/rules/', l: ['4×RULE.mdc + 最佳实践'] },
       { t: '协作指令速查.md', l: ['红线 · 动作门 · commit trailer'] },
     ],
@@ -67,7 +67,7 @@ const LAYERS = [
     y: 356, h: 100, cols: 2, rows: 1, fill: C.l2, stroke: C.l2s,
     name: 'L2 · 总索引', note: '先查这一层，再打开唯一真源；不要一上来全仓 grep',
     cards: [
-      { t: 'docs/INDEX.md — 唯一「分」入口', l: ['338 份 md · 按问句 → 唯一真源 · 只路由'] },
+      { t: 'docs/INDEX.md — 唯一「分」入口', l: ['按问句 → 唯一真源 · 只路由', '统计口径只在此处顶部写一处'] },
       { t: 'docs/知识库拓扑.md — 本图真源', l: ['五层载体 · 门禁 · 禁止路径 · 冲突优先级'] },
     ],
   },
@@ -185,9 +185,8 @@ function build() {
   panel(1020, 798, 340, 208, '已知缺口（不猜，已落台账）', C.gray, C.grays, [
     '#8441 release-deploy-console.sh',
     '  被 README / MEMORY 引用但文件不存在',
-    '#8442 wiki/index.md 仍写 350 份',
-    '  实测口径 338 份',
     '#8443 21 个 SVG 中 13 个生成源未确认',
+    '#8444 ui-design-spec.html 无过时声明',
     '~/WorkBuddy/chase 个人 AI 工作空间',
     '≡ ~/AiWorkspace（symlink，勿当两份）',
   ], 22, C.text);
@@ -203,7 +202,7 @@ function build() {
   });
   txt(40, 1104, '绿色实线 = 正确执行路径　·　红虚线 = 已踩过的跑偏路径　·　灰框 = 未确认缺口，不作为事实使用', 12.5, '#374151');
   txt(40, 1128, '改图改脚本重跑：node scripts/gen-kb-topology.mjs　｜　自检：--check　｜　新增 md 必须在 docs/INDEX.md §1 登记一行（R5）', 12.5, '#374151');
-  txt(40, 1152, '载体实测（11-04 删桩后）：docs 141 md · specs 112 md · 根 2 md · wiki 2 md = 257 份活跃；archive 80 份史料另存', 12.5, '#374151');
+  txt(40, 1152, '载体规模与统计口径只写 docs/INDEX.md 顶部一处；archive 80 份史料另存，不进事实检索', 12.5, '#374151');
   push('</svg>');
   return p.join('\n') + '\n';
 }
