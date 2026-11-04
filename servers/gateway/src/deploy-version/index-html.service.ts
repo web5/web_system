@@ -16,6 +16,16 @@ import {
 } from '../dynamic-route/entities';
 // P2（2026-09-20）：静态根改为可配（STATIC_PUBLIC_ROOT），不配时与历史行为一致
 import { PUBLIC_ROOT } from '../static/public-root';
+// Phase 1（2026-11-04）：资源 URL 唯一出口。ASSET_ORIGIN = 带域名的完整 URL base；
+// ASSET_URL_MODE=cdn 时 manifest 直接给 <commit> 一跳 URL（去指针化）。
+import {
+  AssetConfig,
+  assetConfigFrom,
+  assetUrl,
+  commonAssetUrl,
+  moduleAssetRel,
+  moduleAssetsBaseRel,
+} from '../static/asset-url';
 
 interface VersionCache {
   value: string | undefined;
@@ -83,6 +93,33 @@ export class IndexHtmlService {
     return this.configService.get('DEPLOY_ENV_ID') || 'dev';
   }
 
+  /**
+   * 资源 URL 配置（Phase 1）。每次读取、不缓存：
+   * - 默认（未配 ASSET_ORIGIN / 非 cdn）= legacy + 相对路径，输出与改造前逐字节一致；
+   * - cdn 模式必须配完整 URL base，manifest 直接给 `<env>/<app>/<commit>/` 一跳 URL。
+   * ⚠️ 三个键必须由 ecosystem gateway env 注入进程环境（同 PUBLIC_ROOT 的坑）。
+   */
+  private get asset(): AssetConfig {
+    return assetConfigFrom({
+      ASSET_ORIGIN: this.configService.get('ASSET_ORIGIN'),
+      ASSET_URL_MODE: this.configService.get('ASSET_URL_MODE'),
+      ASSET_CSS_APPS: this.configService.get('ASSET_CSS_APPS'),
+    });
+  }
+
+  /** 相对资源路径 → 最终 URL（唯一出口，禁止再拼字面量） */
+  private url(rel: string, cfg: AssetConfig = this.asset): string {
+    return assetUrl(rel, cfg.origin);
+  }
+
+  /**
+   * 应急 old-flat 布局专用：CDN 上不存在 `static/modules/<key>/<version>/` 这种扁平目录，
+   * 故无论是否切了 cdn 模式，legacy 通道一律保持站点相对路径，避免拼出不存在的 URL。
+   */
+  private legacyUrl(rel: string): string {
+    return assetUrl(rel, '');
+  }
+
   /** 是否已打印过读取源（启动后只记一次，避免刷日志） */
   private loggedReadSource = false;
 
@@ -116,7 +153,9 @@ export class IndexHtmlService {
    * pub === 'console'：deploy-console 独立 SPA，不注入清单
    */
   async render(pub: string, req?: any): Promise<string> {
-    const html = await this.readHtml(pub);
+    const cfg = this.asset;
+    // cdn 模式把模板里写死的 /static/cdn/ 公共依赖重写到 common/（legacy 原样返回，零变化）
+    const html = this.rewriteCommonLibUrls(await this.readHtml(pub), cfg);
     if (pub !== 'shell') {
       // deploy-console 等非微前端应用，只注入环境标识
       const meta = `<script>window.__DEPLOY_ENV__=${JSON.stringify(this.envId)};</script>`;
@@ -126,7 +165,31 @@ export class IndexHtmlService {
     // 基座：注入模块清单（新结构 envs/byEnv；与 /__manifest__ 端点同一来源）
     const manifest = await this.buildManifest(req);
     const scriptTag = `<script id="__MODULES_MANIFEST__">window.__MODULES_MANIFEST__=${JSON.stringify(manifest)};</script>`;
-    return this.injectHead(html, scriptTag + this.buildPreloadTags(manifest, req));
+    // 公共素材运行时基址：新产物用 window.__ASSET_BASE__ 取代编译期常量
+    // （见 scripts/vite-public-assets.mjs）。legacy 不注入，保证 HTML 逐字节兼容。
+    // 旧产物里仍是编译期字面量 /static/cdn/pub/，过渡期靠 nginx 双投兼容。
+    const baseTag =
+      cfg.mode === 'cdn'
+        ? `<script>window.__ASSET_BASE__=${JSON.stringify(assetUrl('common/pub/', cfg.origin))};</script>`
+        : '';
+    return this.injectHead(html, baseTag + scriptTag + this.buildPreloadTags(manifest, req));
+  }
+
+  /**
+   * shell 模板（含线上已发布的历史 index.html）把 14 个公共 UMD 依赖写死在
+   * `/static/cdn/`，并有一份 REQUIRED_GLOBALS 就绪检查映射。cdn 模式在服务端
+   * 一次性重写成 `ASSET_ORIGIN + common/libs/`，好处是：
+   * - 不改模板产物文件，历史版本也能随配置切换（不用重建 bundle）；
+   * - 域名不进 bundle / 代码常量，Phase 3 换真 CDN 只改 env。
+   * 只匹配引号包裹的引用，避免误伤注释与提示文案。
+   */
+  private rewriteCommonLibUrls(html: string, cfg: AssetConfig): string {
+    if (cfg.mode !== 'cdn') return html;
+    const libs = assetUrl('common/libs/', cfg.origin);
+    const pub = assetUrl('common/pub/', cfg.origin);
+    return html
+      .replace(/(["'])\/static\/cdn\/pub\//g, `$1${pub}`)
+      .replace(/(["'])\/static\/cdn\/([A-Za-z0-9._-]+\.js)/g, `$1${libs}$2`);
   }
 
   // ==================================================================
@@ -169,30 +232,40 @@ export class IndexHtmlService {
     const key = this.resolvePreloadModuleKey(manifest, req, envId);
     if (!key) return '';
 
+    const cfg = this.asset;
     const tags: string[] = [];
     const push = (href: unknown, kind: 'script' | 'style') => {
       const url = typeof href === 'string' ? href : '';
-      // 只放行本站绝对路径（模块资源一律同源产物），杜绝任何注入面
-      if (!url.startsWith('/') || url.startsWith('//')) return;
+      // 放行两类：① 本站绝对路径（legacy 兼容）；② ASSET_ORIGIN 前缀下的完整 http(s) URL
+      // （cdn / 真 CDN 模式）。跨域 preload 不再被静默丢弃，同时仍杜绝任何注入面。
+      const sameSite = url.startsWith('/') && !url.startsWith('//');
+      const onAssetOrigin = !!cfg.origin && url.startsWith(cfg.origin);
+      if (!sameSite && !onAssetOrigin) return;
       tags.push(`<link rel="preload" href="${url}" as="${kind}">`);
     };
 
     const pointer = manifest.byEnv?.[envId]?.[key];
     const packed = (manifest.modules || []).find((m: any) => m.name === key);
 
-    // ① 版本化整包（体积主体，几百 KB）：指针内部第二跳就是这个 URL，必须逐字一致
-    //    ⚠️ 版本必须取「当前环境」那份 —— `modules[]` 里只有 defaultEnv 的版本，
-    //    直接用它会预载到用户用不上的环境产物（白白多下一次 500KB），故优先用 byEnv.version。
-    const version = pointer?.version;
-    if (version) {
-      push(`/static/modules/${key}/${envId}/${version}/index.js`, 'script');
-    } else if (packed?.entry && (manifest.defaultEnv || this.envId) === envId) {
-      // 老 gateway / legacy 清单没有 version 字段：只在「当前环境即 defaultEnv」时
-      // 才敢用 modules[] 的整包路径（换环境时它指向别处）
-      push(packed.entry, 'script');
+    if (cfg.mode === 'cdn') {
+      // 去指针化后 manifest.byEnv[].entry 本身就是 `<commit>/index.js`（一跳、immutable）：
+      // 只 preload 它，不再额外预载「指针 → 版本」的第二跳，也不用 version 拼串。
+      if (pointer?.entry) push(pointer.entry, 'script');
+    } else {
+      // ① 版本化整包（体积主体，几百 KB）：指针内部第二跳就是这个 URL，必须逐字一致
+      //    ⚠️ 版本必须取「当前环境」那份 —— `modules[]` 里只有 defaultEnv 的版本，
+      //    直接用它会预载到用户用不上的环境产物（白白多下一次 500KB），故优先用 byEnv.version。
+      const version = pointer?.version;
+      if (version) {
+        push(this.url(moduleAssetRel('legacy', { app: key, env: envId, commit: version }), cfg), 'script');
+      } else if (packed?.entry && (manifest.defaultEnv || this.envId) === envId) {
+        // 老 gateway / legacy 清单没有 version 字段：只在「当前环境即 defaultEnv」时
+        // 才敢用 modules[] 的整包路径（换环境时它指向别处）
+        push(packed.entry, 'script');
+      }
+      // ② 无版本指针 + 其样式指针：loader 真正的第一跳，几百字节
+      if (pointer?.entry && pointer.entry !== packed?.entry) push(pointer.entry, 'script');
     }
-    // ② 无版本指针 + 其样式指针：loader 真正的第一跳，几百字节
-    if (pointer?.entry && pointer.entry !== packed?.entry) push(pointer.entry, 'script');
     // ③ 样式只放 shell 会注入的那份（byEnv 指针），不放 CDN 版本化副本 —— 否则重复下载 180KB
     if (pointer?.css) push(pointer.css, 'style');
     return tags.join('');
@@ -307,21 +380,51 @@ export class IndexHtmlService {
 
     // 基座（site-version）不纳入 env 切换（Q107）
     const envDirApps = apps.filter((a) => a.deployMode === 'env-dir');
+    // Phase 1：所有 URL 经 assetUrl() 唯一出口。默认 legacy + 空 origin 时
+    // 下面拼出的字符串与改造前逐字节一致（由全量单测锁定）。
+    const cfg = this.asset;
 
-    const byEnv: Record<string, Record<string, { entry: string; css: string | null; version?: string }>> = {};
+    const byEnv: Record<
+      string,
+      Record<string, { entry: string; css: string | null; version?: string; assetsBase?: string }>
+    > = {};
     for (const e of envIds) {
-      const entries: Record<string, { entry: string; css: string | null; version?: string }> = {};
+      const entries: Record<
+        string,
+        { entry: string; css: string | null; version?: string; assetsBase?: string }
+      > = {};
       for (const app of envDirApps) {
         const version = currentOf.get(`${app.key}@${e}`) as string;
         if (!version) continue;
-        const cssRel = `/static/modules/${app.key}/${e}/index.css`;
+        const cssRel =
+          cfg.mode === 'cdn'
+            ? moduleAssetRel('cdn', { app: app.key, env: e, commit: version, file: 'index.css' })
+            : moduleAssetRel('legacy', { app: app.key, env: e, file: 'index.css' });
+        const hasCss =
+          cfg.mode === 'cdn'
+            ? cfg.cssApps === null || cfg.cssApps.has(app.key)
+            : this.diskHas(cssRel);
         entries[app.key] = {
-          entry: `/static/modules/${app.key}/${e}/index.js`,
-          // 样式指针只在产物含 index.css 时被写入，按磁盘存在性给出（避免前端引 404）
-          css: this.diskHas(`static/modules/${app.key}/${e}/index.css`) ? cssRel : null,
+          // legacy = 无版本磁盘指针（两跳）；cdn = 去指针化，直接给 <commit> 一跳 URL
+          entry: this.url(
+            cfg.mode === 'cdn'
+              ? moduleAssetRel('cdn', { app: app.key, env: e, commit: version })
+              : moduleAssetRel('legacy', { app: app.key, env: e }),
+            cfg,
+          ),
+          // 样式指针只在产物含 index.css 时被写入（cdn 模式改为声明式，不依赖应用机磁盘）
+          css: hasCss ? this.url(cssRel, cfg) : null,
           // 当前版本：**只给服务端首屏 preload 用**（据此拼出指针内部的第二跳 URL）。
-          // 前端挂载走无版本指针，不读这个字段，故指针漂移不影响前端行为。
           version,
+          // cdn 模式把 assetsBase 交给前端，避免 shell 本地硬编码 /static/modules/...
+          ...(cfg.mode === 'cdn'
+            ? {
+                assetsBase: this.url(
+                  moduleAssetsBaseRel('cdn', { app: app.key, env: e, commit: version }),
+                  cfg,
+                ),
+              }
+            : {}),
         };
       }
       byEnv[e] = entries;
@@ -332,14 +435,15 @@ export class IndexHtmlService {
     for (const app of envDirApps) {
       const version = currentOf.get(`${app.key}@${defaultEnv}`);
       if (!version) continue;
-      const base = `/static/modules/${app.key}/${defaultEnv}/${version}/`;
+      const opts = { app: app.key, env: defaultEnv, commit: version };
+      const base = this.url(moduleAssetsBaseRel(cfg.mode, opts), cfg);
+      const cssRel = moduleAssetRel(cfg.mode, { ...opts, file: 'index.css' });
+      const hasCss = cfg.mode === 'cdn' ? cfg.cssApps === null || cfg.cssApps.has(app.key) : this.diskHas(cssRel);
       modules.push({
         name: app.key,
         version,
-        entry: `${base}index.js`,
-        css: this.diskHas(`static/modules/${app.key}/${defaultEnv}/${version}/index.css`)
-          ? `${base}index.css`
-          : null,
+        entry: this.url(moduleAssetRel(cfg.mode, opts), cfg),
+        css: hasCss ? this.url(cssRel, cfg) : null,
         assetsBase: base,
       });
     }
@@ -439,20 +543,35 @@ export class IndexHtmlService {
     const envId = this.envId;
     const module = await this.moduleRepo.findOne({ where: { key: moduleKey } });
 
+    const cfg = this.asset;
     let version: string | undefined;
     let base: string | null = null;
+    let entryRel: string | null = null;
+    let cssRel: string | null = null;
+    let hasCss = false;
     if (this.legacyRead) {
+      // 应急旧表：旧扁平布局 `<key>/<version>/`，没有 app/env/commit 维度，
+      // 不参与 CDN 体系（DEPLOY_LEGACY_READ=1 时只求能起页面）。
       version = await this.getCurrentVersion(envId, moduleKey);
-      if (version) base = `/static/modules/${moduleKey}/${version}/`;
+      if (version) {
+        base = this.legacyUrl(`static/modules/${moduleKey}/${version}/`);
+        entryRel = `static/modules/${moduleKey}/${version}/index.js`;
+        cssRel = `static/modules/${moduleKey}/${version}/index.css`;
+        hasCss = this.diskHas(cssRel);
+      }
     } else {
       version = await this.getCurrentAppVersion(moduleKey, envId);
-      if (version) base = `/static/modules/${moduleKey}/${envId}/${version}/`;
+      if (version) {
+        const opts = { app: moduleKey, env: envId, commit: version };
+        base = this.url(moduleAssetsBaseRel(cfg.mode, opts), cfg);
+        entryRel = moduleAssetRel(cfg.mode, opts);
+        cssRel = moduleAssetRel(cfg.mode, { ...opts, file: 'index.css' });
+        hasCss =
+          cfg.mode === 'cdn'
+            ? cfg.cssApps === null || cfg.cssApps.has(moduleKey)
+            : this.diskHas(cssRel);
+      }
     }
-
-    // 样式指针按磁盘存在性给出（避免前端引 404）
-    const cssRel = this.legacyRead
-      ? `static/modules/${moduleKey}/${version}/index.css`
-      : `static/modules/${moduleKey}/${envId}/${version}/index.css`;
 
     return {
       env: envId,
@@ -460,8 +579,9 @@ export class IndexHtmlService {
       name: module?.name || moduleKey,
       type: module?.type || 'unknown',
       version,
-      entry: base ? `${base}index.js` : null,
-      css: base && version && this.diskHas(cssRel) ? `${base}index.css` : null,
+      entry: entryRel ? (this.legacyRead ? this.legacyUrl(entryRel) : this.url(entryRel, cfg)) : null,
+      // 样式指针按磁盘存在性（legacy）或声明式白名单（cdn）给出，避免前端引 404
+      css: cssRel && hasCss ? (this.legacyRead ? this.legacyUrl(cssRel) : this.url(cssRel, cfg)) : null,
       assetsBase: base,
       source: this.legacyRead ? 'legacy' : 'new',
     };
@@ -493,13 +613,13 @@ export class IndexHtmlService {
       if (version !== stable && !canary) {
         canary = { module: m.key, version };
       }
-      const base = `/static/modules/${m.key}/${version}/`;
+      const base = `static/modules/${m.key}/${version}/`;
       entries.push({
         name: m.key,
         version,
-        entry: `${base}index.js`,
-        css: `${base}index.css`,
-        assetsBase: base,
+        entry: this.legacyUrl(`${base}index.js`),
+        css: this.legacyUrl(`${base}index.css`),
+        assetsBase: this.legacyUrl(base),
       });
     }
     return { env: envId, modules: entries, canary };

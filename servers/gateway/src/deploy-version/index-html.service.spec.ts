@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { IndexHtmlService } from './index-html.service';
 
 /**
@@ -39,12 +39,24 @@ function makeRepo() {
   return { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null) };
 }
 
-function build(opts: { legacyRead?: boolean; preloadOff?: boolean } = {}) {
+function build(
+  opts: {
+    legacyRead?: boolean;
+    preloadOff?: boolean;
+    assetOrigin?: string;
+    assetMode?: string;
+    assetCssApps?: string;
+  } = {},
+) {
   const cfg = {
     get: (k: string) => {
       if (k === 'DEPLOY_ENV_ID') return 'dev';
       if (k === 'DEPLOY_LEGACY_READ' && opts.legacyRead) return '1';
       if (k === 'MF_PRELOAD' && opts.preloadOff) return '0';
+      // Phase 1：资源 URL 配置（默认全空 = legacy 兼容模式）
+      if (k === 'ASSET_ORIGIN') return opts.assetOrigin ?? '';
+      if (k === 'ASSET_URL_MODE') return opts.assetMode ?? '';
+      if (k === 'ASSET_CSS_APPS') return opts.assetCssApps ?? '';
       return '';
     },
   };
@@ -283,5 +295,118 @@ describe('IndexHtmlService.resolveShellAssetPath（/shell/* 与 html 同源）',
     expect(await svc.resolveShellAssetPath('/shell/../secret.txt')).toBeNull();
     expect(await svc.resolveShellAssetPath('/shell/')).toBeNull();
     expect(await svc.resolveShellAssetPath('/shell//abs/path.js')).toBeNull();
+  });
+});
+
+/**
+ * Phase 1（2026-11-04）：ASSET_ORIGIN 带域名完整 URL base + 去指针化。
+ * 用户拍板：cdn 模式 manifest 直接给 `<env>/<app>/<commit>/` 一跳 URL，
+ * 不再有 `/static/modules/<app>/<env>/index.js` 磁盘指针。
+ */
+describe('Phase 1 · ASSET_ORIGIN 全 URL base / 去指针化', () => {
+  const CDN = 'https://kedouai.com/cdn/';
+  const cdnOpts = { assetOrigin: CDN, assetMode: 'cdn' };
+  const adminReq = { headers: { host: 'dev.kedouai.com' }, query: {}, path: '/admin/x', originalUrl: '/admin/x' };
+
+  afterEach(() => {
+    (existsSync as jest.Mock).mockReturnValue(true);
+    (readFileSync as jest.Mock).mockReturnValue('<html><head></head><body></body></html>');
+  });
+
+  it('cdn 模式 byEnv 直接给 <commit> 一跳 URL，指针入口彻底消失', async () => {
+    const { svc } = build(cdnOpts);
+    const m = await svc.buildManifest(req);
+    expect(m.byEnv.dev.admin.entry).toBe(`${CDN}dev/admin/3d5ce61/index.js`);
+    expect(m.byEnv.dev.admin.css).toBe(`${CDN}dev/admin/3d5ce61/index.css`);
+    expect(m.byEnv.dev.admin.assetsBase).toBe(`${CDN}dev/admin/3d5ce61/`);
+    expect(JSON.stringify(m.byEnv)).not.toContain('dev/admin/index.js');
+    // 兼容字段 modules[] 同步走同一出口
+    expect(m.modules[0].entry).toBe(`${CDN}dev/admin/3d5ce61/index.js`);
+    expect(m.modules[0].assetsBase).toBe(`${CDN}dev/admin/3d5ce61/`);
+  });
+
+  it('css 判定不再依赖应用机磁盘（existsSync 全 false 仍返回 css）', async () => {
+    (existsSync as jest.Mock).mockReturnValue(false);
+    const { svc } = build(cdnOpts);
+    const m = await svc.buildManifest(req);
+    expect(m.byEnv.dev.portal.css).toBe(`${CDN}dev/portal/7a6be04/index.css`);
+    expect(m.modules[1].css).toBe(`${CDN}dev/portal/7a6be04/index.css`);
+  });
+
+  it('ASSET_CSS_APPS 白名单：未列出的应用 css 为 null', async () => {
+    const { svc } = build({ ...cdnOpts, assetCssApps: 'admin' });
+    const m = await svc.buildManifest(req);
+    expect(m.byEnv.dev.admin.css).toBe(`${CDN}dev/admin/3d5ce61/index.css`);
+    expect(m.byEnv.dev.portal.css).toBeNull();
+  });
+
+  it('preload 一跳：完整 URL 不再被「只放行 / 开头」静默丢弃', async () => {
+    const { svc } = build(cdnOpts);
+    const html = await svc.render('shell', adminReq);
+    expect(html).toContain(`<link rel="preload" href="${CDN}dev/admin/3d5ce61/index.js" as="script">`);
+    expect(html).not.toContain('dev/admin/index.js" as="script"');
+  });
+
+  it('cdn 模式注入 window.__ASSET_BASE__（common/pub 完整 URL）', async () => {
+    const { svc } = build(cdnOpts);
+    const html = await svc.render('shell', req);
+    expect(html).toContain(`window.__ASSET_BASE__="${CDN}common/pub/"`);
+  });
+
+  it('cdn 模式重写模板里写死的 /static/cdn/ 公共依赖（含 REQUIRED_GLOBALS）', async () => {
+    (readFileSync as jest.Mock).mockReturnValue(
+      '<html><head></head><body>' +
+        '<script defer src="/static/cdn/vue.js"></script>' +
+        '<script>const g={"Vue":"/static/cdn/vue.js","logo":"/static/cdn/pub/logo.svg"};</script>' +
+        '</body></html>',
+    );
+    const { svc } = build(cdnOpts);
+    const html = await svc.render('shell', req);
+    expect(html).toContain(`src="${CDN}common/libs/vue.js"`);
+    expect(html).toContain(`"Vue":"${CDN}common/libs/vue.js"`);
+    expect(html).toContain(`"logo":"${CDN}common/pub/logo.svg"`);
+    expect(html).not.toContain('/static/cdn/vue.js');
+  });
+
+  it('默认（legacy + 空 origin）逐字节兼容：不注入 base、不重写模板、仍是两跳指针', async () => {
+    const { svc } = build();
+    const html = await svc.render('shell', req);
+    expect(html).not.toContain('window.__ASSET_BASE__');
+    expect(html).toContain('window.__MODULES_MANIFEST__=');
+    const m = await svc.buildManifest(req);
+    expect(m.byEnv.dev.admin.entry).toBe('/static/modules/admin/dev/index.js');
+    expect(m.byEnv.dev.admin.css).toBe('/static/modules/admin/dev/index.css');
+    expect(m.modules[0].assetsBase).toBe('/static/modules/admin/dev/3d5ce61/');
+  });
+
+  it('真 CDN 跨域 origin：manifest / preload / __ASSET_BASE__ 全是完整 URL，无同源残留', async () => {
+    const CROSS = 'https://cdn.example.com/cdn/';
+    const { svc } = build({ assetOrigin: CROSS, assetMode: 'cdn' });
+    const m = await svc.buildManifest(req);
+    const html = await svc.render('shell', adminReq);
+    expect(m.byEnv.dev.portal.entry).toBe(`${CROSS}dev/portal/7a6be04/index.js`);
+    expect(JSON.stringify(m.byEnv)).not.toContain('/static/modules/');
+    expect(html).toContain(`href="${CROSS}dev/admin/3d5ce61/index.js" as="script"`);
+    expect(html).toContain(`window.__ASSET_BASE__="${CROSS}common/pub/"`);
+  });
+
+  it('DEPLOY_LEGACY_READ=1 与 cdn 模式同时开：应急通道仍走相对路径（CDN 上没有扁平产物）', async () => {
+    const { svc, deployRepo, moduleRepo } = build({ ...cdnOpts, legacyRead: true });
+    moduleRepo.find.mockResolvedValue([{ key: 'admin', type: 'micro-frontend' }]);
+    deployRepo.findOne.mockResolvedValue({ currentVersion: 'd9889ff' });
+    const m = await svc.buildManifest(req);
+    expect(m.modules[0].entry).toBe('/static/modules/admin/d9889ff/index.js');
+    const v = await svc.resolveModuleVersion('admin', req);
+    expect(v.entry).toBe('/static/modules/admin/d9889ff/index.js');
+  });
+
+  it('只设 ASSET_URL_MODE=cdn 不给 origin → 配置自检抛错（fail-fast）', async () => {
+    const { svc } = build({ assetMode: 'cdn' });
+    await expect(svc.render('shell', req)).rejects.toThrow(/必须同时配置带域名的 ASSET_ORIGIN/);
+  });
+
+  it('ASSET_ORIGIN 写成相对路径 /cdn/ → 配置自检抛错', async () => {
+    const { svc } = build({ assetOrigin: '/cdn/', assetMode: 'cdn' });
+    await expect(svc.render('shell', req)).rejects.toThrow(/带域名的完整 URL/);
   });
 });

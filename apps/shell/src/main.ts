@@ -244,7 +244,10 @@ function buildModuleManifests(m: ReturnType<typeof readManifest>, env: string): 
       version: `env:${env}`,
       entry,
       css,
-      assetsBase: `/static/modules/${name}/${env}/`,
+      // Phase 1：优先用 gateway 下发的 assetsBase（cdn 模式指向 `<commit>/` 目录、
+      // 已去指针化）；旧 gateway / string 形态没有该字段时回落到历史拼法，行为不变。
+      // ⚠️ 不要在前端再硬编码 /static/modules/...，否则换 origin 要重建全部历史产物。
+      assetsBase: (raw as any)?.assetsBase || `/static/modules/${name}/${env}/`,
     };
   }).filter(Boolean) as any[];
 }
