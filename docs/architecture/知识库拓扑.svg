@@ -33,11 +33,12 @@
 <text x="771.5" y="193" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">注入 UI 动作门摘要 · Claude 域无此钩</text>
 <rect x="40" y="240" width="960" height="104" rx="14" fill="#E6F1FB" stroke="#185FA5" stroke-width="1"/>
 <text x="56" y="261" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="14" font-weight="500" fill="#1A1A1F" text-anchor="start">L1 · 入口层</text>
-<text x="186" y="261" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">只指路、不复制数值；出现第二份事实即漂移</text>
+<text x="186" y="261" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">= 工程事实真源，可含数值且只此一份；L0 注入层只放指针</text>
 <rect x="56" y="272" width="302.6666666666667" height="56" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
 <rect x="56" y="278" width="3" height="44" rx="1.5" fill="#185FA5" stroke="#185FA5" stroke-width="0"/>
 <text x="68" y="291" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">README.md</text>
-<text x="68" y="308" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">§5 端口 · §7.1 发布路由 · §9 文档地图</text>
+<text x="68" y="308" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">§4.5 env · §5 端口 · §7.1 发布路由</text>
+<text x="68" y="323" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">§9 只留指针，不复制路由表</text>
 <rect x="368.6666666666667" y="272" width="302.6666666666667" height="56" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
 <rect x="368.6666666666667" y="278" width="3" height="44" rx="1.5" fill="#185FA5" stroke="#185FA5" stroke-width="0"/>
 <text x="380.6666666666667" y="291" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">.codebuddy/rules/</text>
@@ -52,7 +53,7 @@
 <rect x="56" y="388" width="459" height="52" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
 <rect x="56" y="394" width="3" height="40" rx="1.5" fill="#0F6E56" stroke="#0F6E56" stroke-width="0"/>
 <text x="68" y="407" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">docs/INDEX.md — 唯一「分」入口</text>
-<text x="68" y="424" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">338 份 md · 按问句 → 唯一真源 · 只路由</text>
+<text x="68" y="424" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#4B5563" text-anchor="start">按问句 → 唯一真源 · 只路由</text>
 <rect x="525" y="388" width="459" height="52" rx="8" fill="#FFFFFF" stroke="rgba(0,0,0,.08)" stroke-width="1"/>
 <rect x="525" y="394" width="3" height="40" rx="1.5" fill="#0F6E56" stroke="#0F6E56" stroke-width="0"/>
 <text x="537" y="407" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">docs/知识库拓扑.md — 本图真源</text>
@@ -174,11 +175,10 @@
 <text x="1034" y="821" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="500" fill="#1A1A1F" text-anchor="start">已知缺口（不猜，已落台账）</text>
 <text x="1034" y="841" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8441 release-deploy-console.sh</text>
 <text x="1034" y="863" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">  被 README / MEMORY 引用但文件不存在</text>
-<text x="1034" y="885" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8442 wiki/index.md 仍写 350 份</text>
-<text x="1034" y="907" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">  实测口径 338 份</text>
-<text x="1034" y="929" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8443 21 个 SVG 中 13 个生成源未确认</text>
-<text x="1034" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">~/WorkBuddy/chase 个人 AI 工作空间</text>
-<text x="1034" y="973" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">≡ ~/AiWorkspace（symlink，勿当两份）</text>
+<text x="1034" y="885" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8443 21 个 SVG 中 13 个生成源未确认</text>
+<text x="1034" y="907" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">#8444 ui-design-spec.html 无过时声明</text>
+<text x="1034" y="929" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">~/WorkBuddy/chase 个人 AI 工作空间</text>
+<text x="1034" y="951" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="11.5" font-weight="400" fill="#1A1A1F" text-anchor="start">≡ ~/AiWorkspace（symlink，勿当两份）</text>
 <rect x="40" y="1020" width="1320" height="62" rx="12" fill="#EAF3DE" stroke="#3B6D11" stroke-width="1"/>
 <rect x="56" y="1032" width="198" height="38" rx="8" fill="#FFFFFF" stroke="#3B6D11" stroke-width="0.8"/>
 <text x="155" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">① 问句</text>
@@ -199,5 +199,5 @@
 <text x="1225" y="1056" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12" font-weight="500" fill="#3B6D11" text-anchor="middle">⑥ 执行 + 证据</text>
 <text x="40" y="1104" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">绿色实线 = 正确执行路径　·　红虚线 = 已踩过的跑偏路径　·　灰框 = 未确认缺口，不作为事实使用</text>
 <text x="40" y="1128" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">改图改脚本重跑：node scripts/gen-kb-topology.mjs　｜　自检：--check　｜　新增 md 必须在 docs/INDEX.md §1 登记一行（R5）</text>
-<text x="40" y="1152" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">载体实测（11-04 删桩后）：docs 141 md · specs 112 md · 根 2 md · wiki 2 md = 257 份活跃；archive 80 份史料另存</text>
+<text x="40" y="1152" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="12.5" font-weight="400" fill="#374151" text-anchor="start">载体规模与统计口径只写 docs/INDEX.md 顶部一处；archive 80 份史料另存，不进事实检索</text>
 </svg>
