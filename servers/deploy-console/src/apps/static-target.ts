@@ -51,8 +51,14 @@ export function defaultStaticRoot(releaseWorkspace: string): string {
 }
 
 /**
- * 解析某环境的静态落点。
+ * 解析某环境的静态落点（**root 与 sshTarget 同源**：一次给出，杜绝「路径算在一处、
+ * 删除执行在另一处」——方案 §5 P0 风险②）。
  * @param get 配置读取器（ConfigService#get 或测试桩）
+ *
+ * 🔴 Phase 2 边界：本函数是 **legacy 落点**（`STATIC_PUBLIC_ROOT_<ENV>` / `STATIC_SSH_TARGET_<ENV>`）。
+ * CDN 模式的落点解析在 `pipeline/release-paths.ts` 的 `resolveCdnTarget`（`CDN_ROOT_<ENV>` /
+ * `CDN_SSH_TARGET_<ENV>`），两套配置键独立、不互相推导 —— 「磁盘对了但 nginx 没配」正是
+ * 要被抓出来的场景，混用会让校验与删除打到不同机器。
  */
 export function resolveStaticTarget(
   env: string,
@@ -80,7 +86,16 @@ export function sshPrefix(sshTarget: string): string {
   return `ssh -o ConnectTimeout=10 -o BatchMode=yes ${sshTarget}`;
 }
 
-/** 环境产物目录（相对静态根，posix 分隔符 —— 远端 shell 用） */
+/**
+ * 环境产物目录（相对静态根，posix 分隔符 —— 远端 shell 用）。
+ *
+ * 🔴 Phase 2 边界：本函数**只服务 legacy 布局**（`static/modules/<app>/<env>`）。
+ * CDN 布局（`/data/cdn/<env>/<app>/<commit>`，顺序互换）**不在这里**，统一收敛到
+ * `pipeline/release-paths.ts` 的 `cdnAppDir` / `cdnAssetDir`。**禁止在此把顺序改成
+ * `<env>/<app>`** —— 否则会同时破坏 legacy 契约（诊断 #3 的逐字节零变化）与 CDN 的
+ * 「顺序只此一处」单一出口。顺序互换不是改名，只换根不换顺序会让 GC 扫到的下一级
+ * 恰好是 commit 哈希，能通过 `isSafeVersionName` 静默删错目录（方案 §5 P0 风险③）。
+ */
 export function envArtifactsRel(appKey: string, env: string): string {
   return `static/modules/${appKey}/${env}`;
 }
