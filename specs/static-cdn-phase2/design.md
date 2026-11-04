@@ -93,9 +93,42 @@ build → 判重(test -d 已存在即 fail-fast) → 上传入口机新目录 �
 
 ---
 
+## 5bis. 切指针前的 CDN 硬门禁（S6，`cdn-asset-verifier.service.ts`）
+
+**为什么在平台代码里而不是流水线脚本里**：脚本正文是 DB 数据，少写一行 `verify` 就静默跳过；
+而「指针已切、资源 404」的后果是线上白屏，DB 里却全绿。顺序必须由结构保证。
+
+```
+pointer 执行体：assertCdnReady() → （灰度）写规则 / （全量）setPointer
+```
+
+**四道判据**（任一不满足即 throw → 流水线失败 → 已有自动回滚）：
+
+| # | 判据 | 抓的是什么 |
+|---|---|---|
+| 1 | `CDN_ORIGIN_<ENV>`（或 `CDN_ORIGIN`）是完整 URL base | 配错/没配时**绝不静默跳过** |
+| 2 | 本地产物目录非空 | 「构建没产出却报成功」 |
+| 3 | `GET <base>/_manifest.sha256` 200 | nginx `/cdn/` 未生效、路径段不一致、目录不存在 |
+| 4 | 清单逐文件 sha256 与本地目录一致（集合相等） | tar 截断、残留同名文件、上传错 commit |
+| 5 | 入口 `index.js` HEAD 200 | 清单在但 JS 服务不出去（MIME/权限/软链） |
+
+**为什么用清单对账而不是逐个 URL 探活**：逐 HEAD 只能证明「文件在」不能证明「内容对」；
+逐 GET 算 sha256 在几百分包时会把 verify 拖成分钟级。清单一份即得「集合 + 内容」两个维度。
+
+清单由上传脚本在入口机生成（BR 见 S8）：
+```sh
+cd "$DEST" && find . -type f ! -name _manifest.sha256 -print0 | sort -z | xargs -0 sha256sum > _manifest.sha256
+```
+
+**默认零变化**：`CDN_LAYOUT_MODE≠cdn` 时 `assertReady()` 直接返回 `null`，**不发任何请求**。
+
+---
+
 ## 6. 验收（PR-A 本地可验部分）
 
 1. `npx jest src/pipeline/release-paths` 全绿，且新增「env/app 顺序互换」回归用例。
 2. 变异验证：把 `cdnAssetDir` 的 `env/app` 顺序调回 `<app>/<env>`，单测必须红。
 3. `CDN_LAYOUT_MODE` 未设时，`resolveRemoteScriptVars` 输出与改动前**逐字段相同**。
 4. 段校验：`default/1a2b3c4` 经 `toCommitId()` 归一化后才能进路径；未归一化直接拼 → throw。
+5. CDN 门禁：`cdn-verify.spec.ts` + `cdn-asset-verifier.service.spec.ts` + `steps/pointer.executor.spec.ts` 全绿；
+   变异「校验失败只告警不抛」与「切指针放到校验之前」两处都必须变红。

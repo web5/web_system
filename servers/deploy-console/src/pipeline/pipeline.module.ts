@@ -22,6 +22,8 @@ import { CleanupExecutor } from './steps/cleanup.executor';
 import { SyncRuntimeExecutor } from './steps/sync-runtime.executor';
 import { GcRuntimeExecutor } from './steps/gc-runtime.executor';
 import { PIPELINE_BUILTIN_STEPS, buildBuiltinSteps, BuiltinExecutors } from './steps/step-registry';
+// 切指针前的 CDN 硬门禁（verify 200 + sha256 对账；仅 CDN_LAYOUT_MODE=cdn 生效）
+import { CdnAssetVerifier } from './cdn-asset-verifier.service';
 import { ModuleRegistryModule } from '../module-registry/module-registry.module';
 import { CanaryModule } from '../canary/canary.module';
 import { AuditModule } from '../audit/audit.module';
@@ -108,6 +110,8 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
     CleanupExecutor,
     SyncRuntimeExecutor,
     GcRuntimeExecutor,
+    // 切指针前的 CDN 校验（指针执行体注入；legacy 模式空转）
+    CdnAssetVerifier,
     // 步骤注册表：按步骤元数据（category/commandMode/守卫/执行体）组装，engine 数据驱动分派
     {
       provide: PIPELINE_BUILTIN_STEPS,

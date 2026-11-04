@@ -7,6 +7,8 @@ export interface HttpProbeResult {
   status: number;
   /** GET 且响应体可 JSON.parse 时有值（状态码与 JSON 解析分开判定：产物文件不是 JSON 不代表不可访问） */
   json?: unknown;
+  /** GET 时的原始响应体文本（HEAD 无）；只给小文件用（如 sha256 清单），不要用来下载产物 */
+  text?: string;
 }
 
 /**
@@ -52,7 +54,7 @@ export class HttpProbeService {
           } catch {
             json = undefined;
           }
-          resolve({ ok, status, json });
+          resolve({ ok, status, json, text: data });
         });
       });
       req.on('error', () => resolve({ ok: false, status: 0 }));
@@ -74,6 +76,15 @@ export class HttpProbeService {
   async getJson<T>(url: string, timeoutMs = 10_000): Promise<T | null> {
     const res = await this.request(url, 'GET', timeoutMs);
     return res.ok ? ((res.json as T | undefined) ?? null) : null;
+  }
+
+  /**
+   * GET 纯文本（sha256 清单等小文件）。
+   * 非 2xx → null（调用方据 status 决定报错文案，故同时回传状态码）。
+   */
+  async getText(url: string, timeoutMs = 10_000): Promise<{ ok: boolean; status: number; text: string }> {
+    const res = await this.request(url, 'GET', timeoutMs);
+    return { ok: res.ok, status: res.status, text: res.text ?? '' };
   }
 
   /**
