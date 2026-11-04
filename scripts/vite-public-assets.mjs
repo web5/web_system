@@ -20,11 +20,24 @@
 export const PUBLIC_ASSET_BASE = '/static/cdn/pub/';
 
 /**
- * 注入 `__PUBLIC_ASSET_BASE__` 编译期常量。
+ * 注入 `__PUBLIC_ASSET_BASE__`。
  * 用法与 appVersionDefine() 一致，在各 vite.config.ts 的 define 里展开即可。
+ *
+ * **Phase 1（2026-11-04）改为运行时求值**：define 的值是一个 JS 表达式字符串，
+ * 所有 `${__PUBLIC_ASSET_BASE__}logo.svg` 会变成
+ * `${(window.__ASSET_BASE__ || '/static/cdn/pub/')}logo.svg`。
+ * `window.__ASSET_BASE__` 由 gateway 在 shell HTML 的 <head> 注入
+ * （cdn 模式 = `ASSET_ORIGIN + common/pub/` 完整 URL）。
+ *
+ * 为什么必须改：编译期常量会把「域名 + 路径」烧进每一个历史版本 bundle，
+ * 换 CDN / 换路径就得重建**全部历史版本**（迁移不可行）。改成运行时后，
+ * 老产物在旧路径下仍靠 fallback 正常工作，新产物随 env 切换，零重建。
+ *
+ * 兼容：未注入 `window.__ASSET_BASE__`（legacy 模式 / vite dev 直接起）
+ * 时回落 `PUBLIC_ASSET_BASE`，与改造前逐字节一致。
  */
 export function publicAssetDefine() {
   return {
-    __PUBLIC_ASSET_BASE__: JSON.stringify(PUBLIC_ASSET_BASE),
+    __PUBLIC_ASSET_BASE__: `(window.__ASSET_BASE__ || ${JSON.stringify(PUBLIC_ASSET_BASE)})`,
   };
 }

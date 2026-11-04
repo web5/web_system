@@ -131,6 +131,18 @@ module.exports = {
         // __dirname realpath 会把默认推导带偏（2026-11-04 dev/prod portal 全白屏）。
         // prod 在根 .env.production 里配 /data/web_system_static/public；dev 用下面的默认值。
         STATIC_PUBLIC_ROOT: process.env.STATIC_PUBLIC_ROOT || require('path').join(WEB_SYSTEM_DIR, 'servers', 'gateway', 'public'),
+        // Phase 1（2026-11-04）：资源 URL 唯一出口。默认 legacy + 空 origin =
+        // 线上现状（相对路径），零行为变化。切 /cdn/ 时按环境设：
+        //   prod: ASSET_ORIGIN=https://kedouai.com/cdn/     ASSET_URL_MODE=cdn
+        //   dev:  ASSET_ORIGIN=https://dev.kedouai.com/cdn/ ASSET_URL_MODE=cdn
+        // 未来换真 CDN 只改 ASSET_ORIGIN（例 https://cdn.kedouai.com/cdn/），不改代码。
+        // ⚠️ 必须是带域名的完整 URL base，禁止 /cdn/ 这类相对值（asset-url.ts 会 fail-fast）。
+        // ⚠️ 不要写成 `process.env.X || ''`：空串会被 ConfigService 当成「已配置」
+        //    （2026-09-11 dev 事故）。未配置时根本不注入该键，让 ConfigService
+        //    自行按 .env 链解析；assetConfigFrom 会把缺失值归一成 legacy + 相对路径。
+        ...(process.env.ASSET_ORIGIN ? { ASSET_ORIGIN: process.env.ASSET_ORIGIN } : {}),
+        ...(process.env.ASSET_URL_MODE ? { ASSET_URL_MODE: process.env.ASSET_URL_MODE } : {}),
+        ...(process.env.ASSET_CSS_APPS ? { ASSET_CSS_APPS: process.env.ASSET_CSS_APPS } : {}),
         JWT_SECRET,
       },
       error_file: `${logBase}/gateway-error.log`,

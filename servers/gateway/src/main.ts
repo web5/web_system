@@ -6,6 +6,8 @@ import { ConfigService } from '@nestjs/config';
 import { IndexHtmlService } from './deploy-version/index-html.service';
 // P2（2026-09-20）：静态根可配（STATIC_PUBLIC_ROOT），兜底分支也必须用同一份定义
 import { PUBLIC_ROOT, assertPublicRoot } from './static/public-root';
+// Phase 1（2026-11-04）：资源 URL 配置自检 + CSP 白名单
+import { assetConfigFrom, assetOriginHost } from './static/asset-url';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join, extname } from 'path';
 import compression from 'compression';
@@ -20,7 +22,17 @@ async function bootstrap() {
   assertPublicRoot();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+  // 资源 URL 配置自检（Phase 1）：cdn 模式缺带域名 origin / origin 写成相对路径时
+  // 直接 fail-fast，避免启动后才发现全站资源 404。
+  const assetCfg = assetConfigFrom({
+    ASSET_ORIGIN: configService.get('ASSET_ORIGIN'),
+    ASSET_URL_MODE: configService.get('ASSET_URL_MODE'),
+    ASSET_CSS_APPS: configService.get('ASSET_CSS_APPS'),
+  });
+  const assetHost = assetOriginHost(assetCfg.origin);
+  const assetCsp = assetHost ? [assetHost] : [];
   const logger = new Logger('Gateway');
+  if (assetHost) logger.log(`ASSET_ORIGIN=${assetCfg.origin} (mode=${assetCfg.mode})`);
   const indexHtmlService = app.get(IndexHtmlService);
 
   // ── trust proxy（P0 修复 2026-10-27）────────────────────────────────────
@@ -84,7 +96,9 @@ async function bootstrap() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        // 允许外部 CDN 加载 vue/antd 等共享依赖；unsafe-eval 给 SystemJS（用 Function 构造器）使用
+        // 允许外部 CDN 加载 vue/antd 等共享依赖；unsafe-eval 给 SystemJS（用 Function 构造器）使用。
+        // Phase 1：assetCsp 把 ASSET_ORIGIN 的 origin 加进来，否则切 /cdn/ 或真 CDN 后
+        // 跨域资源会被 CSP 直接拦掉（同源起步时 assetCsp 为空，与改造前逐字节一致）。
         scriptSrc: [
           "'self'",
           "'unsafe-inline'",
@@ -92,9 +106,10 @@ async function bootstrap() {
           'https://cdn.staticfile.org',
           'https://cdn.jsdelivr.net',
           'https://unpkg.com',
+          ...assetCsp,
         ],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', ...assetCsp],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:', ...assetCsp],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         // 允许 fetch 到 CDN 和 API；SystemJS 动态加载模块走 https
         connectSrc: [
@@ -103,6 +118,7 @@ async function bootstrap() {
           'https://cdn.staticfile.org',
           'https://cdn.jsdelivr.net',
           'https://unpkg.com',
+          ...assetCsp,
         ],
         mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
         // Worker 来源：未显式声明 worker-src 时浏览器回退到 script-src，
