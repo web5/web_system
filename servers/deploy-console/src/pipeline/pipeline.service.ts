@@ -384,6 +384,12 @@ export const PROTECTED_STAGE_KEYS: readonly string[] = [
   'REMOTE_SSH_TARGET',
   'REMOTE_MODULES_ROOT',
   'REMOTE_DEST_DIR',
+  // Phase 2 CDN 三件套 + 版本目录层（与上面四件套同理，`CDN_LAYOUT_MODE=cdn` 才注入）。
+  // 被覆盖 = 脚本拿到的落点/目标机与平台本次算出的不一致，同样「页面 404 + 日志全绿」。
+  'REMOTE_CDN_SSH_TARGET',
+  'REMOTE_CDN_ROOT',
+  'REMOTE_CDN_DEST',
+  'REMOTE_CDN_VERSIONS_DIR',
 ];
 
 /** 端口来源（注入为 `PORT_SOURCE`，脚本/排障据此判断该不该信任这个端口） */
@@ -520,6 +526,14 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
     REMOTE_MODULES_ROOT: i.remote?.REMOTE_MODULES_ROOT || '',
     REMOTE_DEST_DIR: i.remote?.REMOTE_DEST_DIR || '',
     SSH_KEY_PATH: i.remote?.SSH_KEY_PATH || '',
+    // Phase 2 CDN 三件套 + 版本目录层（`CDN_LAYOUT_MODE=cdn` 时才由 resolveRemoteScriptVars
+    // 产出；默认 legacy 时 i.remote 无这些键 → 展开成空串，与 legacy 输出逐字段一致）。
+    // ⚠️ 缺了这里的透传，脚本里 `${REMOTE_CDN_ROOT:-}` 会静默空串 → CDN 分支永远不走，
+    //    正是「模板改了但线上仍按旧布局」的代码侧根源。
+    REMOTE_CDN_SSH_TARGET: i.remote?.REMOTE_CDN_SSH_TARGET || '',
+    REMOTE_CDN_ROOT: i.remote?.REMOTE_CDN_ROOT || '',
+    REMOTE_CDN_DEST: i.remote?.REMOTE_CDN_DEST || '',
+    REMOTE_CDN_VERSIONS_DIR: i.remote?.REMOTE_CDN_VERSIONS_DIR || '',
   };
 
   // P0（2026-09-20）：配置中心全量注入。
@@ -544,6 +558,10 @@ export function resolveStageVars(i: StageVarsInput): Record<string, string> {
   // 会出现「流水线全绿 + 页面 404」——产物在另一台机器/另一个目录，而日志不会报错。
   // `SSH_KEY_PATH` 不在此列：换私钥路径是合法的按环境定制，改错也只是连不上（不静默）。
   for (const k of ['REMOTE_SSH_TARGET', 'REMOTE_MODULES_ROOT', 'REMOTE_DEST_DIR'] as const) {
+    if (base[k]) merged[k] = base[k];
+  }
+  // 同类：CDN 三件套 + 版本目录层也是平台本次算出的结果，同样拦截流水线变量兜底改写。
+  for (const k of ['REMOTE_CDN_SSH_TARGET', 'REMOTE_CDN_ROOT', 'REMOTE_CDN_DEST', 'REMOTE_CDN_VERSIONS_DIR'] as const) {
     if (base[k]) merged[k] = base[k];
   }
   return merged;

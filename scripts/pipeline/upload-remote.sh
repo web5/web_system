@@ -23,9 +23,16 @@
 #   REMOTE_DEST_DIR        最终落点 = <根>/<模块>/<版本>（**由平台算，脚本不算**）
 #   SSH_KEY_PATH           私钥**路径**（不是私钥内容）；为空 = 未检测到可用私钥
 #
+# Phase 2 CDN 布局（平台只在 `CDN_LAYOUT_MODE=cdn` 时注入，见下方第 43-60 行分流）：
+#   REMOTE_CDN_SSH_TARGET  入口机 user@host
+#   REMOTE_CDN_ROOT        入口机 CDN 根 /data/cdn（**判据**：非空即 CDN 模式）
+#   REMOTE_CDN_DEST        本次落点 = <root>/<env>/<app>/<commit>（平台算，脚本不算）
+#   REMOTE_CDN_VERSIONS_DIR 版本目录层 <root>/<env>/<app>（cleanup 用，upload 不用）
+#
 # ⚠️ 落点为什么必须由平台给：远端静态根是三级取值链（REMOTE_MODULES_ROOT_<ENV>
-#   → STATIC_PUBLIC_ROOT_<ENV>/static/modules → 旧常量），prod 与 dev 完全不同。
-#   脚本自己拼 = 「投递成功但页面 404」，且日志完全看不出来（诊断 #3）。
+#   → STATIC_PUBLIC_ROOT_<ENV>/static/modules → 旧常量），prod 与 dev 完全不同；
+#   CDN 布局的 env/app/commit 顺序也只写在平台一处。脚本自己拼 =
+#   「投递成功但页面 404」，且日志完全看不出来（诊断 #3）。
 #
 # 本地调试：DRY_RUN=1 只打印计划，不改远端。
 # ============================================================
