@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { IndexHtmlService } from './deploy-version/index-html.service';
 // P2（2026-09-20）：静态根可配（STATIC_PUBLIC_ROOT），兜底分支也必须用同一份定义
-import { PUBLIC_ROOT } from './static/public-root';
+import { PUBLIC_ROOT, assertPublicRoot } from './static/public-root';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { join, extname } from 'path';
 import compression from 'compression';
@@ -16,6 +16,8 @@ import { json, urlencoded } from 'body-parser';
 import { DEFAULT_TRUST_PROXY, applyTrustProxy } from './trust-proxy';
 
 async function bootstrap() {
+  // 静态根自检必须早于 Nest 启动：根指错时 fail-fast，而不是让页面 200 + 一行兜底文案
+  assertPublicRoot();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Gateway');

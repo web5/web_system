@@ -106,7 +106,9 @@ module.exports = {
       ...commonConfig,
       name: 'gateway',
       cwd: `${WEB_SYSTEM_DIR}/servers/gateway`,
-      script: './servers/gateway/dist/main.js',
+      // 绝对路径：cwd 已经是 servers/gateway，相对 script 会被 pm2 拼成
+      // servers/gateway/servers/gateway/dist/main.js（2026-11-04 干净重启实测 Script not found）
+      script: `${WEB_SYSTEM_DIR}/servers/gateway/dist/main.js`,
       env: {
         NODE_ENV: 'production',
         PORT: 6000,
@@ -124,6 +126,11 @@ module.exports = {
         FINNEWS_SERVICE_KEY: process.env.FINNEWS_SERVICE_KEY || '',
         PUBLIC_URL: process.env.PUBLIC_URL || 'http://localhost:6000',
         CORS_ORIGINS: process.env.CORS_ORIGINS || 'https://kedouai.com,https://admin.kedouai.com',
+        // 静态根必须显式注入进程 env：PUBLIC_ROOT 在 import 期求值，
+        // 服务 .env 由 @nestjs/config 加载太晚；dist 可能是 runtime 版本目录软链，
+        // __dirname realpath 会把默认推导带偏（2026-11-04 dev/prod portal 全白屏）。
+        // prod 在根 .env.production 里配 /data/web_system_static/public；dev 用下面的默认值。
+        STATIC_PUBLIC_ROOT: process.env.STATIC_PUBLIC_ROOT || require('path').join(WEB_SYSTEM_DIR, 'servers', 'gateway', 'public'),
         JWT_SECRET,
       },
       error_file: `${logBase}/gateway-error.log`,
