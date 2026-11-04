@@ -229,7 +229,7 @@ bash scripts/dev-verify.sh --health     # 仅服务健康/登录自检
 ```bash
 bash scripts/health-check.sh local   # 本机：12 服务端口 + gateway 接口 + MCP initialize + AI 链路
 bash scripts/health-check.sh dev      # 远程 dev（SSH，auth=6001）
-bash scripts/health-check.sh prod     # 远程 prod（SSH，3000 系列）
+bash scripts/health-check.sh prod     # ⚠️ 待核对：脚本 prod 分支仍探测 3000 系，与 dev/prod 6000 系口径冲突（2026-11-04 发现），结果勿作上线判据
 ```
 
 ### 7.2 单元测试（deploy-console）

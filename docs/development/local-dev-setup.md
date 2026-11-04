@@ -11,7 +11,7 @@
 
 本指南说明如何在本机（macOS / Linux，无 brew、无 sudo）一键跑起 Web System 全栈工程：6 个 NestJS 后端服务 + 2 个前端（portal / admin-web）+ MySQL + Redis。
 
-> 适用场景：纯本机原生开发，不依赖 Docker。生产部署请参考 `DEPLOYMENT.md` 与 `docker-compose*.yml`。
+> 适用场景：纯本机原生开发，不依赖 Docker。生产部署请参考 `README.md` §7 与 `~/skills/web-system-deploy/SKILL.md`；旧 `DEPLOYMENT.md` 已删除。
 
 ---
 

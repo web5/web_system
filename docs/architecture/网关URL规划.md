@@ -220,7 +220,7 @@ location ~ ^/api/mcp(/.*)?$ {
 | DEV | {{DEV_HOST}} | :6006 | 本机 content-hub(:6007) | 开发/验证环境，承载 `/api/mcp` 后端与 mcp-admin 页面 |
 | PROD | {{PROD_HOST}} | :6006 | **跨机调 DEV** `https://dev.kedouai.com/api/content-hub`（Bearer） | 现网正式端点 `kedouai.com/mcp/finnews` |
 
-> ⚠️ 测试发邮件（apply 验证码）时必须标注来源环境：`/api/mcp/keys/apply` 走公网时由 **DEV** 发信；PROD 的 SMTP 已同配置但现网 `/mcp` 端点不涉及发信。两环境的 `MCP_CLIENT_KEY`/`MCP_ADMIN_KEY`/`SMTP_*` 保持同值，key 双环境通用。
+> ⚠️ 测试发邮件（apply 验证码）时必须标注来源环境：`/api/keys/apply` 走公网时由 **DEV** 发信；PROD 的 SMTP 已同配置但现网 `/mcp` 端点不涉及发信。两环境的 `MCP_CLIENT_KEY`/`MCP_ADMIN_KEY`/`SMTP_*` 保持同值，key 双环境通用。
 > E2E 测试脚本：`servers/mcp-gateway/test/e2e-keys.sh [dev|prod] [--public]`，输出自动带 `[DEV]`/`[PROD]` 环境前缀。
 
 **② 开发域名 `dev.kedouai.com/mcp`**（`/etc/nginx/conf.d/dev.kedouai.com.conf`）：

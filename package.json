@@ -7,9 +7,9 @@
   "scripts": {
     "build:cdn": "node scripts/build-externals.mjs && node scripts/build-public-assets.mjs",
     "build:public-assets": "node scripts/build-public-assets.mjs",
-    "pub:dev": "bash scripts/publish.sh dev",
-    "pub:prod": "bash scripts/publish.sh prod",
-    "pub:local": "bash scripts/deploy-local.sh",
+    "pub:dev": "echo 'DEPRECATED: use bash ~/skills/web-system-deploy/scripts/publish.sh dev <svc> (README.md §7.1)' && exit 1",
+    "pub:prod": "echo 'DEPRECATED: use bash ~/skills/web-system-deploy/scripts/publish.sh prod <svc> (README.md §7.1)' && exit 1",
+    "pub:local": "echo 'DEPRECATED: scripts/deploy-local.sh retired; see README.md §7.1' && exit 1",
     "check:agent-core-exports": "node scripts/check-agent-core-exports.mjs",
     "proto": "node scripts/proto-serve.mjs",
     "check:env": "bash scripts/check-env.sh",
