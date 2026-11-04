@@ -31,6 +31,15 @@ import * as path from 'path';
  *
  * 依据：systemjs 6.15.1 实测（ESM 指针 THROW / 本写法 PASS 且 `default.mount` 可用）
  * 与 2026-09-21 `local.kedouai.com` 门户加载失败事故（`portal@env:local`）。
+ *
+ * ── Phase 2 去指针化（2026-11-04）──────────────────────────
+ * 本文件承载的是 **legacy 两跳布局**的磁盘指针：`static/modules/<app>/<env>/index.js`
+ * 指向 `<version>/index.js`。CDN 模式（`CDN_LAYOUT_MODE=cdn`）下 gateway manifest
+ * 直接给出**一跳完整 URL**（`/cdn/<env>/<app>/<commit>/index.js`），不再读写磁盘指针。
+ * 故本文件所有函数**仅在 legacy 模式参与**，CDN 模式下由 `release-paths.ts` 的
+ * `cdnAssetDir` / `cdnAssetUrl` 承担路径职责（`EnvArtifactService` / `AppsService` 已分流）。
+ *
+ * 过渡期保留（旧 gateway / `DEPLOY_LEGACY_READ=1` 仍需读磁盘指针），T3 收尾后删除。
  */
 
 /** T1 定稿 A' 的 SystemJS 等价写法（单测锁定，勿改） */
@@ -108,6 +117,7 @@ export function listEnvVersions(staticRoot: string, appKey: string, envId: strin
 /**
  * 改写入口指针（**切换版本 / 回滚的唯一写入口**，不重建产物）。
  * @returns 实际写入的绝对路径（js 必有，css 视产物而定）
+ * @deprecated Phase 2 去指针化后仅 legacy 模式使用；CDN 模式无磁盘指针（`AppsService` 不再调用）。T3 后删除。
  */
 export function writeEnvEntryPointer(
   staticRoot: string,
@@ -127,7 +137,10 @@ export function writeEnvEntryPointer(
   return { js, css };
 }
 
-/** 读回入口指针当前指向的版本（展示/校验用；解析失败返回 null） */
+/**
+ * 读回入口指针当前指向的版本（展示/校验用；解析失败返回 null）。
+ * @deprecated Phase 2 去指针化后仅 legacy 模式使用；CDN 模式磁盘无指针。T3 后删除。
+ */
 export function readEnvEntryPointer(
   staticRoot: string,
   appKey: string,
@@ -147,7 +160,10 @@ export function parsePointerVersion(content: string): string | null {
   return m ? m[1] : null;
 }
 
-/** 产物 HTTP URL（供 verify 探活 / 前端加载） */
+/**
+ * 产物 HTTP URL（供 verify 探活 / 前端加载）。
+ * @deprecated Phase 2 去指针化后仅 legacy 模式使用；CDN 模式改用 `cdnAssetUrl`（一跳完整 URL）。
+ */
 export function envEntryUrl(appKey: string, envId: string): string {
   return `/static/modules/${appKey}/${envId}/index.js`;
 }

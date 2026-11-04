@@ -17,7 +17,7 @@ import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { EnvsService } from '../envs/envs.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
-import { defaultReleaseWorkspace } from '../pipeline/release-paths';
+import { defaultReleaseWorkspace, cdnAssetUrl, cdnLayoutMode, resolveCdnOrigin, toCommitId } from '../pipeline/release-paths';
 import {
   APP_KINDS,
   AppRouteDto,
@@ -162,6 +162,14 @@ export class AppsService implements OnModuleInit {
     return (
       this.configService.get<string>('RELEASE_WORKSPACE') || defaultReleaseWorkspace()
     );
+  }
+
+  /** 配置读取器（`ConfigService.get<string>` 的形状，供纯函数使用） */
+  private cfg = (key: string): string | undefined => this.configService.get<string>(key);
+
+  /** 是否处于 CDN 布局（Phase 2 去指针化：env-dir 微前端不再写磁盘指针） */
+  private isCdnLayout(): boolean {
+    return cdnLayoutMode(this.cfg) === 'cdn';
   }
 
   // ==================== 应用 ====================
@@ -434,8 +442,25 @@ export class AppsService implements OnModuleInit {
 
   private entryUrlFor(app: DeployAppEntity, envId: string, version: string | null): string {
     if (app.deployMode === 'site-version') {
-      // 基座：按版本目录直出（无指针，Q107）
+      // 基座（index.html）不进 CDN，留在应用机 TEMPLATE_ROOT；仍按版本目录直出（Q107）
       return version ? `/static/modules/${app.key}/${envId}/${version}/index.html` : '';
+    }
+    // Phase 2 去指针化：CDN 模式下 env-dir 无磁盘指针，**绝不回落 legacy 指针 URL**。
+    // 展示层容错：version / origin / commit 任一缺失或非法 → 降级空串，不抛错（门禁在切指针处 fail-fast）。
+    if (this.isCdnLayout()) {
+      if (!version) return '';
+      try {
+        const commit = toCommitId(version);
+        const origin = commit ? resolveCdnOrigin(this.cfg, envId) : null;
+        if (commit && origin) {
+          return cdnAssetUrl(origin, envId, app.key, commit, 'index.js');
+        }
+      } catch (e) {
+        this.logger.warn(
+          `CDN entry URL 构造失败（${app.key}@${envId} → ${version}）：${(e as Error).message}`,
+        );
+      }
+      return '';
     }
     return envEntryUrl(app.key, envId);
   }
@@ -556,9 +581,10 @@ export class AppsService implements OnModuleInit {
       return { appKey, envId, from, to: version, pointer: null, unchanged: true };
     }
 
-    // 2) 磁盘入口指针（env-dir 专用）；失败则回滚指针表
+    // 2) 磁盘入口指针（仅 legacy env-dir 需要）；失败则回滚指针表。
+    //    Phase 2 去指针化：CDN 模式下 manifest 直接给一跳完整 URL，无磁盘指针可写，跳过此步。
     let pointer: { js: string; css: string | null } | null = null;
-    if (app.deployMode === 'env-dir') {
+    if (app.deployMode === 'env-dir' && !this.isCdnLayout()) {
       try {
         pointer = await this.artifacts.writePointer(envId, appKey, version);
       } catch (e) {
@@ -595,6 +621,8 @@ export class AppsService implements OnModuleInit {
   /**
    * 回滚 `switchVersion` 已经提交的指针表变更（磁盘入口指针写失败的补偿）。
    * `from` 为空表示本次是首次写入，直接删行而不是写空指针。
+   *
+   * 仅 legacy 路径会触发：CDN 模式（去指针化）不写磁盘指针，也就没有「写指针失败 → 回滚」的补偿场景。
    */
   private async revertAppEnvPointer(
     appKey: string,
