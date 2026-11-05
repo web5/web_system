@@ -3,7 +3,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { backendRuntimeActivationCommand, backendRuntimeProgram, executeBackendRuntime } from './backend-runtime';
+import {
+  backendRuntimeActivationCommand,
+  backendRuntimeProgram,
+  executeBackendRuntime,
+  normalizePnpmModulesState,
+  normalizePnpmWorkspaceState,
+  PNPM_MODULES_STATE_TIMESTAMP,
+  PNPM_WORKSPACE_STATE_TIMESTAMP,
+} from './backend-runtime';
 
 describe('isolated backend runtime', () => {
   let temporary: string;
@@ -176,6 +184,65 @@ describe('isolated backend runtime', () => {
     // 必须显式问 git 要 commit 时间（%cI），否则重发仍会因时间戳变化撞不可变校验
     const gitCalls = commands.mock.calls.filter(([file]) => file === 'git').map(([, args]) => args.join(' '));
     expect(gitCalls).toContain('show -s --format=%cI HEAD');
+  });
+
+  it('D1-F3：归一化 pnpm 状态文件的运行时刻 ⇒ 同一 commit 两次打包载荷字节一致', async () => {
+    // 真实形态：pnpm 每次 deploy/prune 都会刷新 node_modules/.modules.yaml 的 prunedAt
+    // 与 .pnpm-workspace-state-v1.json 的 lastValidatedTimestamp，而 node_modules 在
+    // inventory() 的哈希范围内 ⇒ 不归一化时同一 commit 的 payloadSha256 恒不同
+    // （prod 实测 dccb279e / cdee9348 / e4de2e76；pnpm 10 沙盒实测第二源 c7094723 / 0bcd91da）。
+    const repackage = async (stamp: { prunedAt: string; validatedAt: number }) => {
+      // 上一轮 package 成功后 service/dist 已被换成运行时包，重新放回构建产物
+      fs.rmSync(output, { recursive: true, force: true });
+      write(path.join(output, 'main.js'), 'module.exports = "new-runtime";');
+      return executeBackendRuntime(packageInput(), {
+        run: packager(bundle => {
+          write(
+            path.join(bundle, 'node_modules/.modules.yaml'),
+            `{\n  "layoutVersion": 5,\n  "prunedAt": "${stamp.prunedAt}",\n  "nodeLinker": "isolated"\n}\n`,
+          );
+          write(
+            path.join(bundle, 'node_modules/.pnpm-workspace-state-v1.json'),
+            `{\n  "lastValidatedTimestamp": ${stamp.validatedAt},\n  "projects": {}\n}\n`,
+          );
+        }),
+      });
+    };
+
+    const first = await repackage({ prunedAt: 'Thu, 05 Nov 2026 07:50:51 GMT', validatedAt: 1793876027540 });
+    const second = await repackage({ prunedAt: 'Thu, 05 Nov 2026 10:24:53 GMT', validatedAt: 1793876036873 });
+    expect(first).toMatchObject({ action: 'package' });
+    expect((first as { pnpmStateNormalized: string[] }).pnpmStateNormalized.sort()).toEqual([
+      '.modules.yaml',
+      '.pnpm-workspace-state-v1.json',
+    ]);
+    expect(second.payloadSha256).toBe(first.payloadSha256);
+    expect(second.files).toBe(first.files);
+    // 归一化产物必须仍是合法 JSON（第一版把尾逗号吃掉了，肉眼极难发现）
+    const modulesState = JSON.parse(fs.readFileSync(path.join(output, 'node_modules/.modules.yaml'), 'utf8'));
+    expect(modulesState.prunedAt).toBe(PNPM_MODULES_STATE_TIMESTAMP);
+    expect(modulesState.nodeLinker).toBe('isolated');
+    const workspaceState = JSON.parse(fs.readFileSync(path.join(output, 'node_modules/.pnpm-workspace-state-v1.json'), 'utf8'));
+    expect(workspaceState.lastValidatedTimestamp).toBe(PNPM_WORKSPACE_STATE_TIMESTAMP);
+    expect(fs.readFileSync(path.join(output, 'node_modules/.pnpm-workspace-state-v1.json'), 'utf8')).not.toContain('1793876036873');
+  });
+
+  it('D1-F3：pnpm 9 的 YAML 裸键与 pnpm 10 的 JSON 引号键都能归一化，且不破坏其余字节', () => {
+    // pnpm 9 / YAML：裸键、无尾逗号
+    expect(normalizePnpmModulesState('layoutVersion: 5\nprunedAt: Thu, 05 Nov 2026 07:50:51 GMT\n')).toBe(
+      `layoutVersion: 5\nprunedAt: "${PNPM_MODULES_STATE_TIMESTAMP}"\n`,
+    );
+    // pnpm 10 / JSON：引号键 + 尾逗号必须保留，否则文件变非法 JSON
+    expect(normalizePnpmModulesState('{\n  "prunedAt": "Thu, 05 Nov 2026 07:50:51 GMT",\n  "nodeLinker": "isolated"\n}\n')).toBe(
+      `{\n  "prunedAt": "${PNPM_MODULES_STATE_TIMESTAMP}",\n  "nodeLinker": "isolated"\n}\n`,
+    );
+    expect(normalizePnpmWorkspaceState('{\n  "lastValidatedTimestamp": 1793876027540,\n  "projects": {}\n}\n')).toBe(
+      `{\n  "lastValidatedTimestamp": ${PNPM_WORKSPACE_STATE_TIMESTAMP},\n  "projects": {}\n}\n`,
+    );
+    // 只动这两个键，其他含时间/数字的行原样保留
+    const untouched = '{\n  "modifiedAt": "2026-11-05T00:00:00.000Z",\n  "count": 1793876027540\n}\n';
+    expect(normalizePnpmModulesState(untouched)).toBe(untouched);
+    expect(normalizePnpmWorkspaceState(untouched)).toBe(untouched);
   });
 
   it('publishes a version atomically and allows identical retries', async () => {

@@ -83,7 +83,7 @@ export type { KillResult };
 // approval 节点挂起信号与恢复起点
 import { PipelineSuspended, isPipelineSuspended, resolveStartIndex } from './pipeline-suspension';
 // 流水线变量（属于某条流水线；执行前解析注入节点脚本环境）
-import { PipelineVarService } from './pipeline-var.service';
+import { PipelineVarService, PROD_ROLLOUT_GATE_CLOSED, PROD_ROLLOUT_GATE_KEY } from './pipeline-var.service';
 export { resolveStartIndex };
 // 发布目录 git 工作区（拉码后回填实际 commit 用）
 import { ReleaseGitService } from '../git/release-git.service';
@@ -1171,6 +1171,8 @@ export class PipelineService {
     p.status = 'cancelled';
     p.endTime = Date.now();
     p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: '已取消' };
+    // 取消也是终态：闸门跟着归位，否则取消掉的 prod 单会一直挂着窗口（修复方案 §7.4）
+    await this.releaseProdRolloutGate(p);
     await this.pipelineRepo.save(p);
     // 必须释放并发锁，否则后续提交会被拒绝（"X@Y 正在发布中"），需等 TTL 30 分钟过期。
     // 正常完成路径（成功/失败）在 run() 的 finally 已释放；cancel 是另一入口，需自释放。
@@ -1427,6 +1429,8 @@ export class PipelineService {
         `[${approval.nodeKey ?? '-'}] 审批拒绝: ${comment?.trim() || '无意见'}` +
           (onReject === 'rollback' ? '（onReject=rollback 尚未实现（P4），按 abort 终止）' : ''),
       ];
+      // 审批拒绝 = 终态：闸门归位（修复方案 §7.4）
+      await this.releaseProdRolloutGate(p);
       await this.pipelineRepo.save(p);
 
       await this.auditService.log({
@@ -1472,6 +1476,8 @@ export class PipelineService {
       ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }),
       message: '审批拒绝',
     };
+    // 门禁级拒绝 = 终态：闸门归位（修复方案 §7.4）
+    await this.releaseProdRolloutGate(p);
     await this.pipelineRepo.save(p);
 
     await this.auditService.log({
@@ -2213,7 +2219,30 @@ export class PipelineService {
       p.progress.message = `失败: ${p.error}`;
       p.endTime = Date.now();
     }
+    // 闸门归位（修复方案 §7.4）：历史实现只有 publish.sh 在失败/超时路径手工归位，成功路径漏了
+    // ⇒ 成功单结束后 PROD_RUNTIME_ROLLOUT_RUN_ID 仍挂着 jobId，下一次 prod 提交被闸门误挡。
+    // 收尾统一放到平台终态出口，成功 / 失败 / 取消三条路径都覆盖（幂等，失败不改变 run 结论）。
+    await this.releaseProdRolloutGate(p);
     await this.save(p);
+  }
+
+  /**
+   * prod 发布闸门归位到 closed。
+   * 只在变量当前值仍是本次 run 时生效（不误关后来者）；任何异常只记日志，不影响 run 结论。
+   */
+  private async releaseProdRolloutGate(p: DeployPipelineEntity): Promise<void> {
+    if (p.env !== 'prod') return;
+    try {
+      const released = await this.pipelineVars.releaseGate(p.pipelineId, PROD_ROLLOUT_GATE_KEY, p.id);
+      if (released) {
+        p.logs = [...(p.logs ?? []), `[orchestration] prod 发布闸门已归位 ${PROD_ROLLOUT_GATE_CLOSED}`];
+      }
+    } catch (error) {
+      p.logs = [
+        ...(p.logs ?? []),
+        `[orchestration] prod 发布闸门归位失败（不影响本次结论）: ${error instanceof Error ? error.message : String(error)}`,
+      ];
+    }
   }
 
   /** 查模块登记的 type（查不到返回 undefined，不抛 —— 模块未登记时不阻塞发布） */

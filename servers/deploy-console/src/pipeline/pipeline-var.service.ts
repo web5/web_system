@@ -24,6 +24,9 @@ export interface UpsertPipelineVarSpec {
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 export const PIPELINE_VAR_MASK = '********';
+/** prod 发布闸门变量：必须是「本次 run 的 id」才放行，值等于 closed 表示无窗口。 */
+export const PROD_ROLLOUT_GATE_KEY = 'PROD_RUNTIME_ROLLOUT_RUN_ID';
+export const PROD_ROLLOUT_GATE_CLOSED = 'closed';
 
 /**
  * 流水线变量服务。
@@ -148,5 +151,29 @@ export class PipelineVarService {
     const out: Record<string, string> = {};
     for (const r of rows) out[r.key] = r.value;
     return out;
+  }
+
+  /**
+   * 闸门归位（prod 发布窗口收尾）。
+   *
+   * 只在变量当前值**仍是本次 run** 时写回 `closed`：这样
+   * ① 成功单不会再留下悬挂窗口（历史缺陷：只有 publish.sh 的失败路径手工归位，成功路径漏了）；
+   * ② 不会误关「下一次 run 已经绑定的闸门」；
+   * ③ 变量不存在 / 已是 closed 时静默返回 false，不制造额外写库。
+   */
+  async releaseGate(
+    pipelineId: string | null | undefined,
+    key: string,
+    runId: string,
+    closedValue: string = PROD_ROLLOUT_GATE_CLOSED,
+  ): Promise<boolean> {
+    if (!pipelineId || !runId) return false;
+    const row = await this.repo.findOne({ where: { pipelineId, key } });
+    if (!row || row.value !== runId) return false;
+    row.value = closedValue;
+    row.updatedBy = 'system:gate-release';
+    row.updatedAt = Date.now();
+    await this.repo.save(row);
+    return true;
   }
 }

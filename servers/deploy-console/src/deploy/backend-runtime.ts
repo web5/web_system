@@ -26,6 +26,61 @@ export interface BackendRuntimeAdapters {
   now?: () => number;
 }
 
+/** pnpm 状态文件里被归一化的运行时刻字段的固定值（D1-F3）。 */
+export const PNPM_MODULES_STATE_TIMESTAMP = '1970-01-01T00:00:00.000Z';
+export const PNPM_WORKSPACE_STATE_TIMESTAMP = 0;
+
+/**
+ * 把 pnpm 状态文件里某个「运行时刻」键的值改成固定值，**保留行内其余字节**（引号/逗号/缩进）。
+ *
+ * 踩过的坑（三版才收敛，写在这里免得下次又踩）：
+ * ① `.*$` 吃整行尾 → 把 pnpm 10 JSON 的尾逗号一起吃了，文件变非法 JSON；
+ * ② 用 `[^,]*` 当值 → pnpm 的时间戳自带逗号（`Thu, 05 Nov 2026 07:50:51 GMT`），
+ *    在第一个逗号处截断，整行匹配失败、静默不归一化（比抛错更难查）；
+ * ③ 一条大正则同时管「找行」和「切值」→ 两个关注点纠缠，改一处崩另一处。
+ *
+ * 最终做法：按行切分 + 定位冒号 + 只在冒号右侧做一次「可选尾逗号」切分。
+ * 值 = 冒号后到「行尾空白/尾逗号」之间的全部内容，时间戳里的逗号天然安全。
+ */
+function normalizeTimestampValue(text: string, key: string, value: string): string {
+  const head = new RegExp(`^[ \\t]*"?${key}"?[ \\t]*:`);
+  return text
+    .split('\n')
+    .map(line => {
+      if (!head.test(line)) return line;
+      const colon = line.indexOf(':');
+      if (colon < 0) return line;
+      // 冒号右侧 = 前导空白 + 值 + （可选尾逗号 + 尾空白）
+      const m = /^([ \t]*)(.*?)([ \t]*,?[ \t]*)$/.exec(line.slice(colon + 1));
+      if (!m) return line;
+      return `${line.slice(0, colon + 1)}${m[1]}${value}${m[3]}`;
+    })
+    .join('\n');
+}
+
+/**
+ * D1-F3（修复方案 §7.3）：把 pnpm 写在 `node_modules/.modules.yaml` 里的 `prunedAt` 归一化。
+ *
+ * 该字段是 pnpm 每次 deploy/prune 刷新的运行时刻，而 `node_modules` 在 `inventory()` 的
+ * 哈希范围内 ⇒ 同一 commit 连打两次包 payloadSha256 仍不同（prod 实测 dccb279e / cdee9348 /
+ * e4de2e76），重发永远落到 F2 的 replaced 分支、`unchanged:true` 快路径恒不命中。
+ *
+ * 只动这一个键：它记录的是 store 清理记账时刻，运行时既不读也不校验，改它对产物行为无影响；
+ * 归一化后同一 commit 的载荷字节可复现。兼容 pnpm 9 的 YAML 裸键与 pnpm 10 的 JSON 引号键。
+ */
+export function normalizePnpmModulesState(text: string): string {
+  return normalizeTimestampValue(text, 'prunedAt', `"${PNPM_MODULES_STATE_TIMESTAMP}"`);
+}
+
+/**
+ * D1-F3（同一根因的第二处）：pnpm 10 还会写 `node_modules/.pnpm-workspace-state-v1.json`，
+ * 里面的 `lastValidatedTimestamp` 同样是每次 deploy 刷新的毫秒 wall clock —— 实测同一 commit
+ * 两次打包该文件哈希不同（c7094723 vs 0bcd91da），是 prunedAt 之外**第二个**不可复现源。
+ */
+export function normalizePnpmWorkspaceState(text: string): string {
+  return normalizeTimestampValue(text, 'lastValidatedTimestamp', String(PNPM_WORKSPACE_STATE_TIMESTAMP));
+}
+
 export async function executeBackendRuntime(input: BackendRuntimeInput, adapters: BackendRuntimeAdapters = {}) {
   const fs: typeof import('node:fs') = require('node:fs');
   const path: typeof import('node:path') = require('node:path');
@@ -212,13 +267,28 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       const version = { version: input.versionTag, gitCommit: commit, builtAt };
       fs.writeFileSync(path.join(bundle, 'dist', 'version.json'), JSON.stringify(version));
       fs.writeFileSync(path.join(bundle, 'version.json'), JSON.stringify(version));
+      // D1-F3：pnpm 状态文件里的「运行时刻」字段落在哈希范围内 ⇒ 先归一化再算载荷，
+      // 否则同一 commit 每次打包哈希都不同（见 normalizePnpmModulesState 注释）。
+      const pnpmStateFiles: Array<[string, (text: string) => string]> = [
+        [path.join(bundle, 'node_modules', '.modules.yaml'), normalizePnpmModulesState],
+        [path.join(bundle, 'node_modules', '.pnpm-workspace-state-v1.json'), normalizePnpmWorkspaceState],
+      ];
+      const pnpmStateNormalized: string[] = [];
+      for (const [file, normalize] of pnpmStateFiles) {
+        if (!fs.existsSync(file)) continue;
+        const original = fs.readFileSync(file, 'utf8');
+        const normalized = normalize(original);
+        if (normalized === original) continue;
+        fs.writeFileSync(file, normalized);
+        pnpmStateNormalized.push(path.basename(file));
+      }
       const payload = inventory(bundle);
       const manifest = { format: 'web-system-runtime-v1', moduleKey: input.moduleKey, versionTag: input.versionTag, gitCommit: commit, entry: 'dist/main.js', nodeAbi: process.versions.modules, platform: process.platform, architecture: process.arch, lockfileSha256: hash(fs.readFileSync(path.join(root, 'pnpm-lock.yaml'))), workspacePackages: [...copied].sort(), payloadSha256: payload.sha256, payloadFiles: payload.files };
       fs.writeFileSync(path.join(bundle, 'runtime-manifest.json'), JSON.stringify(manifest));
       inspect(bundle);
       fs.renameSync(output, previous); moved = true;
       fs.renameSync(bundle, output);
-      return { action: 'package', moduleKey: input.moduleKey, versionTag: input.versionTag, files: payload.files, payloadSha256: payload.sha256, workspacePackages: manifest.workspacePackages };
+      return { action: 'package', moduleKey: input.moduleKey, versionTag: input.versionTag, files: payload.files, payloadSha256: payload.sha256, pnpmStateNormalized, workspacePackages: manifest.workspacePackages };
     } catch (error) {
       if (moved && !fs.existsSync(output)) fs.renameSync(previous, output);
       throw error;
