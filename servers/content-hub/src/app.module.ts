@@ -22,6 +22,7 @@ import { HotmoneySeatEntity } from './content/entities/hotmoney-seat.entity';
 import { CollectRunEntity } from './content/entities/collect-run.entity';
 import { PipelineRunEntity } from './content/entities/pipeline-run.entity';
 import { ContentAccountEntity } from './content/entities/content-account.entity';
+import { DB_TARGET_ALLOWLIST_ENV, resolveDbTarget } from './common/database-target';
 
 @Module({
   imports: [
@@ -34,6 +35,13 @@ import { ContentAccountEntity } from './content/entities/content-account.entity'
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const dbType = configService.get('DB_TYPE', 'mysql');
+        // 启动守卫：DB_DATABASE 白名单 fail fast；synchronize 只允许白名单主库 + 非 production。
+        // 2026-10-26 曾因误连 deploy/shadow 且开着 synchronize，在两库建出空壳 content_* 表。
+        const dbTarget = resolveDbTarget({
+          database: configService.get<string>('DB_DATABASE'),
+          nodeEnv: configService.get<string>('NODE_ENV'),
+          allowlist: configService.get<string>(DB_TARGET_ALLOWLIST_ENV),
+        });
         const entities = [
           TopicEntity,
           NewsEntity,
@@ -57,9 +65,9 @@ import { ContentAccountEntity } from './content/entities/content-account.entity'
             port: configService.get<number>('DB_PORT', 3306),
             username: configService.get<string>('DB_USERNAME', 'root'),
             password: configService.get<string>('DB_PASSWORD', ''),
-            database: configService.get<string>('DB_DATABASE', 'web_system'),
+            database: dbTarget.database,
             entities,
-            synchronize: configService.get('NODE_ENV') !== 'production',
+            synchronize: dbTarget.synchronize,
             namingStrategy: new SnakeNamingStrategy(),
             charset: 'utf8mb4',
           };
@@ -70,9 +78,9 @@ import { ContentAccountEntity } from './content/entities/content-account.entity'
           port: configService.get<number>('DB_PORT', 5432),
           username: configService.get<string>('DB_USERNAME', 'web_system'),
           password: configService.get<string>('DB_PASSWORD', ''),
-          database: configService.get<string>('DB_DATABASE', 'web_system'),
+          database: dbTarget.database,
           entities,
-          synchronize: configService.get('NODE_ENV') !== 'production',
+          synchronize: dbTarget.synchronize,
         };
       },
     }),
