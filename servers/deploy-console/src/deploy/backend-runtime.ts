@@ -191,7 +191,25 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       copyWorkspaceOutputs(pkg, bundle);
       const commit = run('git', ['rev-parse', 'HEAD'], { cwd: root }).trim();
       if (!commit.startsWith(input.versionTag.split('/').pop()!)) throw new Error('Backend runtime version does not match checkout');
-      const version = { version: input.versionTag, gitCommit: commit, builtAt: new Date(now()).toISOString() };
+      // D1（2026-11-05 prod 第二单 op6 根因）：builtAt 曾取 wall clock `new Date(now())`，
+      // 被写进 version.json，而 version.json 在 inventory() 的哈希范围内 ⇒ 同一 commit
+      // 每次构建的 payloadSha256 都不同 ⇒ 失败重发必撞「Immutable runtime version already
+      // exists with different content」（实测 files 均 21582、内容哈希 dccb279e vs 8a9c22c1）。
+      // 改为取 commit 时间戳：它是 commit 的固有属性，同一 commit 重建恒等；而"真实打包时刻"
+      // 对回滚/审计没有意义（version.json 的用途是版本识别，不是构建日志）。
+      const builtAt = (() => {
+        for (const format of ['%cI', '%ct']) {
+          try {
+            const value = run('git', ['show', '-s', '--format=' + format, 'HEAD'], { cwd: root }).trim();
+            if (!value) continue;
+            return format === '%ct' ? new Date(Number(value) * 1000).toISOString() : value;
+          } catch {
+            /* 老 git / 浅克隆无该格式：继续回落（必须确定性，不能退回 wall clock） */
+          }
+        }
+        return new Date(0).toISOString();
+      })();
+      const version = { version: input.versionTag, gitCommit: commit, builtAt };
       fs.writeFileSync(path.join(bundle, 'dist', 'version.json'), JSON.stringify(version));
       fs.writeFileSync(path.join(bundle, 'version.json'), JSON.stringify(version));
       const payload = inventory(bundle);
@@ -222,8 +240,26 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       const incoming = inspect(staging);
       if (fs.existsSync(destination)) {
         const existing = inspect(destination);
-        if (existing.payload.sha256 !== incoming.payload.sha256) throw new Error('Immutable runtime version already exists with different content');
-        return { action: 'publish', unchanged: true, versionTag: input.versionTag, payloadSha256: incoming.payload.sha256 };
+        if (existing.payload.sha256 === incoming.payload.sha256) {
+          return { action: 'publish', unchanged: true, versionTag: input.versionTag, payloadSha256: incoming.payload.sha256 };
+        }
+        // D1-F2（2026-11-05）：同 tag、同 commit、字节不同 —— 只可能来自「构建不可复现」
+        // （历史 builtAt 时间戳）或工具链换代。不可变语义约束的是「tag ⇒ 代码身份」，
+        // 不是「tag ⇒ 字节快照」：同 commit 允许认领/替换，不同 commit 一律硬失败。
+        if (existing.manifest.gitCommit !== incoming.manifest.gitCommit) {
+          throw new Error('Immutable runtime version already exists with different content');
+        }
+        const active = path.join(service, 'dist');
+        const live = fs.existsSync(active)
+          && fs.lstatSync(active).isSymbolicLink()
+          && fs.realpathSync(active) === fs.realpathSync(path.join(destination, 'dist'));
+        if (live) {
+          // 目录里正跑着进程：只认领，绝不替换（rm -rf 会打断已加载的模块）
+          return { action: 'publish', unchanged: true, adopted: true, versionTag: input.versionTag, payloadSha256: existing.payload.sha256 };
+        }
+        fs.rmSync(destination, { recursive: true, force: true });
+        fs.renameSync(staging, destination);
+        return { action: 'publish', unchanged: false, replaced: true, versionTag: input.versionTag, payloadSha256: incoming.payload.sha256 };
       }
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.renameSync(staging, destination);

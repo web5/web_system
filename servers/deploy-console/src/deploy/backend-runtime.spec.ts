@@ -166,7 +166,19 @@ describe('isolated backend runtime', () => {
     return { archivePath: file, archiveSha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
   }
 
-  it('publishes a version atomically and allows only identical retries', async () => {
+  it('builtAt 取自 commit 时间戳（不是 wall clock），载荷因此可复现', async () => {
+    const commands = packager();
+    await executeBackendRuntime(packageInput(), { run: commands });
+    const version = JSON.parse(fs.readFileSync(path.join(output, 'version.json'), 'utf8'));
+    // packager 对任何 git 调用都回 commit；旧实现走 new Date(now()) 时这里会是 ISO 时间
+    expect(version.builtAt).toBe(commit);
+    expect(version.gitCommit).toBe(commit);
+    // 必须显式问 git 要 commit 时间（%cI），否则重发仍会因时间戳变化撞不可变校验
+    const gitCalls = commands.mock.calls.filter(([file]) => file === 'git').map(([, args]) => args.join(' '));
+    expect(gitCalls).toContain('show -s --format=%cI HEAD');
+  });
+
+  it('publishes a version atomically and allows identical retries', async () => {
     await executeBackendRuntime(packageInput(), { run: packager() });
     const service = path.join(runtime, 'servers/todo-service');
     const destination = path.join(service, versionTag);
@@ -174,15 +186,79 @@ describe('isolated backend runtime', () => {
     const input = { action: 'publish' as const, moduleKey: 'todo-service', versionTag, serviceDirectory: service, versionDirectory: destination, ...archive(output, 'first') };
     await expect(executeBackendRuntime(input)).resolves.toMatchObject({ action: 'publish', unchanged: false });
     await expect(executeBackendRuntime(input)).resolves.toMatchObject({ action: 'publish', unchanged: true });
+  });
 
+  it('同 commit 同 tag、字节不同（构建不可复现）→ 认领/替换，不再撞不可变墙', async () => {
+    await executeBackendRuntime(packageInput(), { run: packager() });
+    const service = path.join(runtime, 'servers/todo-service');
+    const destination = path.join(service, versionTag);
+    fs.mkdirSync(service, { recursive: true });
+    const input = { action: 'publish' as const, moduleKey: 'todo-service', versionTag, serviceDirectory: service, versionDirectory: destination, ...archive(output, 'first') };
+    await executeBackendRuntime(input);
+
+    // 同一 commit 重新构建出不同字节（旧 builtAt 时间戳场景）
     const secondRoot = path.join(temporary, 'second-build');
     fs.cpSync(workspace, secondRoot, { recursive: true });
     const secondOutput = path.join(secondRoot, 'servers/todo-service/dist');
     fs.rmSync(secondOutput, { recursive: true });
     write(path.join(secondOutput, 'main.js'), 'different runtime with the same version label');
     await executeBackendRuntime({ ...packageInput(), workspace: secondRoot }, { run: packager() });
-    await expect(executeBackendRuntime({ ...input, ...archive(secondOutput, 'different') })).rejects.toThrow(/Immutable runtime/);
+
+    // 非活版本（dist 未指向该目录）→ 允许替换目录，重发确实生效
+    await expect(executeBackendRuntime({ ...input, ...archive(secondOutput, 'different') })).resolves.toMatchObject({
+      action: 'publish',
+      replaced: true,
+    });
+    expect(fs.readFileSync(path.join(destination, 'dist/main.js'), 'utf8')).toContain('different runtime');
+  });
+
+  it('同 commit 同 tag、字节不同且是活版本 → 只认领，绝不替换正在跑的目录', async () => {
+    await executeBackendRuntime(packageInput(), { run: packager() });
+    const service = path.join(runtime, 'servers/todo-service');
+    const destination = path.join(service, versionTag);
+    fs.mkdirSync(service, { recursive: true });
+    const input = { action: 'publish' as const, moduleKey: 'todo-service', versionTag, serviceDirectory: service, versionDirectory: destination, ...archive(output, 'first') };
+    await executeBackendRuntime(input);
+    // dist 指向该版本 = 活版本（生产事故模型：目录里正跑着进程）
+    fs.symlinkSync(path.relative(service, path.join(destination, 'dist')), path.join(service, 'dist'), 'dir');
+
+    const secondRoot = path.join(temporary, 'third-build');
+    fs.cpSync(workspace, secondRoot, { recursive: true });
+    const secondOutput = path.join(secondRoot, 'servers/todo-service/dist');
+    fs.rmSync(secondOutput, { recursive: true });
+    write(path.join(secondOutput, 'main.js'), 'different runtime with the same version label');
+    await executeBackendRuntime({ ...packageInput(), workspace: secondRoot }, { run: packager() });
+
+    await expect(executeBackendRuntime({ ...input, ...archive(secondOutput, 'different') })).resolves.toMatchObject({
+      action: 'publish',
+      unchanged: true,
+      adopted: true,
+    });
+    // 目录内容未被替换（仍是首版）
     expect(fs.readFileSync(path.join(destination, 'dist/main.js'), 'utf8')).toContain('new-runtime');
+  });
+
+  it('不同 commit 复用同一 tag → 依旧硬失败（tag ⇒ 代码身份的不可变语义）', async () => {
+    await executeBackendRuntime(packageInput(), { run: packager() });
+    const service = path.join(runtime, 'servers/todo-service');
+    const destination = path.join(service, versionTag);
+    fs.mkdirSync(service, { recursive: true });
+    const input = { action: 'publish' as const, moduleKey: 'todo-service', versionTag, serviceDirectory: service, versionDirectory: destination, ...archive(output, 'first') };
+    await executeBackendRuntime(input);
+
+    const secondRoot = path.join(temporary, 'fourth-build');
+    fs.cpSync(workspace, secondRoot, { recursive: true });
+    const secondOutput = path.join(secondRoot, 'servers/todo-service/dist');
+    fs.rmSync(secondOutput, { recursive: true });
+    write(path.join(secondOutput, 'main.js'), 'same tag, another commit');
+    const otherCommit = 'abcdef12deadbeefdeadbeefdeadbeefdeadbeef';
+    await executeBackendRuntime({ ...packageInput(), workspace: secondRoot }, { run: packager() });
+    // 改 manifest 的 gitCommit 模拟「另一个 commit 用了同一个 tag」（manifest 不在载荷哈希范围内）
+    const manifestFile = path.join(secondOutput, 'runtime-manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, gitCommit: otherCommit }));
+
+    await expect(executeBackendRuntime({ ...input, ...archive(secondOutput, 'other-commit') })).rejects.toThrow(/Immutable runtime/);
   });
 
   it('rejects an archive digest mismatch before creating version files', async () => {

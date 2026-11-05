@@ -21,7 +21,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { CommandService } from '../shell/command.service';
 import { AuditService } from '../audit/audit.service';
-import { ConfigService as ConfigCenterService } from '../config/config.service';
+import { ConfigService as ConfigCenterService, renderGeneratedEnvFile } from '../config/config.service';
 import { AppsService } from '../apps/apps.service';
 // 按环境分流（2026-10-08）：DeployService 依赖它把 prod 指针镜像到云数据库
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
@@ -320,10 +320,13 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     });
 
     const cmds = ((global as any).__sshCmds as string[]) || [];
-    // 第一条 ssh = 配置下发（先下发、再落地/重启）
-    const dispatch = cmds[0] || '';
+    // D2-G3（2026-11-05）：下发前先读目标机现有 .env.generated 比对 → 第一条 ssh 是「读」
+    const readIndex = cmds.findIndex((c) => c.includes('printf \'present'));
+    const writeIndex = cmds.findIndex((c) => c.includes('base64 -d'));
+    expect(readIndex).toBeGreaterThanOrEqual(0);
+    expect(writeIndex).toBeGreaterThan(readIndex);
+    const dispatch = cmds[writeIndex] || '';
     expect(dispatch).toContain('.env.generated');
-    expect(dispatch).toContain('base64 -d');
     expect(dispatch).toContain('chmod 600');
     // 正文 base64 传输：解码后含真实键值，命令里不落明文
     const m = dispatch.match(/printf '%s' '([^']+)' \| base64 -d/);
@@ -348,13 +351,73 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     await service.dispatchConfigForRelease('dev', 'mcp-gateway');
 
     const cmds = ((global as any).__sshCmds as string[]) || [];
-    expect(cmds.length).toBe(1);
-    expect(cmds[0]).toContain('.env.generated');
-    expect(cmds[0]).toContain('base64 -d');
-    expect(cmds[0]).toContain('chmod 600');
+    // 读（比对）+ 写（首次下发）：两条，且读在前
+    expect(cmds.length).toBe(2);
+    expect(cmds[0]).toContain('printf \'present');
+    const write = cmds[1];
+    expect(write).toContain('.env.generated');
+    expect(write).toContain('base64 -d');
+    expect(write).toContain('chmod 600');
     // 只下发、不落地、不重启（发布流水线由后续 apply-runtime activate 负责生效）
-    expect(cmds[0]).not.toContain('dist.bak-');
-    expect(cmds[0]).not.toContain('pm2 restart');
+    expect(write).not.toContain('dist.bak-');
+    expect(write).not.toContain('pm2 restart');
+  });
+
+  it('dispatchConfigForRelease：目标机内容与渲染结果一致 → 跳过写（配置指纹因此保持稳定）', async () => {
+    const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+    cc.hasModuleScope.mockResolvedValue(true);
+    const items = [{ key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:dev/mcp-gateway' }];
+    cc.dispatchPayload.mockResolvedValue(items);
+    // 目标机现有内容 = 渲染结果（字节相同）→ 必须 noop，不写文件
+    const rendered = renderGeneratedEnvFile(items, { envId: 'dev', serviceKey: 'mcp-gateway' });
+    (global as any).__sshCmds = [];
+    (global as any).__sshExecImpl = (cmd: string) => {
+      ((global as any).__sshCmds as string[]).push(cmd);
+      if (cmd.includes("printf 'present")) {
+        return { code: 0, out: 'present\n' + Buffer.from(rendered, 'utf8').toString('base64') };
+      }
+      return { code: 0, out: 'ok' };
+    };
+
+    await expect(service.dispatchConfigForRelease('dev', 'mcp-gateway')).resolves.toBeUndefined();
+
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    expect(cmds.length).toBe(1);
+    expect(cmds[0]).toContain("printf 'present");
+    // 关键：没有写命令（写会改 mtime/内容集合 → op11 配置指纹校验必红）
+    expect(cmds.some((c) => c.includes('base64 -d'))).toBe(false);
+    (global as any).__sshExecImpl = undefined;
+  });
+
+  it('dispatchConfigForRelease：目标机内容与渲染结果不一致 → 拒绝执行（只报键名，不写文件、不回显值）', async () => {
+    const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+    cc.hasModuleScope.mockResolvedValue(true);
+    cc.dispatchPayload.mockResolvedValue([
+      { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:dev/mcp-gateway' },
+    ]);
+    (global as any).__sshCmds = [];
+    (global as any).__sshExecImpl = (cmd: string) => {
+      ((global as any).__sshCmds as string[]).push(cmd);
+      if (cmd.includes("printf 'present")) {
+        // 目标机上是一个「审批时看到的」旧配置：多一个键、少一个键、且同键值不同
+        const stale = 'GATEWAY_SERVICE_KEY=old-secret-value\nREMOVED_KEY=1\n';
+        return { code: 0, out: 'present\n' + Buffer.from(stale, 'utf8').toString('base64') };
+      }
+      return { code: 0, out: 'ok' };
+    };
+
+    const error = await service.dispatchConfigForRelease('dev', 'mcp-gateway').catch((e: Error) => e);
+    expect(String(error)).toMatch(/配置变更被拒绝/);
+    // 只回键名，绝不含明文值
+    expect(String(error)).toContain('GATEWAY_SERVICE_KEY');
+    expect(String(error)).toContain('REMOVED_KEY');
+    expect(String(error)).not.toContain('old-secret-value');
+    expect(String(error)).not.toContain('svc-key-123');
+    expect(String(error)).toMatch(/capture/);
+
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    expect(cmds.some((c) => c.includes('base64 -d'))).toBe(false);
+    (global as any).__sshExecImpl = undefined;
   });
 
   it('dispatchConfigForRelease：非后端 → 跳过（无任何 ssh 命令）', async () => {
