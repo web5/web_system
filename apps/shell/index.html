@@ -137,7 +137,7 @@
         });
         if (missing.length) {
           console.error('[boot] 缺失全局依赖:', missing);
-          report('依赖未就绪，缺失：<br><code>' + missing.join('</code><br><code>') + '</code><br>请检查 <code>/static/cdn/</code> 是否可访问后刷新。');
+          report('依赖未就绪，缺失：<br><code>' + missing.join('</code><br><code>') + '</code><br>请检查上述资源 URL 是否可访问后刷新。');
           return true;
         }
         return false;

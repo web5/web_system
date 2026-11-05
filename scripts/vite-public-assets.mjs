@@ -16,7 +16,10 @@
 //   - scripts/build-public-assets.mjs 的 OUT_DIR（发布落盘位置）
 //   - servers/gateway/src/static/static.module.ts 的缓存判定（CDN_DIR_RE 已按 /static/cdn/ 前缀命中）
 
-/** 公共静态资源的 URL 前缀（结尾带斜杠，与 Vite base 口径一致）。 */
+import { cdnMode, cdnCommonUrlPrefix } from './lib/cdn-layout.mjs';
+
+/** 公共静态资源的 URL 前缀（结尾带斜杠，与 Vite base 口径一致）。
+ *  legacy fallback 值；`ASSET_URL_MODE=cdn` 时 publicAssetDefine() 改用 `/cdn/common/pub/`。 */
 export const PUBLIC_ASSET_BASE = '/static/cdn/pub/';
 
 /**
@@ -37,7 +40,9 @@ export const PUBLIC_ASSET_BASE = '/static/cdn/pub/';
  * 时回落 `PUBLIC_ASSET_BASE`，与改造前逐字节一致。
  */
 export function publicAssetDefine() {
+  // cdn 模式下 fallback 对齐 CDN 布局 `/cdn/common/pub/`；legacy 保持 `/static/cdn/pub/`（逐字节不变）。
+  const fallback = cdnMode() === 'cdn' ? cdnCommonUrlPrefix('pub') : PUBLIC_ASSET_BASE;
   return {
-    __PUBLIC_ASSET_BASE__: `(window.__ASSET_BASE__ || ${JSON.stringify(PUBLIC_ASSET_BASE)})`,
+    __PUBLIC_ASSET_BASE__: `(window.__ASSET_BASE__ || ${JSON.stringify(fallback)})`,
   };
 }

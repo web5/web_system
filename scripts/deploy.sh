@@ -129,6 +129,33 @@ deploy_cdn() {
   # 两者同处 servers/gateway/public/static/cdn/ 下，一起 tar 投递；
   # 相应地模块版本目录里不再放 public 资源 —— 产物只含 index.js/css/manifest.json，
   # 也不会再有「base 少一段产品线段 → 图片静默 404」的问题。
+
+  # Phase 2（PR-B）：ASSET_URL_MODE=cdn 时走 CDN 布局 —— build 脚本产出到 <CDN_ROOT>/common/{libs,pub}，
+  # 投递到入口机 <CDN_ROOT>/common/（两级：libs + pub）；legacy 保持下方现状（逐字节不变）。
+  local cdn_mode="legacy"
+  [ "$(printf '%s' "${ASSET_URL_MODE:-}" | tr '[:upper:]' '[:lower:]')" = "cdn" ] && cdn_mode="cdn"
+  if [ "$cdn_mode" = "cdn" ]; then
+    local cdn_root="${CDN_ROOT:-/data/cdn}"
+    local cdn_src="$cdn_root/common"
+    if [ "$CDN_SKIP_REBUILD" != "1" ]; then
+      log "重建 CDN 产物（antd/icons 按需子集由源码扫描生成，必须与代码同步）"
+      (cd "$ROOT" && node scripts/build-externals.mjs && node scripts/build-public-assets.mjs) \
+        || die "CDN 产物重建失败（可 CDN_SKIP_REBUILD=1 跳过，但子集会与源码脱节）"
+    fi
+    if [ ! -d "$cdn_src" ]; then
+      die "本地未找到 $cdn_src，CDN 产物缺失"
+    fi
+    if [ "$DRY_RUN" != "1" ]; then
+      tar czf "/tmp/cdn-deploy.tar.gz" -C "$cdn_root" common
+      scp_to "/tmp/cdn-deploy.tar.gz"
+      remote "mkdir -p $cdn_root && cd $cdn_root && tar xzf /tmp/cdn-deploy.tar.gz && rm -f /tmp/cdn-deploy.tar.gz"
+      rm -f "/tmp/cdn-deploy.tar.gz"
+      verify_cdn
+    fi
+    log "自建 CDN 部署完成（CDN 布局 $cdn_root/common）"
+    return 0
+  fi
+
   log "部署自建 CDN（依赖 UMD + 公共静态资源） → $TARGET"
   local src="$ROOT/servers/gateway/public/static/cdn"
   # ⚠️ 2026-09-28 antd/icons 改为「扫描源码生成按需子集」后，CDN 产物**与源码强耦合**：
@@ -158,6 +185,37 @@ deploy_cdn() {
 # 才能暴露 —— 这类静默故障的代价是整页白屏，宁可发布失败也不能假成功。
 verify_cdn() {
   [ "$CDN_SKIP_VERIFY" = "1" ] && { log "CDN 自检已跳过（CDN_SKIP_VERIFY=1）"; return 0; }
+
+  # Phase 2（PR-B）：cdn 布局探活 /cdn/common/libs/（libs UMD 平铺在 <CDN_ROOT>/common/libs 下）
+  local cdn_mode="legacy"
+  [ "$(printf '%s' "${ASSET_URL_MODE:-}" | tr '[:upper:]' '[:lower:]')" = "cdn" ] && cdn_mode="cdn"
+  if [ "$cdn_mode" = "cdn" ]; then
+    local cdn_root="${CDN_ROOT:-/data/cdn}"
+    local cdn_src="$cdn_root/common/libs"
+    local cdn_names
+    cdn_names="$(cd "$cdn_src" && ls *.js 2>/dev/null | tr '\n' ' ')"
+    [ -z "$cdn_names" ] && { log "CDN 目录下没有 *.js，跳过自检"; return 0; }
+    local cdn_local_n cdn_remote_n
+    cdn_local_n="$(echo "$cdn_names" | wc -w | tr -d ' ')"
+    cdn_remote_n="$(remote "ls -1 $cdn_root/common/libs/*.js 2>/dev/null | wc -l" 2>/dev/null | tail -1 | tr -d ' ')"
+    if [ "${cdn_remote_n:-0}" -lt "$cdn_local_n" ]; then
+      die "CDN 落点自检失败：本地 $cdn_local_n 个 UMD，远端 $cdn_root/common/libs 只有 ${cdn_remote_n:-0} 个"
+    fi
+    local cdn_f cdn_code cdn_bad=0
+    for cdn_f in $cdn_names; do
+      cdn_code="$(remote "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/cdn/common/libs/$cdn_f" 2>/dev/null | tail -1 | tr -d "'")"
+      if [ "$cdn_code" != "200" ]; then
+        echo "  [cdn-verify] ✗ $cdn_f → HTTP ${cdn_code:-无响应}"
+        cdn_bad=$((cdn_bad + 1))
+      fi
+    done
+    if [ "$cdn_bad" -gt 0 ]; then
+      die "CDN 自检失败：$cdn_bad 个 UMD 取不到 200（落点 /cdn/common/libs）。若本地直连 nginx 不适用，用 CDN_SKIP_VERIFY=1 跳过"
+    fi
+    log "CDN 自检通过：${cdn_local_n} 个 UMD 全部 200（落点 /cdn/common/libs）"
+    return 0
+  fi
+
   local src="$ROOT/servers/gateway/public/static/cdn"
   local names
   names="$(cd "$src" && ls *.js 2>/dev/null | tr '\n' ' ')"

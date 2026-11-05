@@ -28,10 +28,12 @@ import { gzipSync } from 'zlib';
 import { build } from 'vite';
 // 扫描实现与 scripts/verify-cdn-subsets.cjs 共用同一份，防止「构建口径」与「校验口径」漂移
 import scanLib from './lib/scan-pkg-imports.cjs';
+import { cdnMode, cdnCommonDir } from './lib/cdn-layout.mjs';
 const { SCAN_DIRS, SCAN_EXCLUDE_FILES, collectSources, collectNamedImports, collectTemplateTags } = scanLib;
 
 const REPO_ROOT = resolve(process.cwd());
-const OUT_DIR = resolve(REPO_ROOT, 'servers/gateway/public/static/cdn');
+// legacy: 仓库内 servers/gateway/public/static/cdn；cdn: 入口机 <CDN_ROOT>/common/libs
+const OUT_DIR = cdnMode() === 'cdn' ? cdnCommonDir('libs') : resolve(REPO_ROOT, 'servers/gateway/public/static/cdn');
 
 /** 参与扫描的源码目录 / 排除文件：定义在 scripts/lib/scan-pkg-imports.cjs，
  *  与 verify-cdn-subsets.cjs 共用，避免构建口径与校验口径漂移 */

@@ -28,11 +28,15 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, cpSync, readdirSync, statSync } from 'fs';
 import { createHash } from 'crypto';
 import { resolve, join, relative } from 'path';
+import { cdnMode, cdnCommonDir, cdnCommonUrlPrefix } from './lib/cdn-layout.mjs';
 
 const REPO_ROOT = resolve(process.cwd());
 const SRC_DIR = resolve(REPO_ROOT, 'assets/shared-public');
-// 必须与 scripts/vite-public-assets.mjs 的 PUBLIC_ASSET_BASE 对应：/static/cdn/pub/
-const OUT_DIR = resolve(REPO_ROOT, 'servers/gateway/public/static/cdn/pub');
+// 必须与 scripts/vite-public-assets.mjs 的 PUBLIC_ASSET_BASE 对应（孪生常量）。
+// legacy: 仓库内 servers/gateway/public/static/cdn/pub；cdn: 入口机 <CDN_ROOT>/common/pub
+const _isCdn = cdnMode() === 'cdn';
+const OUT_DIR = _isCdn ? cdnCommonDir('pub') : resolve(REPO_ROOT, 'servers/gateway/public/static/cdn/pub');
+const URL_PREFIX = _isCdn ? cdnCommonUrlPrefix('pub') : '/static/cdn/pub/';
 
 function log(msg) { console.log(`[build-public-assets] ${msg}`); }
 function die(msg) { console.error(`[build-public-assets] ERROR: ${msg}`); process.exit(1); }
@@ -72,19 +76,19 @@ function main() {
 
   const manifest = files.map((rel) => ({
     file: rel,
-    url: `/static/cdn/pub/${rel.split('/').join('/')}`,
+    url: `${URL_PREFIX}${rel.split('/').join('/')}`,
     bytes: statSync(join(OUT_DIR, rel)).size,
     sha256: sha256(join(OUT_DIR, rel)),
   }));
 
   writeFileSync(
     join(OUT_DIR, 'manifest.json'),
-    JSON.stringify({ base: '/static/cdn/pub/', generatedAt: new Date().toISOString(), count: manifest.length, files: manifest }, null, 2) + '\n',
+    JSON.stringify({ base: URL_PREFIX, generatedAt: new Date().toISOString(), count: manifest.length, files: manifest }, null, 2) + '\n',
   );
 
   const total = manifest.reduce((s, f) => s + f.bytes, 0);
   log(`${manifest.length} 个文件 → ${OUT_DIR}（${(total / 1024).toFixed(0)} KB）`);
-  log(`访问前缀: /static/cdn/pub/（运行环境需已部署 cdn 目录，本地由 gateway 6000 端口托管）`);
+  log(`访问前缀: ${URL_PREFIX}（运行环境需已部署对应目录，legacy 由 gateway 6000 端口托管）`);
 }
 
 main();
