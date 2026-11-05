@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { DeployPipelineVarEntity } from '../entities/deploy-pipeline-var.entity';
-import { PipelineVarService, PIPELINE_VAR_MASK } from './pipeline-var.service';
+import { PipelineVarService, PIPELINE_VAR_MASK, PROD_ROLLOUT_GATE_CLOSED, PROD_ROLLOUT_GATE_KEY } from './pipeline-var.service';
 
 /** 内存仓库：覆盖 service 用到的 findOne / find / create / save / delete */
 function memRepo() {
@@ -129,5 +129,34 @@ describe('PipelineVarService（流水线变量）', () => {
     await expect(svc.update(variable.id, { key: 'PUBLIC', isSecret: flag as unknown as boolean })).rejects.toThrow(BadRequestException);
     expect(await svc.resolve('tpl-1')).toEqual({ SECRET: 'private-original' });
     expect((await svc.list('tpl-1'))[0]).toMatchObject({ key: 'SECRET', isSecret: true, value: PIPELINE_VAR_MASK });
+  });
+
+  /**
+   * 闸门归位（修复方案 §7.4）：成功/失败/取消/拒绝四条终态路径共用一个出口，
+   * 语义是「只在闸门仍指向本次 run 时归位」，既补上成功路径的漏收尾，也不误关后来者。
+   */
+  it('闸门归位：值仍是本 run → 写回 closed', async () => {
+    await svc.create('tpl-1', { key: PROD_ROLLOUT_GATE_KEY, value: 'run-1' });
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(true);
+    expect(await svc.resolve('tpl-1')).toEqual({ [PROD_ROLLOUT_GATE_KEY]: PROD_ROLLOUT_GATE_CLOSED });
+  });
+
+  it('闸门归位：值已属于下一次 run → 不动（不误关后来者）', async () => {
+    await svc.create('tpl-1', { key: PROD_ROLLOUT_GATE_KEY, value: 'run-2' });
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(false);
+    expect(await svc.resolve('tpl-1')).toEqual({ [PROD_ROLLOUT_GATE_KEY]: 'run-2' });
+  });
+
+  it('闸门归位：变量不存在 / 参数缺失 → false 且不写库', async () => {
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(false);
+    expect(await svc.releaseGate(undefined, PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(false);
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, '')).toBe(false);
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('闸门归位是幂等的：重复调用第二次返回 false', async () => {
+    await svc.create('tpl-1', { key: PROD_ROLLOUT_GATE_KEY, value: 'run-1' });
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(true);
+    expect(await svc.releaseGate('tpl-1', PROD_ROLLOUT_GATE_KEY, 'run-1')).toBe(false);
   });
 });
