@@ -305,6 +305,38 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     expect(cmds.some((c) => c.includes('pm2 restart'))).toBe(true);
   });
 
+  it('远程部署：先在目标机下发 .env.generated（base64 + 0600 + 原子替换），再落地/重启', async () => {
+    const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+    cc.hasModuleScope.mockResolvedValue(true);
+    cc.dispatchPayload.mockResolvedValue([
+      { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:dev/mcp-gateway' },
+      { key: 'PORT', value: '6010', scope: 'env:dev' },
+    ]);
+
+    await service.deployVersion({
+      moduleKey: 'mcp-gateway',
+      env: 'dev',
+      versionTag: 'mcp-gateway-local/abc1234',
+    });
+
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    // 第一条 ssh = 配置下发（先下发、再落地/重启）
+    const dispatch = cmds[0] || '';
+    expect(dispatch).toContain('.env.generated');
+    expect(dispatch).toContain('base64 -d');
+    expect(dispatch).toContain('chmod 600');
+    // 正文 base64 传输：解码后含真实键值，命令里不落明文
+    const m = dispatch.match(/printf '%s' '([^']+)' \| base64 -d/);
+    expect(m).toBeTruthy();
+    const text = Buffer.from(m![1], 'base64').toString('utf-8');
+    expect(text).toContain('GATEWAY_SERVICE_KEY=svc-key-123');
+    expect(text).toContain('PORT=6010');
+    expect(dispatch).not.toContain('svc-key-123');
+    // 下发之后才落地 + 重启
+    expect(cmds.some((c) => c.includes('dist.bak-'))).toBe(true);
+    expect(cmds.some((c) => c.includes('pm2 restart'))).toBe(true);
+  });
+
   it('后台 + 远程失败：抛错且指针不改（先落地后改指针）', async () => {
     (global as any).__sshExecImpl = () => ({ code: 1, out: 'boom' });
     const upsert = (service as any).deploymentRepo.upsert as jest.Mock;

@@ -43,7 +43,7 @@ import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 // 统一脱敏（诊断 #8）：远端回显 / 异常消息落库前脱掉凭据
 import { redactSecrets } from '../common/redact';
-import { SshExecService } from '../remote/ssh-exec.service';
+import { SshExecService, SshTarget } from '../remote/ssh-exec.service';
 import { GatewayCacheService } from '../common/gateway-cache.service';
 // 工具目录（能力单元）：干净重启的 shell 正文在这里，代码不持有实现
 import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
@@ -806,6 +806,46 @@ export class DeployService {
     envId: string,
     moduleKey: string,
   ): Promise<{ path: string; keys: string[]; hash: string } | null> {
+    const payload = await this.renderGeneratedEnvPayload(envId, moduleKey);
+    if (payload === null) return null;
+    const { text, keys, dir: moduleDir } = payload;
+
+    const home = process.env.HOME || '';
+    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
+    const dir = path.join(ws, 'servers', moduleDir);
+    const target = path.join(dir, '.env.generated');
+    fs.mkdirSync(dir, { recursive: true });
+    this.backupGeneratedEnv(target);
+    // 直接以 0600 建文件（内容含密钥明文：只给服务进程自己读）
+    fs.writeFileSync(target, text, { encoding: 'utf-8', mode: 0o600 });
+    try {
+      fs.chmodSync(target, 0o600);
+    } catch {
+      /* 权限设置失败不阻断（已用 mode 建文件） */
+    }
+
+    const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+    this.logger.log(`已下发配置: ${target}（${keys.length} 个键，sha256=${hash}）`);
+    await this.audit.log({
+      action: 'config.dispatch',
+      env: envId,
+      component: moduleKey,
+      status: 'success',
+      detail: JSON.stringify({ path: target, keys, hash }),
+    });
+    return { path: target, keys, hash };
+  }
+
+  /**
+   * 渲染配置中心对「环境 × 服务」的可下发内容（`renderGeneratedEnvFile` 正文），
+   * 供本地（`writeGeneratedEnv`）与远程（`dispatchRemoteGeneratedEnv`）两路共用。
+   *
+   * @returns `{ text, keys, dir }`；非后端服务 / 无 module 级条目 / 无可下发键时返回 null（跳过，非错误）
+   */
+  private async renderGeneratedEnvPayload(
+    envId: string,
+    moduleKey: string,
+  ): Promise<{ text: string; keys: string[]; dir: string } | null> {
     let mod: { type?: string; dir?: string } | null = null;
     try {
       mod = (await this.moduleRegistry.get(moduleKey)) as any;
@@ -830,33 +870,58 @@ export class DeployService {
       return null;
     }
 
-    const home = process.env.HOME || '';
-    const ws = this.configService.get<string>('RELEASE_WORKSPACE') || `${home}/web_system_release`;
-    const dir = path.join(ws, 'servers', mod.dir || moduleKey);
-    const target = path.join(dir, '.env.generated');
-
     const text = renderGeneratedEnvFile(items, { envId, serviceKey: moduleKey });
-    fs.mkdirSync(dir, { recursive: true });
-    this.backupGeneratedEnv(target);
-    // 直接以 0600 建文件（内容含密钥明文：只给服务进程自己读）
-    fs.writeFileSync(target, text, { encoding: 'utf-8', mode: 0o600 });
-    try {
-      fs.chmodSync(target, 0o600);
-    } catch {
-      /* 权限设置失败不阻断（已用 mode 建文件） */
-    }
+    return { text, keys: items.map((i) => i.key), dir: mod.dir || moduleKey };
+  }
 
-    const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
-    const keys = items.map((i) => i.key);
-    this.logger.log(`已下发配置: ${target}（${keys.length} 个键，sha256=${hash}）`);
+  /**
+   * 远程（dev / prod）部署生效前，把配置中心下发内容写到目标机服务目录 `.env.generated`。
+   *
+   * 为什么在控制台侧渲染、再 ssh 写远端（而非 activate 内部 curl）：`consoleApiBase()` 是
+   * 127.0.0.1，activate 跑在目标机（prod 是另一台机器），curl 自己的 127.0.0.1 拿不到控制台。
+   * 控制台本就持配置中心连接，渲染后 base64 随 ssh 写进远端服务目录，不依赖目标机能回连控制台。
+   *
+   * 下发失败抛错（P0：先下发再重启、失败中止）；无 module 级条目 → 跳过（204 语义，
+   * prod 无 config_items 记录时天然 no-op，不改变 prod 现有行为）。
+   */
+  private async dispatchRemoteGeneratedEnv(
+    envId: string,
+    moduleKey: string,
+    sshConfig: SshTarget,
+    remoteDir: string,
+  ): Promise<void> {
+    const payload = await this.renderGeneratedEnvPayload(envId, moduleKey);
+    if (payload === null) return;
+
+    const command = this.buildRemoteGeneratedEnvCommand(remoteDir, payload.text);
+    await this.sshRun(sshConfig, command, envId, Math.max(this.sshTimeoutMs('exec'), 20000));
+
+    const hash = crypto.createHash('sha256').update(payload.text).digest('hex').slice(0, 16);
+    this.logger.log(
+      `已下发配置: ${envId}:${remoteDir}/.env.generated（${payload.keys.length} 个键，sha256=${hash}）`,
+    );
     await this.audit.log({
       action: 'config.dispatch',
       env: envId,
       component: moduleKey,
       status: 'success',
-      detail: JSON.stringify({ path: target, keys, hash }),
+      detail: JSON.stringify({ path: `${remoteDir}/.env.generated`, keys: payload.keys, hash }),
     });
-    return { path: target, keys, hash };
+  }
+
+  /** 生成「把下发内容写进远端服务目录」的命令（base64 落临时文件 → 0600 → 原子替换） */
+  private buildRemoteGeneratedEnvCommand(remoteDir: string, text: string): string {
+    const encoded = Buffer.from(text, 'utf8').toString('base64');
+    const file = `${remoteDir}/.env.generated`;
+    const tmp = `${file}.tmp.$$`;
+    return [
+      'set -e',
+      `mkdir -p '${remoteDir}'`,
+      `printf '%s' '${encoded}' | base64 -d > '${tmp}'`,
+      `chmod 600 '${tmp}'`,
+      `mv -f '${tmp}' '${file}'`,
+      `printf 'dispatched %s keys' "$(grep -c '=' '${file}' 2>/dev/null || true)"`,
+    ].join('\n');
   }
 
   /**
@@ -1660,6 +1725,10 @@ export class DeployService {
     const dir = mod.dir || input.moduleKey;
     const sshConfig = await this.getSshConfig(input.env);
     const remoteDir = `${this.getWebSystemDir(input.env)}/servers/${dir}`;
+    // 配置下发（P0-2）：先下发、再落地/重启 —— 与 applyBackendVersion 本地分支同序。
+    // 远程机跑独立 runtime，activate 会把 service 目录的 .env.generated 软链进 runtime，
+    // 故这里把下发内容写到远端服务目录即可；下发出错抛错中止部署（不落地、不改指针）。
+    await this.dispatchRemoteGeneratedEnv(input.env, input.moduleKey, sshConfig, remoteDir);
     // 远端版本目录（发布流水线的远程投递已放好，用户 2026-09-21：产物跟着环境走，类似 admin）
     const remoteVerDir = `${remoteDir}/${input.versionTag}`;
     // 隔离产物真源：storage root（activate 的落地目标）。两者任一有 manifest 即走隔离激活；
