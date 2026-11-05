@@ -389,6 +389,40 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     (global as any).__sshExecImpl = undefined;
   });
 
+  it('dispatchConfigForRelease：键值一致、仅文件头「生成时间」不同 → 仍判一致并跳过（不比字节）', async () => {
+    // 2026-11-05 第三单 op9 真实死因：renderGeneratedEnvFile 的头部含
+    // `# 生成时间: <每次渲染的 wall clock>`，同一份配置两次渲染正文永不相等。
+    // 若按 text === text 判等，拒绝分支会对任何一次下发都触发（实测三个键值逐字节一致却被判「配置变更」）。
+    const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+    cc.hasModuleScope.mockResolvedValue(true);
+    const items = [
+      { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:dev/mcp-gateway' },
+      { key: 'JWT_SECRET', value: 'jwt-secret-xyz', scope: 'env:dev' },
+    ];
+    cc.dispatchPayload.mockResolvedValue(items);
+    // 目标机上是「上一次渲染」的结果：键值完全相同，只有文件头时间戳不同
+    const stale = renderGeneratedEnvFile(items, {
+      envId: 'dev',
+      serviceKey: 'mcp-gateway',
+      generatedAt: new Date('2026-11-05T08:00:00.000Z'),
+    });
+    expect(stale).not.toBe(renderGeneratedEnvFile(items, { envId: 'dev', serviceKey: 'mcp-gateway' }));
+    (global as any).__sshCmds = [];
+    (global as any).__sshExecImpl = (cmd: string) => {
+      ((global as any).__sshCmds as string[]).push(cmd);
+      if (cmd.includes("printf 'present")) {
+        return { code: 0, out: 'present\n' + Buffer.from(stale, 'utf8').toString('base64') };
+      }
+      return { code: 0, out: 'ok' };
+    };
+
+    await expect(service.dispatchConfigForRelease('dev', 'mcp-gateway')).resolves.toBeUndefined();
+
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    expect(cmds.some((c) => c.includes('base64 -d'))).toBe(false);
+    (global as any).__sshExecImpl = undefined;
+  });
+
   it('dispatchConfigForRelease：目标机内容与渲染结果不一致 → 拒绝执行（只报键名，不写文件、不回显值）', async () => {
     const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
     cc.hasModuleScope.mockResolvedValue(true);

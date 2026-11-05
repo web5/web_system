@@ -972,9 +972,21 @@ export class DeployService {
     //   需要发布后重新 capture 再发一单才转绿（一次性成本，自愈）。
     const current = await this.readRemoteGeneratedEnv(sshConfig, remoteDir, envId);
 
-    if (current.exists && current.text === payload.text) {
+    // ── 比对口径：**按键值语义比，不比字节** ──────────────────────────────
+    // `renderGeneratedEnvFile()` 的文件头带 `# 生成时间: <每次渲染的 wall clock>`，
+    // 所以「同一份配置」每次渲染出的正文**永远不相等**。若按 `text === text` 判等，
+    // 这条拒绝分支会对任何一次下发都触发（2026-11-05 第三单 op9 实测即如此：
+    // 三个键的值逐字节一致，只是文件头时间不同 → 误判为「配置变更被拒绝」）。
+    // 与 D1 同源：把易变的 wall clock 放进被比对的内容里。这里改为只比 `key=value`，
+    // 注释/文件头/顺序不参与判断 —— 指纹关心的是「配置内容有没有变」，不是文件长得像不像。
+    const diff = current.exists
+      ? diffEnvAssignments(parseEnvAssignments(payload.text), parseEnvAssignments(current.text))
+      : null;
+    const identical = !!diff && !diff.added.length && !diff.changed.length && !diff.removed.length;
+
+    if (identical) {
       this.logger.log(
-        `配置未变化，跳过下发（不写文件，保持配置指纹稳定）: ${envId}:${file}（${payload.keys.length} 个键，sha256=${hash}）`,
+        `配置未变化，跳过下发（不写文件，保持配置指纹稳定）: ${envId}:${file}（${payload.keys.length} 个键，键值一致，sha256=${hash}）`,
       );
       await this.audit.log({
         action: 'config.dispatch',
@@ -986,11 +998,7 @@ export class DeployService {
       return;
     }
 
-    if (current.exists) {
-      const diff = diffEnvAssignments(
-        parseEnvAssignments(payload.text),
-        parseEnvAssignments(current.text),
-      );
+    if (current.exists && diff) {
       const describe = (label: string, keys: string[]) =>
         keys.length ? `${label} [${keys.join(', ')}]` : '';
       const detailText = [describe('新增', diff.added), describe('值变更', diff.changed), describe('删除', diff.removed)]
