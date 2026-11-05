@@ -875,6 +875,33 @@ export class DeployService {
   }
 
   /**
+   * 发布流水线（pipeline release）里「下发配置」内置步骤的公共入口（#8493）。
+   *
+   * 为什么需要它：`dispatchRemoteGeneratedEnv` 原先只被「部署生效」路径
+   * `applyBackendRemote` 调用，而发布流水线的 release 阶段走的是 `shell 工具 apply-runtime`
+   * （activate），**绕过了 deployVersion** —— 于是经发布流水线发版的场景，`.env.generated`
+   * 永远不下发（2026-11-05 实测 prod gateway 发版后 `.env.generated` 不存在）。
+   * 这里把「非后端跳过 + 解析 SSH 目标 + 算远端目录 + 下发」收成公共方法，
+   * 供 `DispatchConfigExecutor`（内置 service action `dispatch-config`）在 activate 前调用。
+   */
+  async dispatchConfigForRelease(env: string, moduleKey: string): Promise<void> {
+    let mod: { type?: string; dir?: string } | null = null;
+    try {
+      mod = (await this.moduleRegistry.get(moduleKey)) as any;
+    } catch {
+      mod = null;
+    }
+    if (!mod || mod.type !== 'backend') {
+      this.logger.log(`跳过配置下发：${moduleKey} 不是后端服务（无服务进程 .env）`);
+      return;
+    }
+    const sshConfig = await this.getSshConfig(env);
+    const dir = mod.dir || moduleKey;
+    const remoteDir = `${this.getWebSystemDir(env)}/servers/${dir}`;
+    await this.dispatchRemoteGeneratedEnv(env, moduleKey, sshConfig, remoteDir);
+  }
+
+  /**
    * 远程（dev / prod）部署生效前，把配置中心下发内容写到目标机服务目录 `.env.generated`。
    *
    * 为什么在控制台侧渲染、再 ssh 写远端（而非 activate 内部 curl）：`consoleApiBase()` 是

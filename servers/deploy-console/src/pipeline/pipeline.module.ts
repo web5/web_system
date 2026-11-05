@@ -21,6 +21,7 @@ import { PointerExecutor } from './steps/pointer.executor';
 import { CleanupExecutor } from './steps/cleanup.executor';
 import { SyncRuntimeExecutor } from './steps/sync-runtime.executor';
 import { GcRuntimeExecutor } from './steps/gc-runtime.executor';
+import { DispatchConfigExecutor } from './steps/dispatch-config.executor';
 import { PIPELINE_BUILTIN_STEPS, buildBuiltinSteps, BuiltinExecutors } from './steps/step-registry';
 // 切指针前的 CDN 硬门禁（verify 200 + sha256 对账；仅 CDN_LAYOUT_MODE=cdn 生效）
 import { CdnAssetVerifier } from './cdn-asset-verifier.service';
@@ -110,6 +111,7 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
     CleanupExecutor,
     SyncRuntimeExecutor,
     GcRuntimeExecutor,
+    DispatchConfigExecutor,
     // 切指针前的 CDN 校验（指针执行体注入；legacy 模式空转）
     CdnAssetVerifier,
     // 步骤注册表：按步骤元数据（category/commandMode/守卫/执行体）组装，engine 数据驱动分派
@@ -125,8 +127,9 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
         cleanup: CleanupExecutor,
         syncRuntime: SyncRuntimeExecutor,
         gcRuntime: GcRuntimeExecutor,
+        dispatchConfig: DispatchConfigExecutor,
       ) =>
-        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup, syncRuntime, gcRuntime } as BuiltinExecutors),
+        buildBuiltinSteps({ check, pull, upload, apply, version, pointer, cleanup, syncRuntime, gcRuntime, dispatchConfig } as BuiltinExecutors),
       inject: [
         CheckExecutor,
         PullExecutor,
@@ -136,7 +139,8 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
         PointerExecutor,
         CleanupExecutor,
         SyncRuntimeExecutor,
-    GcRuntimeExecutor,
+        GcRuntimeExecutor,
+        DispatchConfigExecutor,
       ],
     },
   ],

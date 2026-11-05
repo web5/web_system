@@ -337,6 +337,35 @@ describe('DeployService.deployVersion（后台模块：落地 dist + pm2 重启�
     expect(cmds.some((c) => c.includes('pm2 restart'))).toBe(true);
   });
 
+  it('dispatchConfigForRelease：后端 + 有 module 条目 → 只下发 .env.generated（不落地/不重启）', async () => {
+    const cc = (service as any).configCenter as { hasModuleScope: jest.Mock; dispatchPayload: jest.Mock };
+    cc.hasModuleScope.mockResolvedValue(true);
+    cc.dispatchPayload.mockResolvedValue([
+      { key: 'GATEWAY_SERVICE_KEY', value: 'svc-key-123', scope: 'module:dev/mcp-gateway' },
+    ]);
+    (global as any).__sshCmds = [];
+
+    await service.dispatchConfigForRelease('dev', 'mcp-gateway');
+
+    const cmds = ((global as any).__sshCmds as string[]) || [];
+    expect(cmds.length).toBe(1);
+    expect(cmds[0]).toContain('.env.generated');
+    expect(cmds[0]).toContain('base64 -d');
+    expect(cmds[0]).toContain('chmod 600');
+    // 只下发、不落地、不重启（发布流水线由后续 apply-runtime activate 负责生效）
+    expect(cmds[0]).not.toContain('dist.bak-');
+    expect(cmds[0]).not.toContain('pm2 restart');
+  });
+
+  it('dispatchConfigForRelease：非后端 → 跳过（无任何 ssh 命令）', async () => {
+    moduleRegistry.get.mockResolvedValue({ key: 'admin', type: 'micro-frontend', dir: 'admin' });
+    (global as any).__sshCmds = [];
+
+    await service.dispatchConfigForRelease('dev', 'admin');
+
+    expect(((global as any).__sshCmds as string[]).length).toBe(0);
+  });
+
   it('后台 + 远程失败：抛错且指针不改（先落地后改指针）', async () => {
     (global as any).__sshExecImpl = () => ({ code: 1, out: 'boom' });
     const upsert = (service as any).deploymentRepo.upsert as jest.Mock;

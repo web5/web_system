@@ -16,6 +16,9 @@ export const SERVICE_TOOL_TO_STEP: Readonly<Record<string, string>> = {
   'apply-version': 'apply',
   // 方案 B（2026-11-01）：把平台能力程序投放到目标机，编排随后用 shell 工具调用它
   'sync-runtime-program': 'sync-runtime',
+  // #8493：发布流水线里的配置下发（渲染配置中心 → 写远端 .env.generated），
+  // 弥补 release 阶段走 shell 工具 apply-runtime 绕开 deployVersion 的缺口
+  'dispatch-config': 'dispatch-config',
   upload: 'upload',
   pull: 'pull',
   cleanup: 'cleanup',
@@ -38,6 +41,7 @@ export const SERVICE_TOOL_OPTIONS: ReadonlyArray<{ tool: string; label: string }
   { tool: 'switch-pointer', label: '切换版本指针' },
   { tool: 'apply-version', label: '部署生效（后台：版本目录 → dist + 重启 + 切指针）' },
   { tool: 'sync-runtime-program', label: '投放运行时能力程序（目标机，幂等）' },
+  { tool: 'dispatch-config', label: '下发配置（渲染配置中心 → 目标机 .env.generated）' },
   { tool: 'upload', label: '投递产物' },
   { tool: 'pull', label: '拉取代码' },
   { tool: 'cleanup', label: '清理旧版本' },

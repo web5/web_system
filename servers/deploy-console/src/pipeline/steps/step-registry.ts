@@ -9,6 +9,7 @@ import { PointerExecutor } from './pointer.executor';
 import { CleanupExecutor } from './cleanup.executor';
 import { SyncRuntimeExecutor } from './sync-runtime.executor';
 import { GcRuntimeExecutor } from './gc-runtime.executor';
+import { DispatchConfigExecutor } from './dispatch-config.executor';
 
 /** 内置步骤注册表的 DI token（engine 注入聚合后的 Record） */
 export const PIPELINE_BUILTIN_STEPS = 'PIPELINE_BUILTIN_STEPS';
@@ -34,6 +35,8 @@ export interface BuiltinExecutors {
   syncRuntime: SyncRuntimeExecutor;
   /** 历史版本目录回收（方案 B）：投放 gc 程序并执行，保护集 = pm2 引用 + 软链目标 */
   gcRuntime: GcRuntimeExecutor;
+  /** 发布流水线配置下发（#8493）：渲染配置中心 → 写远端 .env.generated */
+  dispatchConfig: DispatchConfigExecutor;
 }
 
 /** 复用磁盘产物的守卫（跳过程码获取/构建/投递/重启） */
@@ -110,6 +113,13 @@ export function buildBuiltinSteps(ex: BuiltinExecutors): Record<string, BuiltinS
       // 编排只能决定「这条流水线要不要回收节点」，不能改写它怎么删。
       commandMode: 'none',
       run: (ctx) => ex.gcRuntime.run(ctx),
+    },
+    'dispatch-config': {
+      category: 'deploy',
+      // 纯内置：下发内容由配置中心渲染（控制台持 CONFIG_MASTER_KEY 才能解密），
+      // 编排只能决定「激活前要不要下发」，不能改写正文（改写 = 又长出一份配置渲染副本）。
+      commandMode: 'none',
+      run: (ctx) => ex.dispatchConfig.run(ctx),
     },
   };
 }
