@@ -19,15 +19,16 @@ describe('step-registry（内置步骤配置化声明）', () => {
       cleanup: { run: jest.fn() },
       syncRuntime: { run: jest.fn() },
       gcRuntime: { run: jest.fn() },
+      dispatchConfig: { run: jest.fn() },
     }) as unknown as BuiltinExecutors;
 
   const registry = buildBuiltinSteps(stub());
   const p = (over: Record<string, unknown> = {}) =>
     ({ moduleType: undefined, reuseArtifact: false, skipVerify: false, ...over }) as never;
 
-  it('九步骤齐全（restart / verify 已下沉；prebuild 已去内置 = 普通脚本节点；gc-runtime 为回收内置步骤），category 与 commandMode 正确', () => {
+  it('步骤齐全（restart / verify 已下沉；prebuild 已去内置 = 普通脚本节点；gc-runtime 为回收内置步骤；dispatch-config 为发布流水线配置下发），category 与 commandMode 正确', () => {
     expect(Object.keys(registry).sort()).toEqual(
-      ['apply', 'build', 'check', 'cleanup', 'gc-runtime', 'pointer', 'pull', 'sync-runtime', 'upload', 'version'],
+      ['apply', 'build', 'check', 'cleanup', 'dispatch-config', 'gc-runtime', 'pointer', 'pull', 'sync-runtime', 'upload', 'version'],
     );
     expect(registry.check).toMatchObject({ category: 'semantic', commandMode: 'base' });
     expect(registry.pull).toMatchObject({ category: 'code', commandMode: 'override' });
@@ -40,6 +41,8 @@ describe('step-registry（内置步骤配置化声明）', () => {
     expect(registry['sync-runtime']).toMatchObject({ category: 'deploy', commandMode: 'none' });
     // 回收：cleanup 语义 + 纯内置（保护集判据是平台知识，编排不能改写它怎么删）
     expect(registry['gc-runtime']).toMatchObject({ category: 'cleanup', commandMode: 'none' });
+    // 配置下发（#8493）：deploy 语义 + 纯内置（下发内容由配置中心渲染，编排不能改写正文）
+    expect(registry['dispatch-config']).toMatchObject({ category: 'deploy', commandMode: 'none' });
   });
 
   it('gc-runtime 有内置执行体，且不因模块类型/复用产物被守卫跳过（每条流水线都要回收）', () => {
