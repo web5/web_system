@@ -8,6 +8,7 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import { appVersionDefine, appVersionPlugin } from './vite-app-version.mjs';
 import { publicAssetDefine } from './vite-public-assets.mjs';
+import { cdnMode } from './lib/cdn-layout.mjs';
 
 // 默认 externals 映射：模块 external 这些 key，运行时从 window.__SHARED__ 对应字段取
 // ⚠️ globals 值必须是「点链」访问（rollup UMD 不支持 ["..."] 括号，会生成错误代码），
@@ -68,6 +69,20 @@ export function resolveMfBase(name, rawTag = process.env.RELEASE_TAG) {
   }
   // 两段是 env-dir 的正当形态（`specs/app-artifact-env-dir` G2：产品线段 = envId，
   // 投递落 modules/<key>/<envId>/<commit>/），不告警；仅由上方 JSDoc 说明其与扁平的差异。
+
+  // Phase 2（PR-B）：ASSET_URL_MODE=cdn 时输出 CDN 布局 `<env>/<app>/<commit>`。
+  // env 必须来自 RELEASE_TAG 两段的首段（`<env>/<commit>`）；cdn 模式下 1 段无法得到 env，fail-fast。
+  // 顺序 `<env>/<app>` 与 legacy 的 `<app>/<env>` 相反（见 specs/static-cdn-phase2/design.md §2），
+  // 顺序只在本函数与 deploy-console `release-paths.cdnAssetDir` 两处定义，禁止手拼。
+  if (cdnMode() === 'cdn') {
+    if (segments.length !== 2) {
+      throw new Error(
+        `[mf] ASSET_URL_MODE=cdn 要求 RELEASE_TAG 为两段 <env>/<commit>（首段=环境），当前 ${segments.length} 段: ${tag}`,
+      );
+    }
+    const [env, commit] = segments;
+    return `/cdn/${env}/${name}/${commit}/`;
+  }
   return `/static/modules/${name}/${segments.join('/')}/`;
 }
 

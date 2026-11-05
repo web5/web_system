@@ -30,10 +30,12 @@ import { createRequire } from 'module';
 import { execFileSync } from 'child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'fs';
 import { resolve } from 'path';
+import { cdnMode, cdnCommonDir } from './lib/cdn-layout.mjs';
 
 const REPO_ROOT = resolve(process.cwd());
 const require = createRequire(resolve(REPO_ROOT, 'package.json'));
-const OUT_DIR = resolve(REPO_ROOT, 'servers/gateway/public/static/cdn');
+// legacy: 仓库内 servers/gateway/public/static/cdn；cdn: 入口机 <CDN_ROOT>/common/libs
+const OUT_DIR = cdnMode() === 'cdn' ? cdnCommonDir('libs') : resolve(REPO_ROOT, 'servers/gateway/public/static/cdn');
 
 function log(msg) { console.log(`[build-externals] ${msg}`); }
 function die(msg) { console.error(`[build-externals] ERROR: ${msg}`); process.exit(1); }
