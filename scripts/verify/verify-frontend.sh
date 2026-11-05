@@ -43,7 +43,7 @@ echo " 目标: ${BASE_URL}"
 echo "=========================================="
 
 # ---- 1. 模块 manifest（网关版本指针）----
-MANIFEST="$($RUN curl -s -m 8 "${BASE_URL}/__manifest__" 2>/dev/null || echo '{}')"
+MANIFEST="$(${RUN:-} curl -s -m 8 "${BASE_URL}/__manifest__" 2>/dev/null || echo '{}')"
 if echo "$MANIFEST" | grep -q "$MODULE"; then
   ok "网关 manifest 含模块 ${MODULE}"
   # 如果指定了版本，检查 manifest 中的版本
