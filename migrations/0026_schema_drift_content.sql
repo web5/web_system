@@ -17,8 +17,17 @@
 --    但 SQL 只在 @exists = 0 时 ADD、否则一律 skip，account_type 从 varchar(16) 到
 --    varchar(32) 的对齐从未生效。本版改查 COLUMN_TYPE，长度不足才 MODIFY。
 --
--- 适用：dev / prod 都手跑一遍。幂等：逐列判断 information_schema，已存在则跳过。
--- 本地库已手工加过列，本脚本在本地跑会识别「已存在跳过」。
+-- 🔴 适用范围（2026-11-05 补充，勿删）：**仅允许在 `web_system` 业务主库执行**
+--   （content-hub / mcp-gateway 的 DB_DATABASE 默认值），dev / prod 的主库各手跑一遍。
+--   ❌ 禁止在 `web_system_deploy` / `web_system_deploy_shadow` 执行：这两库是发布平台库与
+--   影子库，2026-09 整库复制 + 2026-10-26 synchronize 误连时曾混入一套字段不同的空壳
+--   content_* 表（0 行、无服务读写），2026-11-05 已 DROP 清理。本脚本若在列不存在的库上
+--   跑会 ADD 出新列，重新制造 schema 分叉。
+--   执行前自检：SELECT DATABASE();  -- 必须返回 web_system
+--   ⚠️ 幂等 ≠ 在任何库上都是 no-op：列不存在会 ADD、列型不符会 MODIFY。
+--
+-- 幂等：逐列判断 information_schema，已存在则跳过。
+-- 本地主库已手工加过列，本脚本在本地跑会识别「已存在跳过」。
 
 SET @db = DATABASE();
 

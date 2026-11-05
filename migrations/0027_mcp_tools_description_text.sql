@@ -9,7 +9,15 @@
 -- 新工具声明（verify_release 等）描述远超 255 字符，STRICT_TRANS_TABLES 下 seed
 -- 必炸 ER_DATA_TOO_LONG（errno 1406）。mcp-gateway 新 dist 重启即挂。
 --
--- 适用：dev / prod 都手跑一遍。幂等：查 COLUMN_TYPE，已是 text/mediumtext/longtext 则跳过。
+-- 🔴 适用范围（2026-11-05 补充，勿删）：**仅允许在 `web_system` 业务主库执行**
+--   （mcp-gateway 的 DB_DATABASE 默认值），dev / prod 的主库各手跑一遍。
+--   ❌ 禁止在 `web_system_deploy` / `web_system_deploy_shadow` 执行：这两库里的 `mcp_tools`
+--   是整库复制遗留的 0 行空壳表（description varchar(255)、无外键、无服务读写），
+--   2026-11-05 已 DROP 清理；没有任何代码往这两库写工具声明，把它们改成 text 没有收益。
+--   真正的 255 溢出风险在主库（新工具声明实测最长 391 字符），主库已改为 text。
+--   执行前自检：SELECT DATABASE();  -- 必须返回 web_system
+--
+-- 幂等：查 COLUMN_TYPE，已是 text/mediumtext/longtext 则跳过。
 
 SET @db = DATABASE();
 
