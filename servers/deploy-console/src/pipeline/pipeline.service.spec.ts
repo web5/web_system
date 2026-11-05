@@ -750,9 +750,40 @@ describe('toolShellFailure（工具目录 shell 工具退出码判定）', () =>
     expect(source).toContain("return 'skipped';");
   });
 
-  it('runService 的 shell 工具分支确实调用了判定（防回调到丢弃退出码）', () => {
+  // ── prod 闸门归位：覆盖所有终态出口（修复方案 §7.4 的回归）──
+  // 背景：1793881149067 实发 succeeded 后闸门仍挂 jobId，靠 publish.sh watch 兜底。
+  // 根因是成功路径有两条（run 的经典模式 / runOrchestrationMode 编排模式），
+  // 当时只接了编排模式 + 取消/拒绝，经典模式的 return 早退完全绕开了归位。
+  it('prod 闸门归位接在每一个终态出口，经典模式成功/失败不漏', () => {
     const source = fs.readFileSync(path.join(__dirname, 'pipeline.service.ts'), 'utf8');
-    // 1 = 定义；>=2 表示除定义外至少有一处调用
-    expect(source.split('toolShellFailure(').length - 1).toBeGreaterThanOrEqual(2);
+    // 经典模式成功：status=succeeded 到 save 之间必须归位
+    expect(source).toMatch(
+      /p\.status = 'succeeded';[\s\S]{0,300}?await this\.releaseProdRolloutGate\(p\);\s*await this\.save\(p\);/,
+    );
+    // catch 里的失败/取消：流水线失败日志之前必须归位
+    expect(source).toMatch(
+      /p\.status = this\.cancelled\.has\(p\.id\) \? 'cancelled' : 'failed';[\s\S]{0,900}?await this\.releaseProdRolloutGate\(p\);\s*await this\.save\(p\);/,
+    );
+    // 调用点总数：编排模式 + 经典成功 + 经典失败 + cancel + 审批拒绝 + onReject-abort
+    expect(source.split('await this.releaseProdRolloutGate(p)').length - 1).toBeGreaterThanOrEqual(6);
+  });
+
+  it('归位只作用于 prod、只认本单 jobId，且异常不影响 run 结论', async () => {
+    const svc: any = Object.create(PipelineService.prototype);
+    const releaseGate = jest.fn().mockResolvedValue(true);
+    svc.pipelineVars = { releaseGate };
+
+    const dev = { id: 'run-dev', env: 'dev', pipelineId: 'tpl-gateway-dev', logs: [] } as any;
+    await svc.releaseProdRolloutGate(dev);
+    expect(releaseGate).not.toHaveBeenCalled();
+
+    const prod = { id: 'run-prod', env: 'prod', pipelineId: 'tpl-gateway-dev', logs: [] } as any;
+    await svc.releaseProdRolloutGate(prod);
+    expect(releaseGate).toHaveBeenCalledWith('tpl-gateway-dev', 'PROD_RUNTIME_ROLLOUT_RUN_ID', 'run-prod');
+    expect(prod.logs.join('\n')).toContain('闸门已归位');
+
+    svc.pipelineVars.releaseGate = jest.fn().mockRejectedValue(new Error('db down'));
+    await expect(svc.releaseProdRolloutGate(prod)).resolves.toBeUndefined();
+    expect(prod.logs.join('\n')).toContain('归位失败（不影响本次结论）');
   });
 });

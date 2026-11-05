@@ -1880,6 +1880,9 @@ export class PipelineService {
       p.status = 'succeeded';
       p.progress = { ...p.progress!, message: '发布完成' };
       p.endTime = Date.now();
+      // 经典模式（nodes/legacy）终态出口：与 runOrchestrationMode 末尾同口径。
+      // 本单 1793881149067 实测走的是这条路径，只挂编排模式会让成功单留悬挂闸门。
+      await this.releaseProdRolloutGate(p);
       await this.save(p);
 
       await this.auditService.log({
@@ -1934,6 +1937,8 @@ export class PipelineService {
         p.progress = { ...(p.progress ?? { current: 0, total: PIPELINE_STAGES.length }), message: `失败: ${msg}` };
         p.endTime = Date.now();
       }
+      // 失败/取消也是终态：闸门必须归位，否则下一次 prod 提交被上一单的窗口误挡。
+      await this.releaseProdRolloutGate(p);
       await this.save(p);
       this.logger.error(`流水线失败: ${p.id} 阶段=${p.stage} : ${msg}`);
       if (p.status === 'failed') {
