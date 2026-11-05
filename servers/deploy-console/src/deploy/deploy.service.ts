@@ -64,6 +64,42 @@ const DEFAULT_SSH_EXEC_TIMEOUT_MS = 10 * 60 * 1000;
 /** 远程上传默认超时（可配 `SSH_UPLOAD_TIMEOUT_MS`）：产物包可能上百 MB，留足余量 */
 const DEFAULT_SSH_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 /**
+ * 解析 `.env` 正文为「键 → 原始值」表（忽略注释 / 空行 / 非法键）。
+ *
+ * 只用于**比对键名与值是否变化**，不做任何求值或反转义：值原样参与比较，
+ * 从而保证「配置中心渲染 → 目标机落盘 → 再次渲染」这条链上字节相同即判等。
+ */
+export function parseEnvAssignments(text: string): Map<string, string> {
+  const entries = new Map<string, string>();
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim().replace(/^export\s+/, '');
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    entries.set(key, line.slice(eq + 1));
+  }
+  return entries;
+}
+
+/** 键级差异（只回键名，**绝不回值**：审计与报错都不能落明文） */
+export function diffEnvAssignments(
+  next: Map<string, string>,
+  current: Map<string, string>,
+): { added: string[]; changed: string[]; removed: string[] } {
+  const added: string[] = [];
+  const changed: string[] = [];
+  const removed: string[] = [];
+  for (const [key, value] of next) {
+    if (!current.has(key)) added.push(key);
+    else if (current.get(key) !== value) changed.push(key);
+  }
+  for (const key of current.keys()) if (!next.has(key)) removed.push(key);
+  return { added: added.sort(), changed: changed.sort(), removed: removed.sort() };
+}
+
+/**
  * pm2 重启失败的**专用退出码**（诊断 #4）。
  * 远端脚本用它把「产物已换、进程没重启」与「产物没换成功」区分开：
  * 前者保留现场（不回滚 dist，人工 `pm2 restart` 即可救），后者才回滚。
@@ -920,20 +956,100 @@ export class DeployService {
     const payload = await this.renderGeneratedEnvPayload(envId, moduleKey);
     if (payload === null) return;
 
+    const file = `${remoteDir}/.env.generated`;
+    const hash = crypto.createHash('sha256').update(payload.text).digest('hex').slice(0, 16);
+
+    // ── D2-G3（2026-11-05 prod 第一单 op11 死因）：下发只允许「写与评审指纹一致的内容」──
+    // 背景：op9 下发会写 `.env.generated`，而 op11 verify 比对的是**发布前**捕获的
+    // PROD_RUNTIME_CONFIG_SHA256（指纹含 files[].exists 与各文件 sha256），于是
+    //   「首次下发」或「内容变了」⇒ 指纹必变 ⇒ op11 必红
+    // （实测 4545c2a0 → c2c13ff0，配置内容一个字节没坏，是下发动作自己造成的漂移）。
+    // 语义与远端探针里那句未启用的 `--verify-rendered`
+    // "Code-only rollout refuses production configuration changes" 对齐：
+    //   一致 → 跳过写（noop，指纹稳定）；
+    //   不一致 → 拒绝执行（失败前移到本步，现场不会被改了半截）；
+    //   目标机无该文件 → 首次下发，允许写（否则配置永远下不去），但会改变已评审指纹，
+    //   需要发布后重新 capture 再发一单才转绿（一次性成本，自愈）。
+    const current = await this.readRemoteGeneratedEnv(sshConfig, remoteDir, envId);
+
+    if (current.exists && current.text === payload.text) {
+      this.logger.log(
+        `配置未变化，跳过下发（不写文件，保持配置指纹稳定）: ${envId}:${file}（${payload.keys.length} 个键，sha256=${hash}）`,
+      );
+      await this.audit.log({
+        action: 'config.dispatch',
+        env: envId,
+        component: moduleKey,
+        status: 'skipped',
+        detail: JSON.stringify({ path: file, keys: payload.keys, hash, reason: 'unchanged' }),
+      });
+      return;
+    }
+
+    if (current.exists) {
+      const diff = diffEnvAssignments(
+        parseEnvAssignments(payload.text),
+        parseEnvAssignments(current.text),
+      );
+      const describe = (label: string, keys: string[]) =>
+        keys.length ? `${label} [${keys.join(', ')}]` : '';
+      const detailText = [describe('新增', diff.added), describe('值变更', diff.changed), describe('删除', diff.removed)]
+        .filter(Boolean)
+        .join(' / ');
+      await this.audit.log({
+        action: 'config.dispatch',
+        env: envId,
+        component: moduleKey,
+        status: 'refused',
+        detail: JSON.stringify({ path: file, keys: payload.keys, hash, reason: 'differs', diff }),
+      });
+      throw new Error(
+        `配置变更被拒绝：${envId}:${file} 的目标机内容与配置中心渲染结果不一致（${detailText || '正文不同'}）。` +
+          `发布单只发代码，不得顺带改配置（否则审批看到的是改前的配置）。` +
+          `确需变更请在配置中心确认后执行 \`publish.sh capture ${moduleKey} --source <versionTag>\` 重新捕获配置指纹，并重新提交审批。`,
+      );
+    }
+
     const command = this.buildRemoteGeneratedEnvCommand(remoteDir, payload.text);
     await this.sshRun(sshConfig, command, envId, Math.max(this.sshTimeoutMs('exec'), 20000));
 
-    const hash = crypto.createHash('sha256').update(payload.text).digest('hex').slice(0, 16);
     this.logger.log(
-      `已下发配置: ${envId}:${remoteDir}/.env.generated（${payload.keys.length} 个键，sha256=${hash}）`,
+      `已下发配置（首次，目标机原无 .env.generated）: ${envId}:${file}（${payload.keys.length} 个键，sha256=${hash}）；` +
+        `注意：配置指纹已改变，本次发布若卡在 verify 需重新 capture 后重发`,
     );
     await this.audit.log({
       action: 'config.dispatch',
       env: envId,
       component: moduleKey,
       status: 'success',
-      detail: JSON.stringify({ path: `${remoteDir}/.env.generated`, keys: payload.keys, hash }),
+      detail: JSON.stringify({ path: file, keys: payload.keys, hash, reason: 'created' }),
     });
+  }
+
+  /**
+   * 读目标机现有 `.env.generated`（base64 回传，避免值里的换行/引号被 shell 吃掉）。
+   *
+   * 只用于「与待下发内容比对」，读完不落盘、不进日志；`exists=false` 表示目标机没有该文件。
+   */
+  private async readRemoteGeneratedEnv(
+    sshConfig: SshTarget,
+    remoteDir: string,
+    envId: string,
+  ): Promise<{ exists: boolean; text: string }> {
+    const file = `${remoteDir}/.env.generated`;
+    const command = `if [ -f '${file}' ]; then printf 'present\\n'; base64 '${file}' | tr -d '\\n'; else printf 'absent\\n'; fi`;
+    const out = String(
+      (await this.sshRun(sshConfig, command, envId, Math.max(this.sshTimeoutMs('exec'), 20000))) || '',
+    );
+    const newline = out.indexOf('\n');
+    const marker = (newline === -1 ? out : out.slice(0, newline)).trim();
+    if (marker !== 'present') return { exists: false, text: '' };
+    const encoded = out.slice(newline + 1).replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+      // 读不干净就当成「内容未知」→ 走拒绝分支（fail-safe，绝不在未知状态下覆盖生产配置）
+      throw new Error(`读取目标机 ${file} 失败：回传内容不是合法 base64，已中止下发`);
+    }
+    return { exists: true, text: Buffer.from(encoded, 'base64').toString('utf8') };
   }
 
   /** 生成「把下发内容写进远端服务目录」的命令（base64 落临时文件 → 0600 → 原子替换） */
