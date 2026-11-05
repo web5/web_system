@@ -384,6 +384,28 @@ describe('isolated backend runtime', () => {
     expect(env.HOME).toBeDefined();
   });
 
+  it('injects WEB_SYSTEM_DIR before requiring ecosystem.config.js so dotenv resolves the production env', async () => {
+    const fixture = await activationFixture();
+    const previous = process.env.WEB_SYSTEM_DIR;
+    delete process.env.WEB_SYSTEM_DIR;
+    try {
+      // ecosystem.config.js 顶部 dotenv 靠 WEB_SYSTEM_DIR 定位 .env.production；远程执行时
+      // process.cwd() 是 home，不注入会加载 <home>/.env.production 失败 → JWT_SECRET 空 →
+      // 求值期 process.exit(1)（2026-11-05 prod op9 根因）。本用例让 env 块回显该变量，
+      // 验证 require 前已被注入为 project（= runtime）。
+      write(
+        path.join(runtime, 'ecosystem.config.js'),
+        "module.exports = { apps: [{ name: 'todo-service', env: { NODE_ENV: 'production', ECHO_WEB_SYSTEM_DIR: process.env.WEB_SYSTEM_DIR || '(unset)' } }] };",
+      );
+      await executeBackendRuntime(fixture.input, fixture.adapters);
+      const start = recorded(fixture).find(([, args]) => args[0] === 'start');
+      expect(start![2].env!.ECHO_WEB_SYSTEM_DIR).toBe(runtime);
+    } finally {
+      if (previous === undefined) delete process.env.WEB_SYSTEM_DIR;
+      else process.env.WEB_SYSTEM_DIR = previous;
+    }
+  });
+
   it('reuses the previous process working directory and memory limit on a clean start', async () => {
     const fixture = await activationFixture(false, { max_memory_restart: 536870912 });
     await executeBackendRuntime(fixture.input, fixture.adapters);

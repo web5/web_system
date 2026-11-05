@@ -356,6 +356,14 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
       const ecosystemFile = path.join(project, 'ecosystem.config.js');
       if (fs.existsSync(ecosystemFile)) {
         try {
+          // 🔴 WEB_SYSTEM_DIR 注入（2026-11-05 prod op9 根因）：ecosystem.config.js 顶部
+          // dotenv 靠 WEB_SYSTEM_DIR 定位 .env.production。本函数经 backendRuntimeProgram()
+          // toString() 序列化后远程执行（backendRuntimeActivationCommand 未透传
+          // WEB_SYSTEM_DIR），目标机 process.cwd() 是 home 目录，不注入会加载
+          // <home>/.env.production 失败 → JWT_SECRET 空 → 求值期 process.exit(1)
+          // 直接杀进程（跳过 catch 回滚，dist 已切但进程未重启的中间态）。
+          // project = path.resolve(service, '..', '..') 即运行根目录，正是 ecosystem 期望值。
+          if (!process.env.WEB_SYSTEM_DIR) process.env.WEB_SYSTEM_DIR = project;
           const ecosystemConfig = require(ecosystemFile) as {
             apps?: Array<{ name?: string; env?: Record<string, unknown> }>;
           };
