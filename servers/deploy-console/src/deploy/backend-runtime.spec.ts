@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import {
   backendRuntimeActivationCommand,
   backendRuntimeProgram,
+  backendRuntimeProgramPrelude,
   executeBackendRuntime,
   normalizePnpmModulesState,
   normalizePnpmWorkspaceState,
@@ -583,6 +584,38 @@ describe('isolated backend runtime', () => {
   it('carries the clean-restart switch into the remote activation command', () => {
     expect(backendRuntimeActivationCommand({ moduleKey: 'todo-service', versionTag, cleanRestart: false })).toContain("RELEASE_CLEAN_RESTART='0'");
     expect(backendRuntimeActivationCommand({ moduleKey: 'todo-service', versionTag })).toContain("RELEASE_CLEAN_RESTART='1'");
+  });
+
+  it('序列化程序自包含：D1-F3 辅助函数必须随 toString 一起下发（prod op4 回归）', () => {
+    // 2026-11-05 prod op4 实测：能力程序 apply-runtime.js 报
+    // `normalizePnpmModulesState is not defined`。根因是 executeBackendRuntime 被
+    // toString() 序列化后投到目标机，顶层辅助函数不会跟过去；而既有序列化用例
+    // 只跑 action=inspect，不进 package 分支，所以缺函数照样全绿。
+    const program = backendRuntimeProgram();
+    const prelude = backendRuntimeProgramPrelude();
+
+    // ① 动态：前导块单独在干净子进程里可执行，且归一化行为正确
+    const out = execFileSync(process.execPath, [
+      '-e',
+      `${prelude}\nconsole.log(normalizePnpmModulesState("prunedAt: Thu, 05 Nov 2026 07:50:51 GMT\\n").trim());`,
+    ], { encoding: 'utf8' });
+    expect(out.trim()).toBe(`prunedAt: "${PNPM_MODULES_STATE_TIMESTAMP}"`);
+
+    // ② 静态：函数体里引用的每个外部辅助函数/常量，前导块都必须定义。
+    // 以后新增 normalize* / PNPM_* 依赖却忘了加前导块，这条会直接红。
+    const body = executeBackendRuntime.toString();
+    // 只认「normalize + 大写开头」的模块级辅助函数；normalized / normalize 这类
+    // 函数体内的小驼峰局部变量不算外部依赖，别误报。
+    const refs = [...new Set(body.match(/\b(?:normalize[A-Z][A-Za-z0-9_]*|PNPM_[A-Z0-9_]+)\b/g) ?? [])];
+    expect(refs.length).toBeGreaterThan(0); // 防止正则写错导致空集假绿
+    for (const name of refs) expect(prelude).toContain(`const ${name}=`);
+    expect(program).toContain('const normalizePnpmModulesState=');
+    expect(program).toContain('const normalizePnpmWorkspaceState=');
+
+    // ③ 静态：CJS 编译产物里每个 exports.XXX 都必须在前导块赋值，
+    // 否则目标机上取到的是 undefined（不抛错，最难查）。
+    const cjsRefs = [...new Set(program.match(/\bexports\.[A-Za-z0-9_]+/g) ?? [])];
+    for (const ref of cjsRefs) expect(prelude).toContain(`${ref}=`);
   });
 
 });

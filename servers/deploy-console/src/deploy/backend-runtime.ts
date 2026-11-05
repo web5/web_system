@@ -520,8 +520,37 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
   }
 }
 
+/**
+ * 序列化程序的前导块：把 executeBackendRuntime 引用到的**顶层辅助函数与常量**一起下发。
+ *
+ * 🔴 硬约束（本文件 §cleanRestart 处早有注释）：executeBackendRuntime 会被 toString()
+ * 序列化后投到目标机执行，函数体外的任何标识符在目标机都不存在。
+ * 2026-11-05 prod op4 实测踩中：新增 D1-F3 归一化后，能力程序报
+ * `normalizePnpmModulesState is not defined` 直接失败 —— 单测直接调函数没走序列化，抓不到。
+ *
+ * ⚠️ 以后给 executeBackendRuntime 新增 `normalize*` 辅助函数或 `PNPM_*` 常量，
+ * 必须同步加进本数组；`backend-runtime.spec.ts` 有静态回归用例会强制检查。
+ */
+export function backendRuntimeProgramPrelude(): string {
+  return [
+    `const PNPM_MODULES_STATE_TIMESTAMP=${JSON.stringify(PNPM_MODULES_STATE_TIMESTAMP)};`,
+    `const PNPM_WORKSPACE_STATE_TIMESTAMP=${JSON.stringify(PNPM_WORKSPACE_STATE_TIMESTAMP)};`,
+    `const normalizeTimestampValue=${normalizeTimestampValue.toString()};`,
+    `const normalizePnpmModulesState=${normalizePnpmModulesState.toString()};`,
+    `const normalizePnpmWorkspaceState=${normalizePnpmWorkspaceState.toString()};`,
+    // TS→CJS 后，函数体对模块级标识符的访问会被编译成 exports.XXX；
+    // 序列化到目标机时 exports 是空对象，只定义裸 const 会静默变 undefined
+    // （实测输出 `prunedAt: "undefined"`）。两种形态都补齐，才真正自包含。
+    'exports.PNPM_MODULES_STATE_TIMESTAMP=PNPM_MODULES_STATE_TIMESTAMP;',
+    'exports.PNPM_WORKSPACE_STATE_TIMESTAMP=PNPM_WORKSPACE_STATE_TIMESTAMP;',
+    'exports.normalizeTimestampValue=normalizeTimestampValue;',
+    'exports.normalizePnpmModulesState=normalizePnpmModulesState;',
+    'exports.normalizePnpmWorkspaceState=normalizePnpmWorkspaceState;',
+  ].join('\n');
+}
+
 export function backendRuntimeProgram(): string {
-  return '(' + executeBackendRuntime.toString() + ')(process.env.BACKEND_RUNTIME_PAYLOAD?JSON.parse(Buffer.from(process.env.BACKEND_RUNTIME_PAYLOAD,"base64").toString("utf8")):{' +
+  return backendRuntimeProgramPrelude() + '\n(' + executeBackendRuntime.toString() + ')(process.env.BACKEND_RUNTIME_PAYLOAD?JSON.parse(Buffer.from(process.env.BACKEND_RUNTIME_PAYLOAD,"base64").toString("utf8")):{' +
     "action:process.env.BACKEND_RUNTIME_ACTION,workspace:process.env.RELEASE_DIR,runtimeRoot:process.env.WEB_SYSTEM_DIR,runtimeStorageRoot:process.env.BACKEND_RUNTIME_ROOT,moduleDirectory:process.env.MODULE_DIR,moduleKey:process.env.MODULE_KEY,versionTag:process.env.COMMIT_ID,serviceDirectory:process.env.RUNTIME_SERVICE_DIR,versionDirectory:process.env.RUNTIME_VERSION_DIR,pnpm:process.env.RELEASE_PNPM_BIN||'pnpm',processName:process.env.PM2_NAME,port:process.env.PORT,healthPath:process.env.RUNTIME_HEALTH_PATH||'/health'" +
     "}).then(result=>process.stdout.write(JSON.stringify(result)+'\\n')).catch(error=>{console.error(error.message);process.exitCode=1;});";
 }
