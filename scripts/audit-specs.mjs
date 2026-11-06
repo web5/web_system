@@ -26,7 +26,16 @@
  *   R3 状态取值不在 §3 封闭枚举内
  *   R4 相对 markdown 链接指向不存在的文件（死链）
  *   R5 空壳 feature：目录内无任何「命名合规的产物文件」
+ *   R7 requirements.md 无可验判据章节（SOP §4「功能需求 + 验收判据」/ §4.1 EARS）
  *   形态统计（原 R6，notice 级，已不构成欠账）
+ *   R8 requirements.md 缺「边界与反例」/「变更日志」（notice 级，只计数）
+ *
+ * 为什么 R7 能阻断、R8 只能 notice —— 存量实测（8 份 requirements.md，2026-11-06）：
+ *   可验判据 8/8 命中（100%）｜ 边界与反例 5/8 ｜ 变更日志 4/8 ｜ SOP §4 八个章节全齐仅 2/8。
+ *   → 只有 100% 的那项做硬门才是零误杀；把八个章节名逐个对齐会一次判 6 红，
+ *     而那 6 份语义都齐全（只是标题叫「需求辨证」「验证判据表」），改名纯属
+ *     形式主义churn。护栏必须比规范宽松，这条已被 R2/R5 的历史误判验证过两次。
+ *   → 判据锚点按**语义**匹配（验收|判据|EARS|V\d|验证标准），不认死标题。
  *
  * 「产物文件」的判定见 isProductFile()：R1 白名单内的 .md，加上原型白名单
  * （prototype.html）。这样「命名合规」与「算不算产物」是同一套标准，不会出现
@@ -74,6 +83,15 @@ const BY_RULE_NAME = {
   R3: '状态取值越界',
   R4: '死链',
   R5: '空壳 feature',
+  R7: '需求无可验判据',
+};
+
+// requirements.md 的「可验判据」锚点：按语义匹配，不认死标题（SOP §4 / §4.1）
+const VERIFIABLE_RE = /验收|判据|EARS|V\d|验证标准/;
+// 「边界与反例」「变更日志」只做 notice（存量 5/8、4/8，硬门会误杀语义齐全的存量）
+const SOFT_SECTION = {
+  边界与反例: /边界|反例|非目标|不做/,
+  变更日志: /变更日志|changelog/i,
 };
 
 const findings = [];
@@ -153,6 +171,7 @@ const features = fs
 
 const emptyDirs = [];
 const noReqDirs = [];
+const softMissing = [];
 let mdTotal = 0;
 
 for (const feature of features) {
@@ -199,6 +218,18 @@ for (const feature of features) {
       }
     }
 
+    // R7 / R8 requirements.md 章节完整性（SOP §4）
+    // 只扫**标题行**：正文里提一句「验收」不算写了验收判据。
+    if (name === 'requirements.md') {
+      const heads = (text.match(/^#{1,4} .+$/gm) ?? []).join('\n');
+      if (!VERIFIABLE_RE.test(heads)) {
+        add('R7', feature, rel, '无可验判据章节（SOP §4「功能需求 + 验收判据」/ §4.1 EARS）');
+      } else {
+        const miss = Object.keys(SOFT_SECTION).filter((k) => !SOFT_SECTION[k].test(heads));
+        if (miss.length) softMissing.push({ feature, file: rel, miss });
+      }
+    }
+
     // R4 死链
     const re = /\[[^\]]*\]\(([^)\s]+)\)/g;
     let m;
@@ -242,7 +273,7 @@ for (const f of findings) (byRule[f.rule] ??= []).push(f);
 
 console.log(`specs 审计：${features.length} 个 feature / ${mdTotal} 份 md`);
 console.log(`已知存量（基线内）：${findings.length - fresh.length} ｜ 本次新增：${fresh.length} ｜ 基线已失效：${stale.length}`);
-for (const rule of ['R1', 'R2', 'R3', 'R4', 'R5']) {
+for (const rule of ['R1', 'R2', 'R3', 'R4', 'R5', 'R7']) {
   const list = byRule[rule] ?? [];
   if (!list.length) continue;
   const freshN = list.filter((f) => !knownKeys.has(f.key)).length;
@@ -250,6 +281,17 @@ for (const rule of ['R1', 'R2', 'R3', 'R4', 'R5']) {
 }
 if (emptyDirs.length) {
   console.log(`  提示 · 空目录 ${emptyDirs.length} 个（git 不跟踪，建议清理）：${emptyDirs.join(', ')}`);
+}
+// R8 notice：SOP §4 的「边界与反例」「变更日志」两章节。只计数，不阻断
+// （存量实测 5/8、4/8；缺的多是 9 月早期 spec，语义另有承载，硬门只会逼改名）
+if (softMissing.length) {
+  const c = {};
+  for (const r of softMissing) for (const k of r.miss) c[k] = (c[k] ?? 0) + 1;
+  console.log(
+    `  R8 章节欠账（notice，不阻断）：${softMissing.length} 份 requirements.md —— ` +
+      Object.entries(c).map(([k, v]) => `缺${k} ${v}`).join(' ｜ '),
+  );
+  if (VERBOSE) for (const r of softMissing) console.log(`     · ${r.feature}/${r.file}：缺 ${r.miss.join('、')}`);
 }
 // 形态统计：SOP v1.1 §2.1.1 已认定这些形态全部合法，只做分布统计，永不阻断
 if (noReqDirs.length) {
