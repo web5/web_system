@@ -75,6 +75,29 @@ export class User extends BigIntEntity {
   @Column({ type: 'varchar', length: 100, nullable: true, name: 'oa_openid', comment: '微信公众号 openid' })
   oaOpenid: string;
 
+  /**
+   * 企业微信成员 userid（统一外部身份层 · 卡①）。
+   *
+   * 契约真源：docs/development/wecom-approval-identity-contract.md
+   * console 不直读本列，只走 user-service `POST /internal/identities/resolve`。
+   * 生产 synchronize=false → 必须手工执行 migrations/0028_users_wecom_identity.sql。
+   * 索引具名（idx_users_wecom_userid）与迁移一致：匿名 @Index() 会生成哈希名，
+   * synchronize 以实体元数据对齐时会反复 DROP/BUILD 抖动。
+   */
+  @Index('idx_users_wecom_userid', ['wecomUserid'])
+  @Column({ type: 'varchar', length: 64, nullable: true, name: 'wecom_userid', comment: '企业微信成员 userid' })
+  wecomUserid: string;
+
+  /**
+   * 微信开放平台 unionid：同一人在公众号与小程序的 openid 不同，但同主体绑定
+   * 开放平台后 unionid 一致。resolve 中只作 externalId 未命中时的兜底（R-c）。
+   * 字段名故意不叫 unionId —— SnakeNamingStrategy 会把它转成 union_id，
+   * 与既有列规划 `unionid` 不符。
+   */
+  @Index('idx_users_unionid', ['unionid'])
+  @Column({ type: 'varchar', length: 64, nullable: true, name: 'unionid', comment: '微信开放平台 unionid' })
+  unionid: string;
+
   /** 状态：active 正常 / inactive 未激活 / banned 封禁 */
   @Column({ type: 'varchar', length: 20, default: 'active', comment: '状态 active/inactive/banned' })
   status: 'active' | 'inactive' | 'banned';
