@@ -8,7 +8,7 @@ import {
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { AuditService } from '../audit/audit.service';
-import { ApprovalService, REQUIRE_APPROVAL_ENVS_KEY } from './approval.service';
+import { ApprovalService, APPROVAL_TTL_MS } from './approval.service';
 
 describe('ApprovalService', () => {
   let service: ApprovalService;
@@ -83,9 +83,56 @@ describe('ApprovalService', () => {
       expect(row.createdAt).toBeDefined();
     });
 
+    it('新单写入 7 天有效期（createdAt + APPROVAL_TTL_MS）', async () => {
+      const before = Date.now();
+      const row = await service.create(spec);
+      expect(row.expiresAt).toBe(Number(row.createdAt) + APPROVAL_TTL_MS);
+      expect(Number(row.expiresAt)).toBeGreaterThanOrEqual(before + APPROVAL_TTL_MS);
+    });
+
     it('同一 env+moduleKey 已有待审批单时拒绝重复提交', async () => {
       repo.findOne.mockResolvedValue({ pipelineId: 'p0', status: 'pending' });
       await expect(service.create(spec)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  /**
+   * 节点级审批单。
+   *
+   * 🔴 这一段存在的唯一理由：**过期时间必须被钉死**。
+   * 节点级单若不写 `expiresAt`，超时作废永远扫不到它 → 流水线永久挂在
+   * `awaiting-approval`，正是本轮要修的原病。此前 `createNode` 在单测里
+   * **一次都没被真调用**（`release-plan.service.spec` 里只是 mock），
+   * 把这行删掉没有任何红灯（M5 实测）。
+   */
+  describe('createNode（节点级审批单）', () => {
+    const nodeSpec = {
+      pipelineId: 'p1',
+      nodeKey: 'deploy:prod',
+      nodeLabel: '发布到生产',
+      env: 'prod',
+      moduleKey: 'auth-service',
+      mode: 'direct',
+      gitBranch: 'master',
+      commitId: 'abc1234',
+      operator: 'alice',
+    };
+
+    it('新节点单写入 7 天有效期（createdAt + APPROVAL_TTL_MS）', async () => {
+      const before = Date.now();
+      const row = await service.createNode(nodeSpec);
+      expect(row.nodeKey).toBe('deploy:prod');
+      expect(row.status).toBe('pending');
+      expect(row.expiresAt).toBeDefined();
+      expect(Number(row.expiresAt)).toBe(Number(row.createdAt) + APPROVAL_TTL_MS);
+      expect(Number(row.expiresAt)).toBeGreaterThanOrEqual(before + APPROVAL_TTL_MS);
+    });
+
+    it('已有同节点待决单时直接复用，不新建（避免重复挂起）', async () => {
+      repo.findOne.mockResolvedValue({ id: 'a9', nodeKey: 'deploy:prod', status: 'pending' });
+      const row = await service.createNode(nodeSpec);
+      expect(row.id).toBe('a9');
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 
@@ -134,6 +181,31 @@ describe('ApprovalService', () => {
       await service.list('pending');
       const [opts] = repo.find.mock.calls[0];
       expect(opts.where).toEqual({ status: 'pending' });
+    });
+  });
+
+  /**
+   * L8：`expires_at IS NULL` 的老单永远不被扫描到。
+   * 实现上靠 `<=` 的 SQL 语义（NULL 比较得 NULL，不为真），
+   * 所以这里断言的是「条件确实是 <= 一个具体时刻」，而不是 IsNull / 无条件的 OR。
+   */
+  describe('findExpiredPending（超时作废的取数条件）', () => {
+    it('只取 pending 且 expiresAt <= now', async () => {
+      repo.find.mockResolvedValue([]);
+      const now = 1_800_000_000_000;
+      await service.findExpiredPending(now, 50);
+      const [opts] = repo.find.mock.calls[0];
+      expect(opts.where.status).toBe('pending');
+      expect(opts.where.expiresAt.type).toBe('lessThanOrEqual');
+      expect(opts.where.expiresAt.value).toBe(now);
+      expect(opts.order).toEqual({ expiresAt: 'ASC' });
+      expect(opts.take).toBe(50);
+    });
+
+    it('默认单轮上限 100：宁可多跑几轮，也不要一次锁住大表', async () => {
+      repo.find.mockResolvedValue([]);
+      await service.findExpiredPending(Date.now());
+      expect(repo.find.mock.calls[0][0].take).toBe(100);
     });
   });
 

@@ -332,4 +332,71 @@ describe('WecomApprovalService.runSnapshot（S5 只读运行结果）', () => {
     const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
     expect(snap.stages.map((x) => x.key)).toEqual(['check', 'build']);
   });
+
+  /**
+   * L9：S5 页面在 live 状态 5s 轮询一次，逐次落审计会把审计表灌成访问日志。
+   * 去重口径：同单同状态 5min 内 1 条；status 变化额外 1 条；超窗后算新查看行为。
+   */
+  it('viewRun 审计去重：5min 内同状态只记 1 条，状态跃迁额外记 1 条', async () => {
+    const s = setup({ pipeline: { ...runPipeline, status: 'running' } });
+    const nowSpy = jest.spyOn(Date, 'now');
+    const t0 = 1_700_000_000_000;
+    nowSpy.mockReturnValue(t0);
+
+    // 连续 3 次轮询（同状态、同窗口）→ 只记 1 条
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledTimes(1);
+    const first = (s.audit.log as jest.Mock).mock.calls[0][0];
+    expect(first.detail).toContain('dedup=first');
+    // 去重只影响审计，不影响快照本身：最后一次仍要正常返回
+    const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(snap.runId).toBe('P1');
+    expect(s.audit.log).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
+
+  it('viewRun 审计去重：状态跃迁与超窗各补记一条', async () => {
+    const s = setup({ pipeline: { ...runPipeline, status: 'running' } });
+    const nowSpy = jest.spyOn(Date, 'now');
+    const t0 = 1_700_000_000_000;
+    nowSpy.mockReturnValue(t0);
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+
+    // 30s 后同状态 → 不记
+    nowSpy.mockReturnValue(t0 + 30_000);
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledTimes(1);
+
+    // 状态跃迁 running → failed → 记一条 status-changed
+    (s.pipelines.get as jest.Mock).mockResolvedValue({ ...runPipeline, status: 'failed' });
+    nowSpy.mockReturnValue(t0 + 60_000);
+    const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(snap.status).toBe('failed');
+    expect(s.audit.log).toHaveBeenCalledTimes(2);
+    expect((s.audit.log as jest.Mock).mock.calls[1][0].detail).toContain('dedup=status-changed');
+
+    // 超过 5min 窗口后再访问 → 记一条 refreshed
+    nowSpy.mockReturnValue(t0 + 60_000 + 5 * 60 * 1000 + 1);
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledTimes(3);
+    expect((s.audit.log as jest.Mock).mock.calls[2][0].detail).toContain('dedup=refreshed');
+
+    nowSpy.mockRestore();
+  });
+
+  it('viewRun 去重按单隔离：另一张单不受影响', async () => {
+    const s = setup({ pipeline: { ...runPipeline, status: 'running' } });
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    // 同一张单的第二次 → 去重
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledTimes(1);
+
+    // 换一张单（A2）：get 返回新单，approvalId 也对得上 → 必须独立记一条
+    (s.approvals.get as jest.Mock).mockResolvedValue(makeApproval({ id: 'A2' }));
+    await s.service.runSnapshot('A2', { ...actor, approvalId: 'A2' }, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledTimes(2);
+  });
 });

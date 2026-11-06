@@ -196,7 +196,7 @@ export class WecomController {
   }
 
   /**
-   * S4「查看流水线详情」：用审批票据换**一次性、30 分钟**的平台会话。
+   * S4「查看流水线详情」：用审批票据换**30 分钟、每单最多 3 次**的平台会话。
    *
    * 前端拿到 token 写进 localStorage 的 pinia 持久化键（`auth`）后再跳
    * `/console/pipelines/:id`，否则必然被路由守卫踢去登录页（见 wecom-session.service.ts 注释）。
