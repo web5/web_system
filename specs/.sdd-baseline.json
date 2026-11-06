@@ -1,9 +1,4 @@
 {
   "updatedAt": "2026-11-06",
-  "entries": {
-    "R5|ui-prototype-token-alignment|(dir)": {
-      "rule": "R5",
-      "detail": "既无 requirements/design，也无 api-design / page-spec / tech-design"
-    }
-  }
+  "entries": {}
 }

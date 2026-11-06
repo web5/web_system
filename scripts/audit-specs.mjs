@@ -25,8 +25,12 @@
  *   R2 requirements.md / design.md / tech-design-*.md 缺标准状态行
  *   R3 状态取值不在 §3 封闭枚举内
  *   R4 相对 markdown 链接指向不存在的文件（死链）
- *   R5 空壳 feature：有 md 但既无需求也无任何设计类产物
+ *   R5 空壳 feature：目录内无任何「命名合规的产物文件」
  *   R6 缺 requirements.md 的 feature 计数（notice 级，只打印不阻断）
+ *
+ * 「产物文件」的判定见 isProductFile()：R1 白名单内的 .md，加上原型白名单
+ * （prototype.html）。这样「命名合规」与「算不算产物」是同一套标准，不会出现
+ * 同一份文件 R1 判合规、R5 判无用（2026-11-06 实测：inventory-impact.md 就撞上了）。
  *
  * 为什么 R5 不写成「必须有 requirements.md」：
  *   SOP §2.1 字面写「缺一则补」，但实测 64 个 feature 里 52 个没有
@@ -49,6 +53,9 @@ const TYPES = new Set([
   'glossary', 'index', 'handoff', 'guide', 'inventory', 'proposal',
   'adr', 'decision',
 ]);
+// 非 md 的产物：本仓大量 feature 是原型驱动，只有 prototype.html 而无任何 md
+// （pipeline-form-preview / popconfirm-width / sider-submenu-spacing 即此形态）。
+const PRODUCT_NON_MD = new Set(['prototype.html']);
 const STATUS = new Set([
   '草稿', '需求编写中', '方案设计中', '待评审',
   '已评审确认', '实施中', '已实现', '已归档',
@@ -86,11 +93,17 @@ function nameCompliant(name) {
   return false;
 }
 
-function walkMd(dir, acc = []) {
+/** 目录内是否存在「算得上产物」的文件：命名合规的 .md，或原型白名单 */
+function isProductFile(name) {
+  return PRODUCT_NON_MD.has(name) || (name.endsWith('.md') && nameCompliant(name));
+}
+
+/** 目录内所有文件（含非 md）—— 空目录判定与产物判定共用 */
+function walkAll(dir, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walkMd(p, acc);
-    else if (e.name.endsWith('.md')) acc.push(p);
+    if (e.isDirectory()) walkAll(p, acc);
+    else acc.push(p);
   }
   return acc;
 }
@@ -112,25 +125,28 @@ let mdTotal = 0;
 
 for (const feature of features) {
   const dir = path.join(SPECS, feature);
-  const files = walkMd(dir);
-  mdTotal += files.length;
-  if (files.length === 0) { emptyDirs.push(feature); continue; }
+  const allFiles = walkAll(dir);
+  // 空目录按「递归无任何文件」判。旧版按 .md 计数，把只有 prototype.html 的
+  // 原型目录误报成空目录（2026-11-06 实测误报 3 个）。
+  if (allFiles.length === 0) { emptyDirs.push(feature); continue; }
 
-  // R5 空壳守卫：目录里有 md，但既无需求也无任何设计类产物。
+  const files = allFiles.filter((f) => f.endsWith('.md'));
+  mdTotal += files.length;
+
+  // R5 空壳守卫：目录里有文件，但没有一个算产物（命名违规 / 纯素材）。
   // 刻意**不**要求「每 feature 必有 requirements.md」——那会一次判 52 个存量
   // feature 违规（含 16 个只有 api-design 的纯接口契约 feature、含 nce 这类
   // 只有 page-spec 的），逼着人去补 52 份文档，只会逼出糊弄式回填。
   // 「requirements.md 覆盖率」按 §2.1 的欠账另行跟踪（见 R6 提示），不进阻断面。
-  const hasAnyDesign = files.some((f) => {
-    const b = path.basename(f);
-    return b === 'requirements.md' || b === 'design.md' || /^(tech-design|api-design|page-spec).*\.md$/.test(b);
-  });
-  if (!hasAnyDesign) add('R5', feature, '(dir)', '既无 requirements/design，也无 api-design / page-spec / tech-design');
+  if (!allFiles.some((f) => isProductFile(path.basename(f)))) {
+    add('R5', feature, '(dir)', `无命名合规的产物文件（现有：${allFiles.map((f) => path.basename(f)).join(', ')}）`);
+  }
 
   if (!files.some((f) => path.basename(f) === 'requirements.md')) noReqDirs.push(feature);
 
   for (const abs of files) {
-    const rel = path.relative(SPECS, abs);
+    // 相对 feature 目录的路径，输出时前面再拼 feature 名（否则会显示成 a/a/x.md）
+    const rel = path.relative(dir, abs);
     const name = path.basename(abs);
     const text = fs.readFileSync(abs, 'utf8');
 
