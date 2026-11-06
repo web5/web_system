@@ -10,10 +10,25 @@ import { SchedulerService } from './scheduler.service';
  *   2. 合法的仍要照常注册（不能因为邻居坏了一条就整体不注册）；
  *   3. `reload()` 可重入（改完 cron 立刻生效，不必重启进程）。
  */
+/**
+ * 每条注册成功的管线都会在 cron 库里挂一个 setTimeout 句柄。
+ *
+ * 不在 afterEach 里销毁，就等于把句柄留给 jest 进程：CI 的 `pnpm test`
+ * （scripts/ci/changed-packages.sh）**不带 --forceExit**，句柄不清的后果是
+ * 「断言全过、进程不退出」—— PR 上表现为 `改动包 build/test` 永远 in_progress，
+ * 直到 job 默认 360 分钟超时（2026-11-06 实测踩到，PR #569 挂了 25 分钟以上）。
+ * 本地一直带 --forceExit 所以没暴露，别再用 --forceExit 掩盖它。
+ */
+const liveSchedulers: SchedulerService[] = [];
+const track = (svc: SchedulerService): SchedulerService => {
+  liveSchedulers.push(svc);
+  return svc;
+};
+
 function makeService(rows: Array<Partial<ContentPipelineEntity>>) {
   const repo = { find: async () => rows };
   const pipelineService = { run: async () => ({ collected: 0 }) };
-  const svc = new SchedulerService(repo as never, pipelineService as never);
+  const svc = track(new SchedulerService(repo as never, pipelineService as never));
   // 静默 logger，避免测试输出被注册日志刷屏
   (svc as unknown as { logger: { log: () => void; warn: () => void; error: () => void } }).logger = {
     log: () => undefined,
@@ -24,6 +39,10 @@ function makeService(rows: Array<Partial<ContentPipelineEntity>>) {
 }
 
 describe('SchedulerService', () => {
+  afterEach(() => {
+    while (liveSchedulers.length > 0) liveSchedulers.pop()!.onModuleDestroy();
+  });
+
   it('合法 cron 注册成功，status 带下次执行时间', async () => {
     const svc = makeService([{ code: 'daily_paper', cron: '0 9 * * 5', enabled: true }]);
     await svc.reload();
@@ -108,9 +127,8 @@ describe('SchedulerService', () => {
         return [{ code: 'hot_news', cron: '0 12 * * *', enabled: true }];
       },
     };
-    const svc = new SchedulerService(
-      repo as never,
-      { run: async () => ({ collected: 0 }) } as never,
+    const svc = track(
+      new SchedulerService(repo as never, { run: async () => ({ collected: 0 }) } as never),
     );
     (svc as unknown as { logger: Record<string, () => void> }).logger = {
       log: () => undefined,
