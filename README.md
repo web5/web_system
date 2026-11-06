@@ -67,7 +67,7 @@ web_system/
 │   └── agent-message/        # AI 对话消息共享逻辑（blocks 解析/翻译/折叠）
 ├── docs/                     # 人读文档（架构/开发/UI/产品/发布手册）
 │   └── architecture/system-overview.md   # ← 架构与部署总览（唯一入口）
-├── specs/                    # 设计/变更规格（新机制先在此定稿）
+├── specs/                    # 设计/变更规格（新机制先在此定稿；规范见 SDD-SOP，门禁 npm run check:specs）
 ├── scripts/                  # 构建/启动/验证/发布脚本
 ├── migrations/               # 数据库迁移 SQL
 ├── .codebuddy/               # 数字人体系（agent-kit / skills / rules）
