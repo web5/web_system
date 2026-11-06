@@ -123,6 +123,21 @@ export class ApproverService {
     };
   }
 
+  /**
+   * userId → 用户名（把 `operator: '1'` 渲染成人能读的名字）。
+   *
+   * 复用上面的可审批人清单（60s 缓存），**不新增跨服务端点**：
+   * 覆盖不到时（提交人没有 approve 权限 / 服务不可用）返回 null，由调用方回落显示原值。
+   * 只用于展示，**不得**用于任何权限判定。
+   */
+  async displayName(userId?: string | null): Promise<string | null> {
+    const id = String(userId ?? '').trim();
+    if (!id) return null;
+    const { users } = await this.list();
+    const hit = users.find((u) => String(u.id) === id);
+    return hit?.username ?? null;
+  }
+
   /** 清缓存（手工同步权限后立即生效） */
   clearCache(): void {
     this.cache = undefined;
