@@ -16,6 +16,7 @@ import {
   type RenderItem,
 } from '../processors/render';
 import { ListItemsQueryDto } from '../dto/content-quality.dto';
+import { PipelineCreateDto, PipelineUpdateDto } from '../dto/pipeline.dto';
 import { renderPlaceholders, renderTitle } from './title.util';
 import { ContentAccountService } from './content-account.service';
 import { MediaService } from './media.service';
@@ -174,11 +175,11 @@ export class ContentService {
     return this.pipelineRepo.findOne({ where: { id } });
   }
 
-  createPipeline(dto: Partial<ContentPipelineEntity>) {
+  createPipeline(dto: PipelineCreateDto) {
     return this.pipelineRepo.save(this.pipelineRepo.create(dto));
   }
 
-  async updatePipeline(id: number, dto: Partial<ContentPipelineEntity>) {
+  async updatePipeline(id: number, dto: PipelineUpdateDto) {
     await this.pipelineRepo.update(id, dto as any);
     return this.pipelineRepo.findOne({ where: { id } });
   }

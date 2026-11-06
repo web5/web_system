@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import {
@@ -7,7 +7,9 @@ import {
   createPipeline,
   updatePipeline,
   listWechatCovers,
+  previewCron,
   type ContentPipeline,
+  type CronPreviewResult,
   type WechatCoverItem,
 } from '@/api/content';
 
@@ -104,6 +106,68 @@ async function loadCovers() {
   }
 }
 
+// ── cron 校验与「下次执行」预览（2026-11-06 #8561）──
+
+/**
+ * 为什么校验走后端而不是前端引 cron 包：
+ * 校验口径必须与调度器**完全一致**。前端另写一套，就会出现「页面放行、调度器注册失败」
+ * 的分裂——那正是 #8557 的成因（`0 8 0 * *` 把「周四」写进了「日」字段，静默停摆两天）。
+ */
+const cronCheck = ref<CronPreviewResult | null>(null);
+const cronChecking = ref(false);
+let cronTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** ISO(+08:00) → `MM-DD HH:mm`：预览里年份和毫秒都是噪音 */
+function fmtRun(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * 校验并预览。
+ * 返回 null 表示「没能判定」（如预览接口不可用）——此时不拦保存：
+ * 后端 DTO 还有一道硬校验，前端不该在网络抖动时把人锁死。
+ */
+async function checkCron(expr: string): Promise<CronPreviewResult | null> {
+  const v = expr.trim();
+  if (!v) {
+    cronCheck.value = null;
+    return null;
+  }
+  cronChecking.value = true;
+  try {
+    const r = await previewCron(v);
+    cronCheck.value = r;
+    return r;
+  } catch {
+    cronCheck.value = null;
+    return null;
+  } finally {
+    cronChecking.value = false;
+  }
+}
+
+watch(
+  () => form.cron,
+  (v) => {
+    if (cronTimer) clearTimeout(cronTimer);
+    if (!v.trim()) {
+      cronCheck.value = null;
+      cronChecking.value = false;
+      return;
+    }
+    cronChecking.value = true;
+    cronTimer = setTimeout(() => void checkCron(v), 350);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (cronTimer) clearTimeout(cronTimer);
+});
+
 // ── 标题模板 live 预览（对齐后端 title.util.ts 的 renderPlaceholders 语义）──
 
 const TITLE_TZ = 'Asia/Shanghai';
@@ -193,6 +257,12 @@ async function submit() {
     message.warning('code 与 cron 必填');
     return;
   }
+  // 保存前再校验一次：不等防抖结果，否则「刚改完立刻点保存」正好绕过校验
+  const checked = await checkCron(form.cron);
+  if (checked && !checked.valid) {
+    message.error(`cron 不合法：${checked.error ?? '无法解析'}`);
+    return;
+  }
   const dto = {
     code: form.code.trim(),
     type: form.type,
@@ -259,6 +329,20 @@ onMounted(() => {
           <a-col :span="12">
             <a-form-item label="cron 表达式" required>
               <a-input v-model:value="form.cron" placeholder="0 9 * * *" class="mono" />
+              <div class="field-hint" style="margin-top: 4px">
+                <template v-if="cronChecking">校验中…</template>
+                <template v-else-if="cronCheck && !cronCheck.valid">
+                  <span style="color: #cf1322">✗ {{ cronCheck.error }}</span>
+                </template>
+                <template v-else-if="cronCheck && cronCheck.valid">
+                  <span style="color: #389e0d">
+                    ✓ 接下来 3 次：<span class="mono">{{ cronCheck.next.map(fmtRun).join(' · ') }}</span>
+                  </span>
+                </template>
+                <template v-else>
+                  5 段式「分 时 日 月 周」，如 <span class="mono">0 9 * * *</span>（每天 09:00）
+                </template>
+              </div>
             </a-form-item>
           </a-col>
           <a-col :span="12">
