@@ -274,13 +274,27 @@ git push origin <当前分支>
 
 **方式 0：CI 自动提 PR（推荐，零人工）**
 
-已配置 GitHub Actions（`.github/workflows/auto-pr.yml`）：push 到 `feature/*` / `fix/*` 分支时**自动创建 PR 到 master**，幂等（已有 PR 则跳过），用 GitHub 内置 `GITHUB_TOKEN`（不落地本地）。
-> ⚠️ 前提（两步都要做，缺一不可）：仓库 **Settings → Actions → General → Workflow permissions** 区块：
-> 1. 单选 **"Read and write permissions"**（否则内置 `GITHUB_TOKEN` 只读，无法建 PR）；
-> 2. **勾选下方复选框 "Allow GitHub Actions to create and approve pull requests"**。
->    ⚠️ 这一步极易被漏掉——即使第 1 步选了 Read/Write，只要这个复选框没勾，`pulls.create` 仍会 403 报
->    `GitHub Actions is not permitted to create or approve pull requests`，PR 照样建不出来。
-> 两步都开启后，只要 push `feature/xxx` / `fix/xxx` 分支，GitHub Actions 会自动建 PR，无需手动操作。
+已配置 GitHub Actions（`.github/workflows/auto-pr.yml`）：push 到 `feature/*` / `fix/*` 分支时**自动创建 PR 到 master**，幂等（已有 PR 则跳过），并顺带挂上 auto-merge（`mergeMethod=MERGE`）。
+
+> 🔴 **凭据是仓库 Secret `AUTO_PR_TOKEN`（fine-grained PAT），不是内置 `GITHUB_TOKEN`；缺失即失败，不回退。**
+> （2026-09-24 起；2026-11-06 修正本节旧写法——旧文称「用内置 `GITHUB_TOKEN`」，与实现不符。）
+>
+> **为什么必须 PAT**：由 `GITHUB_TOKEN` 创建的事件**不会触发后续 workflow**（GitHub 防递归机制），
+> 用它建的 PR 其 CI（quality-gate）**根本不跑** —— 表现为「每个 PR 都红，但一个 job 都没有」，
+> 2026-09-24 实测 4 个不同分支同时中招，排查时极易误判成工作流文件或改动内容的问题。
+> 旧写法 `secrets.AUTO_PR_TOKEN || secrets.GITHUB_TOKEN` 在 secret 未配置时**静默回落**，正是那次事故的根因；
+> 现改为**显式失败**并在日志里给出修法，让凭证缺失当场暴露。
+>
+> **配置**：Settings → Secrets and variables → Actions → New repository secret
+> 名称 `AUTO_PR_TOKEN`，值 = 具备 `pull_requests:write` + `contents:read` 的 fine-grained PAT
+> （与本地根 `.env` 的 `GITHUB_PR_TOKEN` 同一个即可）。fine-grained PAT 会过期，
+> 到期后同样以本 workflow 失败的形式暴露，不会静默。
+>
+> 因此 `Settings → Actions → General → Workflow permissions` 那两步（Read/Write + allow create PR）**不再是本工作流的前提**，
+> 以为开了它就能用 `GITHUB_TOKEN` 建 PR 是过时理解。其余用内置 token 的工作流仍受那两步约束。
+>
+> **实操**：push 完等约 30 秒，用 `gh pr list --head <分支名>` 确认 PR 已自动建好并挂上 auto-merge，
+> **不要再去 `gh pr create`** —— 会造出重复 PR。
 
 **方式 A：gh CLI**（token 已存根 `.env` 的 `GITHUB_PR_TOKEN`）
 ```bash
