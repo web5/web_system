@@ -35,6 +35,8 @@ interface Detail {
   nodeLabel?: string
   pipelineId: string
   pipelineStatus: string
+  /** 所属流水线模板 id —— 控制台详情页要的是模板 id，不是运行实例 id */
+  templateId?: string
   reviewer?: string
   reviewedAt?: number | string
   requiresConfirm: boolean
@@ -75,7 +77,18 @@ const submittedAt = computed(() => {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '-'
   return new Date(ms).toLocaleString('zh-CN', { hour12: false })
 })
-const consoleLink = computed(() => `/console/pipelines/${detail.value?.pipelineId || ''}`)
+/**
+ * 控制台链接拼装规则（踩过的坑，别再改回去）：
+ * `/console/pipelines/:id` 的 `:id` 是**流水线模板 id**，而审批单存的是**运行实例 id**（runId）。
+ * 直接用 runId 拼 → 模板查不到 → 详情页 `router.replace('/pipelines')`，手机点进去只能看到列表。
+ * 正确形态：`/console/pipelines/<templateId>?run=<runId>`，详情页按 `route.query.run` 选中那次运行。
+ */
+const consoleLink = computed(() => {
+  const tplId = detail.value?.templateId
+  const runId = detail.value?.pipelineId
+  if (!tplId) return '/console/pipelines'
+  return `/console/pipelines/${tplId}${runId ? `?run=${encodeURIComponent(runId)}` : ''}`
+})
 
 /**
  * 点「查看流水线详情」：先用审批票据换 30 分钟平台会话、写进 localStorage，
