@@ -586,6 +586,13 @@ DESIGN_ANCHOR_SCOPE="${DESIGN_ANCHOR_SCOPE:-}"
 check_r11b() {
   local range="$1"
   [ "$DESIGN_ANCHOR_MODE" = "off" ] && return 0
+  # pre-commit（cached 模式）不跑本规则。原因不是"太慢"，是**判不准**：
+  #   scan-design-drift.py 的 read_at() 固定 `git show HEAD:<file>` 读的是 HEAD，
+  #   `--cached` 只影响"改动了哪些文件"，不影响"读哪一版内容"——
+  #   于是它比对的是「HEAD 存量」，对「本次提交是否引入漂移」零信息量，
+  #   还会因为实现侧未回填而在每次 UI 提交上恒定报同一批 MISSING（2026-11-06 夹具实测）。
+  # 口径：R11b 是对「提交后仓库状态」的比对，交给 CI / 本地 diff 模式判（A2 拍板 2026-11-06）。
+  [ "$range" = "--cached" ] && return 0
   local py="$TOP/scripts/redline/scan-design-drift.py"
   [ -f "$py" ] || return 0
   local out lvl rule loc msg sev app

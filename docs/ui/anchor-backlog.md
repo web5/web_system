@@ -25,6 +25,23 @@
 
 合计 **129** 个界面文件。B1a 与 B1b 可并行推进（同属 admin 系一个观察轮）。
 
+### 2.1 2026-11-06 复测（⚠️ 上表数字已过时 + 换成「锚点维度」看）
+
+**文件数漂移**（`git ls-files` 实测，对比 09-22 的 129）：`deploy-console` 38→42、`admin` 26→42、`portal` 35→41、小程序 28→35、`shell` 6（表里没列），**实际 166 个界面文件，偏差 +29%**。排期前须按本行重算，否则工作量低估。
+
+**锚点维度**（真正决定工作量的口径：要落多少个 `data-dr`，而不是改多少个文件）：
+
+| 端 | 原型侧锚点数 | 实现侧已回填 | 缺口 | 原型文件 |
+|---|---|---|---|---|
+| `admin` | 40 | 0 | **40** | `admin-agents.html`(12) / `admin-agents-hub.html`(34) / `admin-agent-def-detail.html`(35) —— 三文件合计 81，**去重后 40** |
+| `deploy-console` | 5 | 0 | **5** | `deploy-console-domain.html` |
+| `kedou-ai-minigram` | 7 | 0 | **7** | 小程序原型 |
+| `shell` | 1 | 0 | **1** | `shell/prototype` |
+| `portal` | 0 | 0 | 0 | 原型未打锚点 → SKIP |
+
+**回填不是机械活**（2026-11-06 试水 8 个锚点的结论）：成本在**逐点判断**——`gen-params-preset` / `gen-params-payload-preview` / `gen-params-sampler` 在实现中不存在，`agent-def-edit-modal` 已被 page-spec v2 作废（应改原型，不是改代码）。
+**半截回填无收益**（40→32 后 admin 仍 MISSING，必须到 0 才能开）；且改 UI 源码要 `Proto:` / `Design:` 凭证 → **回填必须与所属原型/规格批次成对提交**，不能孤立排期。
+
 ## 3. 推进方式（`DESIGN_ANCHOR_MODE` 四档）
 
 ```bash
