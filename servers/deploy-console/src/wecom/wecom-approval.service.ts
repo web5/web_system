@@ -77,6 +77,53 @@ export interface WecomDecisionResult {
   message: string;
 }
 
+/**
+ * 移动端只读运行快照（S5）。
+ *
+ * 🔴 **为什么要有它**：S4 之后审批人真正想知道的是「这次发布到底成没成」。
+ * 让这个只读动作去换平台会话（方案 C）等于为了看一眼结果交一次后台权限。
+ * 这个端点用**同一张审批票据**回答同一个问题，凭据面不出审批域。
+ *
+ * 🔴 **刻意不给的东西**：日志正文、绝对路径、环境变量、编排快照全文。
+ * 卡② 的脱敏边界不因为「换个页面」而放松。要看日志去桌面。
+ */
+export interface WecomRunSnapshot {
+  runId: string;
+  approvalId: string;
+  /** 模板 id（桌面链接要用它，不是运行 id） */
+  templateId?: string;
+  templateName?: string;
+  env: string;
+  moduleKey: string;
+  mode: string;
+  status: string;
+  stage?: string;
+  /**
+   * 本次运行实际活动的节点（顺序即执行顺序）。
+   * 状态由**前端**用 `pipeline.stages.ts` 的 `stepState` 推导 —— 后端不复制展示状态机，
+   * 否则「桌面看到的」和「手机看到的」会各自漂移。
+   */
+  stages: Array<{ key: string; label?: string; kind?: string }>;
+  progress?: { current: number; total: number; message?: string };
+  versionTag?: string;
+  gitBranch?: string;
+  gitCommit?: string;
+  triggerSource?: string;
+  operator: string;
+  operatorName?: string;
+  startTime: number;
+  endTime?: number;
+  /** 失败摘要（只取首行 + 抹掉绝对路径，最多 180 字） */
+  errorBrief?: string;
+  /** 本次审批所在节点 */
+  nodeLabel?: string;
+  /** 仍在跑/等审批 → 前端轮询 */
+  live: boolean;
+}
+
+/** 运行中的状态集合（与前端 isLive 保持同义，仅用于告知前端是否轮询） */
+const LIVE_PIPELINE_STATUSES = ['running', 'pending', 'pending-approval', 'awaiting-approval'];
+
 const TERMINAL_PIPELINE_STATUSES = ['cancelled', 'failed', 'succeeded', 'rejected'];
 
 @Injectable()
@@ -133,7 +180,7 @@ export class WecomApprovalService {
 
   private async auditDecision(
     args: {
-      action: 'approve' | 'reject' | 'detail';
+      action: 'approve' | 'reject' | 'detail' | 'viewRun';
       approval: DeployApprovalEntity;
       actor: WecomActor;
       sourceIp: string;
@@ -197,6 +244,106 @@ export class WecomApprovalService {
       requiresConfirm: approval.env === 'prod',
       recentNodes,
     };
+  }
+
+  /**
+   * S5 移动端只读运行快照。
+   *
+   * 🔴 白名单与 `detail` 完全一致（`assertCanReview`）：能看审批详情的人才看得懂运行结果，
+   * 不因为是「只读」就放宽身份要求。
+   *
+   * 🔴 只读展示，**不改任何状态**；审计落 `wecom.viewRun`，便于回答「谁在什么时候看了哪次运行」。
+   */
+  async runSnapshot(
+    approvalId: string,
+    actor: WecomActor,
+    sourceIp: string,
+  ): Promise<WecomRunSnapshot> {
+    this.assertEnabled();
+    const approval = await this.approvals.get(approvalId);
+    const pipeline = await this.pipelines.get(approval.pipelineId);
+    await this.assertCanReview(approval, actor, pipeline);
+
+    // 只用于展示：查不到回落 operator 原值
+    const operatorName = await this.approvers.displayName(pipeline.operator || approval.operator);
+
+    await this.auditDecision({
+      action: 'viewRun',
+      approval,
+      actor,
+      sourceIp,
+      status: 'viewed',
+      detail: `查看运行结果 runId=${pipeline.id} status=${pipeline.status} stage=${pipeline.stage ?? '-'}`,
+    });
+
+    return {
+      runId: pipeline.id,
+      approvalId: approval.id,
+      // 命名陷阱同 detail：DeployPipelineEntity.pipelineId 是模板 id
+      templateId: pipeline.pipelineId ?? undefined,
+      templateName: pipeline.templateName,
+      env: pipeline.env,
+      moduleKey: pipeline.moduleKey,
+      mode: pipeline.mode,
+      status: pipeline.status,
+      stage: pipeline.stage,
+      stages: this.stageListOf(pipeline),
+      progress: pipeline.progress,
+      versionTag: pipeline.versionTag,
+      gitBranch: pipeline.gitBranch,
+      gitCommit: pipeline.gitCommit,
+      triggerSource: pipeline.triggerSource,
+      operator: pipeline.operator || approval.operator,
+      operatorName: operatorName ?? undefined,
+      // bigint 列经 TypeORM 可能已是字符串，统一归一，避免前端 new Date('1793...') 得 Invalid Date
+      startTime: Number(pipeline.startTime) || 0,
+      endTime:
+        pipeline.endTime === undefined || pipeline.endTime === null
+          ? undefined
+          : Number(pipeline.endTime),
+      errorBrief: this.briefError(pipeline.error),
+      nodeLabel: approval.nodeLabel,
+      live: LIVE_PIPELINE_STATUSES.includes(pipeline.status),
+    };
+  }
+
+  /**
+   * 本次运行实际活动的节点（顺序即执行顺序）。
+   * v5 nodes 优先 → steps 子集 → 空数组（前端回落九阶段）。
+   * 🔴 只给 key/label/kind，**不给** actions、命令、env —— 手机端不需要，也不该有。
+   */
+  private stageListOf(pipeline: {
+    nodes?: unknown;
+    steps?: string[] | null;
+  }): Array<{ key: string; label?: string; kind?: string }> {
+    const nodes = Array.isArray(pipeline.nodes)
+      ? (pipeline.nodes as Array<{ key?: string; label?: string; kind?: string }>)
+      : [];
+    const fromNodes = nodes
+      .filter((n) => n && typeof n.key === 'string' && n.key)
+      .map((n) => ({ key: n.key as string, label: n.label, kind: n.kind }));
+    if (fromNodes.length) return fromNodes;
+    if (Array.isArray(pipeline.steps) && pipeline.steps.length) {
+      return pipeline.steps.map((s) => ({ key: s }));
+    }
+    return [];
+  }
+
+  /**
+   * 失败摘要脱敏：只取首行 + 抹掉绝对路径 + 截断 180 字。
+   * 报错里常带 `/home/ubuntu/...` 这类内部路径，不能原样送到手机上（卡② 脱敏边界）。
+   */
+  private briefError(error?: string): string | undefined {
+    if (!error) return undefined;
+    const firstLine = String(error)
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.length > 0);
+    if (!firstLine) return undefined;
+    const masked = firstLine
+      .replace(/\/(?:home|Users|var|opt|srv|data|private)\/[^\s:;,)"']*/g, '<path>')
+      .slice(0, 180);
+    return masked || undefined;
   }
 
   async approve(

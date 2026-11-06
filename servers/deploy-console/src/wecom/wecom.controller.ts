@@ -17,9 +17,16 @@ import { WecomTicketService } from './wecom-ticket.service';
 /**
  * 企微审批 HTTP 入口（卡② T2-c/T2-d）。
  *
- * 全部 `@Public()` 绕过全局 `JwtAuthGuard`；3 个审批端点另挂
+ * 全部 `@Public()` 绕过全局 `JwtAuthGuard`；审批端点另挂
  * `WecomApproveGuard` 只认 scope=approve 短令牌。
  * 身份失败一律返回**冷提示 HTML 403**（S5），绝不创建/修改任何审批单。
+ *
+ * 端点清单（全部只认审批票据，凭据不出审批域）：
+ *  - GET  approvals/:id          审批详情（S1）
+ *  - GET  approvals/:id/run      运行结果，只读（S5）
+ *  - POST approvals/:id/approve  通过（S2）
+ *  - POST approvals/:id/reject   驳回（S3）
+ *  - POST approvals/:id/session  换 30min 平台会话，去桌面动手时用（L2 出口）
  */
 
 const OAUTH_AUTHORIZE = 'https://open.weixin.qq.com/connect/oauth2/authorize';
@@ -147,6 +154,20 @@ export class WecomController {
   async detail(@Param('id') id: string, @Res() res: Response): Promise<void> {
     const req = res.req as unknown as WecomRequestLike;
     const data = await this.approvals.detail(id, requireActor(req), sourceIpOf(req));
+    res.json({ code: 0, data });
+  }
+
+  /**
+   * S5 移动端只读运行结果（GET → 走票据的 2h 读窗口，见 wecom-approve.guard.ts）。
+   *
+   * 存在的意义：让「看一眼发布成没成」不必先换平台会话。
+   * 与 `session` 的区别是**凭据不出审批域** —— 这条路径永远拿不到全站权限。
+   */
+  @UseGuards(WecomApproveGuard)
+  @Get('approvals/:id/run')
+  async run(@Param('id') id: string, @Res() res: Response): Promise<void> {
+    const req = res.req as unknown as WecomRequestLike;
+    const data = await this.approvals.runSnapshot(id, requireActor(req), sourceIpOf(req));
     res.json({ code: 0, data });
   }
 

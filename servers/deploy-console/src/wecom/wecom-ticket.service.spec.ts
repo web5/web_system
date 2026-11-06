@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { WecomTicketService } from './wecom-ticket.service';
 
 const NOW = 1_700_000_000_000;
@@ -52,6 +53,46 @@ describe('WecomTicketService（S3 / S4 / V9）', () => {
     it('signed-link 令牌不能当 approve 短令牌用', () => {
       const link = svc.issueSignedLink('A1', NOW);
       expect(svc.verifyApproveTicket(link, NOW)).toBeNull();
+    });
+  });
+
+  /**
+   * 读写窗口分离（14 号方案 §五）。
+   * 写窗口 15min 不放宽；读窗口 2h，覆盖「批完去开会、回来再看一眼发布结果」。
+   */
+  describe('scope=approve 读写窗口分离', () => {
+    const args = { sub: 'bob', ext: 'wenzhui', approvalId: 'A1' };
+
+    it('16 分钟后写模式失效、读模式仍有效', () => {
+      const token = svc.issueApproveTicket(args, NOW);
+      const at16min = NOW + 16 * 60_000;
+      expect(svc.verifyApproveTicket(token, at16min, 'write')).toBeNull();
+      expect(svc.verifyApproveTicket(token, at16min, 'read')).not.toBeNull();
+    });
+
+    it('不传 mode 等同于写模式（默认必须严）', () => {
+      const token = svc.issueApproveTicket(args, NOW);
+      expect(svc.verifyApproveTicket(token, NOW + 16 * 60_000)).toBeNull();
+    });
+
+    it('超过 2 小时读模式也失效', () => {
+      const token = svc.issueApproveTicket(args, NOW);
+      expect(svc.verifyApproveTicket(token, NOW + 2 * 60 * 60_000 - 1, 'read')).not.toBeNull();
+      expect(svc.verifyApproveTicket(token, NOW + 2 * 60 * 60_000, 'read')).toBeNull();
+    });
+
+    it('旧票（无 viewExp）读模式回落 exp，不因部署瞬间集体失效也不会被放宽', () => {
+      // 手工按部署前的载荷格式签一张票：只有 exp，没有 viewExp
+      const json = JSON.stringify({
+        scope: 'approve', sub: 'bob', ext: 'wenzhui', approvalId: 'A1',
+        iat: NOW, exp: NOW + WecomTicketService.APPROVE_TTL_SEC * 1000,
+      });
+      const body = Buffer.from(json, 'utf8').toString('base64url');
+      const sig = createHmac('sha256', 'test-secret').update(json).digest('hex');
+      const legacy = `${body}.${sig}`;
+
+      expect(svc.verifyApproveTicket(legacy, NOW + 14 * 60_000, 'read')).not.toBeNull();
+      expect(svc.verifyApproveTicket(legacy, NOW + 16 * 60_000, 'read')).toBeNull();
     });
   });
 
