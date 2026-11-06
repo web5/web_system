@@ -1,5 +1,6 @@
 # 步骤 · 步骤任务（分支）与执行条件
-> 状态：草稿 ｜ 2026-11-06
+> 状态：已实现 ｜ 2026-11-06
+> 复核依据：分支已落成独立实体 `servers/deploy-console/src/entities/deploy-pipeline-step-branch.entity.ts`（不再拼进脚本）。本文件作为该实体的设计正本保留；更完整的三层模型见 `specs/pipeline-step-task/design.md`。
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：流水线**步骤（节点）与其下「步骤任务」的两实体关系** + **统一的条件表达式引擎**（步骤执行条件 / 任务匹配条件共用）。
