@@ -8,6 +8,11 @@
 对照源：`docs/ui/prototypes/console-wecom-approval-mobile.html`（原 `02-交互原型稿-企微移动端审批.html`，
 2026-11-04 需求稿配套稿）+ `30-任务产物/2026-11-04-console企微端手动审批/01-需求spec与技术方案.md`。
 
+> 📌 **2026-11-06 补注（不改上文原句）**：上面第二项是**评审当时**的输入源，该文件现为工作区归档快照、
+> 不再维护（只保留正文供追溯）。现行真源已归位入仓 →
+> [`specs/deploy-console-wecom-approval/design.md`](../../../specs/deploy-console-wecom-approval/design.md)（PR #582）。
+> 本报告其余结论依据的是当时原型与实现，未因本次归位而失效。
+
 本报告是执行者的**实现一致性自查**。自动化证据：`vue-tsc --noEmit` EXIT=0；后端定向单测 60/60、
 回归集 41/41 + 18/18（脚本 `evidence/verify-card2.sh`，VERDICT ALL GREEN）。
 **未做**：真机企微内打开的白屏/字体/安全区复验（须手机 + 企微客户端），故本报告不替代真机验收。
