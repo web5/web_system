@@ -345,7 +345,7 @@ onUnmounted(stopPolling)
 
 .card{background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:12px;
   box-shadow:0 1px 3px rgba(0,0,0,.06);padding:12px 13px;margin-bottom:10px}
-.card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;font-weight:600;margin:0 0 10px}
+.card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6B7280;font-weight:600;margin:0 0 10px}
 
 .card.fail{border-color:#FECACA;background:#FFFBFB}
 .card.fail h4{color:#B91C1C}
@@ -368,12 +368,12 @@ onUnmounted(stopPolling)
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .node-text{min-width:0}
 .name{font-size:14px;font-weight:600;color:#1A1A1F;line-height:1.45;word-break:break-word}
-.state{font-size:11.5px;color:#9CA3AF;margin-top:2px;line-height:1.4}
-.timeline li.running .state{color:#D97706;font-weight:600}
+.state{font-size:11.5px;color:#6B7280;margin-top:2px;line-height:1.4}
+.timeline li.running .state{color:#B45309;font-weight:600}
 .timeline li.error .state{color:#DC2626;font-weight:600}
-.timeline li.pending .name{color:#9CA3AF;font-weight:500}
+.timeline li.pending .name{color:#6B7280;font-weight:500}
 
-.disclaimer{font-size:11.5px;color:#9CA3AF;line-height:1.6;margin:12px 2px 0}
+.disclaimer{font-size:11.5px;color:#6B7280;line-height:1.6;margin:12px 2px 0}
 
 .btn{border-radius:10px;padding:12px 16px;font-size:14px;font-weight:600;border:1px solid transparent;
   cursor:pointer;font-family:inherit}
