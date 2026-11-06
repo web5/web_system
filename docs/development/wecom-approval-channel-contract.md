@@ -1,6 +1,9 @@
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
+> 定位：卡②「console 企微审批通道」的**接口契约与交付物定义**（写码前的流程凭证；改契约先改本文再改代码）。
+
 # console 企微审批通道（卡②）· 接口契约与交付物定义
 
-> 归属需求：`30-任务产物/2026-11-04-console企微端手动审批/01-需求spec与技术方案.md` §5 / §七 卡② / §十 卡②
+> 归属需求：[`specs/deploy-console-wecom-approval/design.md`](../../specs/deploy-console-wecom-approval/design.md) §5 / §七 卡② / §十 卡②（网络与时序见同目录 `tech-design-network-and-sequence.md`）
 > 开工：2026-11-06 08:3x（用户回「校验通过」，#8538 前置闭环；按 11-05「优先开工继续」直接进池）
 > 本文件是写码前的**流程凭证**。改动契约先改本文件再改代码。
 > 上游契约真源：`docs/development/wecom-approval-identity-contract.md`（卡①，`POST /internal/identities/resolve`）

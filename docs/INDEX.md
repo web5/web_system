@@ -62,6 +62,9 @@
 | 事故复盘 / 排障速查 | 事故文档 | `development/事故复盘-*.md`、`development/排障速查-*.md` |
 | 部署通道的**历史**设计决策 | 规格定稿 | `specs/<主题>/design.md`（**设计定稿 ≠ 已上线**，须查落地状态） |
 | 流水线 / 发布平台设计与边界 | 专题文档 | [`development/deploy-pipeline-dev.md`](./development/deploy-pipeline-dev.md)、`operations/pipeline-boundary-scripts.md` |
+| **企微端手动审批（deploy-console 产品特性）怎么设计 / 做到哪一步** | 需求与设计定稿 | [`specs/deploy-console-wecom-approval/design.md`](../specs/deploy-console-wecom-approval/design.md)（**设计定稿 ≠ 已上线**，落地看代码与两份契约）；配套 `decision.md`（为什么这么定）、`tech-design-network-and-sequence.md`（网络拓扑 + 时序）、`prototype.html`（Design: pass，sha256 校验） |
+| 企微接口 60020 / 要不要配 IP 白名单 / 可信域名与可信IP 什么区别 | 出站安全规范 | [`development/wecom-api-trusted-ip.md`](./development/wecom-api-trusted-ip.md)（入站 vs 出站 / 60020 排查三步 / 固定 EIP / 本地借道四种方式） |
+| 企微审批的接口契约、认领文件面、配置键 | 卡① / 卡② 契约 | [`development/wecom-approval-identity-contract.md`](./development/wecom-approval-identity-contract.md)（`POST /internal/identities/*`）、[`development/wecom-approval-channel-contract.md`](./development/wecom-approval-channel-contract.md)（`/api/wecom/*`） |
 | 文档本身怎么写 / 命名规范 | 文档约定 | `.codebuddy/rules/doc-conventions/RULE.mdc` |
 | **长期记忆 / 跨会话判据** | 记忆索引（≤4KB） | `.workbuddy/memory/MEMORY.md`；全文归档 `.workbuddy/memory/topics/` |
 | 发布平台设计态 / 目标态 | 设计稿 | `architecture/release-system-design.md`（**数据模型章节已过时**）、`architecture/aiops-console-target-architecture.md` |
