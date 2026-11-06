@@ -56,8 +56,13 @@ export function parseCronExpression(input: unknown, now: Date = new Date()): Cro
   }
 
   try {
-    const cronTime = new CronTime(raw, CRON_TIMEZONE);
-    const next = cronTime.getNextDateFrom(now);
+    // ⚠️ cron@3.2.1 的 CronTime 构造函数**不吃** timeZone 参数：实测 TZ=UTC 下
+    // `new CronTime(expr, 'Asia/Shanghai')` 得到的仍是 UTC zone 的 DateTime。
+    // 时区必须传给 getNextDateFrom(start, timeZone)，否则「下次执行时间」按**进程
+    // 本地时区**算：CI（UTC）上预览偏 8 小时、断言红，而本地（+08:00）全绿看不出。
+    // 调度器注册（CronJob 第 5 参）是对的，只有这里的校验/预览口径是错的。
+    const cronTime = new CronTime(raw);
+    const next = cronTime.getNextDateFrom(now, CRON_TIMEZONE);
     return { ok: true, normalized: raw, nextRun: next.toISO() ?? undefined };
   } catch (e) {
     return { ok: false, normalized: raw, error: `${(e as Error).message} —— ${CRON_FIELD_HINT}` };
@@ -73,12 +78,13 @@ export function nextCronRuns(input: string, count = 3, now: Date = new Date()): 
   if (!parsed.ok) {
     throw new Error(parsed.error ?? 'cron 表达式不合法');
   }
-  const cronTime = new CronTime(parsed.normalized, CRON_TIMEZONE);
+  // 时区同样只能走 getNextDateFrom 的第二参，构造参数会被 cron 忽略（见上）
+  const cronTime = new CronTime(parsed.normalized);
   const out: string[] = [];
   // 从 now + 1s 起算：表达式可能秒级命中当前时刻，+1s 防止把「现在」算成「下次」
   let cursor = new Date(now.getTime() + 1000);
   for (let i = 0; i < count; i += 1) {
-    const next = cronTime.getNextDateFrom(cursor);
+    const next = cronTime.getNextDateFrom(cursor, CRON_TIMEZONE);
     const iso = next.toISO();
     if (!iso) break;
     out.push(iso);
