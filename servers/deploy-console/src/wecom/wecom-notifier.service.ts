@@ -60,7 +60,20 @@ export class WecomNotifierService implements OnModuleInit, OnModuleDestroy {
   async push(event: ApprovalAwaitingEvent): Promise<boolean> {
     if (!this.config.enabled) return false;
     try {
-      const url = `${this.config.config.publicBaseUrl}/m/approve/${encodeURIComponent(event.approvalId)}`;
+      /**
+       * 🔴 链接必须指向 **OAuth 免登入口**，不能直连 H5（2026-11-06 联调发现）。
+       *
+       * H5（`/m/approve/:id`）的 `onMounted` 只认 `?ticket=` 或 sessionStorage，
+       * 没有票据就直接渲染「链接已失效」——而票据**只能**由 OAuth 回调签发。
+       * 直连 H5 = 从企微点消息 100% 看到「链接已失效」，一次都进不去。
+       * 旧实现（直连 H5）配了一条把这行为写成断言的单测，所以 60/60 全绿也照样不通。
+       *
+       * 走 authorize 的好处：每次点击都重新鉴权（snsapi_base 静默，无感），
+       * 且票据不落在消息链接里，转发/截图泄漏的风险为零。
+       */
+      const url =
+        `${this.config.config.publicBaseUrl.replace(/\/+$/, '')}/api/wecom/oauth/authorize` +
+        `?approvalId=${encodeURIComponent(event.approvalId)}`;
       const envTag = event.env === 'prod' ? 'PROD 生产' : event.env.toUpperCase();
       const description = [
         `环境：${envTag}`,
