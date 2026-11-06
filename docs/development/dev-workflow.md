@@ -43,9 +43,15 @@ git checkout -B feat/my-work master       # ❌ 不要用 feat/：不匹配 auto
 cd ~/workspace/web_system_dev
 git checkout -B feature/xxx master
 
-# ② 自测（只跑受影响的套件，最后再全量）
+# ② 自测（只跑受影响的套件）
 cd servers/deploy-console && npx jest src/<受影响的目录>
 cd apps/deploy-console  && npx vue-tsc --noEmit -p tsconfig.json
+#   ⚠️ 「最后再全量」不再是默认动作：改动若命中共享面（packages/types、packages/shared、packages/ui、
+#      agent-core 协议、服务入口的全局 filter/guard/interceptor、TypeORM 全局配置与 migrations、
+#      jest/tsconfig/CI 基建），禁止直接 `pnpm -r test` —— 先出「测试范围提案」让**人工确认**
+#      走全量还是抽样；抽样必须先梳理核心接口清单（≥5 条 + 未覆盖范围）。
+#      判据与模板：~/AiWorkspace/20-私域资产/研发流程SOP.md §7
+#      未命中共享面 → 只跑受影响包，不请示。
 
 # ③ 涉及数据库改动 —— 先在影子库演练
 cd ~/workspace/web_system

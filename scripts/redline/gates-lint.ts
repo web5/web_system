@@ -275,6 +275,7 @@ function main(): number {
     ["ui_file", scanSrc, "is_ui_file"],
     ["contract_file", scanSrc, "is_contract_file"],
     ["release_file", scanSrc, "is_release_file"],
+    ["test_surface", scanSrc, "is_test_surface_file"],
     ["test_path", scanSrc, "is_test_path"],
   ];
   for (const [scope, src, func] of bindings) {
