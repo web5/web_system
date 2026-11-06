@@ -7,7 +7,7 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import { appVersionDefine, appVersionPlugin } from './vite-app-version.mjs';
-import { publicAssetDefine } from './vite-public-assets.mjs';
+import { publicAssetPlugin } from './vite-public-assets.mjs';
 import { cdnMode } from './lib/cdn-layout.mjs';
 
 // 默认 externals 映射：模块 external 这些 key，运行时从 window.__SHARED__ 对应字段取
@@ -121,10 +121,10 @@ export function microFrontendConfig(opts) {
       // 否则 rollup 保留 `process.env.NODE_ENV !== "production"` 等表达式，浏览器无 process 全局
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env': JSON.stringify({ NODE_ENV: 'production' }),
-      // 公共静态资源前缀 /static/cdn/pub/ —— 资源不随版本投递，避免「双段目录」错一段即 404
-      ...publicAssetDefine(),
+      // 公共静态资源前缀 /static/cdn/pub/ 不在这里注入：它是运行时表达式，
+      // esbuild 的 define 不接受表达式，改由 publicAssetPlugin() 做源码替换
     },
-    plugins: [appVersionPlugin(), vue(), cssScopePlugin(name)],
+    plugins: [publicAssetPlugin(), appVersionPlugin(), vue(), cssScopePlugin(name)],
     resolve: {
       alias: {
         '@': resolve(process.cwd(), 'src'),
