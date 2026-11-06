@@ -36,6 +36,7 @@ function setup(opts: {
   gate?: { ok: boolean; degraded: boolean; reason?: string };
   affected?: number;
   enabled?: boolean;
+  operatorName?: string | null;
 } = {}) {
   const approval = opts.approval ?? makeApproval();
   const pipeline = {
@@ -46,6 +47,7 @@ function setup(opts: {
   const approvals = { get: jest.fn().mockResolvedValue(approval) } as unknown as ApprovalService;
   const approvers = {
     canApprove: jest.fn().mockResolvedValue(opts.gate ?? { ok: true, degraded: false }),
+    displayName: jest.fn().mockResolvedValue(opts.operatorName ?? null),
   } as unknown as ApproverService;
   const pipelines = {
     get: jest.fn().mockResolvedValue(pipeline),
@@ -188,6 +190,21 @@ describe('WecomApprovalService（卡② W-a~W-g / V3–V8 / V10 / V12）', () =>
     expect(serialized).not.toContain('logs');
     expect(serialized).not.toContain('WECOM_SECRET');
     expect(serialized).not.toContain('/data/');
+  });
+
+  it('提交人 id 能反查成用户名（S1 不该显示「1」）', async () => {
+    const s = setup({ operatorName: 'admin' });
+    const d = await s.service.detail('A1', actor, '1.2.3.4');
+    expect(d.operator).toBe('alice');
+    expect(d.operatorName).toBe('admin');
+    // 只传 id 去查，不能拿 username 冒充 id
+    expect(s.approvers.displayName).toHaveBeenCalledWith('alice');
+  });
+
+  it('反查不到时 operatorName 为 undefined，前端回落显示原值', async () => {
+    const s = setup({ operatorName: null });
+    const d = await s.service.detail('A1', actor, '1.2.3.4');
+    expect(d.operatorName).toBeUndefined();
   });
 
   it('非 prod 无需 confirm，可直接通过', async () => {
