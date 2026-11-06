@@ -10,7 +10,7 @@
  */
 import type { IconName } from './icons';
 
-export type NavKey = 'welcome' | 'chat' | 'discover' | 'translate' | 'contract' | 'lab';
+export type NavKey = 'welcome' | 'chat' | 'discover' | 'translate' | 'contract' | 'nce' | 'lab';
 
 export interface NavItem {
   key: NavKey;
@@ -104,6 +104,19 @@ export const NAV_ITEMS: NavItem[] = [
     // P3：报告步由页面注入「合同原文」面板，非报告步不注入 → 右栏整体不占位
     context: true,
     // 2026-09-23 顶栏收口：收进「发现」能力卡片，顶栏不占位
+    topLevel: false,
+    parent: 'discover',
+  },
+  {
+    key: 'nce',
+    label: '新概念英语',
+    to: '/nce',
+    icon: 'lang',
+    // 页面内部自带目录 / 正文 / 习题三栏，外壳不要再插左栏与右栏
+    sideList: false,
+    listTitle: '课文目录',
+    context: false,
+    // 与 translate / contract 同口径：收进「发现」，顶栏不占位
     topLevel: false,
     parent: 'discover',
   },

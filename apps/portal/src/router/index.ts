@@ -56,6 +56,13 @@ const routes = [
     component: () => import('../views/Contract.vue'),
     meta: { requiresAuth: true },
   },
+  // 新概念英语：从「发现」能力卡片进入，页面内部自带目录/正文/习题三栏
+  {
+    path: '/nce',
+    name: 'Nce',
+    component: () => import('../views/Nce.vue'),
+    meta: { requiresAuth: true },
+  },
   {
     path: '/lab',
     name: 'Lab',

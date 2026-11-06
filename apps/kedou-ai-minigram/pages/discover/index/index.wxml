@@ -25,6 +25,16 @@
     <text class="go">›</text>
   </view>
 
+  <!-- 新概念英语：NCE2 逐句精读，入口与 PC portal「发现」对齐 -->
+  <view class="cap" bindtap="openNce">
+    <view class="ic n">英</view>
+    <view class="tx">
+      <view class="b">新概念英语</view>
+      <view class="e">NCE2 逐句精读 · 点句出译文 · 生词就地查</view>
+    </view>
+    <text class="go">›</text>
+  </view>
+
   <view class="sec-t mt">即将上线</view>
 
   <view class="cap soon" bindtap="onSoon" data-name="论文速读">

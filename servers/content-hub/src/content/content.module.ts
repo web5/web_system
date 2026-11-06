@@ -26,6 +26,9 @@ import { ManualCollectService } from './services/manual-collect.service';
 import { ArxivDigestService } from './services/arxiv-digest.service';
 import { ContentQualityController } from './content-quality.controller';
 import { MediaController } from './media.controller';
+import { NceController } from './nce.controller';
+import { NceLessonEntity } from './entities/nce-lesson.entity';
+import { NceLessonService } from './services/nce-lesson.service';
 import { MediaService } from './services/media.service';
 import { CoverAiService } from './services/cover-ai.service';
 import { UploadStoreClient } from './services/upload-store.client';
@@ -45,10 +48,11 @@ import { ContentAuthModule } from '../auth/auth.module';
       CollectRunEntity,
       ContentAccountEntity,
       PipelineRunEntity,
+      NceLessonEntity,
     ]),
     ContentAuthModule,
   ],
-  controllers: [ContentController, ContentQualityController, MediaController],
+  controllers: [ContentController, ContentQualityController, MediaController, NceController],
   providers: [
     ContentService,
     PipelineService,
@@ -66,6 +70,7 @@ import { ContentAuthModule } from '../auth/auth.module';
     MediaService,
     CoverAiService,
     UploadStoreClient,
+    NceLessonService,
   ],
   exports: [
     ContentService,

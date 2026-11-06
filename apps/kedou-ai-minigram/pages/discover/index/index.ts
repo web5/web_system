@@ -71,6 +71,11 @@ Page({
     wx.navigateTo({ url: '/packageAssess/pages/assess/index/index' });
   },
 
+  /** 新概念英语：主包课文目录（与 PC portal / admin 同一份 nce_lessons 数据） */
+  openNce() {
+    wx.navigateTo({ url: '/pages/nce/index/index' });
+  },
+
   /** 即将上线的能力 */
   onSoon(e: any) {
     const name = String(e.currentTarget.dataset.name || '该能力');
