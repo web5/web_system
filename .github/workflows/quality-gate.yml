@@ -251,5 +251,5 @@ jobs:
 
       # 规范真源：~/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md §2 / §3
       # 基线机制与 audit-proto-registry 同款：存量缺口不阻断，新增违规必红。
-      - name: 审计 specs/（R1 命名 / R2 状态缺失 / R3 状态越界 / R4 死链 / R5 空壳）
+      - name: 审计 specs/（R1 命名 / R2 状态缺失 / R3 状态越界 / R4 死链 / R5 空壳 / R7 无可验判据）
         run: node scripts/audit-specs.mjs

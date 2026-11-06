@@ -12,11 +12,13 @@
 # 实际生效的规则（scan_cached → check_file + scan_diff_range --cached）：
 #   R1 调试残留 · R2 敏感文件 · R2b 硬编码凭据 · R3 占位 · R4 TS 铁律
 #   R5 CORS · R8 main.ts 异常过滤器 · R9 新增页面须同行原型 · R9b 既有 UI 改动
+# 另外：暂存区含 specs/ 时追加跑 scripts/audit-specs.mjs（SDD 规格门禁，
+#   规则 R1..R8，真契约在 CI 的 specs-gate job）。
 # commit 级规则（R10/R11/R13/R14/R15/R17/R18）在本地**不跑**——它们要看
 # commit message 与祖先链，只有 commit 之后才存在，交给 CI。
 #
-# 耗时：实测 0.5~3s（2026-10-22 行级改 bash 内建后）。超过 5s 请查
-#      SCAN_PROFILE=1，不要靠感觉。
+# 耗时：红线扫描实测 0.5~3s（2026-10-22 行级改 bash 内建后）；specs 审计 0.6s，
+#      且仅在暂存区含 specs/ 时触发。超过 5s 请查 SCAN_PROFILE=1，不要靠感觉。
 #
 # 绕过：
 #   git commit --no-verify   临时绕过（CI 会重跑同一套规则，故不是真绕过）
@@ -30,6 +32,29 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || exit 0
 
 SCANNER="scripts/redline/scan-rules.sh"
+SPECS_AUDIT="scripts/audit-specs.mjs"
+
+# ── specs 门禁（仅在暂存区动了 specs/ 时跑）──────────────────────────
+# 真契约是 CI（quality-gate.yml 的 specs-gate job）；这里只为「提交前就知道
+# 自己写歪了」。不加这道，本地写完 specs 要等 CI 跑完才发现命名/状态/判据缺失。
+#
+# 为什么只在暂存区含 specs/ 时跑：审计要扫全仓 113 份 md（实测 0.6s），
+# 改前端代码的提交没必要为它付这份时间。
+if command -v git >/dev/null 2>&1 &&
+   git diff --cached --name-only --diff-filter=ACMR 2>/dev/null | grep -q '^specs/'; then
+  if [ -f "$SPECS_AUDIT" ] && command -v node >/dev/null 2>&1; then
+    if ! node "$SPECS_AUDIT"; then
+      echo "" >&2
+      echo "🔴 pre-commit: specs 门禁未通过（新增违规见上）" >&2
+      echo "   规范真源：~/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md §2/§3/§4" >&2
+      echo "   新建 feature 用：node scripts/new-spec.mjs <slug> [--design]" >&2
+      echo "   应急绕过：git commit --no-verify（CI 会重跑同一套规则，不是真绕过）" >&2
+      exit 1
+    fi
+  else
+    echo "⚠️  pre-commit: 缺 $SPECS_AUDIT 或 node，跳过 specs 门禁" >&2
+  fi
+fi
 
 # 扫描器缺失时不阻断（比如在非完整检出的环境里），只提示。
 # 理由：本地门禁是便利设施，不该因为仓库不全而让人无法提交。
