@@ -19,16 +19,14 @@
 import { cdnMode, cdnCommonUrlPrefix } from './lib/cdn-layout.mjs';
 
 /** 公共静态资源的 URL 前缀（结尾带斜杠，与 Vite base 口径一致）。
- *  legacy fallback 值；`ASSET_URL_MODE=cdn` 时 publicAssetDefine() 改用 `/cdn/common/pub/`。 */
+ *  legacy fallback 值；`ASSET_URL_MODE=cdn` 时 publicAssetExpression() 改用 `/cdn/common/pub/`。 */
 export const PUBLIC_ASSET_BASE = '/static/cdn/pub/';
 
 /**
- * 注入 `__PUBLIC_ASSET_BASE__`。
- * 用法与 appVersionDefine() 一致，在各 vite.config.ts 的 define 里展开即可。
+ * `__PUBLIC_ASSET_BASE__` 的**运行时表达式**（不带引号，可直接进源码）。
  *
- * **Phase 1（2026-11-04）改为运行时求值**：define 的值是一个 JS 表达式字符串，
- * 所有 `${__PUBLIC_ASSET_BASE__}logo.svg` 会变成
- * `${(window.__ASSET_BASE__ || '/static/cdn/pub/')}logo.svg`。
+ * **Phase 1（2026-11-04）改为运行时求值**：所有 `${__PUBLIC_ASSET_BASE__}logo.svg`
+ * 最终变成 `${(window.__ASSET_BASE__ || '/static/cdn/pub/')}logo.svg`。
  * `window.__ASSET_BASE__` 由 gateway 在 shell HTML 的 <head> 注入
  * （cdn 模式 = `ASSET_ORIGIN + common/pub/` 完整 URL）。
  *
@@ -38,11 +36,47 @@ export const PUBLIC_ASSET_BASE = '/static/cdn/pub/';
  *
  * 兼容：未注入 `window.__ASSET_BASE__`（legacy 模式 / vite dev 直接起）
  * 时回落 `PUBLIC_ASSET_BASE`，与改造前逐字节一致。
+ *
+ * ⚠️ 用法变了：Phase 1 原先把这段表达式塞进 Vite `define`，esbuild 不接受表达式，
+ * 构建必挂（详见 {@link publicAssetPlugin}）。现在只在插件内部使用，不要再放回 define。
  */
-export function publicAssetDefine() {
+export function publicAssetExpression() {
   // cdn 模式下 fallback 对齐 CDN 布局 `/cdn/common/pub/`；legacy 保持 `/static/cdn/pub/`（逐字节不变）。
   const fallback = cdnMode() === 'cdn' ? cdnCommonUrlPrefix('pub') : PUBLIC_ASSET_BASE;
+  return `(window.__ASSET_BASE__ || ${JSON.stringify(fallback)})`;
+}
+
+/** 被替换的标识符名（与 env.d.ts 的 declare 一致） */
+const PLACEHOLDER = '__PUBLIC_ASSET_BASE__';
+
+/**
+ * 把 `__PUBLIC_ASSET_BASE__` 替换成运行时表达式。
+ *
+ * ⚠️ **为什么不能用 Vite `define`**（2026-11-06 修）：
+ *   Phase 1（90615061）把 define 的值写成了 JS 表达式
+ *   `(window.__ASSET_BASE__ || "/static/cdn/pub/")`。但 Vite 的 define 最终交给
+ *   esbuild，esbuild 只接受「合法 JSON」或「单个标识符」，表达式直接报
+ *   `Invalid define value (must be an entity name or valid JSON syntax)`，
+ *   **admin / portal 的 `vite build` 从 11-04 起必挂**，而 CI 只在「改动包」上跑
+ *   build，admin 一直没进改动包，所以直到 11-06 #8561 改了 admin 才暴露。
+ *
+ *   改走 `transform` 源码替换：esbuild 只管把它当普通表达式编译，运行时能力
+ *   （window.__ASSET_BASE__ 优先、fallback 兜底）与 Phase 1 设计完全一致。
+ *
+ * 跳过 `.d.ts`：`env.d.ts` 里的 `declare const __PUBLIC_ASSET_BASE__` 是给
+ * vue-tsc 的类型声明，替换后语法不成立。
+ */
+export function publicAssetPlugin() {
+  const replacement = publicAssetExpression();
+  const re = new RegExp(`\\b${PLACEHOLDER}\\b`, 'g');
   return {
-    __PUBLIC_ASSET_BASE__: `(window.__ASSET_BASE__ || ${JSON.stringify(fallback)})`,
+    name: 'web-system:public-asset-base',
+    // pre：必须早于 vite:esbuild / @vitejs/plugin-vue，拿到的是原始源码
+    enforce: 'pre',
+    transform(code, id) {
+      if (!code.includes(PLACEHOLDER)) return null;
+      if (id.endsWith('.d.ts') || id.includes('/node_modules/')) return null;
+      return { code: code.replace(re, replacement), map: null };
+    },
   };
 }

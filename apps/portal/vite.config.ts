@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import viteCompression from 'vite-plugin-compression';
 import { appVersionDefine, appVersionPlugin } from '../../scripts/vite-app-version.mjs';
-import { publicAssetDefine } from '../../scripts/vite-public-assets.mjs';
+import { publicAssetPlugin } from '../../scripts/vite-public-assets.mjs';
 import { microFrontendConfig } from '../../scripts/vite-micro-frontend.mjs';
 
 // mode=mf：微前端模块打包（UMD + externals + CSS scope）
@@ -15,8 +15,11 @@ export default defineConfig(({ mode }) => {
   return {
     base: '/portal/',
     // 版本常量 + 公共静态资源前缀（/static/cdn/pub/，见 assets/shared-public/README.md）
-    define: { ...appVersionDefine(), ...publicAssetDefine() },
+    define: { ...appVersionDefine() },
     plugins: [
+      // 公共静态资源前缀（运行时读 window.__ASSET_BASE__）：必须是 pre 插件，
+      // 不能用 define —— esbuild 不接受表达式，见 scripts/vite-public-assets.mjs
+      publicAssetPlugin(),
       appVersionPlugin(),
       vue(),
       viteCompression({
