@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -6,6 +12,7 @@ import {
   ApprovalStatus,
 } from '../entities/deploy-approval.entity';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
+import { AuditService } from '../audit/audit.service';
 
 /** 系统设置键：需要审批的环境列表（逗号分隔；未配置默认 prod） */
 export const REQUIRE_APPROVAL_ENVS_KEY = 'REQUIRE_APPROVAL_ENVS';
@@ -46,6 +53,7 @@ export class ApprovalService {
     @InjectRepository(DeployApprovalEntity)
     private readonly repo: Repository<DeployApprovalEntity>,
     private readonly settings: SystemSettingsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -184,5 +192,77 @@ export class ApprovalService {
     row.comment = comment?.trim() || undefined;
     row.reviewedAt = Date.now();
     return this.repo.save(row);
+  }
+
+  /**
+   * 作废（cancel）：把一张 **pending** 单标记为 `cancelled`。
+   *
+   * 业务场景：流水线的挂起实例随进程重启丢失后，审批单会永久停在 pending ——
+   * 点进去也批不动（恢复时找不到锚点），但它仍会出现在「在途单」检查里，
+   * 成了每次运维都要人工排除的噪声。cancel 就是给它一个**合法的终点**。
+   *
+   * 🔴 三条硬约束：
+   *  1. **必须写原因**：没有原因就无法与「误点作废」区分，事后不可审计。
+   *  2. **只动审批单，不动流水线**：cancel 表示「这单不再有决策对象」，
+   *     不触发恢复也不触发终止；流水线自身状态由其运行记录负责。
+   *  3. **CAS 而非先读后写**：`WHERE status='pending'` 把并发挤在数据库一侧。
+   *     先 get 再 save 会把并发已 approved 的单覆盖成 cancelled —— 那等于
+   *     抹掉一次真实审批留痕，比不做还糟。
+   */
+  async cancel(
+    id: string,
+    reason: string,
+    actor: string,
+  ): Promise<DeployApprovalEntity> {
+    const trimmedReason = (reason || '').trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('作废审批单必须填写原因');
+    }
+    const trimmedActor = (actor || '').trim();
+    if (!trimmedActor) {
+      throw new BadRequestException('作废审批单必须记录操作者');
+    }
+
+    const now = Date.now();
+    const result = await this.repo
+      .createQueryBuilder()
+      .update(DeployApprovalEntity)
+      .set({
+        status: 'cancelled',
+        reviewer: trimmedActor,
+        comment: trimmedReason,
+        reviewedAt: now,
+      })
+      .where('id = :id AND status = :pending', { id, pending: 'pending' })
+      .execute();
+
+    const affected = result?.affected ?? 0;
+    if (affected !== 1) {
+      const row = await this.repo.findOne({ where: { id } });
+      if (!row) throw new NotFoundException(`审批单 ${id} 不存在`);
+      throw new ConflictException(
+        `审批单 ${id} 当前状态为 ${row.status}，只有 pending 可作废`,
+      );
+    }
+
+    const after = await this.repo.findOne({ where: { id } });
+    await this.audit
+      .log({
+        user: trimmedActor,
+        action: 'approval.cancel',
+        env: after?.env,
+        component: 'approval',
+        status: 'success',
+        detail: `作废审批单 ${id}（原 pending）｜原因：${trimmedReason}｜流水线：${after?.pipelineId ?? '未知'}`,
+      })
+      .catch((err: Error) => {
+        // 审计失败不回滚业务状态：单已作废是既成事实，补记即可
+        this.logger.error(`作废审计写入失败 ${id}: ${err.message}`);
+      });
+
+    this.logger.warn(
+      `审批单已作废 ${id} by ${trimmedActor}｜原因：${trimmedReason}`,
+    );
+    return after as DeployApprovalEntity;
   }
 }

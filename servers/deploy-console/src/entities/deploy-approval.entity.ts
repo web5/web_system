@@ -1,6 +1,16 @@
 import { Entity, PrimaryColumn, Column, Index } from 'typeorm';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+/**
+ * 审批单状态。
+ *
+ * `cancelled` 与 `rejected` **不是同义词**：
+ *  - `rejected` = 有人看过并**否决**（reviewer 是决策者，comment 是判断理由）
+ *  - `cancelled` = 这单**不再有决策对象**（流水线实例已丢失 / 流程作废），
+ *    不代表任何人的判断，不触发恢复也不触发终止
+ * 之所以必须独立，是因为把孤儿单塞进 `rejected` 会污染「驳回率」这类基于
+ * 人工否决的统计口径。
+ */
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 /**
  * 发布审批单（prod 门禁的留痕记录）。
@@ -58,7 +68,7 @@ export class DeployApprovalEntity {
   @Column({ type: 'varchar', length: 64, comment: '提交人' })
   operator: string;
 
-  @Column({ type: 'varchar', length: 16, default: 'pending', comment: '状态 pending/approved/rejected' })
+  @Column({ type: 'varchar', length: 16, default: 'pending', comment: '状态 pending/approved/rejected/cancelled' })
   @Index()
   status: ApprovalStatus;
 
