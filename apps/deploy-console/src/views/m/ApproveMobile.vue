@@ -27,12 +27,13 @@ interface Detail {
   gitBranch?: string
   commitId?: string
   operator: string
-  createdAt: number
+  /** bigint 列 → 序列化成字符串，故两种类型都要容忍 */
+  createdAt: number | string
   nodeLabel?: string
   pipelineId: string
   pipelineStatus: string
   reviewer?: string
-  reviewedAt?: number
+  reviewedAt?: number | string
   requiresConfirm: boolean
   recentNodes: Array<{ key: string; label: string; result: string }>
 }
@@ -64,8 +65,12 @@ const versionLine = computed(() => {
   return d.versionTag || d.commitId || d.gitBranch || '-'
 })
 const submittedAt = computed(() => {
-  const t = detail.value?.createdAt
-  return t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '-'
+  // createdAt 是 bigint（毫秒）列，JSON 序列化后是字符串；
+  // 直接 new Date('1793951145341') 在 Chrome 里得 Invalid Date，必须先转数字。
+  const raw = detail.value?.createdAt
+  const ms = typeof raw === 'string' ? Number(raw) : raw
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '-'
+  return new Date(ms).toLocaleString('zh-CN', { hour12: false })
 })
 const consoleLink = computed(() => `/console/pipelines/${detail.value?.pipelineId || ''}`)
 
