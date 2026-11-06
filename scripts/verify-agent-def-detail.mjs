@@ -452,7 +452,7 @@ await page.evaluate(() => {
   if (sd) sd.setAttribute('data-demo-state', 'error');
 });
 await wait(80);
-rec('22a S4 前置：error 态可见、返回修改按钮在', await vis('[data-dr="error-cta"]'), true);
+rec('22a S4 前置：error 态可见、返回修改按钮在', await vis('#cta-error'), true);
 // 先制造「temp+topP 同填」（S4 同款），验证错误态文案承诺「字段值已保留」
 await page.evaluate(() => {
   const t = document.getElementById('in-temp');
@@ -464,7 +464,7 @@ await wait(120);
 const beforeVals = [await val('#in-temp'), await val('#in-topP')].join('|');
 rec('22b 同填前置：temp=1|topP=0.9', beforeVals, '1|0.9');
 // 点「返回修改」
-await clickEl('[data-dr="error-cta"]');
+await clickEl('#cta-error');
 await wait(200);
 rec('22c error-cta → data-demo-state=normal',
   await page.$eval('#screen-detail', (e) => e.getAttribute('data-demo-state')), 'normal');
@@ -492,8 +492,8 @@ await page.evaluate(() => {
   if (sd) sd.setAttribute('data-demo-state', 'empty');
 });
 await wait(80);
-rec('22h 空态可见、开始配置按钮在', await vis('[data-dr="empty-cta"]'), true);
-await clickEl('[data-dr="empty-cta"]');
+rec('22h 空态可见、开始配置按钮在', await vis('#cta-empty'), true);
+await clickEl('#cta-empty');
 await wait(250);
 rec('22i empty-cta → normal 态',
   await page.$eval('#screen-detail', (e) => e.getAttribute('data-demo-state')), 'normal');
@@ -512,6 +512,40 @@ await clickEl('[data-dr="forbidden-cta"]');
 await wait(300);
 rec('22l forbidden-cta → 回列表屏（screen-list 可见 / detail 隐藏）',
   [await vis('#screen-list'), await vis('#screen-detail')].join('|'), 'true|false');
+
+// error-cta = 加载失败态「重试」（S4「失败须有可重试路径」）。
+// 与 #cta-error（保存被拒·互斥演示）**语义不同、两条并存**：前者是锚点，后者只是演示 id。
+await page.evaluate(() => {
+  const b = document.querySelector('[data-act="edit"][data-id="report-helper"]');
+  if (b) b.click();
+});
+await wait(300);
+// 前置：确认这不是死按钮——只有在 load-fail 态下才可见
+rec('22l-1 load-fail 态下重试按钮可见', await (async () => {
+  await page.evaluate(() => {
+    const sd = document.querySelector('#screen-detail');
+    if (sd) sd.setAttribute('data-demo-state', 'load-fail');
+  });
+  await wait(80);
+  return vis('[data-dr="error-cta"]');
+})(), true);
+rec('22l-2 normal 态下重试按钮不可见（不是常显装饰）', await (async () => {
+  await page.evaluate(() => {
+    const sd = document.querySelector('#screen-detail');
+    if (sd) sd.setAttribute('data-demo-state', 'normal');
+  });
+  await wait(80);
+  return vis('[data-dr="error-cta"]');
+})(), false);
+await page.evaluate(() => {
+  const sd = document.querySelector('#screen-detail');
+  if (sd) sd.setAttribute('data-demo-state', 'load-fail');
+});
+await wait(80);
+await clickEl('[data-dr="error-cta"]');
+await wait(200);
+rec('22l-3 error-cta → 回 normal 态（重试有真实出口，非死按钮）',
+  await page.$eval('#screen-detail', (e) => e.getAttribute('data-demo-state')), 'normal');
 
 // 代码块「复制」与主题按钮不再是死点击（.cp 动态生成，走委托）
 await page.evaluate(() => {
@@ -539,7 +573,7 @@ rec('22o 主题按钮有反馈（toast，非死点击）',
 // 变异测试：往屏② 塞一个无绑定 button → 本条立即 FAIL。
 const BOUND_TOKENS = [
   // 状态 CTA（主脚本段绑定）
-  'empty-cta', 'error-cta', 'forbidden-cta',
+  'cta-empty', 'cta-error', 'error-cta', 'forbidden-cta',
   // 导航 / 保存 / diff
   'btn-back', 'crumb-main', 'btn-discard', 'btn-save', 'btn-diff-toggle', 'btn-revert', 'data-act',
   // 采样 / 思考 seg
@@ -575,7 +609,7 @@ rec('23a 屏② 可点元素全部命中绑定清单或 disabled（新增死按�
   unbound.length + ' 个未绑：' + (unbound.slice(0, 3).join(' || ') || '(空)'), '0 个未绑：(空)', unbound.length === 0);
 
 // 23b 清单反向核对：BOUND 里声明的关键锚点在 DOM 里真实存在（防清单空转）
-const anchors = ['empty-cta', 'error-cta', 'forbidden-cta', 'btn-save', 'btn-back', 'btn-diff-toggle', 'data-clear', 'data-toggle', 'data-sampler', 'data-thinking', 'preset'];
+const anchors = ['cta-empty', 'cta-error', 'error-cta', 'forbidden-cta', 'btn-save', 'btn-back', 'btn-diff-toggle', 'data-clear', 'data-toggle', 'data-sampler', 'data-thinking', 'preset'];
 const missingAnchors = await page.$$eval('#screen-detail', (roots, keys) => {
   const html = roots[0].innerHTML;
   return keys.filter((k) => !html.includes(k));

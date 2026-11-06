@@ -10,6 +10,10 @@
     :sub-title="isCreate ? '配置化建档，保存为草稿后发布生效' : '基础配置与高级调参；调参区仅管理员及以上可见'"
     @back="goBack"
   >
+    <!-- 锚点 detail-back：挂在**返回图标**上而非整块 header（挂整块会把语义泛化成"页头"，A3） -->
+    <template #backIcon>
+      <span data-dr="detail-back"><arrow-left-outlined /></span>
+    </template>
     <template #extra>
       <template v-if="!isCreate && currentDef">
         <a-tag :color="currentDef.status === 'published' ? 'green' : 'orange'">
@@ -17,8 +21,8 @@
         </a-tag>
         <a-tag>v{{ currentDef.version }}</a-tag>
       </template>
-      <a-button @click="resetForm">放弃更改</a-button>
-      <a-button type="primary" :loading="saving" :disabled="!canManage" @click="save">保存</a-button>
+      <a-button data-dr="detail-discard" @click="resetForm">放弃更改</a-button>
+      <a-button data-dr="detail-save" type="primary" :loading="saving" :disabled="!canManage" @click="save">保存</a-button>
     </template>
   </a-page-header>
 
@@ -34,11 +38,14 @@
   </div>
 
   <a-spin :spinning="loading">
-    <a-empty v-if="loadError" :description="loadError" />
+    <!-- 锚点 error-cta：设计系统 S4「失败须有可重试路径」——加载失败不能只有一句话，必须给出路 -->
+    <a-empty v-if="loadError" :description="loadError">
+      <a-button data-dr="error-cta" type="primary" @click="load">重试</a-button>
+    </a-empty>
     <!-- 两卡：基础配置默认展开 / 高级默认折叠（page-spec v2 信息架构） -->
     <a-collapse v-else v-model:activeKey="activeCards" :bordered="true" class="def-cards">
       <!-- 卡片一 · 基础配置 -->
-      <a-collapse-panel key="basic" header="基础配置">
+      <a-collapse-panel key="basic" data-dr="card-basic" header="基础配置">
         <a-form layout="vertical" :model="form">
           <a-row :gutter="16">
             <a-col :span="12">
@@ -124,7 +131,7 @@
 
       <!-- 卡片二 · 高级（默认折叠）：模型参数调试工作台（管理员及以上，S5 门禁）
            2026-10-29 拍板（A）：参数面板单列、策略预览整宽（不再困在半宽列内被双重挤压） -->
-      <a-collapse-panel v-if="canTune" key="advanced" header="高级 · 模型参数调试">
+      <a-collapse-panel v-if="canTune" key="advanced" data-dr="card-advanced" header="高级 · 模型参数调试">
         <a-row :gutter="16">
           <!-- 左：生成参数面板（五控件 + 三条联动，内部单列） -->
           <a-col :span="12">
@@ -160,6 +167,19 @@
         <TuningAuditList :visible="true" :entries="auditEntries" />
       </a-collapse-panel>
     </a-collapse>
+
+    <!-- 锚点 role-fallback：editor/viewer 看不到调参卡是**既定决策**，但设计系统 S5 禁止「静默隐藏
+         后无任何解释」——隐藏的同时必须说明为什么，否则用户只会以为页面坏了。
+         文案照 page-spec v2 §5.1。判据 canTune 一字不动，只是把已发生的隐藏说出来 -->
+    <a-alert
+      v-if="!canTune && !isCreate"
+      data-dr="role-fallback"
+      class="role-fallback"
+      type="info"
+      show-icon
+      message="调参与审计仅管理员及以上可见"
+      description="你当前的角色可查看与编辑基础配置；如需调参权限，请联系管理员开通。"
+    />
   </a-spin>
 </template>
 
@@ -167,6 +187,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
+import { ArrowLeftOutlined } from '@ant-design/icons-vue';
 import {
   getAgentDef,
   createAgentDef,

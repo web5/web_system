@@ -115,7 +115,9 @@
       <!-- 顶栏 -->
       <a-layout-header class="top-header">
         <div class="header-left">
-          <a-breadcrumb>
+          <!-- 锚点 crumb-list：面包屑属**壳层**（所有页共享），详情页自身不再画一份
+               （page-spec v2:69 的「面包屑：Agents / 定义管理 / <id>」即此处的首页 → 当前页） -->
+          <a-breadcrumb data-dr="crumb-list">
             <a-breadcrumb-item>
               <HomeOutlined />
             </a-breadcrumb-item>
