@@ -16,7 +16,7 @@
 | 仅原型 | 3 |
 | 仅 inventory | 1 |
 | 空目录 | 0 |
-| 文件总数 | 117 |
+| 文件总数 | 118 |
 
 > 「文件总数」口径：`specs/<feature>/` 下递归的 `.md` 文件数（不含 `.sdd-baseline.json`、`prototype.html`、`.sql` 等非 md 产物）。
 
@@ -37,7 +37,7 @@
 | [`config-driven-deploy`](./config-driven-deploy/) | 待评审 | design.md | 2026-11-06 |
 | [`config-master-key-distribution`](./config-master-key-distribution/) | 已实现 | design.md · guide.md | 2026-11-06 |
 | [`conversation-source-filter`](./conversation-source-filter/) | 已评审确认 | design.md | 2026-11-06 |
-| [`deploy-console`](./deploy-console/) | 待评审 | design.md · tasks.md · api-design.md … +6 | 2026-11-06 |
+| [`deploy-console`](./deploy-console/) | 待评审 | design.md · tasks.md · api-design.md … +7 | 2026-11-06 |
 | [`deploy-console-domain-split`](./deploy-console-domain-split/) | 已评审确认 | requirements.md · design.md · inventory-cleanup-01.md … +6 | 2026-11-06 |
 | [`deploy-console-env-datasource`](./deploy-console-env-datasource/) | 草稿 | design.md | 2026-11-06 |
 | [`deploy-console-wecom-approval`](./deploy-console-wecom-approval/) | 实施中 | design.md · decision.md · tech-design-network-and-sequence.md | 2026-11-06 |
