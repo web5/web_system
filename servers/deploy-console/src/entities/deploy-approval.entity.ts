@@ -97,4 +97,17 @@ export class DeployApprovalEntity {
     comment: '审批来源 IP',
   })
   sourceIp?: string | null;
+
+  /**
+   * 企微通道换平台会话的时间（毫秒）。非空 = 该单的会话已发过一次。
+   *
+   * 🔴 一次性语义由 DB 原子更新保证：换会话时用
+   * `UPDATE ... SET wecom_session_issued_at = ? WHERE id = ? AND wecom_session_issued_at IS NULL`，
+   * affectedRows=0 即已换过 → 拒绝，避免同一张短票据被反复兑换成长会话。
+   */
+  @Column({
+    type: 'bigint', nullable: true, name: 'wecom_session_issued_at',
+    comment: '企微换平台会话时间（毫秒，一次性）',
+  })
+  wecomSessionIssuedAt?: number | null;
 }

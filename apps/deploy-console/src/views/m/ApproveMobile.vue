@@ -13,6 +13,7 @@
  *  4. 任何错误态不给「可能已生效」的模糊表述。
  *
  * 短令牌只存 sessionStorage，不落 localStorage；从 URL 读入后立即清理。
+ * （唯一写 localStorage 的是「票据换来的平台会话」，键名 `auth`，与 pinia 持久化契约一致。）
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -73,6 +74,31 @@ const submittedAt = computed(() => {
   return new Date(ms).toLocaleString('zh-CN', { hour12: false })
 })
 const consoleLink = computed(() => `/console/pipelines/${detail.value?.pipelineId || ''}`)
+
+/**
+ * 点「查看流水线详情」：先用审批票据换 30 分钟平台会话、写进 localStorage，
+ * 再跳 SPA。否则 `/console/pipelines/:id`（requiresAuth）必然把手机用户踢去登录页。
+ *
+ * 换不到（票据过期 / 该单已换过 / 通道关闭）就直跳 —— 落登录页，但不是死链。
+ */
+const consoleBusy = ref(false)
+async function openConsole(): Promise<void> {
+  if (consoleBusy.value) return
+  consoleBusy.value = true
+  try {
+    const res = await request<{ token: string; user: { username: string; role: string } }>(
+      `/approvals/${encodeURIComponent(approvalId.value)}/session`,
+      { method: 'POST' },
+    )
+    // 与 pinia-plugin-persistedstate 契约一致：key = store id `auth`，值 = JSON.stringify(state)
+    localStorage.setItem('auth', JSON.stringify({ token: res.token, user: res.user }))
+  } catch {
+    // 静默：换不到就交给控制台自己的登录流程，不在这里弹错
+  } finally {
+    consoleBusy.value = false
+    window.location.href = consoleLink.value
+  }
+}
 
 function fail(title: string, message: string): void {
   errorState.title = title
@@ -211,7 +237,9 @@ function backToDetail(): void {
         <div class="kv"><span class="k">流水线状态</span><span class="v">{{ result.pipelineStatus }}</span></div>
       </div>
       <p class="cold-tip">审批通过不等于发布成功。发布结果请到流水线详情查看，不要以本页绿灯为准。</p>
-      <a class="link" :href="consoleLink">查看流水线详情</a>
+      <a class="link" :href="consoleLink" @click.prevent="openConsole">{{
+        consoleBusy ? '正在打开控制台…' : '查看流水线详情'
+      }}</a>
     </div>
 
     <!-- S1 详情 + S2 确认层 + S3 驳回抽屉 -->
