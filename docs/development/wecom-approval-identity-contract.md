@@ -1,6 +1,9 @@
+> 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
+> 定位：卡①「统一外部身份层」的**接口契约与交付物定义**（写码前的流程凭证，卡② 依赖的唯一契约真源）。
+
 # 统一外部身份层 · 接口契约与交付物定义（卡①）
 
-> 归属需求：`30-任务产物/2026-11-04-console企微端手动审批/01-需求spec与技术方案.md` §5.3 / §七 卡①
+> 归属需求：[`specs/deploy-console-wecom-approval/design.md`](../../specs/deploy-console-wecom-approval/design.md) §5.3 / §七 卡①（决策依据见同目录 `decision.md` §二）
 > 开工：2026-11-05 21:5x（用户点名「企业微信只是审批的功能优先开工继续」，解除 11-04「等 CDN 改造」暂停）
 > 本文件是写码前的**流程凭证**，也是卡② 依赖的唯一契约真源。改动契约先改本文件再改代码。
 

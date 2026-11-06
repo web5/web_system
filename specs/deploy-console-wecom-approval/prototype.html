@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>企微端手动审批 · 交互原型稿 v1</title>
+<style>
+  :root{
+    --bg:#FFFFFF; --card:#FFFFFF; --line:rgba(0,0,0,.08);
+    --text:#1A1A1F; --text-2:#6B7280; --text-3:#9CA3AF;
+    --brand:#F97316; --accent:#0EA5A4;
+    --danger:#DC2626; --warn:#D97706; --ok:#16A34A;
+    --shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#F7F7F9; color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+    padding:32px 20px 56px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1480px;margin:0 auto}
+  header{margin-bottom:28px}
+  h1{font-size:22px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--text-2);font-size:13px;margin-top:8px;line-height:1.7}
+  .sub code{background:#F1F1F4;padding:1px 5px;border-radius:4px;font-size:12px}
+  .frames{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-top:26px}
+  .frame{width:330px;flex:0 0 auto}
+  .cap{font-size:12px;color:var(--text-2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .cap b{color:var(--text);font-weight:600;font-size:12.5px}
+  .badge-id{background:#F1F1F4;color:var(--text-2);border-radius:4px;padding:1px 6px;font-size:11px}
+  .phone{
+    background:var(--bg);border:1px solid var(--line);border-radius:22px;
+    box-shadow:0 6px 20px rgba(0,0,0,.07);overflow:hidden;height:660px;
+    display:flex;flex-direction:column;position:relative;
+  }
+  .wxtop{
+    background:#F3F4F6;border-bottom:1px solid var(--line);
+    padding:7px 14px;display:flex;align-items:center;justify-content:space-between;
+    font-size:11px;color:var(--text-2);flex:0 0 auto;
+  }
+  .wxtop .dots{letter-spacing:1px}
+  .nav{
+    display:flex;align-items:center;gap:8px;padding:10px 14px;
+    border-bottom:1px solid var(--line);font-size:13px;font-weight:600;flex:0 0 auto;
+  }
+  .nav .back{color:var(--text-2);font-weight:400;font-size:16px;line-height:1}
+  .body{flex:1 1 auto;overflow-y:auto;padding:16px 14px 14px}
+  .body::-webkit-scrollbar{width:0}
+
+  /* header block */
+  .pending-pill{
+    display:inline-flex;align-items:center;gap:6px;background:#FFF7ED;color:#B45309;
+    border:1px solid #FED7AA;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:600;
+  }
+  .hero{font-size:19px;font-weight:650;margin:12px 0 6px;letter-spacing:-.01em}
+  .hero-sub{font-size:12.5px;color:var(--text-2);line-height:1.6}
+
+  .envrow{display:flex;gap:8px;margin:14px 0 12px}
+  .tag{
+    font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid transparent;
+  }
+  .tag.prod{background:#FEF2F2;color:#B91C1C;border-color:#FECACA}
+  .tag.dev{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+  .tag.mode{background:#F0FDFA;color:#0F766E;border-color:#99F6E4}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:12px 13px;margin-bottom:10px;
+  }
+  .card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:600;margin-bottom:8px}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:5px 0}
+  .kv + .kv{border-top:1px dashed #F0F0F2}
+  .kv .k{color:var(--text-2);flex:0 0 auto}
+  .kv .v{text-align:right;font-weight:550;word-break:break-all}
+  .kv .v.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+
+  .steps{list-style:none;font-size:12.5px}
+  .steps li{display:flex;gap:8px;align-items:flex-start;padding:4px 0;color:var(--text-2)}
+  .steps .dot{width:14px;flex:0 0 14px;text-align:center;color:var(--ok);font-weight:700}
+  .steps .now{color:var(--warn)}
+
+  .risk{
+    background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;
+    padding:10px 12px;font-size:12px;color:#92400E;line-height:1.65;margin-bottom:10px;
+  }
+  .risk b{color:#78350F}
+
+  .footbar{
+    flex:0 0 auto;border-top:1px solid var(--line);background:#fff;
+    padding:10px 14px 16px;display:flex;gap:10px;
+  }
+  .btn{
+    flex:1;border-radius:10px;padding:12px 10px;font-size:14px;font-weight:600;
+    border:1px solid var(--line);background:#fff;color:var(--text);text-align:center;
+  }
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(249,115,22,.28)}
+  .btn.ghost:hover{background:#FAFAFB}
+  .btn.danger{background:#fff;border-color:#FECACA;color:var(--danger)}
+  .btn[disabled]{opacity:.45}
+
+  /* sheet */
+  .mask{position:absolute;inset:0;background:rgba(17,24,39,.32);display:flex;align-items:flex-end}
+  .sheet{background:#fff;width:100%;border-radius:16px 16px 0 0;padding:18px 16px 18px}
+  .sheet h3{font-size:15px;font-weight:650;margin-bottom:4px}
+  .sheet p.hint{font-size:12px;color:var(--text-2);margin-bottom:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .chip{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;color:var(--text-2);background:#fff}
+  .chip.on{border-color:#FED7AA;background:#FFF7ED;color:#B45309;font-weight:600}
+  .field{border:1px solid var(--line);border-radius:10px;padding:10px 11px;font-size:13px;color:var(--text-3);background:#FAFAFB;min-height:64px;margin-bottom:12px}
+  .field.filled{color:var(--text);background:#fff}
+
+  /* result */
+  .result{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:0 8px}
+  .ico{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:16px}
+  .ico.ok{background:#F0FDF4;color:var(--ok);border:1px solid #BBF7D0}
+  .ico.no{background:#FEF2F2;color:var(--danger);border:1px solid #FECACA}
+  .ico.deny{background:#F9FAFB;color:var(--text-3);border:1px solid var(--line)}
+  .result h2{font-size:17px;font-weight:650;margin-bottom:8px}
+  .result p{font-size:12.5px;color:var(--text-2);line-height:1.7;max-width:250px}
+  .result .meta{margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.9}
+  .link{margin-top:20px;font-size:12.5px;color:var(--accent);font-weight:600}
+
+  /* confirm dialog */
+  .dialog{
+    position:absolute;inset:0;background:rgba(17,24,39,.36);
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .dlg{background:#fff;border-radius:14px;padding:18px 16px 14px;width:100%;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+  .dlg h3{font-size:15px;font-weight:650;margin-bottom:8px}
+  .dlg p{font-size:12.5px;color:var(--text-2);line-height:1.7}
+  .dlg .em{color:var(--danger);font-weight:600}
+  .dlg .acts{display:flex;gap:9px;margin-top:14px}
+  .dlg .acts .btn{padding:10px 8px;font-size:13px}
+
+  footer.note{
+    margin-top:34px;padding:16px 18px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;color:var(--text-2);line-height:1.85;
+  }
+  footer.note b{color:var(--text)}
+  footer.note table{border-collapse:collapse;margin-top:8px;width:100%;font-size:12px}
+  footer.note td{border-top:1px solid var(--line);padding:6px 8px 6px 0;vertical-align:top}
+  footer.note td:first-child{color:var(--text);font-weight:600;white-space:nowrap;width:120px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>企微端手动审批 · 交互原型稿 v1</h1>
+    <div class="sub">
+      配套需求稿：<code>01-需求spec与技术方案.md</code>（B 方案 · 自建应用 OAuth 免登 H5）<br />
+      页面路由 <code>/console/m/approve/:id</code> · 独立于 MainLayout（现有布局无响应式，塞进去必崩）· 本原型为静态示意，不含业务逻辑
+    </div>
+  </header>
+
+  <div class="frames">
+
+    <!-- S1 -->
+    <div class="frame">
+      <div class="cap"><b>S1 · 待你确认</b><span class="badge-id">首屏不滚动即可判读</span></div>
+      <div class="phone">
+        <div class="wxtop"><span>9:41</span><span class="dots">企业微信</span></div>
+        <div class="nav"><span class="back">‹</span><span>发布审批</span></div>
+        <div class="body">
+          <span class="pending-pill">● 等待你确认 · 已挂起 4 分钟</span>
+          <div class="hero">admin 模块发布到 prod</div>
+          <div class="hero-sub">流水线在「发布确认」节点暂停，通过后从该节点之后继续（已完成节点不重跑）。</div>
+
+          <div class="envrow">
+            <span class="tag prod">PROD 生产</span>
+            <span class="tag mode">direct 全量</span>
+          </div>
+
+          <div class="card">
+            <h4>要发什么</h4>
+            <div class="kv"><span class="k">模块</span><span class="v">admin</span></div>
+            <div class="kv"><span class="k">版本</span><span class="v mono">v2026.11.04-3</span></div>
+            <div class="kv"><span class="k">分支@commit</span><span class="v mono">master @ b5cc467d</span></div>
+            <div class="kv"><span class="k">提交人</span><span class="v">chase.wen</span></div>
+            <div class="kv"><span class="k">提交时间</span><span class="v">13:27</span></div>
+          </div>
+
+          <div class="card">
+            <h4>前序节点</h4>
+            <ul class="steps">
+              <li><span class="dot">✓</span><span>check · 校验通过（0 告警）</span></li>
+              <li><span class="dot">✓</span><span>build · 构建成功（38s）</span></li>
+              <li><span class="dot">✓</span><span>upload · 产物已投递（gateway）</span></li>
+              <li><span class="dot now">●</span><span class="now">approval · 等待你确认 ← 当前</span></li>
+              <li><span class="dot" style="color:#D1D5DB">○</span><span>version → pointer → verify · 待执行</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footbar">
+          <button class="btn ghost">驳回</button>
+          <button class="btn primary">通过</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- S2 -->
+    <div class="frame">
+      <div class="cap"><b>S2 · prod 二次确认</b><span class="badge-id">不允许一键放行</span></div>
+      <div class="phone">
+        <div class="wxtop"><span>9:41</span><span class="dots">企业微信</span></div>
+        <div class="nav"><span class="back">‹</span><span>发布审批</span></div>
+        <div class="body" style="filter:blur(1.2px);opacity:.55">
+          <span class="pending-pill">● 等待你确认</span>
+          <div class="hero">admin 模块发布到 prod</div>
+          <div class="envrow"><span class="tag prod">PROD 生产</span><span class="tag mode">direct 全量</span></div>
+          <div class="card">
+            <h4>要发什么</h4>
+            <div class="kv"><span class="k">模块</span><span class="v">admin</span></div>
+            <div class="kv"><span class="k">版本</span><span class="v mono">v2026.11.04-3</span></div>
+            <div class="kv"><span class="k">分支@commit</span><span class="v mono">master @ b5cc467d</span></div>
+          </div>
+        </div>
+        <div class="dialog">
+          <div class="dlg">
+            <h3>确认放行到生产环境？</h3>
+            <p>本次将把 <b>admin</b> 切到 <span class="mono">v2026.11.04-3</span>，影响 <span class="em">全部线上用户</span>。网关版本缓存约 10s 生效，回滚需再发一次。</p>
+            <div class="acts">
+              <button class="btn ghost">再想想</button>
+              <button class="btn primary">确认通过</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S3 -->
+    <div class="frame">
+      <div class="cap"><b>S3 · 驳回（意见必填）</b><span class="badge-id">空意见禁用提交</span></div>
+      <div class="phone">
+        <div class="wxtop"><span>9:41</span><span class="dots">企业微信</span></div>
+        <div class="nav"><span class="back">‹</span><span>发布审批</span></div>
+        <div class="body" style="filter:blur(1.2px);opacity:.5">
+          <div class="hero">admin 模块发布到 prod</div>
+          <div class="card">
+            <div class="kv"><span class="k">版本</span><span class="v mono">v2026.11.04-3</span></div>
+            <div class="kv"><span class="k">提交人</span><span class="v">chase.wen</span></div>
+          </div>
+        </div>
+        <div class="mask">
+          <div class="sheet">
+            <h3>驳回这次发布</h3>
+            <p class="hint">意见会推给提交人，并写进审计日志。驳回后流水线终止，后续节点不执行。</p>
+            <div class="chips">
+              <span class="chip on">分支不对</span>
+              <span class="chip">版本不对</span>
+              <span class="chip">时机不对</span>
+              <span class="chip">其他</span>
+            </div>
+            <div class="field filled">分支不对：这次应该发 release/11-04，master 上还有未验证的改动。</div>
+            <div class="risk" style="margin-bottom:0">
+              <b>驳回后不会自动回滚。</b>如果流水线已经动了线上指针，需要另行发起回滚。
+            </div>
+            <div class="footbar" style="padding:14px 0 0;border:none">
+              <button class="btn ghost">取消</button>
+              <button class="btn danger">确认驳回</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S4 -->
+    <div class="frame">
+      <div class="cap"><b>S4 · 结果态</b><span class="badge-id">审批结果 ≠ 发布结果</span></div>
+      <div class="phone">
+        <div class="wxtop"><span>9:41</span><span class="dots">企业微信</span></div>
+        <div class="nav"><span class="back">‹</span><span>发布审批</span></div>
+        <div class="body">
+          <div class="result">
+            <div class="ico ok">✓</div>
+            <h2>已通过，发布继续</h2>
+            <p>流水线已从「发布确认」之后继续执行，正在切版本指针。</p>
+            <div class="meta">
+              审批人：chase.wen（企微）<br />
+              时间：13:31:08<br />
+              审批单：approval-1730696…
+            </div>
+            <div class="link">查看流水线详情 ›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- S5 -->
+    <div class="frame">
+      <div class="cap"><b>S5 · 无权限</b><span class="badge-id">不给出「可能已生效」的模糊话</span></div>
+      <div class="phone">
+        <div class="wxtop"><span>9:41</span><span class="dots">企业微信</span></div>
+        <div class="nav"><span class="back">‹</span><span>发布审批</span></div>
+        <div class="body">
+          <div class="result">
+            <div class="ico deny">⊘</div>
+            <h2>你没有这次审批的权限</h2>
+            <p>当前企业微信账号未映射为审批人，或不在该节点的审批人名单内。<br /><b style="color:var(--text)">审批单状态未发生任何变化。</b></p>
+            <div class="meta">企微账号：zhangsan（未映射）<br />节点名单：chase.wen</div>
+            <div class="link" style="color:var(--text-2)">去控制台处理 ›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="note">
+    <b>原型里被刻意做死的四件事（研发实现时不要"优化"掉）</b>
+    <table>
+      <tr><td>首屏四要素</td><td>环境 / 模块 / 版本 / 提交人 必须在首屏可见 —— 这四项是判断依据，藏到第二屏等于逼用户盲批。</td></tr>
+      <tr><td>prod 二次确认</td><td>prod 单必须过一次确认层；后端同时要求 <code>confirm=true</code>（沿用 MCP 口径）。一键通过生产 = 设计缺陷。</td></tr>
+      <tr><td>驳回意见必填</td><td>空意见禁用提交；后端同样校验（400），前端禁用不算安全边界。</td></tr>
+      <tr><td>审批结果 vs 发布结果</td><td>点了通过不等于发布成功。H5 必须区分「已通过，发布继续」与「发布失败」（附失败阶段），不能只报一个绿灯。</td></tr>
+    </table>
+  </footer>
+</div>
+</body>
+</html>
