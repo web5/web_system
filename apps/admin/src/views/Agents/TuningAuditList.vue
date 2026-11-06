@@ -12,7 +12,7 @@
   超期条目由父组件在写入时 prune（AgentDefDetail.vue），本组件只做同期展示过滤。
 -->
 <template>
-  <a-card v-if="visible" class="b3-audit" :bordered="true">
+  <a-card v-if="visible" data-dr="card-audit" class="b3-audit" :bordered="true">
     <template #title>
       调参审计
       <a-tag class="b3-audit-tag">仅管理员及以上可见</a-tag>
