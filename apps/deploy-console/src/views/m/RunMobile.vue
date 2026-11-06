@@ -290,7 +290,7 @@ onUnmounted(stopPolling)
           <p class="err">{{ snapshot.errorBrief }}</p>
         </div>
 
-        <div class="card">
+        <div class="card flow">
           <h4>流程</h4>
           <!-- 竖向时间轴：节点多、名字长都只是往下延伸，不会横向挤压 -->
           <ol class="timeline">
@@ -346,14 +346,18 @@ onUnmounted(stopPolling)
 .card{background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:12px;
   box-shadow:0 1px 3px rgba(0,0,0,.06);padding:12px 13px;margin-bottom:10px}
 .card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6B7280;font-weight:600;margin:0 0 10px}
+/* 流程卡整体居中：标题、时间轴、审批节点提示同一基准，避免三种对齐混排 */
+.card.flow h4,.card.flow .hint{text-align:center}
 
 .card.fail{border-color:#FECACA;background:#FFFBFB}
 .card.fail h4{color:#B91C1C}
 .card.fail .err{font-size:13px;color:#7F1D1D;line-height:1.65;margin:0;word-break:break-word}
 .hint{font-size:11.5px;color:#6B7280;line-height:1.6;margin:10px 0 0}
 
-/* 竖向时间轴：一行一个节点，节点名与状态分两行，流程再长也只往下延伸 */
-.timeline{list-style:none;margin:0;padding:0}
+/* 竖向时间轴：一行一个节点，节点名与状态分两行，流程再长也只往下延伸。
+   🔴 整块贴合内容宽度后水平居中：节点名普遍偏短，满宽会把右侧空出一大片，
+   看起来像"贴在左边"；宽度取 max-content + max-width:100% 兜底，长名换行时自然回落满宽。 */
+.timeline{list-style:none;margin:0 auto;padding:0;width:max-content;max-width:100%}
 .timeline li{position:relative;padding:0 0 20px 32px}
 .timeline li:last-child{padding-bottom:0}
 .timeline li::before{content:'';position:absolute;left:9px;top:22px;bottom:0;width:2px;background:#E8E8EC}
