@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { formatTime, isLive, stepLabelOf, stageKeys, stepState } from '@/components/pipeline/pipeline.stages'
+import { isLive, stepLabelOf, stageKeys, stepState } from '@/components/pipeline/pipeline.stages'
 import type { PipelineItem, TemplateNode } from '@/api'
 
 interface StageDto {
@@ -64,8 +64,6 @@ const snapshot = ref<Snapshot | null>(null)
 const loading = ref(true)
 const refreshing = ref(false)
 const errorState = ref<{ title: string; message: string } | null>(null)
-const exitOpen = ref(false)
-const exiting = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 let polls = 0
 
@@ -126,6 +124,16 @@ const statusTone = computed<'ok' | 'bad' | 'run' | 'idle'>(() => {
   return 'idle'
 })
 
+function stateText(state: string): string {
+  const map: Record<string, string> = {
+    done: '已完成',
+    error: '失败',
+    running: '进行中',
+    pending: '未开始',
+  }
+  return map[state] || state
+}
+
 const duration = computed(() => {
   const s = snapshot.value
   if (!s) return '-'
@@ -139,26 +147,6 @@ const duration = computed(() => {
   const rest = sec % 60
   if (min < 60) return `${min} 分 ${rest} 秒`
   return `${Math.floor(min / 60)} 时 ${min % 60} 分`
-})
-
-const versionLine = computed(() => {
-  const s = snapshot.value
-  if (!s) return '-'
-  return s.versionTag || s.gitCommit || s.gitBranch || '-'
-})
-
-const triggerLine = computed(() => {
-  const s = snapshot.value
-  if (!s) return '-'
-  const who = s.operatorName || s.operator || '-'
-  return s.triggerSource ? `${who} · ${s.triggerSource}` : who
-})
-
-/** 桌面出口：模板 id + 运行 id，缺模板 id 就回落列表页（历史运行可能没有） */
-const consoleLink = computed(() => {
-  const s = snapshot.value
-  if (!s?.templateId) return '/console/pipelines'
-  return `/console/pipelines/${s.templateId}?run=${encodeURIComponent(s.runId)}`
 })
 
 function fail(title: string, message: string): void {
@@ -226,25 +214,13 @@ function startPolling(): void {
 }
 
 /**
- * 桌面出口：换 30 分钟平台会话后跳 SPA。
- * 🔴 这是**提权**动作，必须先过确认层；换不到就直跳，由控制台自己走登录。
+ * 手动刷新：终态后轮询已停，用户想再看一眼时用；也让「自动刷新」失灵时有个兜底。
  */
-async function openDesktop(): Promise<void> {
-  if (exiting.value) return
-  exiting.value = true
-  try {
-    const res = await request<{ token: string; user: { username: string; role: string } }>(
-      `/approvals/${encodeURIComponent(approvalId.value)}/session`,
-      { method: 'POST' },
-    )
-    // 与 pinia-plugin-persistedstate 契约一致：key = store id `auth`
-    localStorage.setItem('auth', JSON.stringify({ token: res.token, user: res.user }))
-  } catch {
-    // 静默：换不到交给控制台登录流程
-  } finally {
-    exiting.value = false
-  }
-  window.location.href = consoleLink.value
+async function manualRefresh(): Promise<void> {
+  if (refreshing.value) return
+  await load(true)
+  // 上一轮已停（终态或超限），手动刷新相当于重新开始观察
+  if (!snapshot.value || snapshot.value.live) startPolling()
 }
 
 function backToApproval(): void {
@@ -281,84 +257,57 @@ onUnmounted(stopPolling)
       <div class="cold-icon">!</div>
       <h1>{{ errorState.title }}</h1>
       <p class="cold-text">{{ errorState.message }}</p>
-      <p class="cold-tip">审批结果不受影响。发布是否生效请看流水线最终状态，不要以本页空白为准。</p>
-      <a class="link" :href="consoleLink">去桌面控制台查看</a>
+      <p class="cold-tip">审批结果不受影响。发布是否生效以流水线最终状态为准。</p>
+      <button class="btn ghost wide" @click="backToApproval">返回审批单</button>
     </div>
 
     <template v-else-if="snapshot">
+      <!-- 操作区在顶部：流程往下读，读到底不用再回头找按钮 -->
+      <div class="actions">
+        <button class="act" @click="backToApproval">← 返回审批单</button>
+        <button class="act" :disabled="refreshing" @click="manualRefresh">
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
+      </div>
+
       <div class="body">
         <div class="head" :class="statusTone">
           <div class="mark">{{ statusTone === 'ok' ? '✓' : statusTone === 'bad' ? '×' : '●' }}</div>
-          <div>
+          <div class="head-text">
             <h1>{{ statusText }}</h1>
-            <p class="sub">{{ snapshot.moduleKey }} · {{ snapshot.env.toUpperCase() }} · {{ snapshot.mode }}</p>
+            <p class="sub">
+              {{ snapshot.moduleKey }} · {{ snapshot.env.toUpperCase() }} · 用时 {{ duration }}
+            </p>
           </div>
-          <span v-if="refreshing" class="refreshing">刷新中</span>
         </div>
 
         <p v-if="snapshot.live" class="live-tip">
           流水线仍在运行，本页每 5 秒自动刷新。可以直接关掉，稍后再从审批单进来查看。
         </p>
 
-        <div class="card">
-          <h4>关键信息</h4>
-          <div class="kv"><span class="k">运行</span><span class="v mono">#{{ snapshot.runId }}</span></div>
-          <div class="kv"><span class="k">版本</span><span class="v mono">{{ versionLine }}</span></div>
-          <div class="kv"><span class="k">分支</span><span class="v mono">{{ snapshot.gitBranch || '-' }}</span></div>
-          <div class="kv long"><span class="k">触发</span><span class="v">{{ triggerLine }}</span></div>
-          <div class="kv"><span class="k">开始</span><span class="v">{{ formatTime(snapshot.startTime) }}</span></div>
-          <div class="kv"><span class="k">结束</span><span class="v">{{ snapshot.endTime ? formatTime(snapshot.endTime) : '进行中' }}</span></div>
-          <div class="kv"><span class="k">耗时</span><span class="v">{{ duration }}</span></div>
-        </div>
-
         <div v-if="snapshot.errorBrief" class="card fail">
           <h4>失败原因</h4>
           <p class="err">{{ snapshot.errorBrief }}</p>
-          <p class="hint">完整日志请到桌面控制台查看（手机端不展示日志正文）。</p>
         </div>
 
         <div class="card">
-          <h4>节点进度</h4>
-          <ul class="steps">
-            <li v-for="row in stageRows" :key="row.key">
-              <span class="dot" :class="row.state">
-                {{ row.state === 'done' ? '✓' : row.state === 'error' ? '×' : row.state === 'running' ? '●' : '○' }}
-              </span>
-              <span :class="['label', row.state]">{{ row.label }}</span>
-              <span class="state-text">{{
-                row.state === 'done' ? '已完成' : row.state === 'error' ? '失败' : row.state === 'running' ? '进行中' : '未开始'
+          <h4>流程</h4>
+          <!-- 竖向时间轴：节点多、名字长都只是往下延伸，不会横向挤压 -->
+          <ol class="timeline">
+            <li v-for="row in stageRows" :key="row.key" :class="row.state">
+              <span class="node">{{
+                row.state === 'done' ? '✓' : row.state === 'error' ? '×' : row.state === 'running' ? '●' : ''
               }}</span>
+              <div class="node-text">
+                <div class="name">{{ row.label }}</div>
+                <div class="state">{{ stateText(row.state) }}</div>
+              </div>
             </li>
-          </ul>
+          </ol>
           <p v-if="snapshot.nodeLabel" class="hint">本次审批节点：{{ snapshot.nodeLabel }}</p>
         </div>
 
-        <p class="disclaimer">
-          审批通过不等于发布成功。本页展示的是流水线的真实执行状态。
-        </p>
-      </div>
-
-      <div class="footer">
-        <button class="btn ghost" @click="backToApproval">返回审批单</button>
-        <button class="btn secondary" @click="exitOpen = true">桌面控制台</button>
-      </div>
-
-      <!-- 桌面出口确认层：把「授权面扩大」显式化 -->
-      <div v-if="exitOpen" class="overlay" @click.self="exitOpen = false">
-        <div class="drawer">
-          <h2>打开桌面控制台？</h2>
-          <p class="hint">
-            桌面控制台用于看完整日志、重跑、回滚、改配置。进入需要一次临时授权：
-            <b>30 分钟内拥有后台操作权限</b>，到期自动失效。
-          </p>
-          <p class="hint">只是想确认发布结果的话，本页已经够了，可以不用进。</p>
-          <div class="drawer-actions">
-            <button class="btn ghost" @click="exitOpen = false">留在本页</button>
-            <button class="btn primary" :disabled="exiting" @click="openDesktop">
-              {{ exiting ? '正在打开…' : '确认进入' }}
-            </button>
-          </div>
-        </div>
+        <p class="disclaimer">审批通过不等于发布成功。本页展示的是流水线的真实执行状态。</p>
       </div>
     </template>
   </div>
@@ -370,67 +319,67 @@ onUnmounted(stopPolling)
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif}
 .topbar{background:#FFFFFF;border-bottom:1px solid rgba(0,0,0,.08);padding:11px 16px;
   font-size:13px;font-weight:600;text-align:center;flex:0 0 auto}
-.body{flex:1 1 auto;padding:16px 14px 96px;overflow-y:auto}
+.body{flex:1 1 auto;padding:14px 14px 28px;overflow-y:auto}
 .center{padding:60px 20px;text-align:center}
 .muted{color:#6B7280;font-size:14px}
 
-.head{display:flex;align-items:center;gap:12px;margin-bottom:8px}
-.mark{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:23px;font-weight:700;flex:0 0 44px}
+/* 操作区在顶部：与流程分离，流程再长也不用滚到底找按钮 */
+.actions{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:8px 12px;background:#FFFFFF;border-bottom:1px solid rgba(0,0,0,.08);flex:0 0 auto}
+.act{background:none;border:none;padding:7px 4px;font-size:13px;font-weight:600;color:#0F766E;
+  font-family:inherit;cursor:pointer}
+.act:disabled{color:#9CA3AF;cursor:default}
+
+.head{display:flex;align-items:center;gap:12px;margin:4px 2px 10px}
+.mark{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:700;flex:0 0 42px}
 .head.ok .mark{background:#F0FDF4;color:#16A34A}
 .head.bad .mark{background:#FEF2F2;color:#DC2626}
 .head.run .mark{background:#FFF7ED;color:#D97706}
 .head.idle .mark{background:#F3F4F6;color:#6B7280}
-.head h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
-.head .sub{font-size:12.5px;color:#6B7280;margin:0}
-.refreshing{font-size:11px;color:#9CA3AF;margin-left:auto}
+.head-text{min-width:0}
+.head h1{font-size:20px;margin:0 0 3px;letter-spacing:-.01em}
+.head .sub{font-size:12.5px;color:#6B7280;margin:0;line-height:1.5;word-break:break-word}
 .live-tip{font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;
-  border-radius:8px;padding:9px 10px;line-height:1.6;margin:10px 0 12px}
+  border-radius:8px;padding:9px 10px;line-height:1.6;margin:0 0 10px}
 
 .card{background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:12px;
   box-shadow:0 1px 3px rgba(0,0,0,.06);padding:12px 13px;margin-bottom:10px}
-.card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;font-weight:600;margin:0 0 8px}
-.kv{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
-.kv+.kv{border-top:1px dashed #F0F0F2}
-.kv .k{color:#6B7280;flex:0 0 auto}
-.kv .v{text-align:right;font-weight:550;word-break:break-all}
-/* 触发来源可能是 `admin · ui|mcp:xxx` 这类长串，右对齐换行会贴到标签上，故单独放开 */
-.kv.long .v{text-align:left;font-size:12px;line-height:1.5;overflow-wrap:anywhere;word-break:normal}
-.v.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.card h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6B7280;font-weight:600;margin:0 0 10px}
 
 .card.fail{border-color:#FECACA;background:#FFFBFB}
 .card.fail h4{color:#B91C1C}
-.card.fail .err{font-size:13px;color:#7F1D1D;line-height:1.65;margin:0 0 8px;word-break:break-word}
-.hint{font-size:11.5px;color:#6B7280;line-height:1.6;margin:8px 0 0}
+.card.fail .err{font-size:13px;color:#7F1D1D;line-height:1.65;margin:0;word-break:break-word}
+.hint{font-size:11.5px;color:#6B7280;line-height:1.6;margin:10px 0 0}
 
-.steps{list-style:none;padding:0;margin:0;font-size:13px}
-.steps li{display:flex;gap:8px;align-items:center;padding:6px 0;color:#6B7280}
-.steps li+li{border-top:1px dashed #F0F0F2}
-.steps .dot{width:16px;flex:0 0 16px;text-align:center;font-weight:700}
-.steps .dot.done{color:#16A34A}
-.steps .dot.error{color:#DC2626}
-.steps .dot.running{color:#D97706}
-.steps .dot.pending{color:#D1D5DB}
-.steps .label{flex:1;color:#1A1A1F}
-.steps .label.pending{color:#9CA3AF}
-.state-text{font-size:11.5px;color:#9CA3AF}
+/* 竖向时间轴：一行一个节点，节点名与状态分两行，流程再长也只往下延伸 */
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{position:relative;padding:0 0 20px 32px}
+.timeline li:last-child{padding-bottom:0}
+.timeline li::before{content:'';position:absolute;left:9px;top:22px;bottom:0;width:2px;background:#E8E8EC}
+.timeline li:last-child::before{content:none}
+.node{position:absolute;left:0;top:1px;width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+  border:2px solid #D1D5DB;background:#FFFFFF;color:#9CA3AF}
+.timeline li.done .node{border-color:#16A34A;background:#16A34A;color:#FFFFFF}
+.timeline li.error .node{border-color:#DC2626;background:#DC2626;color:#FFFFFF}
+.timeline li.running .node{border-color:#D97706;background:#FFF7ED;color:#D97706;
+  animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.node-text{min-width:0}
+.name{font-size:14px;font-weight:600;color:#1A1A1F;line-height:1.45;word-break:break-word}
+.state{font-size:11.5px;color:#6B7280;margin-top:2px;line-height:1.4}
+.timeline li.running .state{color:#B45309;font-weight:600}
+.timeline li.error .state{color:#DC2626;font-weight:600}
+.timeline li.pending .name{color:#6B7280;font-weight:500}
 
-.disclaimer{font-size:11.5px;color:#9CA3AF;line-height:1.6;margin:14px 2px 0}
+.disclaimer{font-size:11.5px;color:#6B7280;line-height:1.6;margin:12px 2px 0}
 
-.footer{position:fixed;left:0;right:0;bottom:0;background:#FFFFFF;border-top:1px solid rgba(0,0,0,.08);
-  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:2}
-.btn{flex:1;border-radius:10px;padding:12px;font-size:14px;font-weight:600;border:1px solid transparent;
+.btn{border-radius:10px;padding:12px 16px;font-size:14px;font-weight:600;border:1px solid transparent;
   cursor:pointer;font-family:inherit}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.ghost{background:#FFFFFF;border-color:rgba(0,0,0,.12);color:#1A1A1F}
-.btn.secondary{background:#F0FDFA;border-color:#99F6E4;color:#0F766E}
-.btn.primary{background:#F97316;color:#FFFFFF}
-
-.overlay{position:fixed;inset:0;background:rgba(17,17,20,.42);z-index:5;display:flex;align-items:flex-end}
-.drawer{background:#FFFFFF;width:100%;border-radius:18px 18px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
-.drawer h2{font-size:17px;margin:0 0 8px}
-.hint{font-size:12.5px;color:#6B7280;line-height:1.65;margin-bottom:14px}
-.drawer-actions{display:flex;gap:10px;margin-top:8px}
+.btn.wide{display:block;width:100%;margin-top:18px}
 
 .sheet{margin:32px 16px;background:#FFFFFF;border:1px solid rgba(0,0,0,.08);
   box-shadow:0 1px 3px rgba(0,0,0,.06);border-radius:16px;padding:28px 20px}
@@ -439,5 +388,4 @@ onUnmounted(stopPolling)
   display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;margin-bottom:16px}
 .cold-text{font-size:14px;line-height:1.7;color:#6B7280;margin-bottom:16px}
 .cold-tip{border-top:1px solid rgba(0,0,0,.06);padding-top:14px;font-size:12.5px;line-height:1.7;color:#1A1A1F}
-.link{display:inline-block;margin-top:18px;font-size:13px;color:#0F766E;text-decoration:none;font-weight:600}
 </style>

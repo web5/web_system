@@ -108,6 +108,36 @@ function makeApprovalRepo() {
       if (opts.order?.createdAt === 'ASC') out = [...out].sort((a, b) => a.createdAt - b.createdAt);
       return out;
     },
+    /**
+     * CAS 更新链（ApprovalService.cancel 用）。
+     *
+     * ⚠️ 这里只模拟「按 :pending 值判定 + 命中即更新」的**语义**；SQL 文本本身
+     * 由 approval.service.spec 用 `toHaveBeenCalledWith('id = :id AND status = :pending')`
+     * 精确锁定 —— 本层若也断文本，就是把实现抄进测试。
+     */
+    createQueryBuilder: () => {
+      const st: { set?: any; sql?: string; params?: any } = {};
+      const qb: any = {
+        update: () => qb,
+        set: (v: any) => {
+          st.set = v;
+          return qb;
+        },
+        where: (sql: string, params: any) => {
+          st.sql = sql;
+          st.params = params;
+          return qb;
+        },
+        execute: async () => {
+          const row = rows.find((r) => r.id === st.params?.id);
+          if (!row) return { affected: 0 };
+          if (row.status !== st.params?.pending) return { affected: 0 };
+          Object.assign(row, st.set);
+          return { affected: 1 };
+        },
+      };
+      return qb;
+    },
   };
 }
 
@@ -391,5 +421,86 @@ describe('远端投递变量注入（S1：脚本做 scp，真相仍在平台）'
     expect(env.SSH_KEY_PATH).toBe('');
     // 留空是给脚本显式报错用的，不能顺手把「发到哪」也抹掉
     expect(env.DEPLOY_ENV).toBeTruthy();
+  });
+});
+
+/**
+ * 取消挂起流水线时的审批单联动（台账 #8600）。
+ *
+ * 背景：节点的挂起锚点在进程内存，重启即丢 ⇒ 单据永久 pending 却批不动。
+ * 历史实现用 `resolve(..., 'reject')` 关单，等于把「机器清理」记成「人否决」，
+ * 会污染驳回率口径。这里锁死：取消 ⇒ 审批单 cancelled。
+ */
+describe('取消挂起流水线：审批单联动为 cancelled（不污染驳回率）', () => {
+  async function setupSuspended() {
+    const ctx = await setup();
+    ctx.p.status = PIPELINE_AWAITING_APPROVAL;
+    ctx.approvals.rows.push({
+      id: 'ap-orphan',
+      pipelineId: 'p1',
+      status: 'pending',
+      nodeKey: 'g',
+      env: 'local',
+      operator: 'alice',
+      createdAt: 1,
+    });
+    return ctx;
+  }
+
+  it('取消 ⇒ 审批单 cancelled（不是 rejected），原因写进审批意见', async () => {
+    const ctx = await setupSuspended();
+
+    await ctx.svc.cancel('p1', 'orphan-cleanup', '挂起实例已随重启丢失');
+
+    expect(ctx.p.status).toBe('cancelled');
+    expect(ctx.p.endTime).toBeTruthy();
+    const ap = ctx.approvals.rows.find((r) => r.id === 'ap-orphan')!;
+    // 🔴 核心断言：写成 rejected 就是把机器清理算成人工作出的否决
+    expect(ap.status).toBe('cancelled');
+    expect(ap.comment).toBe('挂起实例已随重启丢失');
+    expect(ap.reviewer).toBe('orphan-cleanup');
+  });
+
+  it('审计写明原因与阶段，可追溯是谁以什么理由作废的', async () => {
+    const ctx = await setupSuspended();
+
+    await ctx.svc.cancel('p1', 'orphan-cleanup', '实例丢失');
+
+    const entry = ctx.audit.log.mock.calls.find((c: any[]) => c[0]?.action === 'pipeline.cancel')?.[0];
+    expect(entry).toBeTruthy();
+    expect(entry.status).toBe('cancelled');
+    expect(entry.detail).toContain('实例丢失');
+  });
+
+  it('不传原因时保持历史语义「提交人取消」', async () => {
+    const ctx = await setupSuspended();
+
+    await ctx.svc.cancel('p1', 'alice');
+
+    expect(ctx.approvals.rows.find((r) => r.id === 'ap-orphan')!.comment).toBe('提交人取消');
+  });
+
+  it('没有 pending 单（只有已审批的历史单）时仍完成取消，不被联动卡住', async () => {
+    const ctx = await setup();
+    ctx.p.status = PIPELINE_AWAITING_APPROVAL;
+    ctx.approvals.rows.push({ id: 'ap-done', pipelineId: 'p1', status: 'approved', nodeKey: 'g' });
+
+    await ctx.svc.cancel('p1', 'orphan-cleanup', '实例丢失');
+
+    expect(ctx.p.status).toBe('cancelled');
+    // 已审批单不得被改写
+    expect(ctx.approvals.rows.find((r) => r.id === 'ap-done')!.status).toBe('approved');
+  });
+
+  it('终态重复取消是幂等的，不重复写审计', async () => {
+    const ctx = await setupSuspended();
+    await ctx.svc.cancel('p1', 'orphan-cleanup', '实例丢失');
+    const before = ctx.audit.log.mock.calls.length;
+
+    await expect(ctx.svc.cancel('p1', 'orphan-cleanup', '再来一次')).resolves.toEqual({
+      id: 'p1',
+      status: 'cancelled',
+    });
+    expect(ctx.audit.log.mock.calls.length).toBe(before);
   });
 });

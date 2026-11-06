@@ -1,29 +1,47 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
+import { AuditService } from '../audit/audit.service';
 import { ApprovalService, REQUIRE_APPROVAL_ENVS_KEY } from './approval.service';
 
 describe('ApprovalService', () => {
   let service: ApprovalService;
   let repo: any;
   let settings: { get: jest.Mock };
+  let audit: { log: jest.Mock };
+  /** CAS 更新链：update().set().where().execute() */
+  let updateChain: { execute: jest.Mock };
 
   beforeEach(async () => {
+    updateChain = { execute: jest.fn().mockResolvedValue({ affected: 1 }) };
+    const qb: any = {
+      update: jest.fn(() => qb),
+      set: jest.fn(() => qb),
+      where: jest.fn(() => qb),
+      execute: updateChain.execute,
+    };
     repo = {
       create: jest.fn((x) => x),
       save: jest.fn(async (x) => ({ ...x })),
       findOne: jest.fn().mockResolvedValue(null),
       find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(() => qb),
     };
     settings = { get: jest.fn().mockResolvedValue(null) };
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
         ApprovalService,
         { provide: getRepositoryToken(DeployApprovalEntity), useValue: repo },
         { provide: SystemSettingsService, useValue: settings },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
     service = moduleRef.get(ApprovalService);
@@ -116,6 +134,100 @@ describe('ApprovalService', () => {
       await service.list('pending');
       const [opts] = repo.find.mock.calls[0];
       expect(opts.where).toEqual({ status: 'pending' });
+    });
+  });
+
+  describe('cancel（作废孤儿单）', () => {
+    it('pending → cancelled：CAS 条件带 status=pending，原因与操作者落库', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 'o1',
+        status: 'cancelled',
+        env: 'prod',
+        pipelineId: 'p-orphan',
+      });
+
+      await expect(
+        service.cancel('o1', '挂起实例已随重启丢失', 'orphan-cleanup'),
+      ).resolves.toMatchObject({ status: 'cancelled' });
+
+      const qb = repo.createQueryBuilder.mock.results[0].value;
+      // 🔴 CAS 断言的落点：where 必须同时锁 id 与 pending，少一半就等于允许覆盖已审批单
+      expect(qb.where).toHaveBeenCalledWith(
+        'id = :id AND status = :pending',
+        { id: 'o1', pending: 'pending' },
+      );
+      expect(qb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'cancelled',
+          reviewer: 'orphan-cleanup',
+          comment: '挂起实例已随重启丢失',
+        }),
+      );
+    });
+
+    it('作废必须写原因：空/纯空白 → 400，且不碰数据库', async () => {
+      await expect(service.cancel('o1', '   ', 'bob')).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.cancel('o1', '', 'bob')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(repo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('作废必须记录操作者：空操作者 → 400', async () => {
+      await expect(service.cancel('o1', '原因', '  ')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('单据不存在 → 404', async () => {
+      updateChain.execute.mockResolvedValue({ affected: 0 });
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.cancel('nope', '原因', 'bob')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('单已 approved → 409，绝不覆盖真实审批留痕', async () => {
+      updateChain.execute.mockResolvedValue({ affected: 0 });
+      repo.findOne.mockResolvedValue({ id: 'a1', status: 'approved' });
+      await expect(service.cancel('a1', '原因', 'bob')).rejects.toThrow(
+        /只有 pending 可作废/,
+      );
+    });
+
+    it('审计写入失败不影响作废结果（状态已变是既成事实）', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 'o2',
+        status: 'cancelled',
+        env: 'prod',
+      });
+      audit.log.mockRejectedValue(new Error('audit down'));
+
+      await expect(
+        service.cancel('o2', '实例丢失', 'orphan-cleanup'),
+      ).resolves.toMatchObject({ status: 'cancelled' });
+    });
+
+    it('作废写审计，带原因与流水线 id', async () => {
+      repo.findOne.mockResolvedValue({
+        id: 'o3',
+        status: 'cancelled',
+        env: 'prod',
+        pipelineId: 'p-3',
+      });
+      await service.cancel('o3', '实例丢失', 'orphan-cleanup');
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: 'orphan-cleanup',
+          action: 'approval.cancel',
+          env: 'prod',
+          detail: expect.stringContaining('实例丢失'),
+        }),
+      );
+      expect(audit.log.mock.calls[0][0].detail).toContain('p-3');
     });
   });
 });
