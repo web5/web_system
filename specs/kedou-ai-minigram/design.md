@@ -1,4 +1,5 @@
 # 科豆 AI 小程序 · 账号能力产品方案（退出登录 / 绑定手机号）
+> 状态：已实现 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：R1 退出登录、R2 绑定手机号的**怎么做**（状态机 / 流程 / 接口契约 / 数据模型 / 分期），需求判据见 `specs/kedou-ai-minigram/requirements.md`

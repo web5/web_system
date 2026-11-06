@@ -1,6 +1,7 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 
 # 歌曲推荐卡片（一期）需求 spec
+> 状态：待评审 ｜ 2026-11-06
 
 > 目标端：微信小程序 `apps/kedou-ai-minigram`（聊天页）。一期**不做站内播放**，只做「推荐 + 可配置跳转到外部音乐小程序」。
 

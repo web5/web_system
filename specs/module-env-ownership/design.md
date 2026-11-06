@@ -1,6 +1,6 @@
 # 设计稿 · 模块 × 环境 关系改造（1 对多：环境归属模块）
 
-> 状态：**P0 已实现（2026-09-15，待迁移脚本执行 + 联调）**；Q1/Q2/Q3 已由用户确认，Q4/Q5/Q6 按本文建议执行。
+> 状态：已实现 ｜ 2026-11-06
 > 变更日志：
 > - 2026-09-15 P0 落地：实体复合主键 + `address/server_name/port`、子资源路由 `/modules/:key/environments`、种子按模块（含新模块懒补 dev/prod）、monitor/server.service 适配、前端「本模块环境」Tab（覆盖所有模块类型）、迁移脚本 `archive/migrations/p5-module-env-ownership.mjs`
 > 决策来源：用户 2026-09-15 明确「一个模块有多个环境，一个环境只属于某个模块；dev/prod 每模块各一份」

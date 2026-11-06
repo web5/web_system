@@ -1,6 +1,6 @@
 # 设计稿 · 流水线节点模型重构（shell + 审批 两类节点 + 变量管理）
 
-> 状态：**待实现**（2026-09-14；D1–D8 决策已确认，见 §0.3）。
+> 状态：已评审确认 ｜ 2026-11-06
 > 关联代码：`servers/deploy-console/src/pipeline-template/template-node.ts`、`src/pipeline/steps/node-exec-plan.ts`、`src/pipeline/pipeline.service.ts`、`src/config/*`、`apps/deploy-console/src/views/PipelineEdit.vue`
 
 ---

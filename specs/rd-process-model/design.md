@@ -1,4 +1,5 @@
 # 方案 · 研发流程环节 / 角色 / reviewer 拆分（rd-process-model）
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 版本：v1.0（2026-09-23，用户已采纳建议版，待按 §7 拍板后落码）

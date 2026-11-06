@@ -1,6 +1,6 @@
 # 设计稿 · deploy-console 双域重构（微前端 / API 网关）v2
 
-> 状态：**已评审确认 v2**（2026-09-18，Q101–Q112 全部确认，见 `review-01-requirements.md`）
+> 状态：已评审确认 ｜ 2026-11-06
 > 需求来源：`requirements.md` v1.1（FR-1 ~ FR-10）
 > **唯一事实源声明**：本文是数据模型与接口契约的唯一权威；`tech-design-environment.md` 的环境模型结论**已并入本文 §4.2**，该文档降级为设计过程记录
 > 已落地原型（实现基线）：`apps/deploy-console/src/views/{AppManager,AppDetail,EnvironmentManager,EnvironmentDetail,ServiceManager,ServiceDetail}.vue`、`layouts/MainLayout.vue`、`packages/ui/src/components/EnvSwitcher.vue`

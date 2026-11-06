@@ -1,7 +1,7 @@
 # 接口设计 · 对话列表按 source / agentId 过滤（B 待办）
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
-> 状态：设计（已确认粒度：按能力分开，2026-09-23）
+> 状态：已评审确认 ｜ 2026-11-06
 > 相关：`specs/portal-redesign/page-spec.md` §1 3b、§3.2、§3.3
 
 ## 1 背景与目标

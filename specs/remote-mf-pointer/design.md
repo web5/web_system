@@ -1,7 +1,7 @@
 # 远端微前端入口未接通（prod）· 设计方案
 
 > 立项：2026-09-24，登记于 `specs/version-deploy/design.md §7`（专项 P1）
-> 状态：**待确认**（本文只给方案，确认后才动代码）
+> 状态：待评审 ｜ 2026-11-06
 > 相关：`specs/app-artifact-env-dir/design.md`（env-dir 产物与指针，其 Q5 = 本文要回答的 dev/prod 是否切 env 段）、
 > `specs/pipeline-node-model/design.md`（P1 节点 host + SSH 通道）、`specs/remote-backend-release/design.md`（后端远端全链，不覆盖前端指针）
 

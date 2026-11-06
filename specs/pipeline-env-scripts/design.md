@@ -1,4 +1,5 @@
 # 流水线脚本按环境区分（多环境 = 多分支脚本）
+> 状态：草稿 ｜ 2026-11-06
 
 > 建立：2026-09-20 ｜ 分支：`feat/deploy-console-domain-split` ｜ 仅本地（local）验证
 > 配套：`specs/config-driven-deploy/design.md`、`docs/development/local-dev-guide.md §3.2`

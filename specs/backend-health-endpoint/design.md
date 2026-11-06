@@ -2,7 +2,7 @@
 
 > 触发：deploy-console 服务监控页「响应」列大量 404，探活打的是 `/` 根路径，各服务无根路由 → 404 虽被判为「在线」但显示不友好、且无法区分「活着」与「真的健康」。
 > 关联：`specs/deploy-console/tech-design-monitor-health-ssh.md`（探活已收敛为单 SSH 会话）、`servers/gateway/src/health/health.controller.ts`（现有唯一实现，作为模板）
-> 状态：已实现（commit da78932，分支 feature/backend-health-endpoint）；本地与 dev 均已实测通过
+> 状态：已实现 ｜ 2026-11-06
 
 ---
 

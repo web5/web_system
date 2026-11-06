@@ -1,4 +1,5 @@
 # 配置驱动部署（目录 / 入口 / 静态资源可配）
+> 状态：待评审 ｜ 2026-11-06
 
 > 分支：`feat/deploy-console-domain-split` ｜ 建立：2026-09-20 ｜ 状态：设计中
 > 前置阅读：`specs/deploy-console-domain-split/design.md`、`HANDOFF.md`

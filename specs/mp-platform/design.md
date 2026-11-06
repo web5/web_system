@@ -1,6 +1,6 @@
 # 设计稿 · 小程序研发管理平台（mp-platform）
 
-> 状态：**设计确认稿（2026-09-17）**。6 项待拍板已由用户拍板，见 §0.2。
+> 状态：待评审 ｜ 2026-11-06
 > 上游方案：《小程序研发管理平台 · 工程落地技术方案》v2.0（2026-09-17）—— 本稿把它的「待定项」按本仓库现状固化，并记录 7 处偏差。
 > 关联：`specs/release-platform/`（deploy-console）、`specs/iam-multi-system/`、`docs/architecture/网关URL规划.md`、`specs/deploy-console/`
 > 接口契约：见同目录 `api-design.md`

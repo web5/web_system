@@ -1,4 +1,5 @@
 # 服务进程配置的下发链路（配置中心 → 服务 .env）
+> 状态：已实现 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：补齐 `specs/config-driven-deploy/design.md` 只做到一半的那条链路 —— 配置中心的第 ② 层

@@ -1,6 +1,6 @@
 # 需求 spec · deploy-console 双域重构（微前端 / API 网关）
 
-> 状态：**已评审确认 v1.1**（2026-09-18，第 1 轮需求评审通过，见 `review-01-requirements.md`）
+> 状态：已评审确认 ｜ 2026-11-06
 > 决策依据：用户在 rd-brainstorm 阶段选定 **方案 B（彻底分家、全新设计）**，并确认 D1–D5 五项前提（见 §1.3）。
 > 关联现状：`servers/deploy-console/src/entities/*`、`servers/gateway/src/proxy/proxy.controller.ts`、`servers/gateway/src/entities/gateway-route.entity.ts`、`apps/deploy-console/src/layouts/MainLayout.vue`
 > 下游文档：`design.md`（数据模型 + 接口契约）→ 原型稿 `docs/ui/prototypes/`

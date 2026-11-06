@@ -1,4 +1,5 @@
 # 后端 restart / verify 下沉为「发布流水线 action」
+> 状态：待评审 ｜ 2026-11-06
 
 > 建立：2026-09-21 ｜ 状态：**已实施（local）并在本地验证通过**（dev / prod 待后续批次）
 > 相关：`specs/pipeline-node-model/design.md`、`specs/pipeline-step-task/design.md`、`specs/pipeline-env-scripts/design.md`、`specs/pipeline-deploy-action/`、`docs/development/deploy-target-knowledge.md`

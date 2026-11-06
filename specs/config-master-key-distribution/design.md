@@ -1,4 +1,5 @@
 # CONFIG_MASTER_KEY 多机分发与在线轮换 · 设计
+> 状态：已实现 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：`specs/service-config-delivery/design.md` 分期里的 **P2**（独立小设计）。本文只解决三件事：

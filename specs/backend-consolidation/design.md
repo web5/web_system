@@ -1,7 +1,7 @@
 # 后端整合设计（backend-consolidation）
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
-> 状态：**设计已定稿，尚未落码**。四个议题（A/B/C/D）彼此独立，可分期落地、独立回退。
+> 状态：已评审确认 ｜ 2026-11-06
 > **全部决策项已确认**，无遗留开放问题。开工前唯一的前置门是 A6 / A2 页面部分需先过 UI 原型门。
 > 事实基线全部以代码为准（`servers/gateway/src/proxy/proxy.service.ts`、`ecosystem.config.cjs`、各服务 `src/auth/auth.guard.ts`）。
 

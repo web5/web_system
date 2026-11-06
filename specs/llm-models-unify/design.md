@@ -1,6 +1,6 @@
 # 设计 · 模型信息统一到字典（`llm_models` 收编 `model_pricing`）
 
-> 状态：**待评审**（2026-09-11）
+> 状态：待评审 ｜ 2026-11-06
 > 分支：`feature/llm-models-unify`
 > 关联：`specs/dict-module/design.md`（字典能力来源）、`docs/development/agent-capability-playbook.md`（坑 10 / 11）
 >

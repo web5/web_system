@@ -1,4 +1,5 @@
 # 实现计划 · upload.controller 日志合规化
+> 状态：草稿 ｜ 2026-11-06
 
 > 编排阶段：wb-auto-deliver 步骤 1（rd-plan 产物）。改动类型判定：**Tier1 零人**。
 

@@ -1,6 +1,7 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 
 # 用户记忆（User Memory）技术方案
+> 状态：待评审 ｜ 2026-11-06
 
 ## 1 背景与目标
 

@@ -1,6 +1,7 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 
 # 生词本 / 收藏（一期）技术方案
+> 状态：实施中 ｜ 2026-11-06
 
 ## 1 背景与现状
 

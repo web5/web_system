@@ -1,7 +1,7 @@
 # 科豆 AI · PC 端 portal 换血式升级设计
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
-> 状态：草案 v0.1（待用户确认）｜日期：2026-09-21
+> 状态：待评审 ｜ 2026-11-06
 > 配套：`specs/portal-redesign/page-spec.md`（页面规格）· `apps/portal/prototype/index.html`（可点击原型）
 > 上游：`apps/kedou-ai-minigram/docs/产品规划分析与实现方案-梳理.md`（小程序现行骨架）
 

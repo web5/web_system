@@ -1,4 +1,5 @@
 # 微前端产物按环境目录（env-dir）对齐
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：**微前端应用（deployMode=env-dir）的「构建 base / 投递目录 / 入口指针」三者必须逐段一致**——

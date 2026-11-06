@@ -1,4 +1,5 @@
 # 需求 · 从零初始化与 prod 首次发布
+> 状态：已实现 ｜ 2026-11-06
 
 > 分支：`feat/from-zero-bootstrap-prod-release`（基于 master）
 > 关联：`docs/development/from-zero-init-data.md`（数据清单）、`docs/development/prod-release-plan.md`（路径对比）
