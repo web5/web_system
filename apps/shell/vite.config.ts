@@ -46,7 +46,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
+      // ⚠️ 同 admin / portal：基座也只能用 browser.ts 入口（否则 storage-dir 的顶层
+      //    os.homedir() 一样会在浏览器里炸）。2026-11-06 P0 事故同源，详见 browser.ts 顶部注释。
+      '@web-system/shared': resolve(__dirname, '../../packages/shared/src/browser.ts'),
       '@web-system/shell-loader': resolve(__dirname, '../../packages/shell-loader/src/index.ts'),
       // 共享 UI 组件/组合式函数源码直引（同 admin / deploy-console：@web-system/ui 走 dist 且流水线不构建它）
       '@web-system/ui/components': resolve(__dirname, '../../packages/ui/src/components'),
