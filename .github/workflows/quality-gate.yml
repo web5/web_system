@@ -238,3 +238,18 @@ jobs:
 
       - name: 已并入稿的可并入性回归
         run: node scripts/check-proto-adopt.mjs --registered
+
+  specs-gate:
+    name: 规格体系静态门禁（命名 / 状态字段 / 死链 / 核心产物）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 规范真源：~/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md §2 / §3
+      # 基线机制与 audit-proto-registry 同款：存量缺口不阻断，新增违规必红。
+      - name: 审计 specs/（R1 命名 / R2 状态缺失 / R3 状态越界 / R4 死链 / R5 缺核心产物）
+        run: node scripts/audit-specs.mjs

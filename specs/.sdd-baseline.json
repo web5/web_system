@@ -1,0 +1,69 @@
+{
+  "updatedAt": "2026-11-06",
+  "entries": {
+    "R5|ai-agent|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|ai-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|auth-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|content-cover-media|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|content-hub|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|content-preview-typography|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|gateway|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|knowledge-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|mcp-gateway|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|radius-style-dual|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|shell-login-handoff|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|system-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|todo-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|ui-prototype-token-alignment|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|upload-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    },
+    "R5|user-service|(dir)": {
+      "rule": "R5",
+      "detail": "无 requirements.md / design.md / tech-design-*.md"
+    }
+  }
+}
