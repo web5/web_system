@@ -232,9 +232,22 @@ try {
   process.exit(1);
 }
 
+// 索引同步：新 feature 必须进 specs/README.md，否则 specs:index:check 立刻判过期。
+// 放在自检之后（先确认合规，再改生成物），失败也不静默 —— 否则索引会悄悄落后于目录。
+try {
+  execFileSync(process.execPath, ['scripts/gen-specs-index.mjs'], { cwd: ROOT, stdio: 'pipe' });
+  console.log('✅ specs/README.md 已重建（新 feature 已入索引）');
+} catch (e) {
+  console.error('\n🔴 索引重建失败（feature 已创建，但索引未更新）：');
+  console.error(String(e.stderr ?? '') || String(e.message));
+  console.error('   手动修：npm run specs:index');
+  process.exit(1);
+}
+
 console.log(`
 下一步：
   1. 填 requirements.md 的 §1 目标与非目标、§5 验收判据（其余章节可随写随补）
   2. 状态推进：需求编写中 → 待评审 → 已评审确认 → 实施中 → 已实现
   3. 需要方案文档时：node scripts/new-spec.mjs ${slug} --design --force
+  4. 索引已自动更新；改了别处导致索引过期时跑 npm run specs:index
 `);
