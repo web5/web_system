@@ -99,3 +99,11 @@
 | 需求 | 设计项 | 改动项 | 测试用例 | 发布项 | 验收 |
 |---|---|---|---|---|---|
 | admin 补交互式查词 | §2.1 tokensOf 对象绑定 | NceLessons.vue script/template/style | TC-01~TC-06 | 阶段3 admin | 点词正确弹释义，无错位回归 |
+
+## 9. 实现记录（微调豁免）
+
+> 微调豁免（Micro-exempt）：本次为纯对齐型微调用，1:1 复用 portal `Nce.vue` 已评审的
+> `tokensOf()`（生词 map 绑对象）+ `.word-card` 交互写法，无新增视觉语言 / 设计决策，
+> 沿用同一 NCE 浅色 token（#0EA5A4 / #F97316）。需求凭证见 `e3e519b3`（三件套已落分支）。
+> 实现：`apps/admin/src/views/Content/NceLessons.vue`（2026-11-06，研发部），点词查词卡
+> 在 `openPreview` 切换课文时重置（对齐 portal `openLesson`，防残留旧词卡）。
