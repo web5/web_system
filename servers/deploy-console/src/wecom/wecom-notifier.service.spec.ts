@@ -53,7 +53,16 @@ describe('WecomNotifierService（V1 / V11 / V12）', () => {
     await tick();
     expect(send).toHaveBeenCalledTimes(1);
     const [, card] = send.mock.calls[0] as [string, { url: string; description: string }];
-    expect(card.url).toBe('https://dev.kedouai.com/console/m/approve/A1');
+    /**
+     * 2026-11-06 联调修正断言：原断言是 `…/console/m/approve/A1`（直连 H5）。
+     * 那条链接在真机上必然失败 —— H5 只认 `?ticket=`，而票据只能由 OAuth 回调签发，
+     * 所以「直连 H5」等于「从企微点进来 100% 显示链接已失效」。
+     * 断言跟着改成免登入口，并保留一条负向断言防止有人改回直连。
+     */
+    expect(card.url).toBe(
+      'https://dev.kedouai.com/console/api/wecom/oauth/authorize?approvalId=A1',
+    );
+    expect(card.url).not.toMatch(/\/m\/approve\//);
     expect(card.description).toContain('admin');
     expect(card.description).toContain('发布确认');
     svc.onModuleDestroy();
