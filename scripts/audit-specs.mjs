@@ -52,26 +52,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  STATUS, STATUS_RE, STATUS_SCAN_LINES, VERIFIABLE_RE, SOFT_SECTION,
+  nameCompliant, isProductFile, shapeOf, SHAPE_LABEL, walkAll,
+} from './lib/spec-rules.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SPECS = path.join(ROOT, 'specs');
 const BASELINE = path.join(SPECS, '.sdd-baseline.json');
-
-const CORE = new Set(['requirements.md', 'design.md', 'tasks.md']);
-const TYPES = new Set([
-  'api-design', 'page-spec', 'tech-design', 'review', 'progress',
-  'glossary', 'index', 'handoff', 'guide', 'inventory', 'proposal',
-  'adr', 'decision',
-]);
-// 非 md 的产物：本仓大量 feature 是原型驱动，只有 prototype.html 而无任何 md
-// （pipeline-form-preview / popconfirm-width / sider-submenu-spacing 即此形态）。
-const PRODUCT_NON_MD = new Set(['prototype.html']);
-const STATUS = new Set([
-  '草稿', '需求编写中', '方案设计中', '待评审',
-  '已评审确认', '实施中', '已实现', '已归档',
-]);
-const STATUS_RE = /^>\s*状态：\s*(\S+?)\s*(?:｜|\|)/;
-const STATUS_SCAN_LINES = 12;
 
 const args = new Set(process.argv.slice(2));
 const UPDATE = args.has('--update-baseline');
@@ -86,77 +74,9 @@ const BY_RULE_NAME = {
   R7: '需求无可验判据',
 };
 
-// requirements.md 的「可验判据」锚点：按语义匹配，不认死标题（SOP §4 / §4.1）
-const VERIFIABLE_RE = /验收|判据|EARS|V\d|验证标准/;
-// 「边界与反例」「变更日志」只做 notice（存量 5/8、4/8，硬门会误杀语义齐全的存量）
-const SOFT_SECTION = {
-  边界与反例: /边界|反例|非目标|不做/,
-  变更日志: /变更日志|changelog/i,
-};
-
 const findings = [];
 const add = (rule, feature, file, detail) =>
   findings.push({ key: `${rule}|${feature}|${file}`, rule, feature, file, detail });
-
-/** 文件名是否符合 §2.1 白名单 */
-function nameCompliant(name) {
-  if (CORE.has(name)) return true;
-  const base = name.replace(/\.md$/, '');
-  // handoff 允许 P0-/P1-/HANDOFF 前缀，归一成 handoff
-  const norm = base.replace(/^(P0-|P1-|HANDOFF-?)/i, 'handoff-').replace(/-$/, '');
-  // 类型名本身可能带连字符（api-design / page-spec / tech-design），
-  // 因此要按「整串等于类型」或「类型 + -」匹配，不能按第一段切分。
-  for (const t of TYPES) {
-    if (norm === t || norm.startsWith(`${t}-`)) return true;
-  }
-  return false;
-}
-
-/** 目录内是否存在「算得上产物」的文件：命名合规的 .md，或原型白名单 */
-function isProductFile(name) {
-  return PRODUCT_NON_MD.has(name) || (name.endsWith('.md') && nameCompliant(name));
-}
-
-/**
- * 缺 requirements.md 的 feature 属于哪种形态。
- * R6 只做计数，但要让人一眼看出欠账性质：36 个「有 design 无需求」跟
- * 11 个「纯 api-design」是完全不同的两件事，前者可议、后者是合理形态。
- * 分类口径见 30-任务产物/2026-11-06-web_system-specs治理/04-R6欠账分类-*.md
- */
-function shapeOf(allFiles) {
-  const names = allFiles.map((f) => path.basename(f));
-  const has = (re) => names.some((n) => re.test(n));
-  if (names.includes('design.md')) return 'design';
-  const hasApi = has(/^api-design/);
-  const hasPage = has(/^page-spec/);
-  const hasTd = has(/^tech-design/);
-  if (hasApi && !hasPage && !hasTd) return 'api';
-  if (hasPage && !hasApi && !hasTd) return 'page';
-  if (hasTd) return 'techDesign';
-  if (names.includes('prototype.html')) return 'proto';
-  if (has(/^inventory-/)) return 'inventory';
-  return 'other';
-}
-
-const SHAPE_LABEL = {
-  design: '有 design',
-  api: '纯 api-design',
-  page: '纯 page-spec',
-  techDesign: '有 tech-design',
-  proto: '纯原型',
-  inventory: '纯 inventory',
-  other: '其它',
-};
-
-/** 目录内所有文件（含非 md）—— 空目录判定与产物判定共用 */
-function walkAll(dir, acc = []) {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) walkAll(p, acc);
-    else acc.push(p);
-  }
-  return acc;
-}
 
 if (!fs.existsSync(SPECS)) {
   console.error(`specs/ 不存在：${SPECS}`);

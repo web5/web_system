@@ -207,6 +207,20 @@ describe('WecomApprovalService（卡② W-a~W-g / V3–V8 / V10 / V12）', () =>
     expect(d.operatorName).toBeUndefined();
   });
 
+  it('返回 templateId：控制台链接必须用模板 id，用运行实例 id 会落到列表页', async () => {
+    // 实体里的 pipelineId 映射列 template_id（模板 id），与 approval.pipelineId（运行实例 id）同名不同义
+    const s = setup({ pipeline: { pipelineId: 'TPL1' } });
+    const d = await s.service.detail('A1', actor, '1.2.3.4');
+    expect(d.pipelineId).toBe('P1');
+    expect(d.templateId).toBe('TPL1');
+  });
+
+  it('旧运行缺 template_id 时 templateId 为 undefined，前端回落列表页而非拼出坏链接', async () => {
+    const s = setup({ pipeline: { pipelineId: null } });
+    const d = await s.service.detail('A1', actor, '1.2.3.4');
+    expect(d.templateId).toBeUndefined();
+  });
+
   it('非 prod 无需 confirm，可直接通过', async () => {
     const s = setup({ approval: makeApproval({ env: 'dev' }) });
     await expect(s.service.approve('A1', actor, {}, '1.2.3.4')).resolves.toMatchObject({
