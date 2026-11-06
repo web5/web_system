@@ -26,18 +26,19 @@
  *   R3 状态取值不在 §3 封闭枚举内
  *   R4 相对 markdown 链接指向不存在的文件（死链）
  *   R5 空壳 feature：目录内无任何「命名合规的产物文件」
- *   R6 缺 requirements.md 的 feature 计数（notice 级，只打印不阻断）
+ *   形态统计（原 R6，notice 级，已不构成欠账）
  *
  * 「产物文件」的判定见 isProductFile()：R1 白名单内的 .md，加上原型白名单
  * （prototype.html）。这样「命名合规」与「算不算产物」是同一套标准，不会出现
  * 同一份文件 R1 判合规、R5 判无用（2026-11-06 实测：inventory-impact.md 就撞上了）。
  *
  * 为什么 R5 不写成「必须有 requirements.md」：
- *   SOP §2.1 字面写「缺一则补」，但实测 64 个 feature 里 52 个没有
- *   requirements.md（16 个只有 api-design 的纯契约 feature、nce 这类只有
- *   page-spec 的）。做成硬门 = 一次判 52 红，唯一结果是批量糊弄式回填。
- *   所以 R5 只拦「真空壳」，R6 只统计欠账；要收紧先把欠账逐 feature 判完
- *   （补写 / 归档 / 修 SOP），再把 R6 升为阻断。
+ *   SOP v1.0 §2.1 字面写「缺一则补」，实测 63 个 feature 里 55 个没有
+ *   requirements.md。做成硬门 = 一次判 55 红，唯一结果是批量糊弄式回填。
+ *   **2026-11-06 SOP 已升到 v1.1 并新增 §2.1.1「核心产物最小要求」**：
+ *   requirements/design 之外，只有 api-design、只有 page-spec、只有
+ *   prototype.html、只有 inventory-* 都属合法形态，不再要求补 requirements。
+ *   → 于是 R5 只拦「连一个合规产物都没有」的真空壳；形态分布行只做统计。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -115,15 +116,17 @@ function shapeOf(allFiles) {
   if (hasPage && !hasApi && !hasTd) return 'page';
   if (hasTd) return 'techDesign';
   if (names.includes('prototype.html')) return 'proto';
+  if (has(/^inventory-/)) return 'inventory';
   return 'other';
 }
 
 const SHAPE_LABEL = {
-  design: '有 design 无需求',
+  design: '有 design',
   api: '纯 api-design',
   page: '纯 page-spec',
   techDesign: '有 tech-design',
   proto: '纯原型',
+  inventory: '纯 inventory',
   other: '其它',
 };
 
@@ -248,7 +251,7 @@ for (const rule of ['R1', 'R2', 'R3', 'R4', 'R5']) {
 if (emptyDirs.length) {
   console.log(`  提示 · 空目录 ${emptyDirs.length} 个（git 不跟踪，建议清理）：${emptyDirs.join(', ')}`);
 }
-// R6 只做计数，从不阻断（对应 gates.yaml 的 notice 级）
+// 形态统计：SOP v1.1 §2.1.1 已认定这些形态全部合法，只做分布统计，永不阻断
 if (noReqDirs.length) {
   const byShape = {};
   for (const { feature, shape } of noReqDirs) (byShape[shape] ??= []).push(feature);
@@ -257,10 +260,10 @@ if (noReqDirs.length) {
     .map((s) => `${SHAPE_LABEL[s]} ${byShape[s].length}`)
     .join(' ｜ ');
   console.log(
-    `  R6 缺 requirements.md（notice，不阻断）：${noReqDirs.length}/${features.length} 个 feature`,
+    `  形态分布 · 无 requirements.md 的 feature：${noReqDirs.length}/${features.length}` +
+      '（按 SOP §2.1.1 均属合法形态，非欠账）',
   );
-  console.log(`     形态分布：${summary}`);
-  console.log('     分类与处置建议：30-任务产物/2026-11-06-web_system-specs治理/04-R6欠账分类-*.md');
+  console.log(`     ${summary}`);
   if (VERBOSE) {
     for (const s of Object.keys(SHAPE_LABEL)) {
       if (byShape[s]) console.log(`     · ${SHAPE_LABEL[s]}（${byShape[s].length}）：${byShape[s].join(', ')}`);
