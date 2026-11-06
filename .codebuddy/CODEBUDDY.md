@@ -109,7 +109,7 @@
 
 `specs/<feature>/` 是**跨会话、跨 agent 的单一事实源**。开工前先读它，不要凭记忆复述约定：
 
-- **读**：动手改一个能力前，先看 `specs/<feature>/requirements.md`（要什么 / 验收判据）与 `design.md`（怎么做）。找不到对应 feature 就先确认这活该不该新起一个。
+- **读**：动手改一个能力前，先看 `specs/<feature>/requirements.md`（要什么 / 验收判据）与 `design.md`（怎么做）。找不到对应 feature 就先确认这活该不该新起一个。不知道有哪些 feature 时，先看 `specs/README.md`（自动生成的全量索引，含状态与形态分组）。
 - **写**：新起 feature 用脚手架，不要手抄章节名 —— `npm run new:spec -- <slug> [--design]`（按 SOP §4 生成合规骨架，并自动跑门禁自检）。
 - **回写**：需求变了改 `requirements.md`，不要只在代码里打补丁；用户拍板落 `D1..Dn`，被否方案也记一行，免得下个 agent 重提。
 - **自检**：`npm run check:specs`（命名 / 状态字段 / 死链 / 空壳 / 有无可验判据）。

@@ -5,6 +5,8 @@
 > 只放「去哪找」，**不放数值、不放命令全文**。
 > 数值与事实以最后一跳的真源为准；本表与真源冲突时，一律以真源为准。
 > 维护日期 2026-11-04 · 对应治理任务 `30-任务产物/2026-11-04-web_system文档治理/`
+>
+> 🔍 **不知道 specs/ 下有哪些 feature**：先看 [`specs/README.md`](../specs/README.md)（**生成物，勿手改**，`npm run specs:index` 重建 `npm run specs:index:check` 校验）。
 
 ---
 
