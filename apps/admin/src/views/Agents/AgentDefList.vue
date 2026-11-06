@@ -12,7 +12,8 @@
     </template>
   </a-page-header>
 
-  <a-card :bordered="true">
+  <!-- 锚点 agent-def-list：表格容器（空态「暂无数据」由 a-table 自带，S3 空态即此层） -->
+  <a-card data-dr="agent-def-list" :bordered="true">
     <a-table
       :columns="columns"
       :data-source="defs"

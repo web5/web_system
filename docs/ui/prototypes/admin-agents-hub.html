@@ -558,15 +558,18 @@
 
   /* 演示状态矩阵（demo-control-panel.md §5.2，分支块） */
   .only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}
+  .only-loadfail{display:none;}
   [data-demo-state="loading"] .only-loading,
   [data-demo-state="empty"] .only-empty,
   [data-demo-state="error"] .only-error,
   [data-demo-state="forbidden"] .only-forbidden,
   [data-demo-state="misconfig"] .only-misconfig{display:block;}
+  [data-demo-state="load-fail"] .only-loadfail{display:block;}
   [data-demo-state="loading"] .only-normal,
   [data-demo-state="empty"] .only-normal,
   [data-demo-state="error"] .only-normal,
-  [data-demo-state="forbidden"] .only-normal{display:none;}
+  [data-demo-state="forbidden"] .only-normal,
+  [data-demo-state="load-fail"] .only-normal{display:none;}
   [data-demo-state="normal"] .only-normal{display:block;}
   .state-box{padding:40px 20px;text-align:center;color:var(--ws-text-secondary);font-size:13px;}
   .state-box b{display:block;color:var(--ws-text-primary);font-size:14px;margin-bottom:6px;}
@@ -3253,10 +3256,24 @@
 
       <!-- 真实屏（同源抽取自定稿）：定义详情 · 高级 · 模型参数调试台 —— 无菜单项，经列表「编辑」进入（dt-head 即页头） -->
       <div class="screen hidden" data-screen="detail" data-demo-state="normal">
-<!-- 演示数据态分支（demo-control-panel.md 方案 A）：仅演示控件切换，不进产品口径 -->
+<!-- 演示数据态分支（demo-control-panel.md 方案 A）：仅演示控件切换，不进产品口径
+             2026-11-06 三个演示态 CTA 的最终处置（B2a）：
+               · empty-cta    —— **撤锚点**：B3 定稿口径是「逐控件留空 + 占位说明」（C7-e 不预填 0.7 /
+                                 C7-c 留空=不覆盖），不存在整块空态框；S3 空态适用于列表页而非参数区。
+                                 控件保留演示，改挂 id="cta-empty"。
+               · error-cta    —— **锚点改挂到 load-fail 分支**：原 only-error 演示的是「保存被拒（互斥）」，
+                                 属 C7-b 双字段红字（锚点 mutex-conflict-hint 本轮撤除）。而实现侧
+                                 error-cta 的真实语义是**加载失败 → 重试**（设计系统 S4「失败须有可重试路径」），
+                                 故新增 data-demo-state="load-fail" 承载它，锚点落在此处。
+                                 原 only-error 分支保留演示，改挂 id="cta-error"。
+               · forbidden-cta —— **恢复锚点**：实现 views/Forbidden.vue 有唯一出路按钮（useSafeReturn
+                                 的 label/go），结构真实存在。
+             判据：撤锚点必须「规格怎么说」+「实现里有没有」两条都查（本轮撤错 1 次即因只查后者）。 -->
         <div class="only-loading"><div class="state-box"><b>正在加载 Agent 定义与生效策略…</b><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
-        <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" data-dr="empty-cta">开始配置</button></div></div>
-        <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" data-dr="error-cta">返回修改</button></div></div>
+        <div class="only-empty"><div class="state-box"><b>该定义尚未配置任何生成参数</b>保存后运行时按服务侧默认兜底。<br><br><button class="btn sm" id="cta-empty">开始配置</button></div></div>
+        <div class="only-error"><div class="state-box"><b>保存被拒：temperature 与 topP 只能填一个</b>清空其中一项后再保存（互斥校验，字段值已保留）。<br><br><button class="btn sm" id="cta-error">返回修改</button></div></div>
+        <!-- 加载失败态：设计系统 S4「失败须有可重试路径」→ 必须有可点出口。实现落 a-empty + 重试按钮 -->
+        <div class="only-loadfail"><div class="state-box"><b>加载失败：无法获取该 Agent 定义</b>请检查网络或稍后重试；已填内容不会丢失。<br><br><button class="btn sm" data-dr="error-cta">重试</button></div></div>
         <div class="only-forbidden"><div class="state-box"><b>调参与审计仅管理员及以上可见</b>编辑者/查看者可查看基础配置；如需调参权限请联系管理员开通。<br><br><button class="btn sm" data-dr="forbidden-cta">返回列表</button></div></div>
         <div class="only-misconfig"><div class="warn-tool" style="margin:0 0 12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg><div><b>误配态演示：thinking=disabled，但该 Agent 挂载工具</b><div class="wd">运行时会被强制纠正为 enabled；表单下方红框为联动一警示。</div></div></div></div>
         <div class="only-normal">
@@ -3424,7 +3441,7 @@
                   <div class="fitem">
                     <div class="flb"></div>
                     <div class="fld">
-                      <div class="fhint hidden" id="conflict-hint" data-dr="mutex-conflict-hint" style="color:var(--ws-danger);font-weight:600;">
+                      <div class="fhint hidden" id="conflict-hint" style="color:var(--ws-danger);font-weight:600;">
                         temperature 与 top P 只能填一个，请清空其中一项后再保存（字段值不会丢）
                       </div>
                     </div>
@@ -5554,18 +5571,29 @@ qsa('.mask, .drawer-mask').forEach(m =>
     }
     if(card && card.scrollIntoView) card.scrollIntoView({ behavior:'smooth', block:'start' });
   }
-  var ctaError = document.querySelector('[data-dr="error-cta"]');
+  var ctaError = document.getElementById('cta-error');
   if(ctaError) ctaError.addEventListener('click', function(){
     setDemoState('normal');
     renderParams();   // 重渲染：互斥红字提示仍在、字段值不丢
   });
-  var ctaEmpty = document.querySelector('[data-dr="empty-cta"]');
+  var ctaEmpty = document.getElementById('cta-empty');
   if(ctaEmpty) ctaEmpty.addEventListener('click', function(){
     setDemoState('normal');
     expandAdvCard();  // 「开始配置」→ 展开高级卡并滚到参数面板
   });
-  var ctaForbidden = document.querySelector('[data-dr="forbidden-cta"]');
+  var ctaForbidden = document.getElementById('cta-forbidden');
   if(ctaForbidden) ctaForbidden.addEventListener('click', function(){ leaveDetail(this); });
+
+  /* error-cta = 加载失败态「重试」（S4）：回 normal 并重跑一次渲染，字段值不丢。
+     注意与 #cta-error（保存被拒演示态，走 setDemoState+renderParams）区分——两者语义不同。 */
+  var ctaRetry = document.querySelector('[data-dr="error-cta"]');
+  if(ctaRetry) ctaRetry.addEventListener('click', function(){
+    setDemoState('normal');
+    renderParams();
+  });
+  /* forbidden-cta = 无权限态「返回列表」（S5）：与 btn-back 同路径 */
+  var ctaForbiddenDr = document.querySelector('[data-dr="forbidden-cta"]');
+  if(ctaForbiddenDr) ctaForbiddenDr.addEventListener('click', function(){ leaveDetail(this); });
 
   /* 代码块「复制」按钮（动态生成于 .codeblk）：chatbox 事件委托接行为 */
   var chatboxEl = $('chatbox');

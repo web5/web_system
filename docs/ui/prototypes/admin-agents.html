@@ -654,7 +654,7 @@
           <span class="tclose" id="toastClose">关闭</span>
         </div>
 
-        <div class="modal" data-dr="agent-def-edit-modal">
+        <div class="modal">
           <div class="mh"><span class="t">编辑 Agent · 通用助手</span>
             <span class="x"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
           </div>
@@ -688,8 +688,11 @@
             <!-- 2026-11-06 本屏（屏②·编辑弹窗·生成参数区）已被 docs/ui/prototypes/admin-agent-def-detail.html 取代。
                  屏内三个锚点已撤：gen-params-preset（B3 五控件口径不含预设）、gen-params-sampler
                  （改为 temp/topP 两输入 + C7-b 同填报错）、gen-params-payload-preview（旧屏专属，新形态是「生效策略预览」）。
-                 保留本屏仅供历史对照，勿据此回填实现侧锚点。 -->
-            <div class="grp" data-dr="gen-params-group">
+                 保留本屏仅供历史对照，勿据此回填实现侧锚点。
+                 2026-11-06 补撤屏② 余下 3 个锚点：agent-def-edit-modal（弹窗形态本身已作废，
+                 v2 改为独立详情页）、gen-params-group（参数分组容器随弹窗作废）、
+                 agent-def-save（弹窗底部保存按钮）。屏① 的 agent-def-list 保留——列表页仍在用。 -->
+            <div class="grp">
               生成参数
               <span class="side">
                 按场景套用
@@ -779,7 +782,7 @@
 
           <div class="mf">
             <button class="btn" type="button">取消</button>
-            <button class="btn primary" type="button" id="saveBtn" data-dr="agent-def-save">保存</button>
+            <button class="btn primary" type="button" id="saveBtn">保存</button>
           </div>
         </div>
       </div>

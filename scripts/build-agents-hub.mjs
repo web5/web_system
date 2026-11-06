@@ -740,6 +740,7 @@ if (!out.includes('.pg-agent svg{width:var(--ws-icon-inline)')) problems.push('�
 // ④b detail 屏状态矩阵 / 警示框 CSS 必须合入（2026-10-28：B3 CSS 误挂壳块尾部被 between() 丢掉
 //     → 五个 .only-* 数据态同显 + 警告 SVG 撑爆；这类「整块 CSS 静默丢失」必须当场炸）
 [['.only-loading,.only-empty,.only-error,.only-forbidden,.only-misconfig{display:none;}', '状态矩阵基础隐藏组'],
+ ['.only-loadfail{display:none;}', '加载失败态隐藏规则（B2a 新增）'],
  ['.warn-tool svg{width:18px', '.warn-tool svg 尺寸规则'],
  ['[data-demo-state="normal"] .only-normal', '状态切换规则'],
  ['data-screen="detail" data-demo-state="normal"', 'detail 容器 data-demo-state']].forEach(([tok, why]) => {

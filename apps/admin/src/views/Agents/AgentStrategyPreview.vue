@@ -6,7 +6,7 @@
   真值数据同源：thinking / maxTokens 与 AgentTuningPanel 收到的 props 一致（父组件透传）。
 -->
 <template>
-  <div class="b3-strategy">
+  <div class="b3-strategy" data-dr="strategy-preview">
     <div class="b3-strategy-title">生效策略预览</div>
     <div class="b3-strategy-cols">
       <ul class="b3-chain">

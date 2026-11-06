@@ -5,7 +5,9 @@
       <h1 class="forbidden-title">无权限访问</h1>
       <p class="forbidden-desc">{{ hint || '你没有访问该页面的权限，请联系管理员' }}</p>
       <div class="forbidden-actions">
-        <button type="button" class="btn-primary" @click="go">{{ label }}</button>
+        <!-- 锚点 forbidden-cta：S5 要求无权限页必须有**唯一出路**（label/go 由 useSafeReturn 决定，
+             可能是「回到有权限的页面」或「退出登录」），不能只有一句「无权限」 -->
+        <button type="button" data-dr="forbidden-cta" class="btn-primary" @click="go">{{ label }}</button>
       </div>
     </div>
   </div>

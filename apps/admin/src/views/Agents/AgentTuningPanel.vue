@@ -39,6 +39,7 @@
       <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填）
            placeholder 走「示例/格式」口径（2026-10-29 拍板，见 page-spec §2.1） -->
       <a-form-item
+        data-dr="gen-params-temperature"
         label="Temperature"
         extra="留空 = 不覆盖，运行时回落 0.7；与 topP 互斥"
         :help="errs.temperature"
@@ -58,6 +59,7 @@
       <!-- 控件 2 · maxTokens：**无 placeholder**（2026-10-29 拍板口径 C）——留空 = 用满模型上限，
            是推荐态：写「如 4096」会暗示推荐值，写「未配置」会被读成没配好；空值含义由 extra 承担 -->
       <a-form-item
+        data-dr="gen-params-maxTokens"
         label="输出上限"
         :extra="hasTools ? `留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小` : '留空 = 系统默认'"
         :help="errs.maxTokens"
@@ -74,6 +76,7 @@
 
       <!-- 控件 3 · topP：与 temperature 互斥（C7-b）——同填保存被拒、红字、不清值 -->
       <a-form-item
+        data-dr="gen-params-topP"
         label="Top P"
         extra="核采样 top_p；与 temperature 互斥，同填保存将被拒绝"
         :help="errs.topP"
@@ -93,6 +96,7 @@
       <!-- 控件 4 · thinking：三态 segmented（D1）。文案走业务词，契约值留内部
            （2026-10-29 拍板，page-spec :127：hint 禁出现内部字段名/实现枚举） -->
       <a-form-item
+        data-dr="gen-params-thinking"
         label="思考"
         extra="跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）"
       >
@@ -105,13 +109,14 @@
       </a-form-item>
 
       <!-- 联动③：thinking=enabled → budget 只读预览（实时重算） -->
-      <div v-if="thinkingVal === 'enabled'" class="b3-budget-preview">
+      <div v-if="thinkingVal === 'enabled'" data-dr="gen-params-thinking-budget" class="b3-budget-preview">
         思考预算（只读预览）= <b>{{ preview.budgetTokens }}</b>
         <span class="b3-formula">{{ preview.budgetFormula }}</span>
       </div>
 
       <!-- 控件 5 · max_steps -->
       <a-form-item
+        data-dr="gen-params-max-steps"
         label="最大步数"
         extra="Agent 引擎最大工具编排轮数"
         :help="errs.maxSteps"
@@ -131,6 +136,7 @@
     <!-- 联动①：挂工具误配 disabled → 红字警示（D2 可点+警示，不锁死控件） -->
     <a-alert
       v-if="misconfig"
+      data-dr="misconfig-warn"
       class="b3-misconfig"
       type="error"
       show-icon
