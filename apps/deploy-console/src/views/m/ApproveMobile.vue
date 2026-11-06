@@ -95,6 +95,10 @@ const consoleLink = computed(() => {
  *
  * 这是 14 号方案的核心改动：看一眼发布结果不该需要后台权限。
  * 票据直接带过去（sessionStorage 已有），凭据不出审批域。
+ *
+ * 两个调用点：
+ *  - 结果态主按钮「查看发布结果」——审批后确认成没成
+ *  - **详情态「查看完整流程」**——审批**前**看后面还有几步，避免盲批
  */
 function goRun(): void {
   window.location.href = `/console/m/approve/${encodeURIComponent(approvalId.value)}/run`
@@ -321,6 +325,10 @@ function backToDetail(): void {
             </li>
             <li><span class="dot now">●</span><span class="now">{{ detail.nodeLabel || '发布确认' }} · 等待你确认 ← 当前</span></li>
           </ul>
+          <!-- 🔴 审批前也要能看流程全景：「最近节点」只给了前半段，批准后还有几步不知道 ——
+               没有这个入口，审批人只能盲批（11-06 真机三单里两次直接驳回就是这么来的）。
+               跳 S5 复用同一张票据（sessionStorage 已有），不扩权、不另签。 -->
+          <button class="more" @click="goRun">查看完整流程 →</button>
         </div>
       </div>
 
@@ -401,6 +409,11 @@ function backToDetail(): void {
 .steps .dot{width:14px;flex:0 0 14px;text-align:center;font-weight:700}
 .steps .dot.ok{color:#16A34A}
 .steps .dot.now,.steps .now{color:#D97706}
+/* 详情态的流程全景入口：整行可点，用分隔线与节点列表区分，不与「驳回/通过」争视觉权重 */
+.more{display:flex;align-items:center;width:100%;min-height:44px;margin:8px 0 -6px;padding:0;
+  border:none;border-top:1px solid rgba(0,0,0,.06);background:none;text-align:left;
+  font-family:inherit;font-size:13px;font-weight:600;color:#0F766E;cursor:pointer}
+.more:active{color:#0B5C55}
 .footer{position:fixed;left:0;right:0;bottom:0;background:#FFFFFF;border-top:1px solid rgba(0,0,0,.08);
   padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:2}
 .btn{flex:1;border-radius:10px;padding:12px;font-size:14px;font-weight:600;border:1px solid transparent;

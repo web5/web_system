@@ -249,7 +249,8 @@ onUnmounted(stopPolling)
 
 <template>
   <div class="page">
-    <div class="topbar">企业微信 · 发布结果</div>
+    <!-- 顶栏用中性说法「发布流程」：本页有两个入口 —— 审批前看全景、审批后看结果 -->
+    <div class="topbar">企业微信 · 发布流程</div>
 
     <div v-if="loading" class="center muted">正在读取发布结果…</div>
 
