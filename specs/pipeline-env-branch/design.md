@@ -1,5 +1,6 @@
 # 流水线节点的「环境分支」可编辑配置
-> 状态：草稿 ｜ 2026-11-06
+> 状态：已归档 ｜ 2026-11-06
+> 去向：本设计的「脚本拼装」方案未被采用 —— `specs/pipeline-step-branch/design.md` 明确「已由本设计取代，分支改为独立实体，不再拼写进脚本」，后者又被 `specs/pipeline-step-task/design.md` 吸收。保留在本目录供对照（按其约定不迁 `archive/`）。
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：发布（release）节点按环境分叉的**配置与编辑器**设计 —— 每环境一段脚本，页面增删改，保存时拼装成单一执行体。

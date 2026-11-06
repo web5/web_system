@@ -1,5 +1,6 @@
 # 流水线编排重构 · 步骤 / 任务 / 动作（需求 · 产品 · 技术设计）
-> 状态：草稿 ｜ 2026-11-06
+> 状态：已实现 ｜ 2026-11-06
+> 复核依据：三层实体均已落码 —— `deploy-pipeline-step.entity.ts` / `deploy-pipeline-task.entity.ts` / `deploy-pipeline-action.entity.ts`（另有 `deploy-pipeline-step-command.entity.ts` 承载动作执行体），流水线在 dev/prod 实跑。
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：发布流水线编排的**三层实体模型**重构方案 —— 取代「步骤=节点直接挂脚本」的旧模型。

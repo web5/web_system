@@ -1,5 +1,6 @@
 # 流水线脚本按环境区分（多环境 = 多分支脚本）
-> 状态：草稿 ｜ 2026-11-06
+> 状态：已归档 ｜ 2026-11-06
+> 去向：本设计是「环境级脚本列」的备选方案，`specs/pipeline-env-branch/design.md` 明确「env 列备选方案，本设计不采用」；实际落地走的是步骤/任务/动作三层实体（`specs/pipeline-step-task/design.md`）。保留供对照。
 
 > 建立：2026-09-20 ｜ 分支：`feat/deploy-console-domain-split` ｜ 仅本地（local）验证
 > 配套：`specs/config-driven-deploy/design.md`、`docs/development/local-dev-guide.md §3.2`
