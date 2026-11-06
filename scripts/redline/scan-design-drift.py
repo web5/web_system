@@ -17,6 +17,9 @@
 # 锚点匹配口径：**按 key 全局匹配，不按文件映射**。
 #   原型里 data-dr="chat.input" 只要在本 app 任一实现文件中出现即算存在——
 #   避免维护「原型文件 ↔ 页面文件」映射表（维护成本高于收益，且易腐）。
+#
+# 比对前提（防误报，§3.7.1）：原型侧与实现侧**都**有锚点才比对；任一侧为空 → SKIP。
+#   存量回填期间（anchor-backlog 未完成）本脚本的正常输出是 SKIP，不是 MISSING。
 # ============================================================
 import os
 import re
@@ -130,8 +133,16 @@ def cmd_anchors(root, rng):
             proto_keys |= anchors_in(read_at(root, f))
         for f in impl_files:
             impl_keys |= anchors_in(read_at(root, f))
+        # 比对前提（防误报，specs/design-reviewer/design.md §3.7.1）：
+        #   仅当原型侧与实现侧**都**声明了锚点清单时才比对；**任一侧**无锚点 → 跳过，不报 MISSING。
+        # 历史缺陷（2026-11-06 修）：这里原先只判 proto 侧。而实现侧锚点回填进度为 0
+        #   （docs/ui/anchor-backlog.md 5 批 129 文件全「待开始」），于是把「尚未回填」
+        #   整体判成「已漂移」—— 全量视角 53 条告警 100% 是误报，一开 warn 就是满屏噪声。
         if not proto_keys:
             emit('SKIP', 'R11b', app, '原型未打 data-dr（存量未回填），跳过比对 —— 未回填≠已漂移（§3.7.1）')
+            continue
+        if not impl_keys:
+            emit('SKIP', 'R11b', app, '实现侧未打 data-dr（存量未回填），跳过比对 —— 未回填≠已漂移（§3.7.1）')
             continue
         missing = sorted(proto_keys - impl_keys)
         extra = sorted(impl_keys - proto_keys)
