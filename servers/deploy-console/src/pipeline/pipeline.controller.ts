@@ -92,9 +92,14 @@ export class PipelineController {
   }
 
   @Post(':id/cancel')
-  @ApiOperation({ summary: '取消流水线（幂等）' })
-  async cancel(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.pipelineService.cancel(id, user?.username);
+  @ApiOperation({ summary: '取消流水线（幂等）；body.reason 用于运维作废留痕' })
+  async cancel(
+    @Param('id') id: string,
+    @CurrentUser() user?: { username?: string },
+    @Body() body?: { reason?: string },
+  ) {
+    // reason 可选：不传保持历史语义「提交人取消」；运维作废必须写明原因才可追溯
+    return this.pipelineService.cancel(id, user?.username, body?.reason);
   }
 
   @Post(':id/promote')
