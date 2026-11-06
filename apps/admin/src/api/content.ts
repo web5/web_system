@@ -98,6 +98,50 @@ export function deletePipeline(id: number): Promise<{ ok: boolean }> {
   return request.delete(`/content-admin/content/pipelines/${id}`);
 }
 
+// ── cron 校验 / 调度状态（2026-11-06 #8561）──
+
+/**
+ * cron 保存前预览：合法性与未来 3 次执行时间。
+ *
+ * 校验放后端是刻意的——必须与调度器用同一份解析口径，
+ * 否则「页面说没问题、调度器注册失败」的分裂会重演 #8557。
+ */
+export interface CronPreviewResult {
+  valid: boolean;
+  normalized: string;
+  /** 不合法时的原因（含「分 时 日 月 周」字段顺序提示） */
+  error: string | null;
+  /** 未来 3 次执行时间，ISO 8601（+08:00） */
+  next: string[];
+  timezone: string;
+}
+
+export function previewCron(cron: string): Promise<CronPreviewResult> {
+  return request.post('/content-admin/content/pipelines/cron-preview', { cron });
+}
+
+/** 单条管线的调度注册状态 */
+export interface SchedulerJobState {
+  code: string;
+  cron: string;
+  registered: boolean;
+  nextRun: string | null;
+  error: string | null;
+}
+
+export interface SchedulerStatus {
+  timezone: string;
+  checkedAt: string;
+  total: number;
+  failed: number;
+  jobs: SchedulerJobState[];
+}
+
+/** 调度状态：用于「启用着却不跑」时定位是 cron 坏了还是没注册上 */
+export function getSchedulerStatus(): Promise<SchedulerStatus> {
+  return request.get('/content-admin/content/scheduler/status');
+}
+
 // ── 自媒体账号（只读注册表；凭据只回掩码）──
 export interface ContentAccount {
   id: number;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/stores/user';
@@ -9,8 +9,10 @@ import {
   updatePipeline,
   runPipeline,
   getPipelineRunJob,
+  getSchedulerStatus,
   type ContentPipeline,
   type PipelineRunJob,
+  type SchedulerStatus,
 } from '@/api/content';
 
 const router = useRouter();
@@ -40,7 +42,28 @@ async function load() {
   } finally {
     loading.value = false;
   }
+  void loadScheduler();
 }
+
+/**
+ * 调度注册状态（#8557 的教训）。
+ *
+ * 管线「启用着却不跑」时，界面上以前看不出任何异常：进程正常、/health 正常、
+ * 只是启动时那一行 `注册调度失败` 被淹在日志里。这里把它搬到页面上，
+ * 坏一条就红一条，不用再靠人去翻日志。
+ */
+const scheduler = ref<SchedulerStatus | null>(null);
+
+async function loadScheduler() {
+  try {
+    scheduler.value = await getSchedulerStatus();
+  } catch {
+    // 状态是增强信息，拿不到不影响列表本身
+    scheduler.value = null;
+  }
+}
+
+const failedJobs = computed(() => (scheduler.value?.jobs ?? []).filter((j) => !j.registered));
 
 async function onDelete(p: ContentPipeline) {
   try {
@@ -170,6 +193,18 @@ onMounted(load);
     <a-alert v-if="runningCode" type="info" show-icon banner class="run-tip">
       <template #message>
         管线 <span class="mono">{{ runningCode }}</span> 正在后台执行 · {{ runningTip }}
+      </template>
+    </a-alert>
+
+    <!-- 调度注册失败：管线「启用着却不跑」的唯一可见信号（#8557）-->
+    <a-alert v-if="failedJobs.length" type="error" show-icon banner class="run-tip">
+      <template #message>
+        {{ failedJobs.length }} 条管线的 cron 无法注册，<strong>不会按时运行</strong>
+      </template>
+      <template #description>
+        <div v-for="j in failedJobs" :key="j.code">
+          <span class="mono">{{ j.code }}</span>（<span class="mono">{{ j.cron }}</span>）：{{ j.error }}
+        </div>
       </template>
     </a-alert>
 
