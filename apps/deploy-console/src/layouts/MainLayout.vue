@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   DashboardOutlined,
@@ -152,12 +152,65 @@ function handleLogout() {
     },
   })
 }
+
+/**
+ * 移动端布局（≤768px）。
+ *
+ * 🔴 为什么必须有：企微审批的 L2 出口是「桌面控制台」，但用户手上是手机。
+ * 改造前 200px 固定侧栏在 390px 宽屏上吃掉一半，正文被挤成窄条（台账 #8594）。
+ * 这里把侧栏换成抽屉、顶栏一级菜单让位给汉堡按钮 —— 桌面端行为一像素不动。
+ *
+ * 注：流水线详情等宽表页面在手机上仍以横向滚动呈现。移动端看结果的正解是
+ * `/m/approve/:id/run`（只读页），进桌面是为了「动手」，不是为了「看清楚」。
+ */
+const isMobile = ref(false)
+const mobileNavOpen = ref(false)
+let mql: MediaQueryList | null = null
+
+function applyMobile(matches: boolean): void {
+  isMobile.value = matches
+  if (!matches) mobileNavOpen.value = false
+}
+function onMediaChange(e: MediaQueryListEvent): void {
+  applyMobile(e.matches)
+}
+
+onMounted(() => {
+  mql = window.matchMedia('(max-width: 768px)')
+  applyMobile(mql.matches)
+  mql.addEventListener('change', onMediaChange)
+})
+onUnmounted(() => {
+  mql?.removeEventListener('change', onMediaChange)
+  mql = null
+})
+
+function navOnMobile(path: string): void {
+  mobileNavOpen.value = false
+  router.push(path)
+}
+function onMobileDomain(d: Domain): void {
+  if (!d.children.length) {
+    navOnMobile('/dashboard')
+    return
+  }
+  navOnMobile(d.children[0].key)
+}
 </script>
 
 <template>
   <a-layout class="app-layout">
     <!-- 顶部一级导航（深壳） -->
     <a-layout-header class="app-topnav">
+      <button
+        v-if="isMobile"
+        class="nav-toggle"
+        type="button"
+        aria-label="打开导航"
+        @click="mobileNavOpen = true"
+      >
+        <span></span><span></span><span></span>
+      </button>
       <div class="brand">
         <svg
           class="brand-logo"
@@ -180,6 +233,7 @@ function handleLogout() {
       </div>
 
       <a-menu
+        v-if="!isMobile"
         class="top-menu"
         theme="dark"
         mode="horizontal"
@@ -191,6 +245,9 @@ function handleLogout() {
           <span>{{ d.label }}</span>
         </a-menu-item>
       </a-menu>
+
+      <!-- 移动端：顶栏只留当前域名字，切换交给抽屉 -->
+      <div v-else class="top-menu-mobile">{{ activeDomain.label }}</div>
 
       <div class="topnav-right">
         <a-dropdown trigger="['click']">
@@ -227,9 +284,9 @@ function handleLogout() {
     </a-layout-header>
 
     <a-layout class="app-body">
-      <!-- 左侧二级菜单（随一级切换；仪表盘无二级则不显示） -->
+      <!-- 左侧二级菜单（随一级切换；仪表盘无二级则不显示）；移动端改用抽屉 -->
       <a-layout-sider
-        v-if="activeDomain.children.length"
+        v-if="activeDomain.children.length && !isMobile"
         class="app-sider"
         theme="dark"
         :width="200"
@@ -253,6 +310,52 @@ function handleLogout() {
         <router-view />
       </a-layout-content>
     </a-layout>
+
+    <!-- 移动端导航抽屉：一级域切换 + 当前域二级项 -->
+    <a-drawer
+      v-if="isMobile"
+      v-model:open="mobileNavOpen"
+      placement="left"
+      :width="248"
+      :closable="false"
+      :body-style="{ padding: '0' }"
+      class="m-drawer"
+    >
+      <div class="m-drawer-title">导航</div>
+      <div class="m-domains">
+        <button
+          v-for="d in DOMAINS"
+          :key="d.key"
+          type="button"
+          class="m-domain"
+          :class="{ active: d.key === activeDomain.key }"
+          @click="onMobileDomain(d)"
+        >
+          {{ d.label }}
+        </button>
+      </div>
+      <div class="m-items">
+        <button
+          v-for="c in activeDomain.children"
+          :key="c.key"
+          type="button"
+          class="m-item"
+          :class="{ active: selectedKeys[0] === c.key }"
+          @click="navOnMobile(c.key)"
+        >
+          <component :is="c.icon" />
+          <span>{{ c.label }}</span>
+        </button>
+        <button
+          v-if="!activeDomain.children.length"
+          type="button"
+          class="m-item active"
+          @click="navOnMobile('/dashboard')"
+        >
+          仪表盘
+        </button>
+      </div>
+    </a-drawer>
   </a-layout>
 </template>
 
@@ -405,5 +508,115 @@ function handleLogout() {
 
 .app-body {
   min-height: calc(100vh - 56px);
+}
+
+/* ---------- 移动端（≤768px）：侧栏抽屉化 ---------- */
+.nav-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 34px;
+  height: 34px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-toggle span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--dc-panel-menu-text);
+}
+.nav-toggle:active {
+  background: var(--dc-panel-menu-hover);
+}
+.top-menu-mobile {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dc-panel-header-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-drawer-title {
+  padding: 18px 16px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+}
+.m-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.m-domain {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff;
+  color: #374151;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.m-domain.active {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #b45309;
+  font-weight: 600;
+}
+.m-items {
+  padding: 8px 8px 16px;
+}
+.m-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 12px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1a1a1f;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.m-item.active {
+  background: #fff7ed;
+  color: #b45309;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  :deep(.ant-layout-header.app-topnav) {
+    padding: 0 10px;
+    gap: 10px;
+  }
+  .brand-text {
+    display: none;
+  }
+  .user-info,
+  .user-caret {
+    display: none;
+  }
+  .user-trigger {
+    padding: 4px;
+  }
+  /* 宽表页面在手机上横向滚动，而不是把内容压成一列窄条 */
+  .app-content {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 </style>

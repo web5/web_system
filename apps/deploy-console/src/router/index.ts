@@ -160,6 +160,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/m/ApproveMobile.vue'),
     meta: { requiresAuth: false, title: '发布审批' },
   },
+  /**
+   * 企微移动端「发布结果」只读页（S5）。
+   * 同为移动端视图，同样只认审批票据 —— 手机看结果不再需要换平台会话（见 14 号方案）。
+   */
+  {
+    path: '/m/approve/:id/run',
+    name: 'RunMobile',
+    component: () => import('@/views/m/RunMobile.vue'),
+    meta: { requiresAuth: false, title: '发布结果' },
+  },
 ]
 
 const router = createRouter({

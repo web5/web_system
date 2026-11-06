@@ -228,3 +228,108 @@ describe('WecomApprovalService（卡② W-a~W-g / V3–V8 / V10 / V12）', () =>
     });
   });
 });
+
+/**
+ * S5 运行结果快照（GET /wecom/approvals/:id/run）。
+ * 关键约束：只读、白名单与 detail 一致、错误摘要必须脱敏、不得带出日志正文。
+ */
+describe('WecomApprovalService.runSnapshot（S5 只读运行结果）', () => {
+  const runPipeline = {
+    id: 'P1',
+    pipelineId: 'TPL1',
+    templateName: 'todo-service 发布',
+    env: 'dev',
+    moduleKey: 'todo-service',
+    mode: 'direct',
+    status: 'failed',
+    stage: 'verify',
+    versionTag: 'todo-service/abc1234',
+    gitBranch: 'master',
+    gitCommit: 'abc1234',
+    triggerSource: 'ui',
+    operator: 'alice',
+    startTime: 1_700_000_000_000,
+    endTime: 1_700_000_060_000,
+    progress: { current: 7, total: 9, message: '探活失败' },
+    nodes: [
+      { kind: 'shell', key: 'build', label: '构建' },
+      { kind: 'approval', key: 'approve-1', label: '发布确认', approvers: ['bob'] },
+      { kind: 'shell', key: 'verify', label: '探活' },
+    ],
+    error: 'health check failed: /home/ubuntu/deploy/verify.sh exit 1\nsecond line should be dropped',
+    logs: ['SECRET-TOKEN=abc', '/home/ubuntu/deploy'],
+  };
+
+  it('返回只读快照：状态/节点/耗时齐全，且不含日志正文', async () => {
+    const s = setup({ pipeline: runPipeline });
+    const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+
+    expect(snap).toMatchObject({
+      runId: 'P1',
+      approvalId: 'A1',
+      templateId: 'TPL1',
+      status: 'failed',
+      stage: 'verify',
+      env: 'dev',
+      moduleKey: 'todo-service',
+      live: false,
+    });
+    // 节点顺序与 key 原样给出（状态交给前端 stepState 推导，后端不复制展示状态机）
+    expect(snap.stages.map((x) => x.key)).toEqual(['build', 'approve-1', 'verify']);
+    expect(snap.endTime).toBe(1_700_000_060_000);
+    // 脱敏：不得出现日志正文
+    const raw = JSON.stringify(snap);
+    expect(raw).not.toContain('SECRET-TOKEN');
+    expect(raw).not.toContain('/home/ubuntu');
+  });
+
+  it('失败摘要只取首行、抹掉绝对路径、截断', async () => {
+    const s = setup({ pipeline: runPipeline });
+    const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(snap.errorBrief).toBe('health check failed: <path> exit 1');
+    expect(snap.errorBrief).not.toContain('second line');
+  });
+
+  it('运行中（running / awaiting-approval）标记 live=true，前端据此轮询', async () => {
+    for (const status of ['running', 'awaiting-approval']) {
+      const s = setup({ pipeline: { ...runPipeline, status } });
+      const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+      expect(snap.live).toBe(true);
+    }
+  });
+
+  it('票据与单号不匹配 → 403（沿用 detail 的白名单校验）', async () => {
+    const s = setup({ pipeline: runPipeline });
+    await expect(
+      s.service.runSnapshot('A1', { ...actor, approvalId: 'A2' }, '1.2.3.4'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('身份服务降级 → 403（fail-closed，只读也不放行）', async () => {
+    const s = setup({ pipeline: runPipeline, gate: { ok: true, degraded: true, reason: 'unavailable' } });
+    await expect(s.service.runSnapshot('A1', actor, '1.2.3.4')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('通道关闭 → 404（端点语义上不存在）', async () => {
+    const s = setup({ pipeline: runPipeline, enabled: false });
+    await expect(s.service.runSnapshot('A1', actor, '1.2.3.4')).rejects.toThrow(NotFoundException);
+  });
+
+  it('审计落 wecom.viewRun，含运行 id 与状态', async () => {
+    const s = setup({ pipeline: runPipeline });
+    await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(s.audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'wecom.viewRun',
+        status: 'viewed',
+        detail: expect.stringContaining('runId=P1'),
+      }),
+    );
+  });
+
+  it('旧实例无 nodes 时回落 steps 子集，且不因缺字段抛错', async () => {
+    const s = setup({ pipeline: { ...runPipeline, nodes: null, steps: ['check', 'build'] } });
+    const snap = await s.service.runSnapshot('A1', actor, '1.2.3.4');
+    expect(snap.stages.map((x) => x.key)).toEqual(['check', 'build']);
+  });
+});

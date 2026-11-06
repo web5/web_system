@@ -4,8 +4,10 @@ import { createHmac, timingSafeEqual } from 'crypto';
  * 签名串与短令牌（卡② T2-c / S3 / S4 / V9）。
  *
  * 形态：`base64url(payloadJson) + "." + hex(hmacSha256(payloadJson))`
- * 刻意**不是**主 JWT：短令牌只能用在本通道 3 个端点，且与 approvalId 绑定，
- * 泄漏面被限制在「只能批这一单」。
+ * 刻意**不是**主 JWT：短令牌只能用在本通道的审批端点（detail / approve / reject / run
+ * / session），且与 approvalId 绑定，泄漏面被限制在「只能碰这一单」。
+ *
+ * 读写两个窗口见 `ApproveTicketPayload.viewExp` 注释。
  *
  * 纯 crypto 类（不注入 Nest），密钥由 WecomModule factory 传入，便于单测。
  */
@@ -21,8 +23,22 @@ export interface ApproveTicketPayload {
   /** 绑定的审批单 ID —— Guard 会与 URL :id 强比对 */
   approvalId: string;
   iat: number;
+  /** **写**窗口：approve / reject / 换会话。15min，不做延长 */
   exp: number;
+  /**
+   * **读**窗口：GET detail / run。默认 2h。
+   *
+   * 为什么读写分开：审批决断要在近实时内完成（写窗口必须短），
+   * 但「批完去开会、回来再看一眼发布结果」是真实场景（读窗口要够长）。
+   * 只延长读窗口，写权限一厘米不放。
+   *
+   * 历史票据（部署前签发）没有这个字段，验证时回落到 `exp`，保证在途卡片不失效。
+   */
+  viewExp?: number;
 }
+
+/** 票据使用模式：写（默认）/ 只读 */
+export type TicketMode = 'write' | 'read';
 
 export interface StatePayload {
   approvalId: string;
@@ -40,8 +56,13 @@ function unb64url(input: string): string {
 }
 
 export class WecomTicketService {
-  /** 短令牌 TTL：15min（spec S4） */
+  /** 短令牌写窗口：15min（spec S4） */
   static readonly APPROVE_TTL_SEC = 900;
+  /**
+   * 短令牌读窗口：2h。
+   * 覆盖「审批完去看发布结果 / 开会回来再看一眼」；超时重新从企微进入即可重签。
+   */
+  static readonly APPROVE_READ_TTL_SEC = 7200;
   /** OAuth state TTL：10min（spec S3） */
   static readonly STATE_TTL_SEC = 600;
 
@@ -102,11 +123,12 @@ export class WecomTicketService {
     return payload;
   }
 
-  /** 签短令牌（scope=approve，绑定单号） */
+  /** 签短令牌（scope=approve，绑定单号）；同时写入写/读两个到期时刻 */
   issueApproveTicket(
     args: { sub: string; ext: string; approvalId: string },
     nowMs: number = Date.now(),
     ttlSec: number = WecomTicketService.APPROVE_TTL_SEC,
+    readTtlSec: number = WecomTicketService.APPROVE_READ_TTL_SEC,
   ): string {
     const payload: ApproveTicketPayload = {
       scope: 'approve',
@@ -115,12 +137,22 @@ export class WecomTicketService {
       approvalId: args.approvalId,
       iat: nowMs,
       exp: nowMs + ttlSec * 1000,
+      viewExp: nowMs + Math.max(ttlSec, readTtlSec) * 1000,
     };
     return this.seal(payload);
   }
 
-  /** 验短令牌：过期 / scope 不符 → null（V9） */
-  verifyApproveTicket(token: string, nowMs: number = Date.now()): ApproveTicketPayload | null {
+  /**
+   * 验短令牌：过期 / scope 不符 → null（V9）。
+   *
+   * `mode='write'`（默认）看 `exp`；`mode='read'` 看 `viewExp`。
+   * 🔴 默认必须是 write —— 否则调用方漏传 mode 就等于悄悄放宽写权限。
+   */
+  verifyApproveTicket(
+    token: string,
+    nowMs: number = Date.now(),
+    mode: TicketMode = 'write',
+  ): ApproveTicketPayload | null {
     const payload = this.unseal<ApproveTicketPayload>(token);
     if (!payload || payload.scope !== 'approve') return null;
     if (
@@ -130,7 +162,10 @@ export class WecomTicketService {
     ) {
       return null;
     }
-    if (nowMs >= payload.exp) return null;
+    // 旧票无 viewExp → 回落 exp（部署瞬间在途卡片继续可用，不会集体失效）
+    const deadline =
+      mode === 'read' ? (typeof payload.viewExp === 'number' ? payload.viewExp : payload.exp) : payload.exp;
+    if (nowMs >= deadline) return null;
     return payload;
   }
 

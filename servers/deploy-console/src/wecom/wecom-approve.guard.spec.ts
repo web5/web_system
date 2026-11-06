@@ -17,12 +17,13 @@ function context(req: WecomRequestLike): ExecutionContext {
   return { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
 }
 
-function request(token: string, id = 'A1'): WecomRequestLike {
+function request(token: string, id = 'A1', method?: string): WecomRequestLike {
   return {
     headers: token ? { authorization: `Bearer ${token}` } : {},
     params: { id },
     query: {},
     ip: '1.2.3.4',
+    ...(method ? { method } : {}),
   };
 }
 
@@ -64,5 +65,37 @@ describe('WecomApproveGuard（S4 / V9：短令牌只批这一单）', () => {
     const off = new WecomApproveGuard(ticketSvc, WecomConfigService.forTest({ WECOM_APPROVE_ENABLED: '0' }));
     const token = ticketSvc.issueApproveTicket({ sub: 'bob', ext: 'wenzhui', approvalId: 'A1' }, Date.now());
     expect(() => off.canActivate(context(request(token)))).toThrow(NotFoundException);
+  });
+
+  /**
+   * 读写窗口分离（14 号方案 §五）：GET 用 2h 读窗口，其余用 15min 写窗口。
+   * 这组用例存在的意义是**锁住「默认严」**：如果哪天有人把 isReadOnly 判反或判宽，
+   * POST 就会拿到 2h 写权限，这里必须红。
+   */
+  describe('读写窗口', () => {
+    const aged = (ms: number) =>
+      ticketSvc.issueApproveTicket({ sub: 'bob', ext: 'wenzhui', approvalId: 'A1' }, Date.now() - ms);
+
+    it('16 分钟后：GET（读）放行', () => {
+      expect(guard.canActivate(context(request(aged(16 * 60_000), 'A1', 'GET')))).toBe(true);
+    });
+
+    it('16 分钟后：POST（写）→ 401', () => {
+      expect(() => guard.canActivate(context(request(aged(16 * 60_000), 'A1', 'POST')))).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('16 分钟后：不带 method 视为写 → 401（默认必须是严的那一侧）', () => {
+      expect(() => guard.canActivate(context(request(aged(16 * 60_000))))).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('3 小时后：GET 也 → 401（读窗口 2h 封顶）', () => {
+      expect(() => guard.canActivate(context(request(aged(3 * 60 * 60_000), 'A1', 'GET')))).toThrow(
+        UnauthorizedException,
+      );
+    });
   });
 });

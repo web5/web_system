@@ -91,13 +91,24 @@ const consoleLink = computed(() => {
 })
 
 /**
- * 点「查看流水线详情」：先用审批票据换 30 分钟平台会话、写进 localStorage，
- * 再跳 SPA。否则 `/console/pipelines/:id`（requiresAuth）必然把手机用户踢去登录页。
+ * S4 主出口：走**移动端**「发布结果」页（S5），**不换会话**。
  *
- * 换不到（票据过期 / 该单已换过 / 通道关闭）就直跳 —— 落登录页，但不是死链。
+ * 这是 14 号方案的核心改动：看一眼发布结果不该需要后台权限。
+ * 票据直接带过去（sessionStorage 已有），凭据不出审批域。
  */
+function goRun(): void {
+  window.location.href = `/console/m/approve/${encodeURIComponent(approvalId.value)}/run`
+}
+
+/**
+ * 桌面出口：换 30 分钟平台会话后跳 SPA。
+ *
+ * 🔴 这是**提权**动作（授权面从「这一单」扩到「全站」），故必须先过确认层。
+ * 换不到（票据过期 / 已换过 / 通道关闭）就直跳 —— 落登录页，但不是死链。
+ */
+const desktopOpen = ref(false)
 const consoleBusy = ref(false)
-async function openConsole(): Promise<void> {
+async function openDesktop(): Promise<void> {
   if (consoleBusy.value) return
   consoleBusy.value = true
   try {
@@ -111,8 +122,8 @@ async function openConsole(): Promise<void> {
     // 静默：换不到就交给控制台自己的登录流程，不在这里弹错
   } finally {
     consoleBusy.value = false
-    window.location.href = consoleLink.value
   }
+  window.location.href = consoleLink.value
 }
 
 function fail(title: string, message: string): void {
@@ -251,10 +262,30 @@ function backToDetail(): void {
         <div class="kv"><span class="k">审批单</span><span class="v mono">{{ result.approvalId }}</span></div>
         <div class="kv"><span class="k">流水线状态</span><span class="v">{{ result.pipelineStatus }}</span></div>
       </div>
-      <p class="cold-tip">审批通过不等于发布成功。发布结果请到流水线详情查看，不要以本页绿灯为准。</p>
-      <a class="link" :href="consoleLink" @click.prevent="openConsole">{{
-        consoleBusy ? '正在打开控制台…' : '查看流水线详情'
-      }}</a>
+      <p class="cold-tip">审批通过不等于发布成功。发布结果请看流水线的真实执行状态，不要以本页绿灯为准。</p>
+      <div class="result-actions">
+        <button class="btn primary" @click="goRun">查看发布结果</button>
+        <button class="btn ghost" @click="desktopOpen = true">桌面控制台</button>
+      </div>
+      <p class="tiny-tip">「桌面控制台」用于看完整日志、重跑、回滚，进入需一次 30 分钟临时授权。</p>
+
+      <!-- 桌面出口确认层：把「授权面扩大」显式化，不让它藏在一次点击里 -->
+      <div v-if="desktopOpen" class="overlay" @click.self="desktopOpen = false">
+        <div class="drawer">
+          <h2>打开桌面控制台？</h2>
+          <p class="hint">
+            进入后可看完整日志、执行重跑 / 回滚 / 改配置。为此会给你的账号
+            <b>30 分钟后台操作权限</b>，到期自动失效。
+          </p>
+          <p class="hint">如果只是想确认这次发布成没成，用「查看发布结果」就够了。</p>
+          <div class="drawer-actions">
+            <button class="btn ghost" @click="desktopOpen = false">留在本页</button>
+            <button class="btn primary" :disabled="consoleBusy" @click="openDesktop">
+              {{ consoleBusy ? '正在打开…' : '确认进入' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- S1 详情 + S2 确认层 + S3 驳回抽屉 -->
@@ -403,4 +434,7 @@ function backToDetail(): void {
 .cold-text{font-size:14px;line-height:1.7;color:#6B7280;margin-bottom:16px}
 .cold-tip{border-top:1px solid rgba(0,0,0,.06);padding-top:14px;font-size:12.5px;line-height:1.7;color:#1A1A1F}
 .link{display:inline-block;margin-top:18px;font-size:13px;color:#0F766E;text-decoration:none;font-weight:600}
+.result-actions{display:flex;gap:10px;margin-top:18px}
+.result-actions .btn{flex:1}
+.tiny-tip{font-size:11.5px;color:#9CA3AF;line-height:1.6;margin:10px 0 0}
 </style>
