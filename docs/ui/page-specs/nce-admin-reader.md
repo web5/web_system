@@ -1,0 +1,25 @@
+## 迷你规格 · admin 预览页 NCE 逐句对照英文加交互式点词查词
+
+- 页面/组件：`apps/admin/src/views/Content/NceLessons.vue`（预览抽屉内「逐句对照 / Bilingual」section）
+- 类型与参照：不变（原页面） / 交互参照 portal `Nce.vue` 的 `tokensOf()` + `.word-card`（已验证无索引错位 bug）
+- 改动内容（精确到点）：
+  - **script**：
+    - 新增 `interface Token { text: string; word?: NceWord }`
+    - 新增 `const wordPopup = ref<NceWord | null>(null)`
+    - 新增 `function tokensOf(en: string): Token[]`：`Map<string, NceWord>` 绑对象 + 正则按词长降序最长优先匹配，token 带真实对象
+    - 新增 `function onWord(w: NceWord)`：设 `wordPopup = w`
+  - **template**：
+    - 「逐句对照」英文 `<div class="en">{{ l.en }}</div>` 改为 token 渲染：生词 `<span class="w" role="button" tabindex="0" @click @keydown.enter>` 虚线下划线可点
+    - `preview-wrap` 末尾新增查词卡 `<div class="word-card" role="dialog">`：显示 word / phonetic / pos / def / example + 关闭按钮
+  - **style**：新增 `.w`（青色虚线下划线）、`.word-card`（sticky 到底部，浅色白底，pointer-events 设计同 portal 不吞正文点击）
+- 涉及 Token：复用 NCE 浅色白底体系 `#FFFFFF / #1A1A1F / #6B7280 / #F97316 / #0EA5A4`（与 `nce-admin-preview-spec.md` 第 47 行一致）
+- 交互影响：
+  - 新增：点 / 键盘激活生词 → 底部查词卡（不跳转、不掩盖正文）
+  - 不产生破坏性操作；不影响现有「生词平铺列表」section（保留，两种视图共存）
+  - 状态矩阵补充：无生词课文 → 英文纯文本无可点 token（已覆盖，不报错）
+- 状态覆盖自查：
+  - [x] 加载中（a-spin 保留）
+  - [x] 空态（a-empty 保留）
+  - [x] 失败可重试（request 拦截器统一弹错 + 关闭抽屉，保留）
+  - [x] 无生词课文（token 退化为纯文本）
+  - [x] 无弹窗套弹窗（查词卡在 drawer 内，非新 modal）

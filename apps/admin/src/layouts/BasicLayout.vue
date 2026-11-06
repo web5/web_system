@@ -78,6 +78,10 @@
             <template #icon><IdcardOutlined /></template>
             <span>账号管理</span>
           </a-menu-item>
+          <a-menu-item key="content-nce-lessons">
+            <template #icon><ReadOutlined /></template>
+            <span>新概念英语</span>
+          </a-menu-item>
         </a-sub-menu>
         <a-sub-menu v-if="userStore.hasPermission('agents:view')" key="agents">
           <template #icon><RobotOutlined /></template>
@@ -229,6 +233,7 @@ import {
   DeploymentUnitOutlined,
   MonitorOutlined,
   IdcardOutlined,
+  ReadOutlined,
 } from '@ant-design/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
@@ -279,6 +284,7 @@ watch(() => route.path, (path) => {
   else if (path.includes('/content/pipelines')) selectedKeys.value = ['content-pipelines'];
   else if (path.includes('/content/monitor')) selectedKeys.value = ['content-monitor'];
   else if (path.includes('/content/accounts')) selectedKeys.value = ['content-accounts'];
+  else if (path.includes('/content/nce-lessons')) selectedKeys.value = ['content-nce-lessons'];
   else if (path.includes('/content')) selectedKeys.value = ['content-sources'];
   else if (path.includes('/agents/definitions')) selectedKeys.value = ['agents-defs'];
   else if (path.includes('/agents/skills')) selectedKeys.value = ['agents-skills'];
@@ -299,6 +305,7 @@ const handleMenuClick = ({ key }: { key: string }) => {
     'content-publications': '/content/publications', 'content-pipelines': '/content/pipelines',
     'content-media': '/content/media',
     'content-monitor': '/content/monitor', 'content-accounts': '/content/accounts',
+    'content-nce-lessons': '/content/nce-lessons',
     roles: '/settings/roles', dicts: '/settings/dicts',
     'agents-runs': '/agents', 'agents-defs': '/agents/definitions', 'agents-skills': '/agents/skills',
     'agents-playground': '/agents/playground', 'agents-capabilities': '/agents/capabilities',

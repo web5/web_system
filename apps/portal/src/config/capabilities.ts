@@ -33,6 +33,13 @@ export const CAPABILITIES: Capability[] = [
     to: '/contract',
     enabled: true,
   },
+  {
+    name: '新概念英语',
+    desc: 'NCE2 逐句精读 · 点句出译文 · 生词就地查',
+    icon: 'lang',
+    to: '/nce',
+    enabled: true,
+  },
   { name: '论文速读', desc: '上传论文，提取核心结论与方法', icon: 'search', to: '', enabled: false },
   { name: '文案改写', desc: '按平台与受众重写营销文案', icon: 'grid', to: '', enabled: false },
 ];
