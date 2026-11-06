@@ -240,7 +240,7 @@ jobs:
         run: node scripts/check-proto-adopt.mjs --registered
 
   specs-gate:
-    name: 规格体系静态门禁（命名 / 状态字段 / 死链 / 空壳）
+    name: 规格体系静态门禁（命名 / 状态字段 / 死链 / 空壳 / 可验判据）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
