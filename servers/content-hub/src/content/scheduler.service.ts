@@ -39,6 +39,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
    */
   private readonly state = new Map<string, SchedulerJobState>();
 
+  /** reload 串行队列的尾指针（见 reload() 注释：并发重注册会丢 CronJob 句柄） */
+  private reloadChain: Promise<void> = Promise.resolve();
+
   constructor(
     @InjectRepository(ContentPipelineEntity)
     private readonly pipelineRepo: Repository<ContentPipelineEntity>,
@@ -66,12 +69,28 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 全量重注册。
+   * 全量重注册（串行化入口）。
    *
-   * 启动时调一次；admin 改完 cron / enabled 也调一次——否则「改了要重启才生效」，
+   * 启动时调一次；admin 改完 cron / enabled / 删除管线也调一次——否则「改了要重启才生效」，
    * 而重启是可遇不可求的（本次故障正是改完隔了两天、因重启才暴露）。
+   *
+   * ⚠️ 必须串行：两次并发 reload 会让「A 的 stopAll」插进「B 的注册」中间，
+   * B 已 start 的 CronJob 被 map 覆盖后**没人 stop**，会永久留在进程里重复执行
+   * （管线被跑两遍 = 重复发稿）。所以后到的 reload 要排队等前一次跑完。
    */
-  async reload(): Promise<SchedulerStatus> {
+  reload(): Promise<SchedulerStatus> {
+    const next = this.reloadChain.then(
+      () => this.doReload(),
+      () => this.doReload(), // 前一次失败也要继续排队，否则一次异常会把队列永久卡死
+    );
+    this.reloadChain = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  private async doReload(): Promise<SchedulerStatus> {
     this.stopAll();
     this.state.clear();
 

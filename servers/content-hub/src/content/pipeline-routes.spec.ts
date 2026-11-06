@@ -45,6 +45,7 @@ interface Harness {
   reloadCalls: number;
   createCalls: number;
   lastUpdate: Record<string, unknown> | null;
+  deletedId: number | null;
 }
 
 async function buildApp(): Promise<Harness> {
@@ -53,6 +54,7 @@ async function buildApp(): Promise<Harness> {
     reloadCalls: 0,
     createCalls: 0,
     lastUpdate: null,
+    deletedId: null,
   };
 
   const contentService = {
@@ -65,6 +67,10 @@ async function buildApp(): Promise<Harness> {
     updatePipeline: async (id: number, dto: Record<string, unknown>) => {
       harness.lastUpdate = dto;
       return { id, ...dto };
+    },
+    deletePipeline: async (id: number) => {
+      harness.deletedId = id;
+      return { ok: true };
     },
   };
   const scheduler = {
@@ -187,6 +193,15 @@ describe('管线路由（HTTP 级）', () => {
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(harness.lastUpdate).toBeNull();
       expect(harness.reloadCalls).toBe(0);
+    });
+  });
+
+  describe('DELETE /api/content/pipelines/:id', () => {
+    it('删除后必须重注册，否则留下按旧 cron 空跑的孤儿任务', async () => {
+      await request(harness.app.getHttpServer()).delete('/api/content/pipelines/3').expect(200);
+
+      expect(harness.deletedId).toBe(3);
+      expect(harness.reloadCalls).toBe(1);
     });
   });
 

@@ -94,4 +94,33 @@ describe('SchedulerService', () => {
     await svc.reload();
     expect(() => svc.onModuleDestroy()).not.toThrow();
   });
+
+  it('🔴 两次 reload 并发时串行执行（并发会让已 start 的 CronJob 丢句柄后永久重复点火）', async () => {
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const repo = {
+      find: async () => {
+        concurrent += 1;
+        maxConcurrent = Math.max(maxConcurrent, concurrent);
+        // 让出事件循环，暴露「A 的 stopAll 插进 B 的注册」这个窗口
+        await new Promise((r) => setTimeout(r, 10));
+        concurrent -= 1;
+        return [{ code: 'hot_news', cron: '0 12 * * *', enabled: true }];
+      },
+    };
+    const svc = new SchedulerService(
+      repo as never,
+      { run: async () => ({ collected: 0 }) } as never,
+    );
+    (svc as unknown as { logger: Record<string, () => void> }).logger = {
+      log: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    };
+
+    await Promise.all([svc.reload(), svc.reload()]);
+
+    expect(maxConcurrent).toBe(1);
+    expect(svc.getStatus().total).toBe(1);
+  });
 });

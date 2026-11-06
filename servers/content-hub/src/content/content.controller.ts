@@ -174,8 +174,12 @@ export class ContentController {
   }
 
   @Delete('pipelines/:id(\\d+)')
-  deletePipeline(@Param('id') id: string) {
-    return this.contentService.deletePipeline(parseId(id, '管线'));
+  async deletePipeline(@Param('id') id: string) {
+    const removed = await this.contentService.deletePipeline(parseId(id, '管线'));
+    // 不重注册就会留下「孤儿任务」：管线记录没了，定时器还在按旧 cron 点火，
+    // 每天空跑一次并在日志里刷 `调度执行失败`。删完必须让调度面跟上。
+    await this.reloadSchedulerQuietly('删除管线');
+    return removed;
   }
 
   // ── 采集历史 / 发布记录 ──
