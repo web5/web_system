@@ -53,6 +53,12 @@ export interface WecomApprovalDetail {
   nodeKey?: string;
   nodeLabel?: string;
   pipelineId: string;
+  /**
+   * 所属流水线模板 id。
+   * 控制台 `/console/pipelines/:id` 的 `:id` 是模板 id，不是运行实例 id ——
+   * 前端必须用 `templateId` + `?run=pipelineId` 才能直接落到这次运行的详情。
+   */
+  templateId?: string;
   pipelineStatus: string;
   reviewer?: string;
   reviewedAt?: number;
@@ -182,6 +188,9 @@ export class WecomApprovalService {
       nodeKey: approval.nodeKey,
       nodeLabel: approval.nodeLabel,
       pipelineId: approval.pipelineId,
+      // 注意命名陷阱：DeployPipelineEntity.pipelineId 映射的列是 template_id（模板 id），
+      // 与外层 approval.pipelineId（运行实例 id）不是一回事。历史运行可能为空，前端据此回落列表页。
+      templateId: pipeline.pipelineId ?? undefined,
       pipelineStatus: pipeline.status,
       reviewer: approval.reviewer,
       reviewedAt: approval.reviewedAt,
