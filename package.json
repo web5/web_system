@@ -11,6 +11,7 @@
     "pub:prod": "echo 'DEPRECATED: use bash ~/skills/web-system-deploy/scripts/publish.sh prod <svc> (README.md §7.1)' && exit 1",
     "pub:local": "echo 'DEPRECATED: scripts/deploy-local.sh retired; see README.md §7.1' && exit 1",
     "check:agent-core-exports": "node scripts/check-agent-core-exports.mjs",
+    "check:specs": "node scripts/audit-specs.mjs",
     "proto": "node scripts/proto-serve.mjs",
     "check:env": "bash scripts/check-env.sh",
     "check:health": "bash scripts/health-check.sh",
