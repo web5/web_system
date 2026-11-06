@@ -193,6 +193,74 @@ git reset -q HEAD -- apps/demo/src/page.vue >/dev/null 2>&1
 git checkout -- apps/demo/src/page.vue >/dev/null 2>&1
 
 # ============================================================
+sec_head "E. 双引擎一致：warn / strict / scoped / cached / 未知档位（#8602 回归）"
+
+# #8602 的原始症状：同一 commit、DESIGN_ANCHOR_MODE=strict
+#   bash → 40 error；gate.ts → 0 error + 40 warning（写死 level: warning，从不读 level_switch）
+# 所以这一节不只断言"级别对不对"，而是断言**两个引擎的 stdout 逐字节相同**。
+REAL_GATE="$SCRIPTS_DIR/gate.ts"
+[ -f "$REAL_GATE" ] || { printf '\033[0;31m找不到 %s\033[0m\n' "$REAL_GATE" >&2; exit 2; }
+command -v node >/dev/null 2>&1 || { printf '\033[0;31m需要 node（gate.ts）\033[0m\n' >&2; exit 2; }
+
+both_same() { # $1=mode $2=scope $3=range → identical / 差异摘要
+  local mode="$1" scope="$2" range="$3"
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" DESIGN_ANCHOR_SCOPE="$scope" bash "$SCAN" --no-color diff "$range" 2>/dev/null ) > "$WORK/.b.out"
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" DESIGN_ANCHOR_SCOPE="$scope" node "$REAL_GATE" --no-color diff "$range" 2>/dev/null ) > "$WORK/.g.out"
+  if cmp -s "$WORK/.b.out" "$WORK/.g.out"; then echo identical
+  else echo "diff: $(diff "$WORK/.b.out" "$WORK/.g.out" | head -6 | tr '\n' ' ')"; fi
+}
+ts_sev() { # $1=mode $2=scope $3=range → gate.ts 侧 R11b 落在哪一节
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" DESIGN_ANCHOR_SCOPE="$2" node "$REAL_GATE" --no-color diff "$3" 2>/dev/null ) | awk '
+    /红线违规（error）/   { sec="error" }
+    /红线提示（warning）/ { sec="warning" }
+    /\[R11b\]/            { print sec; exit }
+  '
+}
+
+# E0 靶子就位：C_C 上有 2 条 MISSING，warn 下两引擎都必须有输出且有 R11b
+ts_out="$( ( cd "$WORK" && DESIGN_ANCHOR_MODE=warn node "$REAL_GATE" --no-color diff "$C_C^..$C_C" 2>/dev/null ) | grep -c '\[R11b\]' || true )"
+[ "$ts_out" = "2" ] && ok "E0 gate.ts 在 warn 下检出 2 条 R11b（靶子就位）" \
+  || bad "E0 gate.ts 未检出预期 2 条 R11b" "实际 ${ts_out} 条"
+
+# E1 warn：两引擎输出必须逐字节相同
+r="$(both_same warn "" "$C_C^..$C_C")"
+[ "$r" = "identical" ] && ok "E1 warn → 两引擎 stdout 逐字节一致" || bad "E1 warn 两引擎不一致（#8602）" "$r"
+
+# E2 strict：必须同为 error 节，且输出仍逐字节一致
+[ "$(ts_sev strict "" "$C_C^..$C_C")" = "error" ] && ok "E2 strict → gate.ts 升级为 error（不再静默降级）" \
+  || bad "E2 strict 下 gate.ts 未升级为 error" "实际：$(ts_sev strict "" "$C_C^..$C_C")"
+r="$(both_same strict "" "$C_C^..$C_C")"
+[ "$r" = "identical" ] && ok "E2b strict → 两引擎 stdout 逐字节一致" || bad "E2b strict 两引擎不一致" "$r"
+
+# E3 scoped：scope 内的 app（demo）升级 error，scope 外仍 warning
+[ "$(ts_sev scoped demo "$C_C^..$C_C")" = "error" ] && ok "E3 scoped 命中 demo → error" \
+  || bad "E3 scoped 命中 demo 未升级" "实际：$(ts_sev scoped demo "$C_C^..$C_C")"
+[ "$(ts_sev scoped other "$C_C^..$C_C")" = "warning" ] && ok "E3b scoped 未命中 → 仍 warning" \
+  || bad "E3b scoped 未命中却升级了" "实际：$(ts_sev scoped other "$C_C^..$C_C")"
+r="$(both_same scoped demo "$C_C^..$C_C")"
+[ "$r" = "identical" ] && ok "E3c scoped → 两引擎 stdout 逐字节一致" || bad "E3c scoped 两引擎不一致" "$r"
+
+# E4 cached：两引擎都必须不跑 R11b（gate.ts 之前只判 env=off，cached 下会误报）
+printf '\n<!-- parity cached -->\n' >> apps/demo/src/page.vue
+git add apps/demo/src/page.vue >/dev/null 2>&1
+cached_b="$( cd "$WORK" && DESIGN_ANCHOR_MODE=warn bash "$SCAN" --no-color cached 2>/dev/null | grep -c '\[R11b\]' || true )"
+cached_g="$( cd "$WORK" && DESIGN_ANCHOR_MODE=warn node "$REAL_GATE" --no-color cached 2>/dev/null | grep -c '\[R11b\]' || true )"
+[ "$cached_b" = "0" ] && [ "$cached_g" = "0" ] && ok "E4 cached → 两引擎都不跑 R11b" \
+  || bad "E4 cached 下仍有引擎跑 R11b" "bash=${cached_b} gate.ts=${cached_g}"
+git reset -q HEAD -- apps/demo/src/page.vue >/dev/null 2>&1
+git checkout -- apps/demo/src/page.vue >/dev/null 2>&1
+
+# E5 未知档位：两引擎都必须判死（退出码 2 + stdout 为空），不许回落成 warning
+( cd "$WORK" && DESIGN_ANCHOR_MODE=stric bash "$SCAN" --no-color diff "$C_C^..$C_C" > "$WORK/.ub.out" 2> "$WORK/.ub.err" ); eb=$?
+( cd "$WORK" && DESIGN_ANCHOR_MODE=stric node "$REAL_GATE" --no-color diff "$C_C^..$C_C" > "$WORK/.ug.out" 2> "$WORK/.ug.err" ); eg=$?
+if [ "$eb" = "2" ] && [ "$eg" = "2" ] && [ ! -s "$WORK/.ub.out" ] && [ ! -s "$WORK/.ug.out" ] \
+   && grep -q '未知档位' "$WORK/.ub.err" && grep -q '未知档位' "$WORK/.ug.err"; then
+  ok "E5 未知档位 stric → 两引擎都 exit 2 且不出违规报告"
+else
+  bad "E5 未知档位未被判死（会静默降级）" "bash exit=${eb} gate exit=${eg}；stdout 字节 bash=$(wc -c < "$WORK/.ub.out") gate=$(wc -c < "$WORK/.ug.out")"
+fi
+
+# ============================================================
 printf '\n通过 %s / 失败 %s\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
   printf '失败用例：%s\n' "$FAILED_CASES"

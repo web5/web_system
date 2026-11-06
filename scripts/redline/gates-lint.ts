@@ -27,11 +27,16 @@ const TOP = resolve(HERE, "../..");
 const GATES_YAML = join(HERE, "gates.yaml");
 const SCAN_RULES = join(HERE, "scan-rules.sh");
 const GATE_SHARED = join(HERE, "gate-shared.sh");
+const GATE_TS = join(HERE, "gate.ts");
 const SCENARIOS = join(HERE, "cases", "scenarios.tsv");
 
 const LEVELS = ["error", "warning", "notice"];
 const ACCEPTS = ["pass", "path", "sha"];
 const BATCHES = ["1", "2", "3", "external"];
+const SCAN_MODES = ["cached", "diff", "files", "tree"];
+const ACTIONS = ["skip"];
+const SCOPE_KEYS = ["loc_prefix"];
+const RENDERS = ["detail", "message_tag"];
 
 interface Failure {
   kind: string;
@@ -99,6 +104,27 @@ function extractCasePatterns(src: string, func: string): string[] | null {
   return out;
 }
 
+/** 从 `case "$ENV" in` 后紧跟的那一行抽出档位白名单（`off|warn|strict) ;;`） */
+function extractCaseGuardModes(src: string, env: string): string[] | null {
+  const lines = src.split("\n");
+  const head = new RegExp(`^[ \\t]*case "\\$\\{?${env}\\}?" in[ \\t]*$`);
+  const i = lines.findIndex((l) => head.test(l));
+  if (i < 0) return null;
+  for (let j = i + 1; j < lines.length && j < i + 6; j++) {
+    const t = lines[j].trim();
+    if (t === "" || t.startsWith("#")) continue;
+    // 行形如 `off|warn|strict|scoped) ;;` —— 取第一个 `)` 之前的部分，尾部 `;;` 不参与
+    const close = t.indexOf(")");
+    if (close < 0) return null;
+    return t
+      .slice(0, close)
+      .split("|")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+  return null;
+}
+
 function diffSets(label: string, yamlList: string[], bashList: string[]): void {
   const a = [...yamlList].sort();
   const b = [...bashList].sort();
@@ -143,6 +169,11 @@ function main(): number {
     throw e;
   }
   const doc = asMap(root, "顶层");
+  const scanSrc = readFileSync(SCAN_RULES, "utf8");
+  const sharedSrc = readFileSync(GATE_SHARED, "utf8");
+  const gateSrc = readFileSync(GATE_TS, "utf8");
+  /** 档位声明（门循环里收集，接线检查在扫过 bash/ts 源码之后做） */
+  const switches: Array<{ key: string; env: string; modes: string[] }> = [];
 
   // ---------- ① 结构 ----------
   const schema = asStr(doc.schema, "schema");
@@ -246,6 +277,51 @@ function main(): number {
       walk(trig, "trigger");
     }
 
+    // 档位开关：声明了就必须能被引擎求值（#8602 —— 声明四档、引擎只读写死的 level）
+    if (gm.level_switch !== undefined && gm.level_switch !== null) {
+      const ls = asMap(gm.level_switch, `${key}.level_switch`);
+      const env = asStr(ls.env, `${key}.level_switch.env`);
+      if (env === "") bad("结构", `${key}: level_switch.env 为空`);
+      const vals = asMap(ls.values, `${key}.level_switch.values`);
+      const modes = Object.keys(vals);
+      if (modes.length === 0) bad("结构", `${key}: level_switch.values 为空（开关没有任何档位）`);
+      const dflt = asStr(ls.default, `${key}.level_switch.default`);
+      if (!modes.includes(dflt)) {
+        bad("结构", `${key}: level_switch.default「${dflt}」不在 values（${modes.join("/")}）—— 默认值取不到就是静默降级`);
+      }
+      for (const mode of modes) {
+        const mv = asMap(vals[mode], `${key}.level_switch.values.${mode}`);
+        const action = mv.action === undefined ? null : asStr(mv.action, `${key}: ${mode}.action`);
+        const level = mv.level === undefined ? null : asStr(mv.level, `${key}: ${mode}.level`);
+        if (action === null && level === null) bad("结构", `${key}: 档位 ${mode} 既没有 action 也没有 level —— 该档位没有行为`);
+        if (action !== null && level !== null) bad("结构", `${key}: 档位 ${mode} 同时声明 action 与 level（二选一）`);
+        if (action !== null && !ACTIONS.includes(action)) bad("结构", `${key}: 档位 ${mode} 的 action 非法（${action}）`);
+        if (level !== null && !LEVELS.includes(level)) bad("结构", `${key}: 档位 ${mode} 的 level 非法（${level}）`);
+        const scopeEnv = mv.scope_env === undefined ? null : asStr(mv.scope_env, `${key}: ${mode}.scope_env`);
+        if (scopeEnv !== null) {
+          if (level === null) bad("结构", `${key}: 档位 ${mode} 有 scope_env 却没有 level（分级无落点）`);
+          const sk = mv.scope_key === undefined ? "" : asStr(mv.scope_key, `${key}: ${mode}.scope_key`);
+          if (!SCOPE_KEYS.includes(sk)) bad("结构", `${key}: 档位 ${mode} 的 scope_key 非法（${sk}；可选 ${SCOPE_KEYS.join("/")}）`);
+          const se = mv.scope_escalate === undefined ? "" : asStr(mv.scope_escalate, `${key}: ${mode}.scope_escalate`);
+          if (!LEVELS.includes(se)) bad("结构", `${key}: 档位 ${mode} 的 scope_escalate 非法（${se}）`);
+        }
+      }
+      if (ls.skip_scan_modes !== undefined) {
+        for (const sm of asList(ls.skip_scan_modes, `${key}.level_switch.skip_scan_modes`).map((s) => asStr(s, "scan_mode"))) {
+          if (!SCAN_MODES.includes(sm)) bad("结构", `${key}: skip_scan_modes 出现未知扫描模式 ${sm}`);
+        }
+      }
+      if (env !== "" && modes.length > 0) switches.push({ key, env, modes });
+    }
+
+    // 委派门的输出排版：声明了就必须被引擎读取，且只对 delegated 门有意义
+    if (gm.delegate_render !== undefined && gm.delegate_render !== null) {
+      const rd = asStr(gm.delegate_render, `${key}.delegate_render`);
+      if (!RENDERS.includes(rd)) bad("结构", `${key}: delegate_render 非法（${rd}；可选 ${RENDERS.join("/")}）`);
+      else if (stage !== "delegated") bad("结构", `${key}: delegate_render 只对 stage=delegated 有意义`);
+      else if (!gateSrc.includes("delegate_render")) bad("接线", `${key}: 声明了 delegate_render，gate.ts 却没读它`);
+    }
+
     const arr = ids.get(id) ?? [];
     arr.push(gm);
     ids.set(id, arr);
@@ -267,8 +343,24 @@ function main(): number {
   }
 
   // ---------- ② 与 bash 的触发面漂移 ----------
-  const scanSrc = readFileSync(SCAN_RULES, "utf8");
-  const sharedSrc = readFileSync(GATE_SHARED, "utf8");
+  // 档位开关接线：① bash 的档位白名单必须与 values 的键逐个相等
+  //               ② gate.ts 必须真的读 level_switch（否则声明即空文，#8602 的前半因）
+  for (const sw of switches) {
+    const guard = extractCaseGuardModes(scanSrc, sw.env);
+    if (guard === null) {
+      bad("接线", `${sw.key}: gates.yaml 声明了 ${sw.env} 档位，但 scan-rules.sh 里找不到该变量的 case 白名单`);
+    } else {
+      diffSets(`${sw.key} 档位 ${sw.env} ↔ scan-rules.sh case`, sw.modes, guard);
+    }
+  }
+  if (switches.length > 0) {
+    if (!gateSrc.includes("level_switch")) {
+      bad("接线", `gates.yaml 有 ${switches.length} 处 level_switch 声明，但 gate.ts 从不读它 —— strict/scoped 会被静默降级成写死的 level`);
+    } else {
+      ok("档位开关接线", `${switches.length} 处声明，gate.ts 已读，bash 白名单逐个对齐`);
+    }
+  }
+
   const bindings: Array<[scope: string, file: string, func: string]> = [
     ["code_file", scanSrc, "is_code_file"],
     ["ts_file", scanSrc, "is_ts_file"],

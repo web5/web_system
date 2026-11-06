@@ -1110,21 +1110,93 @@ function walk(dir: string, out: string[]): void {
   }
 }
 
+// ============================================================
+// 9.5 档位开关（level_switch）—— 声明在 gates.yaml，引擎只求值
+// ============================================================
+
+const LEVEL_SET: Level[] = ["error", "warning", "notice"];
+
+/**
+ * 求一条 finding 的级别。返回 "skip" 表示整道门本次不跑。
+ *
+ * 🔴 为什么必须有这个函数（#8602）：R11b 的四档声明在 gates.yaml 里躺了很久，
+ *   而引擎只用了写死的 `level: warning` —— 于是 DESIGN_ANCHOR_MODE=strict 时
+ *   bash 报 40 error、新引擎报 0 error + 40 warning：**门存在但不出声**。
+ *   声明了却不求值，比不声明更坏，因为它看起来是被支持的。
+ */
+function switchLevel(g: GateSpec, mode: string, loc: string): Level | "skip" {
+  const ls = asMap(g.raw.level_switch, `${g.key}: level_switch`);
+  const values = asMap(ls.values, `${g.key}: level_switch.values`);
+  const m = asMap(values[mode], `${g.key}: level_switch.values.${mode}`);
+  if (strOr(m.action, "") === "skip") return "skip";
+  const raw = strOr(m.level, "");
+  if (raw === "" || !LEVEL_SET.includes(raw as Level)) {
+    throw new Error(`${g.key}: level_switch.values.${mode}.level 非法（"${raw}"；合法值 ${LEVEL_SET.join("/")}）`);
+  }
+  let level = raw as Level;
+  const scopeEnv = strOr(m.scope_env, "");
+  if (scopeEnv === "") return level;
+  // scoped：loc 形如 "<app> · <key>"，取首个空格前作为 app 名（与 bash 的 ${loc%% *} 同口径）
+  const scopeRaw = process.env[scopeEnv] ?? "";
+  if (scopeRaw === "") return level;
+  const app = loc.split(" ")[0];
+  if (`,${scopeRaw},`.includes(`,${app},`)) {
+    const esc = strOr(m.scope_escalate, "");
+    if (!LEVEL_SET.includes(esc as Level)) {
+      throw new Error(`${g.key}: level_switch.values.${mode}.scope_escalate 非法（"${esc}"）`);
+    }
+    level = esc as Level;
+  }
+  return level;
+}
+
+/** 读档位：默认值与非法值都在这里判死，不留给"运行时悄悄降级" */
+function readSwitch(g: GateSpec): { mode: string; skipScanModes: string[] } {
+  const ls = asMap(g.raw.level_switch, `${g.key}: level_switch`);
+  const env = asStr(ls.env, `${g.key}: level_switch.env`);
+  const values = asMap(ls.values, `${g.key}: level_switch.values`);
+  const dflt = strOr(ls.default, "");
+  const legal = Object.keys(values);
+  if (dflt === "" || !legal.includes(dflt)) {
+    throw new Error(`${g.key}: level_switch.default 必须是 values 的键之一（当前 "${dflt}"，合法值 ${legal.join("/")}）`);
+  }
+  const mode = process.env[env] ?? dflt;
+  if (!legal.includes(mode)) {
+    process.stderr.write(
+      `✗ ${env} 未知档位：${mode}（合法值 ${legal.join(" | ")}，见 scripts/redline/gates.yaml ${g.id} level_switch）\n`,
+    );
+    process.exit(2);
+  }
+  return { mode, skipScanModes: strList(ls.skip_scan_modes) };
+}
+
 /** R11b / R16：判定在 python 辅助脚本里，引擎只按同一口径翻译结果 */
-function runDelegated(key: string, args: string[], levels: string[]): void {
+function runDelegated(key: string, args: string[], levels: string[], scanMode: string): void {
   const g = gate(key);
+  // 档位是"整道门"级别的：skip → 连 python 都不用跑（bash 同样先 return，保持一致）
+  let mode = "";
+  if (g.raw.level_switch !== undefined && g.raw.level_switch !== null) {
+    const sw = readSwitch(g);
+    if (sw.skipScanModes.includes(scanMode)) return;
+    if (switchLevel(g, sw.mode, "") === "skip") return;
+    mode = sw.mode;
+  }
   const rel = strOr(g.trigger.delegate, "");
   const py = join(TOP, rel);
   if (rel === "" || !existsSync(py)) return;
   const r = spawnSync("python3", [py, ...args], { cwd: TOP, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0 || (r.stdout ?? "") === "") return;
+  const tagged = strOr(g.raw.delegate_render, "detail") === "message_tag";
   for (const line of (r.stdout ?? "").split("\n")) {
     if (line === "") continue;
     const parts = line.split("\t");
     if (parts.length < 4) continue;
     const [lvl, rule, loc, msg] = parts;
     if (!levels.includes(lvl)) continue;
-    emitRule(g.level, rule === "" ? g.id : rule, msg, loc, strOr(g.raw.hint, ""));
+    const level: Level | "skip" = mode === "" ? g.level : switchLevel(g, mode, loc);
+    if (level === "skip") continue;
+    if (tagged) emitRule(level, rule === "" ? g.id : rule, `${g.message}（${lvl}）`, loc, msg);
+    else emitRule(level, rule === "" ? g.id : rule, msg, loc, strOr(g.raw.hint, ""));
   }
 }
 
@@ -1165,8 +1237,9 @@ function scanDiffRange(range: string): void {
   runR9b();
   runR10();
   runR11();
-  const anchorMode = process.env.DESIGN_ANCHOR_MODE ?? "off";
-  if (anchorMode !== "off") runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"]);
+  const scanMode = range === "--cached" ? "cached" : "diff";
+  // R11b 档位/是否在 cached 下跳过，全部由 gates.yaml 的 level_switch 决定，这里不再写死
+  runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"], scanMode);
   runCredentialGates(["R13", "R14"]);
   runCredentialGates(["R15"]);
   runCredentialGates(["R17"]);
@@ -1175,7 +1248,7 @@ function scanDiffRange(range: string): void {
   runCredentialGates(["R23"]);
   runR19();
   runR12();
-  runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"]);
+  runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"], scanMode);
 
   if (legacyCount > 0) {
     const g = gate("R21");

@@ -458,13 +458,30 @@ gates:
     level: warning
     stage: delegated
     batch: 2
+    # 档位开关：**机器求值**，不是散文。引擎读 env → 在 values 里取动作，
+    # 取不到即配置错误（直接报错退出，不许回落成 warning —— 那正是 #8602）。
     level_switch:
       env: DESIGN_ANCHOR_MODE
+      default: off
+      # pre-commit（cached）不跑：扫描器 read_at() 恒读 HEAD 存量，对"本次提交是否引入漂移"
+      # 零信息量（2026-11-06 A2 拍板）。声明在这里，两个引擎都按它跳过。
+      skip_scan_modes: [cached]
       values:
-        off: 跳过（默认，存量回填前）
-        warn: warning
-        strict: error
-        scoped: DESIGN_ANCHOR_SCOPE 内的 app 为 error，其余 warning
+        off:
+          action: skip
+        warn:
+          level: warning
+        strict:
+          level: error
+        scoped:
+          level: warning
+          scope_env: DESIGN_ANCHOR_SCOPE
+          scope_key: loc_prefix
+          scope_escalate: error
+    # 委派门的输出排版（引擎按此翻译 python 的 4 列 TSV，不硬编码文案）：
+    #   detail      desc = python 说明 / content = hint      （R16 现状）
+    #   message_tag desc = "{message}（{lvl}）" / content = python 说明（R11b 现状）
+    delegate_render: message_tag
     trigger:
       delegate: scripts/redline/scan-design-drift.py
     credential: null
@@ -474,7 +491,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-      note: 未回填不等于已漂移 —— 原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规
+      note: 未回填不等于已漂移 —— 原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规。档位由 level_switch 求值（两个引擎同读），非法取值 exit 2；双引擎一致性由 test-r11b-anchors.sh E 节守（不在 scenarios.tsv，因该表没有环境变量列）
     evidence: []
 
   - id: R13

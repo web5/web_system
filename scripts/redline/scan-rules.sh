@@ -585,6 +585,14 @@ DESIGN_ANCHOR_MODE="${DESIGN_ANCHOR_MODE:-off}"
 DESIGN_ANCHOR_SCOPE="${DESIGN_ANCHOR_SCOPE:-}"
 check_r11b() {
   local range="$1"
+  # 档位取值必须与 gates.yaml level_switch.values 完全一致。
+  # 🔴 拼错的档位不许回落到 warning —— 那会让「以为开了 strict」实际只提示（#8602 同类问题）。
+  case "$DESIGN_ANCHOR_MODE" in
+    off|warn|strict|scoped) ;;
+    *)
+      printf '✗ DESIGN_ANCHOR_MODE 未知档位：%s（合法值 off | warn | strict | scoped，见 scripts/redline/gates.yaml R11b level_switch）\n' "$DESIGN_ANCHOR_MODE" >&2
+      exit 2 ;;
+  esac
   [ "$DESIGN_ANCHOR_MODE" = "off" ] && return 0
   # pre-commit（cached 模式）不跑本规则。原因不是"太慢"，是**判不准**：
   #   scan-design-drift.py 的 read_at() 固定 `git show HEAD:<file>` 读的是 HEAD，
