@@ -1,7 +1,7 @@
 # 页面规格 · 账号：登录引导卡 / 退出 / 绑定手机号 / 合并（mp-account）
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
-> 定位：R1 退出登录 + R2 绑定手机号（含合并）的页面规格；需求判据见 `requirements-mp-account.md`，技术方案见 `design-mp-account.md`
+> 定位：R1 退出登录 + R2 绑定手机号（含合并）的页面规格；需求判据见 `requirements.md`，技术方案见 `design.md`
 > 原型：整合进整体原型稿 `apps/kedou-ai-minigram/prototype/index.html`（新增 `gate-chat` / `gate-discover` / `gate-mine`、`p-agreement`、`wxModal`）
 
 ## 1 背景与已拍板口径
@@ -42,7 +42,7 @@
 - 点击 → `wx.showModal`：标题「退出登录」，内容「退出后需要重新登录才能继续使用。服务端登录凭证会同时失效。」，按钮「取消 / 退出」。弹窗**蒙层不可关闭**（与真机同口径），取消只能走「取消」按钮 —— 保证「进行中锁」一定有释放路径。
 - 确认后：三个 tab 的登录卡显示并锁滚动；导航栏需账号的入口隐藏；若当前在二级页则先退回所在 tab；toast「已退出登录」。
 - 取消：无任何变化。
-- 真机语义对应 `design-mp-account.md` §4.1 时序（调 `/api/auth/logout` → `clearToken()` → 置本地退出标志 → 清内存态）。
+- 真机语义对应 `design.md` §4.1 时序（调 `/api/auth/logout` → `clearToken()` → 置本地退出标志 → 清内存态）。
 
 ## 5 绑定手机号（三态）
 
