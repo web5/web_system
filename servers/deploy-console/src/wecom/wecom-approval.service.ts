@@ -47,6 +47,8 @@ export interface WecomApprovalDetail {
   gitBranch?: string;
   commitId?: string;
   operator: string;
+  /** 提交人用户名（由 operator 的 userId 反查；查不到时为 undefined，前端回落显示 operator） */
+  operatorName?: string;
   createdAt: number;
   nodeKey?: string;
   nodeLabel?: string;
@@ -158,6 +160,9 @@ export class WecomApprovalService {
     const prior = anchorIdx > 0 ? nodes.slice(Math.max(0, anchorIdx - 3), anchorIdx) : [];
     const recentNodes = prior.map((n) => ({ key: n.key, label: n.label || n.key, result: '已完成' }));
 
+    // 只用于展示：查不到就回落成 operator 原值（不阻塞、不报错）
+    const operatorName = await this.approvers.displayName(approval.operator);
+
     await this.auditDecision({
       action: 'detail', approval, actor, sourceIp, status: 'viewed', detail: '查看审批详情',
     });
@@ -172,6 +177,7 @@ export class WecomApprovalService {
       gitBranch: approval.gitBranch,
       commitId: approval.commitId,
       operator: approval.operator,
+      operatorName: operatorName ?? undefined,
       createdAt: approval.createdAt,
       nodeKey: approval.nodeKey,
       nodeLabel: approval.nodeLabel,

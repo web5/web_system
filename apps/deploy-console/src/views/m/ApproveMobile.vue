@@ -28,6 +28,8 @@ interface Detail {
   gitBranch?: string
   commitId?: string
   operator: string
+  /** 提交人用户名：后端由 operator(id) 反查；查不到时为 undefined，回落显示 operator */
+  operatorName?: string
   /** bigint 列 → 序列化成字符串，故两种类型都要容忍 */
   createdAt: number | string
   nodeLabel?: string
@@ -262,7 +264,7 @@ function backToDetail(): void {
           <div class="kv"><span class="k">环境</span><span class="v">{{ detail.env }}</span></div>
           <div class="kv"><span class="k">模块</span><span class="v">{{ detail.moduleKey }}</span></div>
           <div class="kv"><span class="k">版本</span><span class="v mono">{{ versionLine }}</span></div>
-          <div class="kv"><span class="k">提交人</span><span class="v">{{ detail.operator }}</span></div>
+          <div class="kv"><span class="k">提交人</span><span class="v">{{ detail.operatorName || detail.operator }}</span></div>
           <div class="kv"><span class="k">提交时间</span><span class="v">{{ submittedAt }}</span></div>
           <div class="kv"><span class="k">分支</span><span class="v mono">{{ detail.gitBranch || '-' }}</span></div>
         </div>
