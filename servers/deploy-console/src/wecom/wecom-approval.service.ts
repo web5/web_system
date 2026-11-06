@@ -130,6 +130,25 @@ const TERMINAL_PIPELINE_STATUSES = ['cancelled', 'failed', 'succeeded', 'rejecte
 export class WecomApprovalService {
   private readonly logger = new Logger(WecomApprovalService.name);
 
+  /**
+   * `viewRun` 审计去重表：`approvalId → 上次记录的 {ts, status}`。
+   *
+   * 🔴 为什么要去重：S5 页面在 `live` 状态会轮询（前端 5s 一次），每次轮询都落一条
+   * `wecom.viewRun` 会把审计表灌成访问日志，真正要看「谁看过这次发布」时反而被噪声埋掉。
+   *
+   * 规则：同单 5 分钟内同状态只记第一条；`pipeline.status` 变化时**额外记一条**
+   * （状态跃迁才是审计关心的事）；超过 5 分钟再访问算一次新的「查看行为」。
+   *
+   * ⚠️ 进程内 Map，前提是 console 单实例 pm2 部署。**多实例时必须换 DB/Redis**，
+   * 否则每实例各记一条 = 去重失效（不会更糟，只是白记）。
+   */
+  private readonly viewRunSeen = new Map<string, { ts: number; status: string }>();
+
+  /** 同单同状态的 viewRun 审计窗口 */
+  static readonly VIEWRUN_DEDUP_MS = 5 * 60 * 1000;
+  /** 去重表容量上限（超限丢最旧，防长期运行内存缓慢增长） */
+  private static readonly VIEWRUN_SEEN_MAX = 500;
+
   constructor(
     private readonly config: WecomConfigService,
     private readonly approvals: ApprovalService,
@@ -267,14 +286,19 @@ export class WecomApprovalService {
     // 只用于展示：查不到回落 operator 原值
     const operatorName = await this.approvers.displayName(pipeline.operator || approval.operator);
 
-    await this.auditDecision({
-      action: 'viewRun',
-      approval,
-      actor,
-      sourceIp,
-      status: 'viewed',
-      detail: `查看运行结果 runId=${pipeline.id} status=${pipeline.status} stage=${pipeline.stage ?? '-'}`,
-    });
+    const dedup = this.shouldAuditViewRun(approval.id, pipeline.status, Date.now());
+    if (dedup.log) {
+      await this.auditDecision({
+        action: 'viewRun',
+        approval,
+        actor,
+        sourceIp,
+        status: 'viewed',
+        detail:
+          `查看运行结果 runId=${pipeline.id} status=${pipeline.status} stage=${pipeline.stage ?? '-'}；` +
+          `dedup=${dedup.mark}`,
+      });
+    }
 
     return {
       runId: pipeline.id,
@@ -305,6 +329,39 @@ export class WecomApprovalService {
       nodeLabel: approval.nodeLabel,
       live: LIVE_PIPELINE_STATUSES.includes(pipeline.status),
     };
+  }
+
+  /**
+   * 是否该为这次 `viewRun` 落一条审计；`mark` 进 detail 便于事后区分触发原因。
+   *
+   * 三种「该记」：first（首次）/ status-changed（状态跃迁）/ refreshed（超窗后的新查看行为）。
+   */
+  private shouldAuditViewRun(
+    approvalId: string,
+    status: string,
+    nowMs: number,
+  ): { log: boolean; mark: 'first' | 'status-changed' | 'refreshed' | 'skipped' } {
+    const prev = this.viewRunSeen.get(approvalId);
+    let mark: 'first' | 'status-changed' | 'refreshed';
+    if (!prev) mark = 'first';
+    else if (prev.status !== status) mark = 'status-changed';
+    else if (nowMs - prev.ts >= WecomApprovalService.VIEWRUN_DEDUP_MS) mark = 'refreshed';
+    else return { log: false, mark: 'skipped' };
+
+    this.viewRunSeen.set(approvalId, { ts: nowMs, status });
+    if (this.viewRunSeen.size > WecomApprovalService.VIEWRUN_SEEN_MAX) {
+      // Map 的插入序不随 set 已存在键而更新，故按 ts 找最旧，而不是取 keys() 首个
+      let oldestKey: string | undefined;
+      let oldestTs = Infinity;
+      for (const [k, v] of this.viewRunSeen) {
+        if (v.ts < oldestTs) {
+          oldestTs = v.ts;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey) this.viewRunSeen.delete(oldestKey);
+    }
+    return { log: true, mark };
   }
 
   /**

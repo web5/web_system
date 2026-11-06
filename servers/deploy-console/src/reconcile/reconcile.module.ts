@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ApprovalModule } from '../approval/approval.module';
 import { AuditModule } from '../audit/audit.module';
 import { CloudDbModule } from '../cloud-db/cloud-db.module';
+import { PipelineModule } from '../pipeline/pipeline.module';
 import { ReleaseLockModule } from '../release-lock/release-lock.module';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
 import { DeployCleanupScanEntity } from '../entities/deploy-cleanup-scan.entity';
@@ -11,6 +13,7 @@ import { ConsistencyWatchService } from './consistency-watch.service';
 import { RetentionService } from './retention.service';
 import { CleanupScanService } from './cleanup-scan.service';
 import { CleanupScanLogService } from './cleanup-scan-log.service';
+import { ApprovalExpiryService } from './approval-expiry.service';
 import { ReconcileController } from './reconcile.controller';
 
 /**
@@ -21,6 +24,9 @@ import { ReconcileController } from './reconcile.controller';
  * - `RetentionService`：定时清理超期的任务/版本/审计日志（诊断 #18，默认只观测）
  * - `CleanupScanService` + `CleanupScanLogService`：把上述两个清理能力的**观测结果**落库
  *   （诊断 #18 遗留观测项），使「连续观察 N 天再开开关」具备事实依据
+ * - `ApprovalExpiryService`：定时作废超期 pending 审批单（鉴权时效收口）——
+ *   放这里而不是 ApprovalModule，是因为它要调 `PipelineService.cancel`，
+ *   而 PipelineModule 已经 import ApprovalModule，反向依赖会成环
  */
 @Module({
   imports: [
@@ -30,6 +36,9 @@ import { ReconcileController } from './reconcile.controller';
     AuditModule,
     // 远端产物扫描（只调 scan，不调 cleanup）—— 无循环依赖：ReconcileModule 仅被 app.module 引入
     RemoteDeliveryModule,
+    // 审批超时作废：需要审批单查询 + 走既有 cancel 联动终止流水线
+    ApprovalModule,
+    PipelineModule,
   ],
   controllers: [ReconcileController],
   providers: [
@@ -38,6 +47,7 @@ import { ReconcileController } from './reconcile.controller';
     RetentionService,
     CleanupScanService,
     CleanupScanLogService,
+    ApprovalExpiryService,
   ],
   exports: [
     StartupReconcileService,
@@ -45,6 +55,7 @@ import { ReconcileController } from './reconcile.controller';
     RetentionService,
     CleanupScanService,
     CleanupScanLogService,
+    ApprovalExpiryService,
   ],
 })
 export class ReconcileModule {}
