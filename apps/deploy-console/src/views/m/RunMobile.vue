@@ -305,7 +305,7 @@ onUnmounted(stopPolling)
           <div class="kv"><span class="k">运行</span><span class="v mono">#{{ snapshot.runId }}</span></div>
           <div class="kv"><span class="k">版本</span><span class="v mono">{{ versionLine }}</span></div>
           <div class="kv"><span class="k">分支</span><span class="v mono">{{ snapshot.gitBranch || '-' }}</span></div>
-          <div class="kv"><span class="k">触发</span><span class="v">{{ triggerLine }}</span></div>
+          <div class="kv long"><span class="k">触发</span><span class="v">{{ triggerLine }}</span></div>
           <div class="kv"><span class="k">开始</span><span class="v">{{ formatTime(snapshot.startTime) }}</span></div>
           <div class="kv"><span class="k">结束</span><span class="v">{{ snapshot.endTime ? formatTime(snapshot.endTime) : '进行中' }}</span></div>
           <div class="kv"><span class="k">耗时</span><span class="v">{{ duration }}</span></div>
@@ -394,6 +394,8 @@ onUnmounted(stopPolling)
 .kv+.kv{border-top:1px dashed #F0F0F2}
 .kv .k{color:#6B7280;flex:0 0 auto}
 .kv .v{text-align:right;font-weight:550;word-break:break-all}
+/* 触发来源可能是 `admin · ui|mcp:xxx` 这类长串，右对齐换行会贴到标签上，故单独放开 */
+.kv.long .v{text-align:left;font-size:12px;line-height:1.5;overflow-wrap:anywhere;word-break:normal}
 .v.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 
 .card.fail{border-color:#FECACA;background:#FFFBFB}
