@@ -73,4 +73,28 @@ export class DeployApprovalEntity {
 
   @Column({ type: 'bigint', comment: '提交时间（毫秒）' })
   createdAt: number;
+
+  /**
+   * 审批来源通道（卡② · deploy_approvals 加 3 列）。
+   * 历史行由 DB DEFAULT 'console' 回填；不新增 expiresAt（本期不做过期）。
+   */
+  @Column({
+    type: 'varchar', length: 16, default: 'console', name: 'channel',
+    comment: '审批来源通道 console/mcp/wecom',
+  })
+  channel: string;
+
+  /** 审批人外部身份 ID（企微 userid）；console/MCP 通道为空 */
+  @Column({
+    type: 'varchar', length: 64, nullable: true, name: 'identity_external_id',
+    comment: '审批人外部身份 ID（企微 userid）',
+  })
+  identityExternalId?: string | null;
+
+  /** 审批来源 IP（异常追溯用） */
+  @Column({
+    type: 'varchar', length: 64, nullable: true, name: 'source_ip',
+    comment: '审批来源 IP',
+  })
+  sourceIp?: string | null;
 }

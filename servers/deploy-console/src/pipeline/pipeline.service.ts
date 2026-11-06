@@ -53,6 +53,7 @@ import { issueRunToken, revokeRunTokens } from '../common/run-token';
 import { NotificationService } from '../notification/notification.service';
 import { DeployService } from '../deploy/deploy.service';
 import { ApprovalService } from '../approval/approval.service';
+import { WECOM_APPROVAL_AWAITING, wecomEvents } from '../wecom/wecom.events';
 import { ApproverService, APPROVE_PERMISSION } from '../approval/approver.service';
 import {
   PipelineTemplateService,
@@ -1926,6 +1927,19 @@ export class PipelineService {
           operator: p.operator,
         });
         this.logger.log(`流水线挂起等审批: ${p.id} 节点=${e.nodeKey} 审批单=${e.approvalId}`);
+        // 卡②：企微待办推送。进程内事件、不 await、不抛错 —— 推送失败绝不阻塞挂起路径；
+        // 总开关关闭时 WecomNotifierService 不订阅，emit 是纯 no-op（V12 回到现状）。
+        wecomEvents.emit(WECOM_APPROVAL_AWAITING, {
+          approvalId: e.approvalId,
+          pipelineId: p.id,
+          env: p.env,
+          moduleKey: p.moduleKey,
+          versionTag: p.versionTag,
+          nodeKey: e.nodeKey,
+          nodeLabel: e.nodeLabel,
+          operator: p.operator,
+          createdAt: Date.now(),
+        });
         return;
       }
 

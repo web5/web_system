@@ -153,6 +153,13 @@ const routes: RouteRecordRaw[] = [
       },
     ],
   },
+  // 企微移动端审批 H5（卡②）：独立于 MainLayout，自带 scope 短令牌，不走登录态
+  {
+    path: '/m/approve/:id',
+    name: 'ApproveMobile',
+    component: () => import('@/views/m/ApproveMobile.vue'),
+    meta: { requiresAuth: false, title: '发布审批' },
+  },
 ]
 
 const router = createRouter({
