@@ -3,7 +3,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import * as path from 'path';
-import { SnakeNamingStrategy } from '@web-system/shared';
+import {
+  SnakeNamingStrategy,
+  DB_TARGET_ALLOWLIST_ENV,
+  resolveDbTarget,
+} from '@web-system/shared';
 import { FinnewsModule } from './finnews.module';
 import { ContentModule } from './content/content.module';
 import { InstitutionModule } from './institution/institution.module';
@@ -22,7 +26,6 @@ import { HotmoneySeatEntity } from './content/entities/hotmoney-seat.entity';
 import { CollectRunEntity } from './content/entities/collect-run.entity';
 import { PipelineRunEntity } from './content/entities/pipeline-run.entity';
 import { ContentAccountEntity } from './content/entities/content-account.entity';
-import { DB_TARGET_ALLOWLIST_ENV, resolveDbTarget } from './common/database-target';
 
 @Module({
   imports: [

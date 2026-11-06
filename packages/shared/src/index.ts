@@ -117,6 +117,16 @@ export type {
 } from './micro-frontend';
 export { SnakeNamingStrategy } from './naming/snake-naming.strategy';
 
+// 数据库连接目标守卫（content-hub / mcp-gateway 共用唯一实现，禁止各服务自行判 NODE_ENV）
+export {
+  DEFAULT_DB_TARGET,
+  DB_TARGET_ALLOWLIST_ENV,
+  FORBIDDEN_DB_TARGETS,
+  DatabaseTargetError,
+  resolveDbTarget,
+} from './database-target';
+export type { ResolveDbTargetInput, DbTargetResolution } from './database-target';
+
 // 后端 RBAC 权限守卫（各微服务统一使用）
 export { PermissionGuard, RequirePermission, REQUIRED_PERMISSION_KEY } from './auth/permission.guard';
 
