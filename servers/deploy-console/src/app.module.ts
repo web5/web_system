@@ -28,6 +28,7 @@ import { AppsModule } from './apps/apps.module';
 import { ServicesModule } from './services/services.module';
 import { HostsModule } from './hosts/hosts.module';
 import { HealthModule } from './health/health.module';
+import { WecomModule } from './wecom/wecom.module';
 // 运维自愈（诊断 #12/#13）：启动对账（僵尸任务/过期锁）+ 两库一致性定时巡检 + 强制解锁入口
 import { ReconcileModule } from './reconcile/reconcile.module';
 // 事实层 v1：定时采集线上真实态并与期望态比对（/api/fact/*）
@@ -148,6 +149,8 @@ import {
     // 主机管理（双域重构：服务环境指向的地址来源，host_name 引用 deploy_hosts.name）
     HostsModule,
     HealthModule,
+    // 企微端手动审批通道（卡②）：开关关闭时 config 早退 + notifier 不订阅，V12 回到现状
+    WecomModule,
     // 运维自愈：启动对账 + 两库一致性定时巡检（/api/reconcile/*）
     ReconcileModule,
     // 事实层 v1：环境事实巡检（/api/fact/*）—— 线上真实态 vs 期望态

@@ -34,6 +34,7 @@
 | 脚本 | 用途 | 什么时候跑 |
 |---|---|---|
 | `config-center-base.sql` | 配置中心底座：加 layer/值类型等列、建 `config_revisions` / `config_deliveries`，并**回填存量行的 layer** | §1 结构部分仅在 `DB_SYNCHRONIZE=false` 时需要；**§2 layer 回填任何环境都要跑一次** |
+| `0029_deploy_approvals_wecom_channel.sql` | 卡② 企微审批通道：`deploy_approvals` 加 `channel` / `identity_external_id` / `source_ip` 三列（历史行回填 `console`） | 启用 `WECOM_APPROVE_ENABLED=1` **之前**，dev / prod 各自手工跑一次；🔴 **仅 deploy 库**，不是 `web_system` 业务主库（那是 0028 的落点） |
 
 > 为什么回填必须在脚本里：`layer` 列以默认值 `'app'` 加进去，而存量行混着 `MYSQL_*` 等
 > 永不可下发的键（判据见 `src/config/config.service.ts` 的 `isRowDeliverable`）。
