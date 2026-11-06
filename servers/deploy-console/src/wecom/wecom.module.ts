@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApprovalModule } from '../approval/approval.module';
 import { AuditModule } from '../audit/audit.module';
+import { AuthModule } from '../auth/auth.module';
 import { DeployApprovalEntity } from '../entities/deploy-approval.entity';
 import { PipelineModule } from '../pipeline/pipeline.module';
 import { WecomApiClient } from './wecom-api.client';
@@ -12,6 +13,7 @@ import { WecomConfigService, resolveWecomConfig } from './wecom.config';
 import { WecomController } from './wecom.controller';
 import { WecomIdentityClient } from './wecom-identity.client';
 import { WecomNotifierService } from './wecom-notifier.service';
+import { WecomSessionService } from './wecom-session.service';
 import { WecomTicketService } from './wecom-ticket.service';
 
 /**
@@ -29,6 +31,9 @@ import { WecomTicketService } from './wecom-ticket.service';
     ApprovalModule,
     PipelineModule,
     AuditModule,
+    // 只为拿 JwtService 签「票据换平台会话」（WecomSessionService）。
+    // AuthModule 已在 AppModule 里 import，Nest 复用同一模块实例，不会重复注册全局守卫。
+    AuthModule,
   ],
   controllers: [WecomController],
   providers: [
@@ -45,6 +50,7 @@ import { WecomTicketService } from './wecom-ticket.service';
     WecomIdentityClient,
     WecomNotifierService,
     WecomApprovalService,
+    WecomSessionService,
     WecomApproveGuard,
   ],
   exports: [WecomNotifierService],

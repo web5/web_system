@@ -11,6 +11,7 @@ import {
 } from './wecom-approve.guard';
 import { WecomConfigService } from './wecom.config';
 import { WecomIdentityClient } from './wecom-identity.client';
+import { WecomSessionService } from './wecom-session.service';
 import { WecomTicketService } from './wecom-ticket.service';
 
 /**
@@ -47,6 +48,7 @@ export class WecomController {
     private readonly api: WecomApiClient,
     private readonly identity: WecomIdentityClient,
     private readonly approvals: WecomApprovalService,
+    private readonly session: WecomSessionService,
   ) {}
 
   private get reqBase(): string {
@@ -169,6 +171,21 @@ export class WecomController {
   ): Promise<void> {
     const req = res.req as unknown as WecomRequestLike;
     const data = await this.approvals.reject(id, requireActor(req), body || {}, sourceIpOf(req));
+    res.json({ code: 0, data });
+  }
+
+  /**
+   * S4「查看流水线详情」：用审批票据换**一次性、30 分钟**的平台会话。
+   *
+   * 前端拿到 token 写进 localStorage 的 pinia 持久化键（`auth`）后再跳
+   * `/console/pipelines/:id`，否则必然被路由守卫踢去登录页（见 wecom-session.service.ts 注释）。
+   * 仍需 `WecomApproveGuard`：票据 + 单号强绑定，泄漏面不变。
+   */
+  @UseGuards(WecomApproveGuard)
+  @Post('approvals/:id/session')
+  async exchangeSession(@Param('id') id: string, @Res() res: Response): Promise<void> {
+    const req = res.req as unknown as WecomRequestLike;
+    const data = await this.session.exchange(id, requireActor(req), sourceIpOf(req));
     res.json({ code: 0, data });
   }
 }
