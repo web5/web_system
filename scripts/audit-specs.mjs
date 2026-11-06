@@ -98,6 +98,35 @@ function isProductFile(name) {
   return PRODUCT_NON_MD.has(name) || (name.endsWith('.md') && nameCompliant(name));
 }
 
+/**
+ * 缺 requirements.md 的 feature 属于哪种形态。
+ * R6 只做计数，但要让人一眼看出欠账性质：36 个「有 design 无需求」跟
+ * 11 个「纯 api-design」是完全不同的两件事，前者可议、后者是合理形态。
+ * 分类口径见 30-任务产物/2026-11-06-web_system-specs治理/04-R6欠账分类-*.md
+ */
+function shapeOf(allFiles) {
+  const names = allFiles.map((f) => path.basename(f));
+  const has = (re) => names.some((n) => re.test(n));
+  if (names.includes('design.md')) return 'design';
+  const hasApi = has(/^api-design/);
+  const hasPage = has(/^page-spec/);
+  const hasTd = has(/^tech-design/);
+  if (hasApi && !hasPage && !hasTd) return 'api';
+  if (hasPage && !hasApi && !hasTd) return 'page';
+  if (hasTd) return 'techDesign';
+  if (names.includes('prototype.html')) return 'proto';
+  return 'other';
+}
+
+const SHAPE_LABEL = {
+  design: '有 design 无需求',
+  api: '纯 api-design',
+  page: '纯 page-spec',
+  techDesign: '有 tech-design',
+  proto: '纯原型',
+  other: '其它',
+};
+
 /** 目录内所有文件（含非 md）—— 空目录判定与产物判定共用 */
 function walkAll(dir, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -142,7 +171,9 @@ for (const feature of features) {
     add('R5', feature, '(dir)', `无命名合规的产物文件（现有：${allFiles.map((f) => path.basename(f)).join(', ')}）`);
   }
 
-  if (!files.some((f) => path.basename(f) === 'requirements.md')) noReqDirs.push(feature);
+  if (!files.some((f) => path.basename(f) === 'requirements.md')) {
+    noReqDirs.push({ feature, shape: shapeOf(allFiles) });
+  }
 
   for (const abs of files) {
     // 相对 feature 目录的路径，输出时前面再拼 feature 名（否则会显示成 a/a/x.md）
@@ -219,11 +250,22 @@ if (emptyDirs.length) {
 }
 // R6 只做计数，从不阻断（对应 gates.yaml 的 notice 级）
 if (noReqDirs.length) {
+  const byShape = {};
+  for (const { feature, shape } of noReqDirs) (byShape[shape] ??= []).push(feature);
+  const summary = Object.keys(SHAPE_LABEL)
+    .filter((s) => byShape[s])
+    .map((s) => `${SHAPE_LABEL[s]} ${byShape[s].length}`)
+    .join(' ｜ ');
   console.log(
-    `  R6 缺 requirements.md（notice，不阻断）：${noReqDirs.length}/${features.length} 个 feature` +
-      ` —— SOP §2.1「缺一则补」欠账，需逐 feature 判断补写 / 归档`,
+    `  R6 缺 requirements.md（notice，不阻断）：${noReqDirs.length}/${features.length} 个 feature`,
   );
-  if (VERBOSE) console.log(`     ${noReqDirs.join(', ')}`);
+  console.log(`     形态分布：${summary}`);
+  console.log('     分类与处置建议：30-任务产物/2026-11-06-web_system-specs治理/04-R6欠账分类-*.md');
+  if (VERBOSE) {
+    for (const s of Object.keys(SHAPE_LABEL)) {
+      if (byShape[s]) console.log(`     · ${SHAPE_LABEL[s]}（${byShape[s].length}）：${byShape[s].join(', ')}`);
+    }
+  }
 }
 if (VERBOSE) {
   console.log('\n--- 明细 ---');
