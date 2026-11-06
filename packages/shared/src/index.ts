@@ -141,66 +141,15 @@ export type { AuthMode, VerifyResult, RemoteAuthDeps } from './auth/unified-auth
 // 免鉴权标记（探活 / CI hook 等公共端点使用；key 'isPublic' 与各服务薄 guard 一致）
 export { Public, IS_PUBLIC_KEY } from './auth/public.decorator';
 
-import dayjs from 'dayjs';
-
 /**
- * 格式化日期时间
+ * 前后端通用纯工具函数（从 `./utils` 再导出，**API 与拆文件前逐字一致**）。
+ *
+ * 为什么拆文件：这几个函数前端也在用，但它们原本和 storage-dir / typeorm 实体
+ * 一起住在本 barrel 里，前端从 barrel 取 `API_TIMEOUT` 时会把 node-only 模块
+ * 一并拖进浏览器产物（2026-11-06 微前端白屏事故）。
+ * 前端请改用 `@web-system/shared` → `browser.ts` 入口（由各 vite.config 别名指向）。
  */
-export function formatDateTime(date: Date | string | number, format = 'YYYY-MM-DD HH:mm:ss'): string {
-  return dayjs(date).format(format);
-}
-
-/**
- * 生成随机字符串
- * 注意：使用 Math.random()，非密码学安全，仅适用于非安全场景（如临时 ID）
- * 安全场景（token、密钥等）请使用 crypto.randomBytes
- */
-export function randomString(length = 32): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-/**
- * 延迟执行
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * 防抖函数
- */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  return function (this: any, ...args: Parameters<T>) {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
-  };
-}
-
-/**
- * 节流函数
- */
-export function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  limit: number
-): (...args: Parameters<T>) => void {
-  let inThrottle: boolean = false;
-  return function (this: any, ...args: Parameters<T>) {
-    if (!inThrottle) {
-      func.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  };
-}
+export { formatDateTime, randomString, sleep, debounce, throttle } from './utils';
 
 /**
  * 环境变量获取
