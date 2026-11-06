@@ -3348,8 +3348,11 @@
                 <div class="grp">
                   生成参数
                   <span class="side">
+                    <!-- 2026-11-06 撤锚点 gen-params-preset：B3 定稿五控件口径（Proto 653631a0 / Design pass）
+                         不含「按场景套用」预设下拉；10-28 评审亦记「未实现」。控件保留仅供演示，勿据此回填实现。
+                         真源：docs/ui/reviews/2026-10-28-b3-tuning-ui-design-review.md「五控件」 -->
                     <label class="muted" for="preset">按场景套用</label>
-                    <select id="preset" class="ctrl" style="height:24px;font-size:12px;" data-dr="gen-params-preset">
+                    <select id="preset" class="ctrl" style="height:24px;font-size:12px;">
                       <option value="">请选择…</option>
                       <option value="classify">分类</option>
                       <option value="extract">抽取</option>
@@ -3366,7 +3369,10 @@
                     <div class="flb">采样方式</div>
                     <div class="fld">
                       <div class="tagline"><span class="f-tag gate">C7-b 互斥</span></div>
-                      <div class="seg" id="seg-sampler" data-dr="gen-params-sampler">
+                      <!-- 2026-11-06 撤锚点 gen-params-sampler：B3 定稿把「采样方式二选一」改为
+                           temperature / topP 两个独立输入 + C7-b 同填报错（form-controls §277「互斥类校验」口径）。
+                           实现见 apps/admin/src/views/Agents/AgentTuningPanel.vue；本段 seg 仅供演示。 -->
+                      <div class="seg" id="seg-sampler">
                         <button data-sampler="temp" class="on">Temperature</button>
                         <button data-sampler="topP">Top P</button>
                       </div>

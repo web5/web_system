@@ -33,7 +33,7 @@
 
 | 端 | 原型侧锚点数 | 实现侧已回填 | 缺口 | 原型文件 |
 |---|---|---|---|---|
-| `admin` | 40 | 0 | **40** | `admin-agents.html`(12) / `admin-agents-hub.html`(34) / `admin-agent-def-detail.html`(35) —— 三文件合计 81，**去重后 40** |
+| `admin` | **37**（2026-11-06 撤 3 个后） | 0 | **37** | `admin-agent-def-detail.html`(33，= 第二批全部工作量) / `admin-agents.html`(4 个遗留：`agent-def-edit-modal`(已作废) · `agent-def-list` · `agent-def-save` · `gen-params-group`) |
 | `deploy-console` | 5 | 0 | **5** | `deploy-console-domain.html` |
 | `kedou-ai-minigram` | 7 | 0 | **7** | 小程序原型 |
 | `shell` | 1 | 0 | **1** | `shell/prototype` |
@@ -41,6 +41,25 @@
 
 **回填不是机械活**（2026-11-06 试水 8 个锚点的结论）：成本在**逐点判断**——`gen-params-preset` / `gen-params-payload-preview` / `gen-params-sampler` 在实现中不存在，`agent-def-edit-modal` 已被 page-spec v2 作废（应改原型，不是改代码）。
 **半截回填无收益**（40→32 后 admin 仍 MISSING，必须到 0 才能开）；且改 UI 源码要 `Proto:` / `Design:` 凭证 → **回填必须与所属原型/规格批次成对提交**，不能孤立排期。
+
+### 2.2 三个“实现里没有”的锚点已按定稿撤除（2026-11-06，逐个核过）
+
+撤的是**锚点**，不是功能——三个都查到了“定稿不做”或“已被取代”的记录，所以正确动作是改原型而不是往实现塞锚点：
+
+| 锚点 | 定性 | 判据（可复核） | 处理 |
+|---|---|---|---|
+| `gen-params-preset` | 定稿不含「按场景套用」预设下拉 | `docs/ui/reviews/2026-10-28-b3-tuning-ui-design-review.md`「五控件：temperature / maxTokens / topP / thinking（三态）/ max_steps」+ `agent-def-detail-page-2026-10-28.md:42`「B3 五控件口径不设预设下拉，未实现」 | 原型撤锚点（控件留作演示），`page-spec v2 §3` 第 6/7 项同步标废弃 |
+| `gen-params-sampler` | 「采样方式二选一 + 禁用另一侧」被 **C7-b 同填报错**取代 | 实现 `AgentTuningPanel.vue`（temp/topP 两输入 + 双字段红字）；`page-specs/form-controls-and-toggles-v1.md:277`「互斥类校验 → 两个字段同时红字…现状 C7-b 即按此」 | 原型撤锚点，`page-spec v2 §3` 第 1/3 项同步标废弃 |
+| `gen-params-payload-preview` | 旧屏专属（提交内容预览） | 屏② 已被 `admin-agent-def-detail.html` 取代；新形态是「生效策略预览」`AgentStrategyPreview.vue`（已实现） | 旧原型撤锚点 + 整屏标作废 |
+
+撤除后 admin 缺口 **40 → 37**。
+
+### 2.3 第二批 33 个锚点的可回填比例（2026-11-06 逐条对照实现）
+
+**只有 15 个现在能回填**，3 个归属待定，**14 个卡在“功能未做”**（调试台分期 9 · 字段级“原值→新值”badge 4 · 角色降级无提示 1）。
+→ 逐条对照表见 `~/AiWorkspace/30-任务产物/2026-11-06-R11b修复与锚点试水/02-锚点处置与第二批排期.md` §2。
+
+🔴 **排期不要按“33 个锚点 = 33 份工”算**：不解决那 14 个（做功能 或 撤锚点），admin 永远到不了 0，`scoped`/`strict` 也就永远开不了。
 
 ## 3. 推进方式（`DESIGN_ANCHOR_MODE` 四档）
 

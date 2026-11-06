@@ -685,11 +685,15 @@
             </div>
 
             <!-- 新增：生成参数 -->
+            <!-- 2026-11-06 本屏（屏②·编辑弹窗·生成参数区）已被 docs/ui/prototypes/admin-agent-def-detail.html 取代。
+                 屏内三个锚点已撤：gen-params-preset（B3 五控件口径不含预设）、gen-params-sampler
+                 （改为 temp/topP 两输入 + C7-b 同填报错）、gen-params-payload-preview（旧屏专属，新形态是「生效策略预览」）。
+                 保留本屏仅供历史对照，勿据此回填实现侧锚点。 -->
             <div class="grp" data-dr="gen-params-group">
               生成参数
               <span class="side">
                 按场景套用
-                <select class="preset" id="preset" data-dr="gen-params-preset">
+                <select class="preset" id="preset">
                   <option value="">— 选择 —</option>
                   <option value="cls">分类 / 意图路由</option>
                   <option value="ext">结构化抽取</option>
@@ -703,7 +707,7 @@
 
             <!-- 采样策略：二选一 -->
             <div class="lb" style="margin-top:4px">采样策略<span class="muted" style="font-weight:400">（与 Top P 二选一，官方口径只改其一）</span></div>
-            <div class="seg" style="margin-bottom:12px" data-dr="gen-params-sampler">
+            <div class="seg" id="seg-sampler" style="margin-bottom:12px">
               <button class="on" data-mode="temperature">Temperature</button>
               <button data-mode="topP">Top P</button>
             </div>
@@ -759,7 +763,7 @@
             </div>
 
             <!-- 提交前会发什么（验收锚点：互斥裁剪在这里一眼可见） -->
-            <div class="note" style="display:block;margin:4px 0 12px" data-dr="gen-params-payload-preview">
+            <div class="note" style="display:block;margin:4px 0 12px">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                 提交内容预览 <span class="muted" style="margin-left:auto;font-weight:400">未填的字段不进入 payload（= 沿用默认）</span>
               </div>
@@ -791,7 +795,7 @@
      ① 切换即清空另一侧 —— 否则旧值留在禁用框里看不见、保存却被后端拒；
         清空在 extra 上回显，让状态可解释
      ② 提交前按当前模式裁剪 payload —— 未选中那一侧不进请求体  */
-  var sampler = document.querySelector('[data-dr="gen-params-sampler"]');
+  var sampler = document.getElementById('seg-sampler');
   sampler.addEventListener('click', function (e) {
     if (sampler.classList.contains('locked')) return;
     var b = e.target.closest('button'); if (!b || b.classList.contains('on')) return;
