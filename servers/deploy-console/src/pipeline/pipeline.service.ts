@@ -1146,8 +1146,21 @@ export class PipelineService {
     return out;
   }
 
-  /** 取消流水线（幂等；仅对 pending/running 有意义） */
-  async cancel(id: string, operator?: string): Promise<{ id: string; status: string }> {
+  /**
+   * 取消流水线（幂等；对 pending / pending-approval / awaiting-approval / running 有意义）。
+   *
+   * `reason` 用于「运维作废」这类非提交人主动取消的场景（如挂起实例随重启丢失、
+   * 单永远批不动的孤儿）；不传则按历史语义记为「提交人取消」。
+   *
+   * 🔴 挂起态的联动终态是 `cancelled` 而**不是** `rejected`：
+   * 取消 = 这单不再有决策对象，没有人作出判断；若写成 rejected，
+   * 基于人工否决的「驳回率 / 审批质量」口径会把机器清理算成人工作出的否决。
+   */
+  async cancel(
+    id: string,
+    operator?: string,
+    reason?: string,
+  ): Promise<{ id: string; status: string }> {
     const p = await this.get(id);
     if (['succeeded', 'failed', 'cancelled'].includes(p.status)) {
       return { id, status: p.status };
@@ -1158,11 +1171,21 @@ export class PipelineService {
     if (p.status === 'running' && buildCompleted) {
       throw new ConflictException('发布已进入产物交付或激活阶段，不允许中断；请等待结果后执行模块级回滚');
     }
-    // 撤回待审批（门禁级 / 节点级挂起）：联动关闭审批单，避免审批台出现孤儿单
+    const why = (reason || '').trim() || '提交人取消';
+    // 撤回待审批（门禁级 / 节点级挂起）：联动关闭审批单，避免审批台出现孤儿单。
+    // 走 approvals.cancel（CAS，只动 pending）而非 resolve('reject') —— 见本方法注释。
     if (p.status === 'pending-approval' || p.status === PIPELINE_AWAITING_APPROVAL) {
       const pending = await this.approvals.pendingForPipeline(id);
       if (pending) {
-        await this.approvals.resolve(pending.id, 'reject', operator || 'unknown', '提交人取消');
+        try {
+          await this.approvals.cancel(pending.id, why, operator || 'unknown');
+        } catch (err) {
+          // 并发下审批单可能刚被处理：此时不能因为「单关不掉」就放弃取消流水线，
+          // 否则运行记录会永远停在挂起态（正是本方法要消灭的孤儿形态）
+          this.logger.warn(
+            `取消流水线 ${id} 时联动作废审批单 ${pending.id} 失败：${(err as Error).message}`,
+          );
+        }
       }
     }
     this.cancelled.add(id);
@@ -1187,7 +1210,7 @@ export class PipelineService {
       env: p.env,
       component: p.moduleKey,
       status: 'cancelled',
-      detail: `取消流水线 ${id}（阶段: ${p.stage ?? '-'}）`,
+      detail: `取消流水线 ${id}（阶段: ${p.stage ?? '-'}，原因: ${why}）`,
     });
     return { id, status: p.status };
   }

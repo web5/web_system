@@ -5,6 +5,8 @@ import { ApprovalService } from './approval.service';
 // 可审批人：按权限码 deploy:pipeline:approve 从 user-service 拉取（方案 B）
 import { ApproverService } from './approver.service';
 import { SystemSettingsModule } from '../system-settings/system-settings.module';
+// 作废（cancel）必须留审计：谁在什么时候以什么原因把一单 state 改没了
+import { AuditModule } from '../audit/audit.module';
 
 /**
  * 发布审批门禁模块。
@@ -16,6 +18,7 @@ import { SystemSettingsModule } from '../system-settings/system-settings.module'
     TypeOrmModule.forFeature([DeployApprovalEntity]),
     // 审批开关（REQUIRE_APPROVAL_ENVS）收在系统设置，页面可维护
     SystemSettingsModule,
+    AuditModule,
   ],
   providers: [ApprovalService, ApproverService],
   exports: [ApprovalService, ApproverService],
