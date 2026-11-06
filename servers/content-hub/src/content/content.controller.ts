@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ContentService, WechatMpPublishDto } from './services/content.service';
 import { ContentAccountService } from './services/content-account.service';
@@ -19,6 +20,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InternalKeyGuard } from '../auth/internal-key.guard';
 import { Public } from '../auth/public.decorator';
 import { ListItemsQueryDto } from './dto/content-quality.dto';
+import { CronPreviewDto, PipelineCreateDto, PipelineUpdateDto } from './dto/pipeline.dto';
+import { SchedulerService } from './scheduler.service';
+import { CRON_TIMEZONE, nextCronRuns, parseCronExpression } from '../common/cron.util';
 
 /**
  * 采集源 / 管线 / 条目的管理接口，默认走运营后台（admin）用户 JWT。
@@ -48,7 +52,23 @@ export class ContentController {
     private readonly contentAccountService: ContentAccountService,
     private readonly pipelineRunService: PipelineRunService,
     private readonly wechatMpPublisher: WechatMpPublisher,
+    private readonly schedulerService: SchedulerService,
   ) {}
+
+  /**
+   * 落库成功后重注册调度。
+   *
+   * 不再往外抛：数据已经写进去了，此时把 500 抛给前端只会让人以为「没保存成功」，
+   * 反而更容易重复提交。失败已由 SchedulerService 打 `[ALERT]` 并以
+   * `GET scheduler/status` 可查，此处只补一条上下文日志。
+   */
+  private async reloadSchedulerQuietly(action: string): Promise<void> {
+    try {
+      await this.schedulerService.reload();
+    } catch (e) {
+      new Logger(ContentController.name).error(`${action}后重注册调度失败：${(e as Error).message}`);
+    }
+  }
 
   // ── 自媒体账号（只读注册表；凭据只回掩码，密文不出接口）──
   @Get('accounts')
@@ -105,24 +125,61 @@ export class ContentController {
     return this.contentService.listPipelines();
   }
 
+  /**
+   * cron 保存前预览（#8561）：算出未来 3 次执行时间，顺带做合法性判定。
+   *
+   * 为什么放后端而不是前端引 cron 包：校验口径必须与调度器完全一致，
+   * 前端各写一套必然出现「页面说没问题、调度器注册失败」的分裂（本次故障的温床）。
+   * 路由是两段，不会被 `pipelines/:id` 通配吃掉。
+   */
+  @Post('pipelines/cron-preview')
+  previewCron(@Body() dto: CronPreviewDto) {
+    const parsed = parseCronExpression(dto.cron);
+    return {
+      valid: parsed.ok,
+      normalized: parsed.normalized,
+      error: parsed.ok ? null : (parsed.error ?? 'cron 无法解析'),
+      next: parsed.ok ? nextCronRuns(parsed.normalized, 3) : [],
+      timezone: CRON_TIMEZONE,
+    };
+  }
+
   @Get('pipelines/:id(\\d+)')
   pipeline(@Param('id') id: string) {
     return this.contentService.getPipeline(parseId(id, '管线'));
   }
 
   @Post('pipelines')
-  createPipeline(@Body() body: any) {
-    return this.contentService.createPipeline(body);
+  async createPipeline(@Body() body: PipelineCreateDto) {
+    const saved = await this.contentService.createPipeline(body);
+    // 新建即可生效：否则要等下次重启才注册（#8557 的教训）
+    await this.reloadSchedulerQuietly('新建管线');
+    return saved;
   }
 
   @Patch('pipelines/:id(\\d+)')
-  updatePipeline(@Param('id') id: string, @Body() body: any) {
-    return this.contentService.updatePipeline(parseId(id, '管线'), body);
+  async updatePipeline(@Param('id') id: string, @Body() body: PipelineUpdateDto) {
+    const saved = await this.contentService.updatePipeline(parseId(id, '管线'), body);
+    // 只有影响调度面的字段才重注册，改标题/封面不必搅动定时器
+    if (body.cron !== undefined || body.enabled !== undefined) {
+      await this.reloadSchedulerQuietly('更新管线');
+    }
+    return saved;
+  }
+
+  /** 调度状态：启用着却不跑时，一眼看出是 cron 坏了还是没注册上 */
+  @Get('scheduler/status')
+  schedulerStatus() {
+    return this.schedulerService.getStatus();
   }
 
   @Delete('pipelines/:id(\\d+)')
-  deletePipeline(@Param('id') id: string) {
-    return this.contentService.deletePipeline(parseId(id, '管线'));
+  async deletePipeline(@Param('id') id: string) {
+    const removed = await this.contentService.deletePipeline(parseId(id, '管线'));
+    // 不重注册就会留下「孤儿任务」：管线记录没了，定时器还在按旧 cron 点火，
+    // 每天空跑一次并在日志里刷 `调度执行失败`。删完必须让调度面跟上。
+    await this.reloadSchedulerQuietly('删除管线');
+    return removed;
   }
 
   // ── 采集历史 / 发布记录 ──
