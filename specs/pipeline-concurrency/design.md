@@ -1,11 +1,12 @@
 # 流水线并发：显式队列 + 按运行隔离工作区
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > **定位**：用「显式执行队列（下称 D）+ 每条流水线独立构建工作区（下称 B）」解决单机单发布目录的并发冲突；不引入运行时兼容模式，顺路拆掉改动路径上的历史包袱（§6.4）。
 > 建立：2026-09-24 ｜ 状态：决策已确认，可执行 ｜ 范围：先 local 验证，dev/prod 后续
 >
 > 前置阅读：`specs/pipeline-node-model/design.md`（节点 / host 演进）、`specs/pipeline-step-task/design.md`（三层执行模型）、`specs/release-platform/design.md`（流水线执行与发布锁）
-> 相关：`specs/deploy-console/artifact-path-and-deploy-model.md`、`specs/app-artifact-env-dir/design.md`、`specs/config-driven-deploy/design.md`
+> 相关：`specs/deploy-console/design.md`、`specs/app-artifact-env-dir/design.md`、`specs/config-driven-deploy/design.md`
 
 ---
 
@@ -45,7 +46,7 @@
 | 受影响角色 | 影响 |
 |---|---|
 | 本地联调 | 一次改动引发多模块发布时，只能人工串行排队；并发必炸 |
-| CI 触发 | `specs/ci-cd/gh-actions-release.md:84-86` 目前靠 GH `concurrency` group + 串行提交规避，**平台侧无能力，风险外移** |
+| CI 触发 | `specs/ci-cd/tech-design-gh-actions-release.md:84-86` 目前靠 GH `concurrency` group + 串行提交规避，**平台侧无能力，风险外移** |
 | 远程发布（P1） | `specs/pipeline-node-model/design.md:261` 已记录「同一 host 上的发布需串行，否则互相覆盖产物 / 打架重启」，与本问题是同一个根因在远端的投影 |
 | 手工运维 | `scripts/publish-deploy-console.sh:151`、`scripts/publish-ai-agent.sh:86` 对同一目录写操作，**完全绕过平台** |
 
@@ -448,7 +449,7 @@ DB 锁管不到它们，这是依赖 DB 互斥方案的固有边界。正确处�
 
 ### Q6｜CI 侧 `concurrency` group 是否同期放宽
 
-**是什么**：`specs/ci-cd/gh-actions-release.md:84-86` 目前用 `concurrency: group: release-${{ github.ref }}` + `cancel-in-progress: false` 让 CI 串行排队——**这是因为平台侧没能力而做的外部规避**。
+**是什么**：`specs/ci-cd/tech-design-gh-actions-release.md:84-86` 目前用 `concurrency: group: release-${{ github.ref }}` + `cancel-in-progress: false` 让 CI 串行排队——**这是因为平台侧没能力而做的外部规避**。
 
 **选项与影响**
 

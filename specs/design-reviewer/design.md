@@ -1,4 +1,5 @@
 # 方案 · 视觉交互设计专家（design-reviewer）
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 版本：v1.0（草案，待批注）｜日期：2026-09-22｜状态：**待用户确认，确认前不落码**

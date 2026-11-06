@@ -1,6 +1,6 @@
 # 连线绘制公共 util（pipelineWires）设计
 
-> 状态：**设计稿，待确认**。确认前不改动任何运行时代码。
+> 状态：方案设计中 ｜ 2026-11-06
 > 关联：连线绘制规则（几何/着色/层序/绘制质量）的唯一判据源是
 > [`specs/pipeline-flow-color/design.md` §2.5](../pipeline-flow-color/design.md)，本文只解决「**代码放哪、怎么复用**」。
 

@@ -2,7 +2,7 @@
 
 > 状态：**规划（未实现）** —— 2026-09-15 与用户逐条确认方向，实现排在次日。
 > 关联：`specs/pipeline-node-model/design.md`（终态 nodes 模型）、
-> `specs/deploy-console/pipeline-edit-ui.md`（编辑页 UI 定稿）、
+> `specs/deploy-console/page-spec-pipeline-edit-ui.md`（编辑页 UI 定稿）、
 > `docs/development/from-zero-init-data.md`（种子数据口径）。
 
 ---

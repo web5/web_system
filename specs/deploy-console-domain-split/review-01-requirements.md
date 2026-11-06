@@ -3,7 +3,7 @@
 > 状态：**已确认（2026-09-18）** —— Q101 / Q103 / Q106 / Q107 与 Q105（选 B）由用户拍板，其余按建议通过；
 > 修订动作已完成：`requirements.md` → v1.1、`design.md` → v2；技术方案见 `tech-design.md`
 > 评审目的：在输出技术方案之前，先解决「需求/设计/原型」三者之间的不一致与缺口；**未确认前不进入技术方案**
-> 评审输入：`requirements.md`(v1.0) · `design.md`(v1.0) · `environment-design.md`(v1.1) · `page-spec.md`(v1.3) · 已落地原型代码
+> 评审输入：`requirements.md`(v1.0) · `design.md`(v1.0) · `tech-design-environment.md`(v1.1) · `page-spec.md`(v1.3) · 已落地原型代码
 > 评审方法：文档交叉一致性 → 需求完整性 → 可行性风险 → 验收可测性
 
 ---
@@ -29,7 +29,7 @@
 |---|---|---|
 | `requirements.md` | v1.0 | 需求 spec（FR-1~FR-10 + EARS 判据） |
 | `design.md` | v1.0 | 数据模型 + 接口契约 + 迁移计划 |
-| `environment-design.md` | v1.1 | 环境模型重设计（**晚于 design.md 写成**） |
+| `tech-design-environment.md` | v1.1 | 环境模型重设计（**晚于 design.md 写成**） |
 | `page-spec.md` | v1.3 | 页面规格（含环境详情、服务域三 tab 等修订） |
 
 ### 1.2 已落地代码（原型即代码，作为实现基线）
@@ -50,12 +50,12 @@
 
 | # | 冲突点 | 位置 A | 位置 B | 影响 | 建议 |
 |---|---|---|---|---|---|
-| **C1** | **两套环境模型并存**（模型级） | `design.md` §0.2/§1.1/§1.3：`deploy_environments` + `deploy_env_slots`（slot 概念） | `environment-design.md` §2：`deploy_sites` + `deploy_envs`（envId 自增，**无 slot**） | 无法同时实现；技术方案会分叉 | **以 `environment-design.md` 为准**，重写 `design.md` 环境章节 |
-| **C2** | `requirements.md` 前提 D1 与术语仍写「同环境多实例 slot」 | `requirements.md` §1.3 D1、§3 术语表「环境实例 slot」、FR-8.4、§2 场景"给 dev 加一套 dev2 实例" | `environment-design.md` §2.3：「去掉 slot，dev1/dev2 是**并列环境**」 | 需求判据自相矛盾（FR-8.4 在新模型下成为无效需求） | 修订 D1 表述；删除 slot 术语；FR-8.4 改写为「同一站点可建多个环境，无实例数上限」 |
-| **C3** | 版本指针表结构不一致 | `design.md` §1.2 `deploy_app_deployments(appKey, envKey, slotKey)` | `environment-design.md` §2.3 `deploy_app_env_versions(appKey, envId)` | 表结构与迁移脚本无法确定 | 采用 `deploy_app_env_versions`（去 slot） |
+| **C1** | **两套环境模型并存**（模型级） | `design.md` §0.2/§1.1/§1.3：`deploy_environments` + `deploy_env_slots`（slot 概念） | `tech-design-environment.md` §2：`deploy_sites` + `deploy_envs`（envId 自增，**无 slot**） | 无法同时实现；技术方案会分叉 | **以 `tech-design-environment.md` 为准**，重写 `design.md` 环境章节 |
+| **C2** | `requirements.md` 前提 D1 与术语仍写「同环境多实例 slot」 | `requirements.md` §1.3 D1、§3 术语表「环境实例 slot」、FR-8.4、§2 场景"给 dev 加一套 dev2 实例" | `tech-design-environment.md` §2.3：「去掉 slot，dev1/dev2 是**并列环境**」 | 需求判据自相矛盾（FR-8.4 在新模型下成为无效需求） | 修订 D1 表述；删除 slot 术语；FR-8.4 改写为「同一站点可建多个环境，无实例数上限」 |
+| **C3** | 版本指针表结构不一致 | `design.md` §1.2 `deploy_app_deployments(appKey, envKey, slotKey)` | `tech-design-environment.md` §2.3 `deploy_app_env_versions(appKey, envId)` | 表结构与迁移脚本无法确定 | 采用 `deploy_app_env_versions`（去 slot） |
 | **C4** | 服务"指向"的编辑入口与表结构 | `design.md` §1.3 `deploy_service_envs(serviceKey, envKey, slotKey)`（服务维度） | `page-spec.md` §5.1 + 原型：**环境详情 → 后端服务指向** | 归属与 UI 入口不一致 → 权限、缓存失效范围不同 | 表保留 `deploy_service_envs`，**去 slotKey**，**入口以环境为中心**（服务详情只读） |
-| C5 | 产物路径 | `design.md` 多处仍写 `/static/modules/<key>/<version>/` | `environment-design.md` §3：`/static/modules/<key>/<envId>/` | 发布/回滚/缓存策略不同 | 切到 envId 目录（版本保留策略见 R1） |
-| C6 | gateway manifest 结构 | `design.md` §3.4：数据源切到 `deploy_app_deployments` | `environment-design.md` §4：返回 `envs` / `byEnv` / `switchable` | 前端加载协议不同 | 采用 `envs/byEnv`（兼容期保留旧字段） |
+| C5 | 产物路径 | `design.md` 多处仍写 `/static/modules/<key>/<version>/` | `tech-design-environment.md` §3：`/static/modules/<key>/<envId>/` | 发布/回滚/缓存策略不同 | 切到 envId 目录（版本保留策略见 R1） |
+| C6 | gateway manifest 结构 | `design.md` §3.4：数据源切到 `deploy_app_deployments` | `tech-design-environment.md` §4：返回 `envs` / `byEnv` / `switchable` | 前端加载协议不同 | 采用 `envs/byEnv`（兼容期保留旧字段） |
 | C7 | 迁移计划 | `design.md` §6 M1–M8（含"建 default slot""写 slotKey='default'"） | 新模型无 slot | 迁移脚本不可执行 | 重写迁移计划（见 §7） |
 | C8 | 环境管理页字段与模型 | `design.md` §1.1 `deploy_environments`（key/name/kind/runtime/baseUrl） | 原型 `EnvironmentManager`（envId/name/siteKey/isProd/builtin/sort/enabled） | 页面与表结构不一致 | 以原型为准回写 `design.md` |
 
@@ -98,7 +98,7 @@
 
 | # | 问题 | 选项 | 我的建议 |
 |---|---|---|---|
-| ⭐ **Q101** | 环境模型以哪份文档为准？ | A. `environment-design.md`（sites + envs，无 slot）<br>B. `design.md`（environments + slots） | **A**。B 已被你 2026-09-18 的澄清否定 |
+| ⭐ **Q101** | 环境模型以哪份文档为准？ | A. `tech-design-environment.md`（sites + envs，无 slot）<br>B. `design.md`（environments + slots） | **A**。B 已被你 2026-09-18 的澄清否定 |
 | ⭐ **Q103** | 版本指针表 | A. `deploy_app_env_versions(appKey, envId)`（无 slot）<br>B. 保留 slot | **A** |
 | ⭐ **Q105** | 产物目录与版本共存策略（决定 R1/R2） | A. `envId/index.js` 覆盖式 + 保留最近 N 版**分包**<br>B. `envId/<version>/` + `envId/index.js`（或指针文件）指向当前版本<br>C. 其他 | **B**：版本天然保留、回滚=改指针、缓存友好；代价是多一层目录与一个指针写入 |
 | ⭐ **Q106** | 环境切换后登录态 | A. 保留 token（同一域，token 有效）<br>B. 强制重新登录（更安全）<br>C. 保留 token 但校验失败自动跳登录 | **A**（同域切换，体验优先；权限仍由后端 JWT 校验兜底） |

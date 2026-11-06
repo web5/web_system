@@ -1,7 +1,7 @@
 # 任务：后台模块「部署生效」（方案 ①）—— 交接文档
 
 > 给新对话用。开场可直接说：
-> 「读 `specs/deploy-console/backend-deploy-effect-tasks.md`，从 T1 开始做」
+> 「读 `specs/deploy-console/tasks.md`，从 T1 开始做」
 >
 > 最近更新：2026-09-15
 > - 本机 local 部署生效：**已完成并验证**
@@ -134,5 +134,5 @@ gateway 直读 `public/shell/`，不能走版本目录；覆盖前自动备份 `
 ## 4. 相关文档
 
 - `specs/pipeline-node-model/P1-handoff.md` —— 本轮总体交接（含 48 条流水线、未完成项）
-- `specs/deploy-console/pipeline-edit-ui.md` —— UI 交互定稿
-- `specs/pipeline-node-model/pipeline-configs.md` §5 —— 流水线清单与「后台投递缺口」记录
+- `specs/deploy-console/page-spec-pipeline-edit-ui.md` —— UI 交互定稿
+- `specs/pipeline-node-model/tech-design-pipeline-configs.md` §5 —— 流水线清单与「后台投递缺口」记录

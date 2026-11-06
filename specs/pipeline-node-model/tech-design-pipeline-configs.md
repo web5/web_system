@@ -151,7 +151,7 @@
 |---|---|---|---|
 | A | `restart-backend.sh` / `verify-backend.sh` 收归 console | ✅ 已做：实现副本放进 `servers/deploy-console/src/pipeline/scripts/`，step 脚本改调 `$WS_PLATFORM_SCRIPTS_DIR/*.sh`；工程侧两份保留但标 DEPRECATED（仅 `bootstrap.sh` 与人工运维用） | 2026-09-14 |
 | B | 全局参数有专门查看入口；自定义参数在流水线里体现 | 配置中心页 + 流水线详情「参数」面板（模板级变量 `scope=template`） | P2 |
-| C | 初始化「审批人」权限 | ✅ 已做（方案 B1）：权限码 `deploy:pipeline:approve` + 模板级审批人白名单 + `UserSelect` 选择器，见 `approval-permission-design.md` | 2026-09-14 |
+| C | 初始化「审批人」权限 | ✅ 已做（方案 B1）：权限码 `deploy:pipeline:approve` + 模板级审批人白名单 + `UserSelect` 选择器，见 `tech-design-approval-permission.md` | 2026-09-14 |
 
 **C 的两种落点（需要你选）**
 

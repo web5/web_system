@@ -1,6 +1,6 @@
 # A8 · ai-service 生成图改调 `internal/uploads/store` 落盘（设计）
 
-> 状态：设计稿 → 实现中。任务来源：`specs/backend-consolidation/design.md` §A 系列（A8 依赖 A3，A3 已完成）。
+> 状态：实施中 ｜ 2026-11-06
 > 目标：ai-service 不再本地落盘，存储写入点收敛为 upload-service 单点。
 
 ## 0 背景与现状（已核实）

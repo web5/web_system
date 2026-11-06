@@ -1,4 +1,5 @@
 # 版本部署（独立部署界面）· 设计文档
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 日期：2026-09-21 ｜ 原型：`docs/ui/prototypes/deploy-console-version-deploy.html`（已确认）

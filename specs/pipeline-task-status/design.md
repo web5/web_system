@@ -1,4 +1,5 @@
 # 流水线详情画布 · 任务级执行状态落库与路径高亮
+> 状态：待评审 ｜ 2026-11-06
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 

@@ -1,7 +1,7 @@
 # 圆角语义档 + 双风格偏好（柔和 / 清爽）· 页面规格
 
 > 原型稿：`docs/ui/prototypes/radius-style-dual.html`
-> 判据源：`docs/ui/design-system.md` §2.5 G7（圆角取圆角档、同层级一致）、P2（一致性优先）、I3（密度与圆角）；`specs/ui-prototype-token-alignment/整改影响清单.md` §7.3（品牌端圆角阶梯，负责人已确认 2026-09-23）
+> 判据源：`docs/ui/design-system.md` §2.5 G7（圆角取圆角档、同层级一致）、P2（一致性优先）、I3（密度与圆角）；`specs/ui-prototype-token-alignment/inventory-impact.md` §7.3（品牌端圆角阶梯，负责人已确认 2026-09-23）
 > 状态：**原型待人工确认**（动作门第 3 步未过，禁止落码）
 > 修订：2026-09-23 按 D2 盲审意见修正（统一两端基线、元素→档封闭映射、AC2 可验证化）
 
@@ -57,7 +57,7 @@
 
 ### 3.1 与并行「新规范整改」的关系（兼容口径）
 
-整改清单（`specs/ui-prototype-token-alignment/整改影响清单.md`）正把业务裸值 → 尺寸档 `--ws-radius-*`，圆角是其中一条判据。**本方案不废除该批成果，反而让其自动获得风格能力**：
+整改清单（`specs/ui-prototype-token-alignment/inventory-impact.md`）正把业务裸值 → 尺寸档 `--ws-radius-*`，圆角是其中一条判据。**本方案不废除该批成果，反而让其自动获得风格能力**：
 
 - 双风格直接覆盖**尺寸档**的值 → 已完成整改的页面（引用尺寸档）**自动跟随风格，无需回改**。
 - 整改清单 §1 的判据（「`border-radius` 写字面值，未引 `radius-*`」）**无需修订**，继续有效。
