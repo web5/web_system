@@ -1,6 +1,6 @@
 exit=1
 errors=2
-warnings=9
+warnings=12
 --- stdout ---
 ══ 红线违规（error）══
   [R11] UI commit 缺设计评审凭证
@@ -37,4 +37,13 @@ warnings=9
   [R18] 研发方案与发布清单 commit 缺评审凭证
        feat(api): 新增 thing 接口
        message 须带 Plan: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
-✗ 红线扫描未通过（2 error / 9 warning）
+  [R23] 测试范围决策 commit 缺评审凭证
+       feat(db): 加 note 列（单行微调）
+       message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R23] 测试范围决策 commit 缺评审凭证
+       feat(db): 批量加列并建索引
+       message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R23] 测试范围决策 commit 缺评审凭证
+       chore(ci): 加 fixture workflow
+       message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✗ 红线扫描未通过（2 error / 12 warning）

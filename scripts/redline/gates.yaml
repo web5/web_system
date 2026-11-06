@@ -60,7 +60,7 @@ exemption:
   # 若按「首个 token 是门号」判，会把存量一票否决误判成分类豁免 —— 行为突变
   gate_prefix_rule: 门号列表后必须紧跟冒号，否则按旧格式解析
   legacy_semantics: 一票否决，豁免所有 eligible 门（向后兼容，不得取消）
-  eligible_gates: [R9b, R10, R11, R13, R14, R15, R17, R18]
+  eligible_gates: [R9b, R10, R11, R13, R14, R15, R17, R18, R23]
   # R19 不接受豁免：空提交没有任何改动面，豁免只对有改动面的门有意义
   ineligible_gates: [R19, R20, R21]
   not_applicable_note: 行级/文件级门（R1~R8）根本没有豁免机制 —— 它们的例外是路径白名单（exclude_paths）与作用域本身，写 Micro-exempt 对它们完全无效。R9 的例外是同行 passport，也不是 Micro-exempt。判断「这道门能不能豁免」只看 eligible_gates，不看它是不是 warning 级
@@ -102,6 +102,9 @@ scopes:
   test_path:
     desc: 测试/夹具路径（多条规则在此豁免）
     include: ["*/test/*", "*/tests/*", "*/__tests__/*", "*/spec/*", "*.spec.*", "*.test.*", "*/fixtures/*", "*/mocks/*", "*/mock/*"]
+  test_surface:
+    desc: 测试范围面（R23）。命中即「一处改动可能波及全体功能」——须交代跑全量还是抽样。与 contract_file 的区别：contract_file 管「要不要契约评审」，本面管「测试要铺多大」，面更宽（含共享 UI / 服务入口 / 测试与构建基建 / CI）；两门可同时命中，互不替代
+    include: ["packages/types/*", "packages/shared/*", "packages/ui/src/*", "packages/agent-core/src/interfaces/*", "servers/*/src/main.ts", "apps/*/src/main.ts", "archive/migrations/*", "jest.config.*", "*/jest.config.*", "*/*/jest.config.*", "tsconfig*.json", "*/tsconfig*.json", "*/*/tsconfig*.json", "scripts/ci/*", ".github/workflows/*"]
   passport:
     desc: 通行证（原型/规格书）。除下列 glob 外还认 is_spec_doc —— specs/ 或 docs/ui/page-specs/ 下、文件名或目录名含 page-spec / prototype / 原型
     include: ["*/prototype/*", "docs/ui/prototypes/*", "*/page-spec*.md"]
@@ -673,6 +676,34 @@ gates:
     validity:
       status: unmeasured
     evidence: ["commit-exempt-legacy"]
+
+  - id: R23
+    sub: null
+    title: 测试范围决策凭证
+    level: warning
+    stage: commit
+    batch: 1
+    trigger:
+      scope: test_surface
+      note: 只收「一处改动波及全体」的公共层（共享类型/协议/共享 UI/服务入口/迁移/测试与构建基建/CI）。收宽了等于要求每个 commit 都写 TestScope，摩擦过大必被关掉
+    credential:
+      trailer: TestScope
+      accept: [pass, path]
+      checks:
+        - path_exists_in_commit_tree: true
+        - report_header_blocking_zero: true
+    exempt: true
+    message: 测试范围决策 commit 缺评审凭证
+    message_report_missing: TestScope 凭证指向的报告不存在
+    # 🔴 hint 必须与 scan-rules.sh 里 `_trailer_check_one` 的模板**逐字节一致**（只换 trailer 名）：
+    #    bash 的 hint 是硬编码的，gate.ts 的 hint 取自本字段 —— 两边不同，影子比对立刻红。
+    hint: 'message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）'
+    spec_ref: ~/AiWorkspace/20-私域资产/研发流程SOP.md
+    owner: 研发部
+    validity:
+      status: unmeasured
+      note: '新增门（2026-11-06）先 warning 观察：清单内 ≥5 条、未覆盖范围这两项机器判不了，仍靠人审。观察期 ≥2 周且零误报 → 走 02b §升级路径 升 error'
+    evidence: ["commit-r23-missing", "commit-r23-pass", "commit-r23-sample-missing", "commit-r23-sample"]
 
   # ---------------- 仓库级 ----------------
   - id: R12
