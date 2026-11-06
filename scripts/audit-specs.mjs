@@ -25,7 +25,15 @@
  *   R2 requirements.md / design.md / tech-design-*.md 缺标准状态行
  *   R3 状态取值不在 §3 封闭枚举内
  *   R4 相对 markdown 链接指向不存在的文件（死链）
- *   R5 feature 目录内无任何核心产物（requirements.md / design.md / tech-design-*.md）
+ *   R5 空壳 feature：有 md 但既无需求也无任何设计类产物
+ *   R6 缺 requirements.md 的 feature 计数（notice 级，只打印不阻断）
+ *
+ * 为什么 R5 不写成「必须有 requirements.md」：
+ *   SOP §2.1 字面写「缺一则补」，但实测 64 个 feature 里 52 个没有
+ *   requirements.md（16 个只有 api-design 的纯契约 feature、nce 这类只有
+ *   page-spec 的）。做成硬门 = 一次判 52 红，唯一结果是批量糊弄式回填。
+ *   所以 R5 只拦「真空壳」，R6 只统计欠账；要收紧先把欠账逐 feature 判完
+ *   （补写 / 归档 / 修 SOP），再把 R6 升为阻断。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,7 +65,7 @@ const BY_RULE_NAME = {
   R2: '缺状态字段',
   R3: '状态取值越界',
   R4: '死链',
-  R5: '缺核心产物',
+  R5: '空壳 feature',
 };
 
 const findings = [];
@@ -99,6 +107,7 @@ const features = fs
   .sort();
 
 const emptyDirs = [];
+const noReqDirs = [];
 let mdTotal = 0;
 
 for (const feature of features) {
@@ -107,11 +116,18 @@ for (const feature of features) {
   mdTotal += files.length;
   if (files.length === 0) { emptyDirs.push(feature); continue; }
 
-  const hasCore = files.some((f) => {
+  // R5 空壳守卫：目录里有 md，但既无需求也无任何设计类产物。
+  // 刻意**不**要求「每 feature 必有 requirements.md」——那会一次判 52 个存量
+  // feature 违规（含 16 个只有 api-design 的纯接口契约 feature、含 nce 这类
+  // 只有 page-spec 的），逼着人去补 52 份文档，只会逼出糊弄式回填。
+  // 「requirements.md 覆盖率」按 §2.1 的欠账另行跟踪（见 R6 提示），不进阻断面。
+  const hasAnyDesign = files.some((f) => {
     const b = path.basename(f);
-    return b === 'requirements.md' || b === 'design.md' || /^tech-design-.+\.md$/.test(b);
+    return b === 'requirements.md' || b === 'design.md' || /^(tech-design|api-design|page-spec).*\.md$/.test(b);
   });
-  if (!hasCore) add('R5', feature, '(dir)', '无 requirements.md / design.md / tech-design-*.md');
+  if (!hasAnyDesign) add('R5', feature, '(dir)', '既无 requirements/design，也无 api-design / page-spec / tech-design');
+
+  if (!files.some((f) => path.basename(f) === 'requirements.md')) noReqDirs.push(feature);
 
   for (const abs of files) {
     const rel = path.relative(SPECS, abs);
@@ -184,6 +200,14 @@ for (const rule of ['R1', 'R2', 'R3', 'R4', 'R5']) {
 }
 if (emptyDirs.length) {
   console.log(`  提示 · 空目录 ${emptyDirs.length} 个（git 不跟踪，建议清理）：${emptyDirs.join(', ')}`);
+}
+// R6 只做计数，从不阻断（对应 gates.yaml 的 notice 级）
+if (noReqDirs.length) {
+  console.log(
+    `  R6 缺 requirements.md（notice，不阻断）：${noReqDirs.length}/${features.length} 个 feature` +
+      ` —— SOP §2.1「缺一则补」欠账，需逐 feature 判断补写 / 归档`,
+  );
+  if (VERBOSE) console.log(`     ${noReqDirs.join(', ')}`);
 }
 if (VERBOSE) {
   console.log('\n--- 明细 ---');
