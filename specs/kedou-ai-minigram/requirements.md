@@ -112,7 +112,7 @@
 - [ ] IF code 无效 / 已使用 / 过期（>5min） THEN THE SYSTEM SHALL 返回可识别错误，前端提示「授权已失效，请重试」并可再次发起
 - [ ] IF 请求未带有效 access token THEN THE SYSTEM SHALL 返回 401，不写库
 - [ ] WHEN 手机号已绑定 THE SYSTEM SHALL 在「个人信息」页显示脱敏号，且与 `profile.wxml` 中「微信账号 已绑定」的文案口径一致
-- [ ] WHEN 任何页面展示手机号 THE SYSTEM SHALL 只展示脱敏形式（明文手机号不出现在前端与日志）
+- [ ] WHEN 任何页面展示手机号 THE SYSTEM SHALL 只展示脱敏形式（明文手机号不出现在前端与日志；验证：`grep -cE "1[3-9][0-9]{9}"` 扫产物与日志，命中数应为 0）
 - [ ] WHEN 用户处于未登录态点击绑定手机号 THE SYSTEM SHALL 先引导登录（复用 R1 的登录入口），不直接调接口
 
 ### 边界 / 反例（不算做成）
