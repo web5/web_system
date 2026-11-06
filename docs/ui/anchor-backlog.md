@@ -33,7 +33,7 @@
 
 | 端 | 原型侧锚点数 | 实现侧已回填 | 缺口 | 原型文件 |
 |---|---|---|---|---|
-| `admin` | **37**（2026-11-06 撤 3 个后） | 0 | **37** | `admin-agent-def-detail.html`(33，= 第二批全部工作量) / `admin-agents.html`(4 个遗留：`agent-def-edit-modal`(已作废) · `agent-def-list` · `agent-def-save` · `gen-params-group`) |
+| `admin` | **32**（2026-11-06 B2a 后定稿） | 19（B2a 落码） | **13** | `admin-agent-def-detail.html`(31) / `admin-agents.html` 独有 1（`agent-def-list`）；hub 为生成物不计数 |
 | `deploy-console` | 5 | 0 | **5** | `deploy-console-domain.html` |
 | `kedou-ai-minigram` | 7 | 0 | **7** | 小程序原型 |
 | `shell` | 1 | 0 | **1** | `shell/prototype` |
@@ -41,6 +41,16 @@
 
 **回填不是机械活**（2026-11-06 试水 8 个锚点的结论）：成本在**逐点判断**——`gen-params-preset` / `gen-params-payload-preview` / `gen-params-sampler` 在实现中不存在，`agent-def-edit-modal` 已被 page-spec v2 作废（应改原型，不是改代码）。
 **半截回填无收益**（40→32 后 admin 仍 MISSING，必须到 0 才能开）；且改 UI 源码要 `Proto:` / `Design:` 凭证 → **回填必须与所属原型/规格批次成对提交**，不能孤立排期。
+
+**32 个锚点的最终分组（2026-11-06 B2a 逐条定性，可复核）**
+
+| 组 | 数量 | 含义 |
+|---|---|---|
+| ✅ 回填 | **17** | 实现中已有同语义同位置结构，只缺 `data-dr` |
+| 🔧 补实现后回填 | **2** | 规格强制要求但实现缺失（`role-fallback` 角色降级提示 · `error-cta` 加载失败重试），按规格补最小实现 |
+| ⏸ 阻塞 | **13** | 调试台分期 7（`bench-layout` / `run-bar` / `chat-send` / `chat-compare` / `chat-compare-card` / `cases-run` / `case-row`）+ 面板级 diff 2（`diff-bar` / `diff-table`）+ 字段级 badge 4（`gen-params-*-badge`） |
+
+> 🔴 **13 个阻塞项不清，admin 到不了 0，`scoped`/`strict` 永远开不了**。排期别按「32 个锚点 = 32 份工」算。
 
 ### 2.2 三个“实现里没有”的锚点已按定稿撤除（2026-11-06，逐个核过）
 
