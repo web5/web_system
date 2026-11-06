@@ -14,6 +14,7 @@ import {
   type NceMeta,
   type NceLessonSummary,
   type NceLessonDetail,
+  type NceWord,
 } from '@/api/nce';
 import { moduleOverlayContainer } from '@/utils/mount';
 
@@ -28,6 +29,7 @@ const keyword = ref('');
 const previewVisible = ref(false);
 const previewLoading = ref(false);
 const preview = ref<NceLessonDetail | null>(null);
+const wordPopup = ref<NceWord | null>(null);
 
 const letters = 'ABCD';
 const fmtTime = (s?: string) => (s ? String(s).slice(0, 19).replace('T', ' ') : '—');
@@ -68,6 +70,7 @@ function onPageChange(p: NcePageChange) {
 }
 
 async function openPreview(row: NceLessonSummary) {
+  wordPopup.value = null;
   previewVisible.value = true;
   previewLoading.value = true;
   preview.value = null;
@@ -78,6 +81,32 @@ async function openPreview(row: NceLessonSummary) {
   } finally {
     previewLoading.value = false;
   }
+}
+
+// —— 交互式查词：与 portal Nce.vue 同源（生词 map 绑对象，token 携带真实 NceWord；
+//    不用「排序下标 → 原始下标」，防 2026-11-06 网页原型错位 bug）——
+interface Token { text: string; word?: NceWord }
+
+function onWord(w: NceWord) {
+  wordPopup.value = w;
+}
+
+/** 不用 v-html：句子切 token 渲染，天然免疫 XSS。 */
+function tokensOf(en: string): Token[] {
+  const ws = preview.value?.words ?? [];
+  const map = new Map<string, NceWord>();
+  for (const w of ws) if (w.word) map.set(w.word.toLowerCase(), w);
+  const names = ws
+    .map((w) => w.word)
+    .filter((w): w is string => !!w)
+    .sort((a, b) => b.length - a.length)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!names.length) return [{ text: en }];
+  const re = new RegExp('\\b(' + names.join('|') + ')\\b', 'gi');
+  return en.split(re).filter(Boolean).map((part) => {
+    const w = map.get(part.toLowerCase());
+    return w ? { text: part, word: w } : { text: part };
+  });
 }
 
 onMounted(load);
@@ -195,7 +224,15 @@ const columns = [
             <h4>逐句对照 / Bilingual</h4>
             <div v-for="(l, i) in preview.lines" :key="i" class="line">
               <span class="idx">{{ i + 1 }}</span>
-              <div><div class="en">{{ l.en }}</div><div class="cn-line">{{ l.cn }}</div></div>
+              <div>
+                <div class="en">
+                  <template v-for="(t, j) in tokensOf(l.en)" :key="j"><span
+                    v-if="t.word" class="w" role="button" tabindex="0"
+                    @click="onWord(t.word!)" @keydown.enter="onWord(t.word!)">{{ t.text }}</span><span
+                    v-else>{{ t.text }}</span></template>
+                </div>
+                <div class="cn-line">{{ l.cn }}</div>
+              </div>
             </div>
           </section>
 
@@ -227,6 +264,13 @@ const columns = [
             <h4>来源 / Sources</h4>
             <div v-for="(s, i) in preview.sources" :key="i" class="src">{{ s }}</div>
           </section>
+
+          <div v-if="wordPopup" class="word-card" role="dialog">
+            <button type="button" class="close" @click="wordPopup = null">×</button>
+            <div class="wd">{{ wordPopup.word }} <span class="ph">{{ wordPopup.phonetic }}</span></div>
+            <div class="df">{{ wordPopup.pos }} {{ wordPopup.def }}</div>
+            <div v-if="wordPopup.example" class="eg">{{ wordPopup.example }}</div>
+          </div>
         </div>
         <a-empty v-else-if="!previewLoading" description="未取到课文数据" />
       </a-spin>
@@ -259,6 +303,8 @@ section h4 { font-size: 14px; color: #1a1a1f; margin: 0 0 10px; padding-bottom: 
 .line { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px dashed rgba(0, 0, 0, .06); }
 .idx { flex: 0 0 26px; color: #9ca3af; font-size: 12px; font-variant-numeric: tabular-nums; }
 .en { font-family: Georgia, 'Songti SC', serif; font-size: 14px; }
+.w { color: #0ea5a4; border-bottom: 1px dashed #0ea5a4; cursor: pointer; }
+.w:focus { outline: none; background: #ecfdf9; border-radius: 3px; }
 .cn-line { color: #6b7280; font-size: 12px; margin-top: 2px; }
 .word { padding: 5px 0; font-size: 13px; }
 .quiz { padding: 10px 0; border-bottom: 1px dashed rgba(0, 0, 0, .06); font-size: 13px; }
@@ -267,4 +313,10 @@ section h4 { font-size: 14px; color: #1a1a1f; margin: 0 0 10px; padding-bottom: 
 .opt.right { color: #0ea5a4; font-weight: 600; }
 .exp { margin-top: 6px; color: #6b7280; font-size: 12px; }
 .src { color: #6b7280; font-size: 12px; word-break: break-all; padding: 2px 0; }
+/* 查词卡：纯展示卡，sticky 到抽屉底部；pointer-events:none 让正文点击穿透，仅关闭按钮可点 */
+.word-card { position: sticky; bottom: 12px; margin-top: 18px; background: #fff; border: 1px solid rgba(0, 0, 0, .08); box-shadow: 0 4px 16px rgba(0, 0, 0, .08); border-radius: 10px; padding: 12px 16px; max-width: 68ch; pointer-events: none; }
+.word-card .close { float: right; border: 0; background: none; font-size: 18px; cursor: pointer; color: #6b7280; pointer-events: auto; line-height: 1; }
+.word-card .wd { font-family: Georgia, 'Songti SC', serif; font-size: 16px; font-weight: 600; color: #1a1a1f; }
+.word-card .ph, .word-card .df, .word-card .eg { color: #6b7280; font-size: 12px; margin-top: 3px; }
+.word-card .df { color: #374151; }
 </style>
