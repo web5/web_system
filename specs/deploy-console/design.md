@@ -1,8 +1,8 @@
 # 产物路径与部署模型（解耦环境）：设计文档
 
 > 状态：**设计（未实现）** —— 2026-09-17 用户定调，实现待确认后排期。
-> 关联：`specs/pipeline-node-model/design.md`、`specs/deploy-console/pipeline-naming.md`、
-> `specs/deploy-console/gateway-and-shell-versioned-release.md`
+> 关联：`specs/pipeline-node-model/design.md`、`specs/deploy-console/tech-design-pipeline-naming.md`、
+> `specs/deploy-console/tech-design-gateway-shell-release.md`
 
 ## 1. 背景与问题
 

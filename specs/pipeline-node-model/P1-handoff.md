@@ -1,7 +1,7 @@
 # P1 开工上下文（给新对话用 · 2026-09-15）
 
 > **用法**：新对话开场直接说
-> 「读 `specs/pipeline-node-model/P1-handoff.md` 与 `specs/deploy-console/pipeline-edit-ui.md`，从「未完成」第一节开始做」
+> 「读 `specs/pipeline-node-model/P1-handoff.md` 与 `specs/deploy-console/page-spec-pipeline-edit-ui.md`，从「未完成」第一节开始做」
 > 即可开工，**无需重新探索代码**。
 
 ---
@@ -81,9 +81,9 @@
 
 | 文件 | 内容 |
 |---|---|
-| `specs/deploy-console/pipeline-edit-ui.md` | **UI 交互定稿**（页面路由 / Tabs / 基本信息字段 / 新建流程 / 抽屉分流 / §6.5 回滚语义） |
+| `specs/deploy-console/page-spec-pipeline-edit-ui.md` | **UI 交互定稿**（页面路由 / Tabs / 基本信息字段 / 新建流程 / 抽屉分流 / §6.5 回滚语义） |
 | `specs/pipeline-node-model/design.md` §3、§9 | 节点模型定义；§9 UI 交互定稿摘要 |
-| `specs/pipeline-node-model/pipeline-configs.md` §5 | 48 条流水线终态清单 + **后台投递缺口** |
+| `specs/pipeline-node-model/tech-design-pipeline-configs.md` §5 | 48 条流水线终态清单 + **后台投递缺口** |
 | `specs/module-env-ownership/design.md` | 环境归属（另一会话的工作，已合入） |
 
 ## 5. 关键代码锚点

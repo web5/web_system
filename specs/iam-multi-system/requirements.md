@@ -1,7 +1,7 @@
 # 需求 · 统一账号与系统隔离（IAM 一期）
 
 > 状态：**待确认**（2026-09-14）
-> 上游：`brainstorm.md`（方案 A + 最小 B）。用户四项答复：①先 A 后 B；②**C 端用户必须与运营/运维彻底隔离**；③系统清单 = admin（运营）/ deploy-console（运维）/ portal（C 端，含 kedou-ai-minigram）；④接受废弃 `.env` 的 `ADMIN_PASS`。
+> 上游：本文「附：方案探索记录」（原 `brainstorm.md`，方案 A + 最小 B）。用户四项答复：①先 A 后 B；②**C 端用户必须与运营/运维彻底隔离**；③系统清单 = admin（运营）/ deploy-console（运维）/ portal（C 端，含 kedou-ai-minigram）；④接受废弃 `.env` 的 `ADMIN_PASS`。
 
 ---
 
@@ -59,6 +59,51 @@
 
 ---
 
+## 附：方案探索记录（归档自 brainstorm.md）
+
+> 原 `brainstorm.md` 于 2026-11-06 合并入本文件，保留方案探索过程供回溯。
+
+### 需求理解
+
+一句话：随着 deploy-console 也按权限码控制审批人，需要决定「console 的用户从哪来」以及「user-service 要不要从『单系统的用户中心』升级成『多系统的 IAM 中心』」。
+
+### 需求辨证
+
+- **做成** = 任意一个内部系统（admin / deploy-console）都能回答「这个用户是谁、属于哪些系统、有哪些权限」，且**只有一处**能改答案。
+- **不算做成** = 每个系统各建一套账号；或只加字段但没有系统隔离，C 端小程序用户仍能被授予 `deploy:pipeline:approve`。
+- **为什么现在做** = 审批人已按权限码从 user-service 拉取（B1），下一步 B2（console 登录统一）必然要回答"console 的用户是谁"；越晚做，console 侧的自建账号越容易长出来。
+
+### 关键约束
+
+| 约束 | 现状 |
+|---|---|
+| user-service 实体 | 只有 `users` / `roles` / `role_permissions` / `permissions` / `mcp_api_keys` / `mcp_key_codes`，**没有任何 tenant / system / app 字段** |
+| 用户构成 | `users` 表里 **C 端小程序用户（`wx_*` / `mp_contract_*`）与运营用户（`admin` / `test`）混存** |
+| 角色 | 全局固定 4 个：`super_admin` / `admin` / `editor` / `viewer`，无系统维度 |
+| 权限码 | 全局一张表；"系统"只体现在命名前缀（`deploy:` / `system:` / `agents:` …）上，**是约定不是机制** |
+| console | 无用户表，登录是 `.env` 的 `ADMIN_USER`/`ADMIN_PASS` |
+| 已定排除项 | `specs/agent-platform-evolution/requirements.md`：多租户、计费、开放 API **不做**（注意：那是**产品级多租户**，与本议题的"内部多系统 IAM"不是一回事，不要混为一谈） |
+| 红线 | 权限码单一真相源在 `packages/types`；跨端配置收口 `@web-system/shared` |
+
+### 方案对比
+
+- **方案 A：console 接入 user-service 认证（B2），不引入 system 字段** — console 登录改走 user-service（JWT），用户/角色/权限全部复用；"系统"继续由权限码前缀表达。改动最小；但 C 端用户与运营用户仍同表。
+- **方案 B：引入 `system` 维度（轻量多系统）** — `users` 增加 `systems`（或 `user_systems` 关联表），`roles` / `permissions` 增加 `system` 列；真隔离，但改 3 张表 + seed + 同步接口 + admin 角色管理页 + portal 登录链路，约 20+ 文件。
+- **方案 C：console 自建用户管理** — 违反单一真相源，不推荐。
+- **方案 D：独立 IAM / Keycloak 等** — 引入新组件与运维成本，与项目「自研、不追产品化」定位冲突。
+
+### 推荐（原 brainstorm 结论）
+
+🥇 **先 A，条件成熟再 B**：A 是 B1 的自然收口，1–2 天可落地；B 的触发条件是出现明确隔离需求（本需求中用户要求②彻底隔离，故落地为 **A + 最小 B**：登录统一 + `users.systems` 维度）。C / D 不推荐。**明确不做**产品级多租户。
+
+### 待确认（原 brainstorm）
+
+- [x] portal 的 C 端用户是否与运营/运维彻底隔离 → 用户答复：是（②）
+- [x] console 是否接受"可用性依赖 user-service" → 是
+- [x] 内部"系统"清单 → admin / deploy-console / portal（含 kedou-ai-minigram）
+- [x] 是否接受 console 用 admin 账号登录（废弃 `.env` 的 `ADMIN_PASS`）→ 是
+
 ## 变更日志
 
 - 2026-09-14 首版：用户四项答复落地为需求；记录「A 单独做不到②」的偏差，方案调整为 A + 最小 B。
+- 2026-11-06 将原 `brainstorm.md` 方案探索内容合并入本文件（命名合规化，消除 `brainstorm.md` 引用）。

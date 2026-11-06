@@ -3,7 +3,7 @@
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
 > 定位：把小程序「退出登录」「绑定手机号」及相邻账号占位功能，转成可验证的需求 spec（验收判据 / 反例 / 待确认），供方案设计与开发、测试质疑。
 > 范围：`apps/kedou-ai-minigram`（前端）+ `servers/auth-service` / `servers/user-service`（后端）+ `migrations/`
-> 上游：本文件只定义「做成什么」；「怎么做」见 `specs/kedou-ai-minigram/design-mp-account.md`
+> 上游：本文件只定义「做成什么」；「怎么做」见 `specs/kedou-ai-minigram/design.md`
 
 ---
 
@@ -223,7 +223,7 @@
 | Q14 | 黑名单下沉方式 | **统一到 auth-service**（gateway 不接 Redis，改调 auth-service 内部校验端点） | 方案文档 §4.3 B2 定方案 B |
 | Q6 | 付费手机号组件 | **接受**：0.03 元/次，先用 1000 次体验额度 | 定选微信快速验证；短信降为二期兜底 |
 | Q16 | 小程序主体资质 | **企业主体 + 已完成微信认证 + 同意购资源包** | 资质门槛满足，M3 可开工 |
-| Q15 | 手机号命中已有账号 | **c 合并账号**：A 的数据并入 B，A 软删并记 `merged_to`，凭证重签 | §3 新增 8 条合并判据；方案见 `design-mp-account.md` §5.7 |
+| Q15 | 手机号命中已有账号 | **c 合并账号**：A 的数据并入 B，A 软删并记 `merged_to`，凭证重签 | §3 新增 8 条合并判据；方案见 `design.md` §5.7 |
 
 ### 待确认（阻塞项优先）
 

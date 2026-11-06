@@ -71,7 +71,7 @@ GitHub PR（base = feature/test 或 master）
 | `.github/workflows/ci.yml` | **新增**（或把 `quality-gate.yml` 改名并补强） | PR 校验：红线 + 改动包 build/test（+ 可选 lint） |
 | `.github/workflows/release.yml` | **改造**（已存在，P0 建的） | ① 触发加 `feature/test`；② 环境按分支映射；③ **新增 deploy-console 直连路径**；④ 加 `concurrency` 防并发 |
 | `scripts/release-deploy-console.sh` | **新增（薄封装）** | Actions 里调用：`--skip-sync` 复用现有 `publish-deploy-console.sh`，并补"发布后记一条版本/审计"（可选） |
-| `docs/development/gh-actions-release.md` | 新增 | 面向使用者的操作手册（跑哪些、怎么看、失败怎么办） |
+| `docs/development/tech-design-gh-actions-release.md` | 新增 | 面向使用者的操作手册（跑哪些、怎么看、失败怎么办） |
 
 **`release.yml` 的改造要点**（现有实现已含：解析改动模块、HMAC 签名、`deliveryId` 幂等、轮询终态）：
 

@@ -424,7 +424,7 @@ HTTP      /static/modules/<moduleKey>/<pipelineKey>/<version>/index.js
 
 #### 落地口径确认（2026-09-10，原型评审通过）
 
-原型：`docs/ui/prototypes/release-platform-v6-pipeline-scripts.html`；页面规格书：`specs/release-platform/ui-spec-v6-pipeline-scripts.md`。
+原型：`docs/ui/prototypes/release-platform-v6-pipeline-scripts.html`；页面规格书：`specs/release-platform/page-spec-v6-pipeline-scripts.md`。
 八项口径全部确认（用户"按推荐来"）：
 
 | # | 确认结论 |

@@ -2,7 +2,7 @@
 
 > 状态：**原型已确认**（`docs/ui/prototypes/release-platform-v14-整合框架.html`），待落地到 `apps/deploy-console`。
 > 日期：2026-09-15 ｜ 决策人：用户逐轮过稿确认。
-> 关联：`specs/pipeline-node-model/design.md`（§3 节点模型）、`pipeline-configs.md`（§5 模板启用状态）。
+> 关联：`specs/pipeline-node-model/design.md`（§3 节点模型）、`tech-design-pipeline-configs.md`（§5 模板启用状态）。
 
 ---
 

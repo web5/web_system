@@ -320,9 +320,9 @@
 
 ### 备注
 
-- 切换插件（`EnvSwitcher`）**不是本页的组件**，它渲染在 shell（产品页面）上；本页只展示预览示意（详见 `environment-design.md` §5）。
+- 切换插件（`EnvSwitcher`）**不是本页的组件**，它渲染在 shell（产品页面）上；本页只展示预览示意（详见 `tech-design-environment.md` §5）。
 - **切换环境 = 整页重载**（`location.reload()`）：环境改变整套产物与接口上下文，局部更新会造成新旧混杂；重载后停留当前路由。
-- envId 规则与回退逻辑见 `environment-design.md` §2.2：系统自增数字、内置保留字、找不到回退 dev。
+- envId 规则与回退逻辑见 `tech-design-environment.md` §2.2：系统自增数字、内置保留字、找不到回退 dev。
 
 ---
 
@@ -531,14 +531,14 @@
 
 ### 9.7 风险
 
-- **Q17 已定（方案 D）**：`host_name` 改引用后，**存量数据必须同步改写**，否则 `http://dev-default:6010` 这类不可解析上游会继续生效；改写清单见 `./service-env-config-inventory.md`。
+- **Q17 已定（方案 D）**：`host_name` 改引用后，**存量数据必须同步改写**，否则 `http://dev-default:6010` 这类不可解析上游会继续生效；改写清单见 `./inventory-service-env-config.md`。
 - **一次性落地**（①②③ 同批）：依赖顺序仍为「主机 CRUD → 环境详情下拉 → 服务详情直达」，但**不拆两批发布**。
 - `deploy_hosts`（新）与旧 `deploy_servers`（`server/` 模块，含 `staging-default`）两套主机数据并存：**以 `deploy_hosts` 为准**，`staging-default` 不迁移（`deploy_envs` 无 staging），其残留指向行一并清理。
 - DB 路由当前 **默认关闭**（`GATEWAY_DB_ROUTES≠1`），本次入库不会立即改变线上转发；开启前需先跑一遍全环境探活。
 
 ### 9.8 配置清单（下一步：梳理 → 确认 → 入库）
 
-见 **`./service-env-config-inventory.md`**（主机组 × 服务 × 环境 × 端口的待确认清单与入库脚本草案）。
+见 **`./inventory-service-env-config.md`**（主机组 × 服务 × 环境 × 端口的待确认清单与入库脚本草案）。
 
 ---
 
@@ -549,6 +549,6 @@
 | 2026-09-18 | v1.0 | 初稿。IA 总览 + 6 个页面规格 + 跨域一致性约定，待用户过目 |
 | 2026-09-18 | v1.1 | Q13–Q16 确认：顶部一级 + 左侧二级导航、服务详情默认激活「接口」页签、接口方法筛选用 radio-group、流水线保持独立一级 |
 | 2026-09-18 | v1.2 | 导航收拢：仪表盘置顶为第一个一级项；审计/通知/配置中心/系统设置并入「基础设施」二级菜单 |
-| 2026-09-18 | v1.3 | 环境管理归属纠正：从基础设施移到**微前端二级菜单**（环境=微前端加载维度，见 environment-design.md） |
+| 2026-09-18 | v1.3 | 环境管理归属纠正：从基础设施移到**微前端二级菜单**（环境=微前端加载维度，见 tech-design-environment.md） |
 | 2026-09-20 | v1.4 | 新增 §9「服务环境 IP/端口配置入口」：服务详情环境 Tab 加「配置指向」直达、环境详情目标主机改下拉+展示可解析地址、主机管理最小版前置；暴露 `hostName` 组名/地址二义（Q17）并给出三方案 |
-| 2026-09-20 | v1.5 | Q17–Q20 定稿：`host_name` = 主机组名（引用 `deploy_hosts.name`，地址不冗余，由主机解析）；local 全跑本机；**端口必填不继承、填错报错**；主机下拉不允许自由输入；①②③ 一次性落地；配置清单拆到 `service-env-config-inventory.md` |
+| 2026-09-20 | v1.5 | Q17–Q20 定稿：`host_name` = 主机组名（引用 `deploy_hosts.name`，地址不冗余，由主机解析）；local 全跑本机；**端口必填不继承、填错报错**；主机下拉不允许自由输入；①②③ 一次性落地；配置清单拆到 `inventory-service-env-config.md` |

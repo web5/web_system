@@ -1,7 +1,7 @@
 # 科豆 AI 小程序 · 账号能力产品方案（退出登录 / 绑定手机号）
 
 > 开关：CHANGELOG=off · HISTORY_NOTE=off · FAQ_KEEP=on
-> 定位：R1 退出登录、R2 绑定手机号的**怎么做**（状态机 / 流程 / 接口契约 / 数据模型 / 分期），需求判据见 `specs/kedou-ai-minigram/requirements-mp-account.md`
+> 定位：R1 退出登录、R2 绑定手机号的**怎么做**（状态机 / 流程 / 接口契约 / 数据模型 / 分期），需求判据见 `specs/kedou-ai-minigram/requirements.md`
 > 范围：`apps/kedou-ai-minigram` + `servers/auth-service` + `servers/user-service` + `servers/gateway` + `migrations/`
 > 分支：`feature/kedou-ai-minigram`
 
@@ -579,7 +579,7 @@ EMAIL_CODE_WINDOW_LIMIT=5   # 10 分钟内同邮箱发送上限
 - [ ] Q9 是否并行上 `unionid` 打通（微信生态内免绑号，见 §5.6）
 - [ ] Q2/Q3/Q4 退出细节；Q7/Q8 绑定细节；Q10~Q12 注销是否做；Q13 发版批次
 
-> 完整待确认清单见 `specs/kedou-ai-minigram/requirements-mp-account.md` §2/§3/§7。
+> 完整待确认清单见 `specs/kedou-ai-minigram/requirements.md` §2/§3/§7。
 
 ---
 

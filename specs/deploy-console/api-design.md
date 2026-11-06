@@ -294,6 +294,6 @@
 
 - 流水线/节点模型接口 → `specs/pipeline-node-model/api-design.md`
 - 发布平台整体设计 → `specs/release-platform/`
-- 节点模型设计/配置/审批权限 → `specs/pipeline-node-model/` 下 `design.md` / `pipeline-configs.md` / `approval-permission-design.md`
+- 节点模型设计/配置/审批权限 → `specs/pipeline-node-model/` 下 `design.md` / `tech-design-pipeline-configs.md` / `tech-design-approval-permission.md`
 - 静态产物缓存/版本保留 → `docs/architecture/static-artifact-cache-and-retention.md`
 - 部署铁律（版本表库名、gateway TTL）→ `docs/development/admin-dev.md` §一·C

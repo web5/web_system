@@ -192,7 +192,7 @@
 | B5 | 删除某应用后，其历史版本指针与流水线运行记录里仍有引用 | 采用**软删除**（`enabled=false` / `deletedAt`），历史记录继续可查；硬删除仅在无任何引用时允许 |
 | B6 | 同一服务对象同时在「服务管理」和旧的「模块管理」里被登记 | 迁移期内以新表为准，旧表只读；切换后旧 `deploy_modules` 不参与任何运行时查询 |
 | B7 | 接口导入时同一路径大小写不同（`/api/User` vs `/api/user`） | 按原样登记为**两条**，并在导入结果里标注"疑似重复"提示，由人决定合并，**不得**自动归一化（避免误改真实路由） |
-| B8 | gateway 自身既是服务对象又在提供 manifest | `gateway` 作为普通服务登记；其版本/依赖采取独立托管策略（沿用 `specs/deploy-console/gateway-and-shell-versioned-release.md` 的约定），不因本次改造改变发布通道 |
+| B8 | gateway 自身既是服务对象又在提供 manifest | `gateway` 作为普通服务登记；其版本/依赖采取独立托管策略（沿用 `specs/deploy-console/tech-design-gateway-shell-release.md` 的约定），不因本次改造改变发布通道 |
 | B9 | 绕过 UI 直接调接口创建 envId 含非法字符（`/`、`..`、空格）的环境 | 后端必须做**目录名安全校验**（数字或 `[a-z0-9_-]+`），不能只靠前端拦截（envId 会作为 URL 段与目录名） |
 
 ---

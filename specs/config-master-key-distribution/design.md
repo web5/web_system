@@ -29,7 +29,7 @@
 | D4 轮换 | **在线轮换**：密文带 `keyId` 前缀 + 双钥并行解密 + 可重入重加密；**不改 `config_items` 表结构**。分两步走：**P2a 格式迁移 → P2b 密钥轮换**（§5.3） |
 | D5 权限与审计 | 轮换/重加密仅 `super_admin`（新增权限码 `config:secret:rotate`），审计只记 keyId/指纹/影响行数 |
 | D6 新机上线 | `provision` 脚本（安全投递 + 指纹）+ `verify` 脚本（自检并可独立运行）+ checklist |
-| D7 换库/拆域 | 短期与 dev 同库（不拆）；**换库变更指南与迁移脚本先行备好**：`domain-split-guide.md` + `scripts/master-key-domain-split.mjs`（§10） |
+| D7 换库/拆域 | 短期与 dev 同库（不拆）；**换库变更指南与迁移脚本先行备好**：`guide.md` + `scripts/master-key-domain-split.mjs`（§10） |
 | D8 密文格式 | **只支持新格式 `<keyId>:iv:tag:data`，不兼容老密文**（Q9）→ 前置一次格式迁移 p26（停机窗口，§5.3 P2a） |
 | D9 停机上界 | **轮换**允许秒级重启（Q10）；**格式迁移**需一次分钟级停机窗口（迁移期禁写）。集群化后该约束消失 |
 | D10 执行通道 | `provision` / 轮换由 super_admin 在目标机执行，密钥经 `scp` / `read -s` 直传，**禁止 `KEY=xxx cmd` 形式**（Q11） |
@@ -78,7 +78,7 @@
 
 > Q8 决议（2026-09-22）：**暂不拆**——prod console 短期与 dev 共用域 C，即域 C 一把钥。
 > 未来 prod 换用独立部署库时，域 C 拆为「域 C-dev」与「域 C-prod」，各自一把钥；
-> **变更步骤与脚本已先行备好**：`specs/config-master-key-distribution/domain-split-guide.md` + `scripts/master-key-domain-split.mjs`（见 §10）。
+> **变更步骤与脚本已先行备好**：`specs/config-master-key-distribution/guide.md` + `scripts/master-key-domain-split.mjs`（见 §10）。
 
 ---
 
@@ -310,7 +310,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 | **P1 流程固化** | ① `provision-master-key.sh` + checklist 落 runbook；② 跨机指纹比对（可选 `--peers`）；③ 堡垒机实测 K1–K3 | 脚本删除即可，无运行时耦合 |
 | **P2a 格式迁移（Q9，一次性）** | ① `archive/migrations/p26-master-key-format-migrate.mjs`（影子表备份 + 幂等 + `DRY_RUN=1` + `ROLLBACK=1`）；② `encrypt/decrypt` 切"只认新格式"；③ 域 L 演练 K6 → 域 C 执行 | `ROLLBACK=1` 恢复影子表 + 回退代码版本（**格式不能长期双活，回退须在同一停机窗口内完成**） |
 | **P2b 在线轮换** | ① 密钥环（`CONFIG_ACTIVE_KEY_ID` + `*_OLD`）；② `reencryptSecrets()` + `POST /api/config/secrets/reencrypt`（含快照，compare-and-set）；③ `@RequireSuperAdmin()` + `config:secret:rotate`；④ 审计埋点；⑤ 域 L 完整演练 K4/K5 | 双钥并行期可随时停；回退 = active/`ring` 调回可用组合（密文保留现状） |
-| **P3 换库/拆域（已备好，按需触发）** | 文档 `specs/config-master-key-distribution/domain-split-guide.md` + 脚本 `scripts/master-key-domain-split.mjs` **本轮先交付**，待 prod 换库时执行；其后才是云 KMS/Secrets Manager、systemd `LoadCredential=`、按环境分钥 | 脚本默认 `--dry-run`，写入前备份目标库，`--apply` 才动数据;目标库可从影子表恢复 |
+| **P3 换库/拆域（已备好，按需触发）** | 文档 `specs/config-master-key-distribution/guide.md` + 脚本 `scripts/master-key-domain-split.mjs` **本轮先交付**，待 prod 换库时执行；其后才是云 KMS/Secrets Manager、systemd `LoadCredential=`、按环境分钥 | 脚本默认 `--dry-run`，写入前备份目标库，`--apply` 才动数据;目标库可从影子表恢复 |
 | **P4 未来（不在本轮）** | 云 KMS/Secrets Manager；迁 systemd 时用 `LoadCredential=`（凭据进 `/run/credentials/<unit>/`，**天然不进 env**，比 `EnvironmentFile` 更安全）；按环境分钥（前置：先定义 `global` 行的归属） | — |
 
 > 当前进度：**P0 已落地并在域 L 验证通过**（自检就绪 / 错钥 exit(1) / `verify` 退出码 0）；
@@ -374,7 +374,7 @@ env -i PATH="$PATH" HOME="$HOME" PORT="$PORT" CONFIG_MASTER_KEY_FILE="$CONFIG_MA
 
 | 交付物 | 内容 |
 |---|---|
-| `specs/config-master-key-distribution/domain-split-guide.md` | 换库/拆域完整指南：触发判据、两种情形（空库新建 / dump 复制）、步骤、校验、回退、脚本用法 |
+| `specs/config-master-key-distribution/guide.md` | 换库/拆域完整指南：触发判据、两种情形（空库新建 / dump 复制）、步骤、校验、回退、脚本用法 |
 | `scripts/master-key-domain-split.mjs` | 迁移助手：跨库读密文 → 用源域钥解密 → 用目标域钥重加密（keyId 换新）→ 写目标库；**默认 `--dry-run`**，`--apply` 才写，写前备份目标库，默认**不删源行** |
 
 **要点（详见指南）**：

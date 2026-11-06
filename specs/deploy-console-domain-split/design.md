@@ -2,7 +2,7 @@
 
 > 状态：**已评审确认 v2**（2026-09-18，Q101–Q112 全部确认，见 `review-01-requirements.md`）
 > 需求来源：`requirements.md` v1.1（FR-1 ~ FR-10）
-> **唯一事实源声明**：本文是数据模型与接口契约的唯一权威；`environment-design.md` 的环境模型结论**已并入本文 §4.2**，该文档降级为设计过程记录
+> **唯一事实源声明**：本文是数据模型与接口契约的唯一权威；`tech-design-environment.md` 的环境模型结论**已并入本文 §4.2**，该文档降级为设计过程记录
 > 已落地原型（实现基线）：`apps/deploy-console/src/views/{AppManager,AppDetail,EnvironmentManager,EnvironmentDetail,ServiceManager,ServiceDetail}.vue`、`layouts/MainLayout.vue`、`packages/ui/src/components/EnvSwitcher.vue`
 
 ---
@@ -396,7 +396,7 @@ interface DeployStrategy {
 |---|---|
 | `requirements.md` v1.1 | 需求与 EARS 判据（本文输入） |
 | `review-01-requirements.md` | 第 1 轮评审与 Q101–Q112 确认来源 |
-| `environment-design.md` | 环境模型设计过程记录（**结论已并入本文 §2.2 / §3**） |
+| `tech-design-environment.md` | 环境模型设计过程记录（**结论已并入本文 §2.2 / §3**） |
 | `page-spec.md` v1.3 | 页面规格（与已落地原型一致） |
 | `specs/pipeline-node-model/design.md` | 流水线节点模型（本文只加 targetRef 解析，不改其模型） |
 | `docs/architecture/static-artifact-cache-and-retention.md` | 静态产物缓存与保留策略（本文 §3 与其对齐） |

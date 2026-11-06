@@ -2,7 +2,7 @@
 
 > 模块：`servers/deploy-console`（控制台，端口 6200）
 > 适用分支：`feat/from-zero-bootstrap-prod-release`（pipeline-node-model 批次）
-> 配套设计文档：`specs/pipeline-node-model/design.md`、`./pipeline-configs.md`、`./approval-permission-design.md`
+> 配套设计文档：`specs/pipeline-node-model/design.md`、`./tech-design-pipeline-configs.md`、`./tech-design-approval-permission.md`
 > 运行时真相源：非 production 环境访问 `http://<deploy-console>:6200/api/docs`（Swagger，由 `@nestjs/swagger` 注解自动生成），本文档为「先文档」落盘版，供工程 AI 自进化与前后端对齐。
 
 ## 0. 通用约定
