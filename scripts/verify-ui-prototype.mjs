@@ -41,14 +41,14 @@ rec('A2 锁死后点击无效', await thinkOn(), 'off');
 // 场景 B：切到 Top P 后直接保存 → payload 不应带 temperature
 await page.select('#preset', 'chat'); // 先换档解锁
 await new Promise((r) => setTimeout(r, 200));
-await page.click('[data-dr="gen-params-sampler"] [data-mode="topP"]');
+await page.click('#seg-sampler [data-mode="topP"]');
 await new Promise((r) => setTimeout(r, 100));
 rec('B1 切换后 temperature 已清空', await page.$eval('#inTemp', (e) => e.value), '');
 await clickSave();
 rec('B2 payload 无 temperature', /"temperature"/.test(await payload()), false);
 
 // 场景 C：非法 maxTokens → 由后端返回错误，非前端自造
-await page.click('[data-dr="gen-params-sampler"] [data-mode="temperature"]');
+await page.click('#seg-sampler [data-mode="temperature"]');
 await page.$eval('#inMax', (e) => { e.value = '99999'; e.dispatchEvent(new Event('input')); });
 await clickSave();
 rec('C1 toast 显示后端错误', await toastText(), '保存失败：输出上限须为 1–32768 的整数');

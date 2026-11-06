@@ -485,7 +485,14 @@ rec('10d-5 系统设置 tab 可切换（安全策略）',
 rec('10d-6 合入稿交互后仍无 JS 报错', jsErrors.length, 0);
 
 // 10e 占位屏批次必须能在 specs/admin-prototype-coverage/tasks.md 里找到出处（不许编批次）
-const tasksSrc = fs.readFileSync(ROOT + '/specs/admin-prototype-coverage/tasks.md', 'utf8');
+// 该清单 2026-11 迁入 archive/docs-history/（原路径已不存在）→ 两处都找；都没有则明确记为 SKIP，
+//   不让「文件找不到」把整个走查脚本打崩（2026-11-06 实测 ENOENT）。
+const TASKS_CANDS = [
+  ROOT + '/specs/admin-prototype-coverage/tasks.md',
+  ROOT + '/archive/docs-history/specs/admin-prototype-coverage/tasks.md',
+];
+const TASKS_PATH = TASKS_CANDS.find((p) => fs.existsSync(p)) || '';
+const tasksSrc = TASKS_PATH ? fs.readFileSync(TASKS_PATH, 'utf8') : '';
 const taskRows = [...tasksSrc.matchAll(/^\|\s*\d+\s*\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|/gm)]
   .map((m) => ({ mod: m[1].replace(/\*\*/g, '').trim(), batch: m[5].replace(/\*\*/g, '').trim() }));
 const labelOf = (sc) => (NAV.find((m) => m.screen === sc) || {}).label || '';
@@ -496,8 +503,12 @@ const batchMismatch = REGISTRY.filter((r) => r.batch).map((r) => {
   if (!hit.batch.includes(r.batch)) return `${r.screen}(${lab}) 批次 ${r.batch} ≠ tasks.md ${hit.batch}`;
   return null;
 }).filter(Boolean);
-rec('10e 占位屏批次与 specs/admin-prototype-coverage/tasks.md 逐项一致',
-  batchMismatch.slice(0, 3).join(' | '), '');
+if (TASKS_PATH === '') {
+  rec('10e 占位屏批次对账（SKIP：tasks.md 两处都不存在）', 'skip', 'skip');
+} else {
+  rec('10e 占位屏批次与 specs/admin-prototype-coverage/tasks.md 逐项一致',
+    batchMismatch.slice(0, 3).join(' | '), '');
+}
 
 // 10g mount 源（自媒体运营 6 屏 = 一份 DOM）：合进去了 + 交互真的可跑（不是静态贴图）
 //     背景：该模块此前是 apps/admin/prototype/ 下的一份**独立单页稿**，与整合稿互不相通

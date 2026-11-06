@@ -93,13 +93,13 @@
 
 | # | 控件 | 口径 |
 |---|---|---|
-| 1 | 采样方式 | `a-radio-group` 二选一 Temperature / Top P；未选中侧 `disabled`（C7-b） |
+| 1 | ~~采样方式~~ | **已废弃（2026-11-06）**：B3 定稿改为 Temperature / Top P **两个独立输入 + 同填报错**（C7-b 校验在前端只红字不清值，真源在后端 `assertTuningParams()`；口径见 `page-specs/form-controls-and-toggles-v1.md`「互斥类校验 → 两个字段同时红字」）。原「radio 二选一 + 禁用另一侧」不落地，原型锚点 `gen-params-sampler` 已撤 |
 | 2 | Temperature | 0–2；留空 = `null` = 沿用服务侧默认（C7-c） |
-| 3 | Top P | 0–1；留空 = `null`；与 Temperature 互斥，切换即**清空另一侧** |
+| 3 | Top P | 0–1；留空 = `null`；与 Temperature 互斥，**同填保存被拒**（不再"切换即清空"——两值都保留，由后端报错，便于用户看到自己填了什么） |
 | 4 | 输出上限 maxTokens | 整数 1–32768；**占位「未配置」**（2026-10-29 拍板，与 Temperature/Top P 一致）；extra 按工具态给上限语义（带工具=`留空 = 模型上限（8192），不人为压小`，用 `MODEL_MAX_TOKENS` 插值；非工具=`留空 = 系统默认`） |
 | 5 | 思考 | 三态按钮文案 **跟随默认 / 开启 / 关闭**（契约值 `null` / `enabled` / `disabled` 只在代码与契约文档里，不进 UI；顺序即此序，机检 25e 锁定）：开启 = `{type:'enabled', budget_tokens}` 且出现**思考预算**行，关闭 = `{type:'disabled'}`，跟随默认 = 不在此层锁定、按优先级链决定（带工具时强制开启） |
-| 6 | 按场景套用预设 | 六档（§7.4）：分类 / 抽取 / 代码 / 对话 / 创意 / **工具调用**；**先复位采样方式再写值**（避免写进禁用控件）；契约给区间或「按 X 自定」的一律**留空**，区间原文在提示中回显 |
-| 7 | 分类档锁定 | 套用「分类」后 thinking 段 `locked`（`pointer-events:none` + handler 兜底），hint 说明「分类场景强制关闭思考（C7-d）」；换其它档即解锁 |
+| 6 | ~~按场景套用预设~~ | **已废弃（2026-11-06）**：B3 定稿五控件口径不含预设下拉（`docs/ui/reviews/2026-10-28-b3-tuning-ui-design-review.md`「五控件」；`agent-def-detail-page-2026-10-28.md:42` 记「未实现」）。原型锚点 `gen-params-preset` 已撤；§3.1 档位表保留作**历史取值参考**，不构成实现要求 |
+| 7 | ~~分类档锁定~~ | 随第 1、6 项一并失效（锁定由预设触发，预设不做则无此联动）。thinking 的"带工具强制开启"仍由优先级链判，但不在 UI 上锁 |
 
 ### 3.1 预设档位（出处 `contracts.md §7.4`，无据的不填）
 
