@@ -59,6 +59,9 @@ DESIGN_ANCHOR_MODE=scoped DESIGN_ANCHOR_SCOPE=deploy-console \
 DESIGN_ANCHOR_MODE=strict bash scripts/redline/scan-rules.sh diff origin/master...HEAD
 ```
 
+两个引擎（`scan-rules.sh` / `gate.ts`）读**同一份**档位声明（`scripts/redline/gates.yaml` R11b `level_switch`），同档位下 stdout 必须逐字节一致 —— 由 `scripts/redline/test-r11b-anchors.sh` E 节守着（warn / strict / scoped / cached / 未知档位五种情形）。
+`cached`（pre-commit）下 R11b 恒不跑，由 `skip_scan_modes` 声明；档位拼错（如 `stric`）两个引擎都 `exit 2`，不会静默降级成 warning。
+
 单批自检（不进 CI，随时可跑）：
 
 ```bash

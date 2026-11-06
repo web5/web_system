@@ -239,6 +239,8 @@ D3 是最贵的一关，分两层，避免整关沦为不可回归的主观比�
 
 **判定时点**：R11b 比对的是**提交后的仓库状态**（脚本按 `git show HEAD:<file>` 读内容），因此**只在 CI 与本地 diff 模式跑，pre-commit 不跑**——`--cached` 只影响"改动了哪些文件"，读到的仍是 HEAD，对"本次提交是否引入漂移"零信息量，还会把 HEAD 里的旧漂移算到本次提交头上。回归用例见 `scripts/redline/test-r11b-anchors.sh`。
 
+**档位真源**：四档（`off` / `warn` / `strict` / `scoped`）与默认值声明在 `scripts/redline/gates.yaml` R11b `level_switch`，两个引擎（`scan-rules.sh` 权威 / `gate.ts` 影子）都从它求值，不再各自写死级别。**2026-11-06 修 #8602**：此前 `gate.ts` 只用 yaml 里写死的 `level: warning`，`DESIGN_ANCHOR_MODE=strict` 时 bash 报 error、影子引擎报 warning，门禁存在却不出声；同时 `gate.ts` 未处理 `cached` 跳过，pre-commit 会误报。修后：档位不做乘法、只做一次求值；取值非法（如 `stric`）两个引擎都 `exit 2` 且不产出报告。守门用例 = `test-r11b-anchors.sh` E 节（warn / strict / scoped / cached / 未知档位，断言两引擎 stdout 逐字节一致）+ `gates-lint.ts` 的档位接线校验（yaml 档位键与 bash 白名单逐个相等）。
+
 **存量回填分批（P1，T9b，清单驱动）**：先出《存量界面清单》（`docs/ui/anchor-backlog.md`：文件 / 端 / 是否关键结构 / 批次），按批次推进，每批完成把该批路径加入 `strict` 白名单。批次顺序建议：① admin 系主流程页（列表/详情/表单）→ ② portal 主流程页 → ③ 小程序主包页面 → ④ 分包与低频页。
 
 ### 3.8 端覆盖
