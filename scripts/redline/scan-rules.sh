@@ -408,6 +408,31 @@ is_release_file() {
   return 1
 }
 
+# 测试范围面（R23）——命中即须交代「全量还是抽样」
+# 判据源：~/AiWorkspace/20-私域资产/研发流程SOP.md §7.3（共享面清单）
+# 收面原则：宁窄勿宽 —— 只收「一处改动波及全体」的层。收宽了 = 每个 commit 都要写 TestScope，
+#   摩擦过大必然被 Micro-exempt 糊掉，门就白设了（同 R13 scope 收窄的理由）。
+is_test_surface_file() {
+  case "$1" in
+    packages/types/*) return 0 ;;                       # 共享类型 / 权限码 / 枚举：全体 import
+    packages/shared/*) return 0 ;;                      # 共享工具与常量
+    packages/ui/src/*) return 0 ;;                      # 共享 UI 组件：全部 admin 页面
+    packages/agent-core/src/interfaces/*) return 0 ;;   # Agent 协议：各端 switch case
+    servers/*/src/main.ts) return 0 ;;                  # 服务入口：全局 filter / guard / interceptor / pipe
+    apps/*/src/main.ts) return 0 ;;                     # 前端入口：全局拦截器 / 错误码映射
+    archive/migrations/*) return 0 ;;                   # 数据迁移：全部查询与写入
+    jest.config.*) return 0 ;;                          # 测试基建：影响「测试本身是否可信」
+    */jest.config.*) return 0 ;;
+    */*/jest.config.*) return 0 ;;
+    tsconfig*.json) return 0 ;;                         # 编译基建：改一处全体类型判定变
+    */tsconfig*.json) return 0 ;;
+    */*/tsconfig*.json) return 0 ;;
+    scripts/ci/*) return 0 ;;                           # 改动包选择：决定 CI 到底跑了什么
+    .github/workflows/*) return 0 ;;                    # CI 门禁自身
+  esac
+  return 1
+}
+
 # ---- R9b 既有 UI 改动须同行原型/豁免（文件级 · warning 级）----
 # 补 R9 的覆盖缺口：R9 只卡新增页面与信息架构，改既有交互/样式一行不报（§3.5.1）。
 # 阈值：UI 文件改动累计行数 >= 5，或 diff 含结构标签（<view / <template / <block）。
@@ -618,13 +643,16 @@ check_sync_pair() {
   return 0
 }
 
-# ---- 评审凭证校验（供 R13 / R14 复用）----
+# ---- 评审凭证校验（供 R13 / R14 / R15 / R17 / R18 / R23 复用）----
 # 用法：_trailer_check_one <规则号> <trailer 名> <说明> <commit> <message>
 # 语义：命中改动面的 commit 须带 `<Trailer>: pass`（或报告路径）；
 #       指向报告时校验报告存在且头部 `阻塞: N` 为 0。
 # 豁免：`Micro-exempt:` 与 R9b / R10 / R11 同口径（避免"记了豁免还报错"的新摩擦）
 # 级别：warning（--strict 下 error）。Q3 已拍板（2026-09-24）保持 warning；
 #   如需转 error，把本函数内两处 add_warn 改 add_err，并配套存量 commit 过渡策略。
+# 🔴 hint 文案**故意不做成可变参数**（2026-11-06）：gate.ts 的 hint 一律取自 gates.yaml，
+#   若 bash 允许自定义，同一个门在两个引擎会打印不同文案 → 影子比对红。
+#   所以 gates.yaml 里 R23 的 hint 必须与此处模板完全一致（只有 trailer 名不同）。
 _trailer_check_one() {
   local rule="$1" trailer="$2" desc="$3" c="$4" body="$5"
   local tval n
@@ -849,6 +877,37 @@ check_r18() {
   done
 }
 
+# ---- R23 测试范围决策凭证（commit 级 · warning）----
+# 判据源：~/AiWorkspace/20-私域资产/研发流程SOP.md §7（全量 vs 抽样，人工拍板）
+# 触发面：is_test_surface_file —— 「一处改动可能波及全体功能」的公共层。
+#   与 R13 的分工：R13 问「要不要契约评审」，本门问「测试要铺多大」。两者可同时命中。
+# 判据：commit 须带 `TestScope: pass`（已跑全量）或 `TestScope: <抽样清单路径>`（清单随本 commit 落盘）；
+#   纯微调走 `Micro-exempt: R23: <理由>`。
+# 🔴 机器判不了的两项（故意不机检，别假装它检了）：
+#   ① 抽样清单是否真 ≥5 条核心接口  ② 是否写了「未覆盖范围与风险」。
+#   这两项是 R23 的价值所在，靠人看清单；机器只保证「你没沉默」。
+check_r23() {
+  local range="$1"
+  local -a commits=()
+  while IFS= read -r c; do
+    [ -n "$c" ] && commits+=("$c")
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  [ ${#commits[@]} -eq 0 ] && return 0
+
+  local c f body hit
+  for c in "${commits[@]}"; do
+    hit=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if is_test_surface_file "$f"; then hit=1; break; fi
+    done < <(git show --name-only --format= "$c" 2>/dev/null)
+    [ "$hit" -eq 0 ] && continue
+
+    body="$(git log -1 --format=%B "$c" 2>/dev/null)"
+    exempt_for_gate "$c" "$body" "R23" || _trailer_check_one "R23" "TestScope" "测试范围决策" "$c" "$body"
+  done
+}
+
 # ---- R19 空提交检测（commit 级 · error 级）----
 # 背景：空 commit 没有任何内容，却能占一个 commit 位置 —— 实质是「用空提交重跑 CI」
 #       的后门。实证 558d8cb5「空 commit 仅触发 CI 重跑，无代码变更」曾用 Micro-exempt: 绕过，
@@ -928,6 +987,7 @@ scan_diff_range() {
   check_r15 "$range";  _prof "R15 对外接口评审凭证"
   check_r17 "$range";  _prof "R17 测试用例凭证"
   check_r18 "$range";  _prof "R18 研发方案凭证"
+  check_r23 "$range";  _prof "R23 测试范围决策凭证"
   check_r19_empty_commit "$range";  _prof "R19 空提交检测"
   check_r12;           _prof "R12 kit 同源（全仓遍历）"
   check_r16;           _prof "R16 SSE 契约（调 python）"

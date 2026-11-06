@@ -24,9 +24,9 @@ line-no-trailing-newline	files	servers/api/src/nonl.ts	踩坑 #967：文件末�
 # ---------------- commit 门（8 道）----------------
 commit-r10-ui-no-proto	diff	${C_UI_NO_PROTO}^..${C_UI_NO_PROTO}	R10 阳性：改 UI 无 Proto 凭证
 commit-new-api	diff	${C_NEW_API}^..${C_NEW_API}	R15/R17/R18 阳性：新增 controller + service，凭证全缺
-commit-r13-migration-small	diff	${C_MIGRATION_SMALL}^..${C_MIGRATION_SMALL}	R13 阴性：单行迁移低于行数阈值(5)，属微调不报（阈值下界）
-commit-r13-migration	diff	${C_MIGRATION}^..${C_MIGRATION}	R13 阳性：6 行迁移过阈值，契约面须 Contract 凭证
-commit-release	diff	${C_RELEASE}^..${C_RELEASE}	R14 阳性：CI workflow 属发布面
+commit-r13-migration-small	diff	${C_MIGRATION_SMALL}^..${C_MIGRATION_SMALL}	R13 阴性：单行迁移低于行数阈值(5)，属微调不报（阈值下界）｜R23 阳性：迁移属共享面，与行数无关
+commit-r13-migration	diff	${C_MIGRATION}^..${C_MIGRATION}	R13 阳性：6 行迁移过阈值，契约面须 Contract 凭证｜R23 阳性：迁移属共享面
+commit-release	diff	${C_RELEASE}^..${C_RELEASE}	R14 阳性：CI workflow 属发布面｜R23 阳性：CI 属测试基建共享面
 commit-empty	diff	${C_EMPTY}^..${C_EMPTY}	R19 阳性：空提交（不能靠 Micro-exempt 绕过）
 commit-r17-fake-path	diff	${C_TEST_FAKE}^..${C_TEST_FAKE}	R17 阳性：Test 指向不存在的路径（卡 2.2 真实性）
 commit-r17-pass	diff	${C_TEST_PASS}^..${C_TEST_PASS}	R17 阴性：Test: pass 放行
@@ -45,4 +45,8 @@ commit-r11-spec-blocking	diff	${C_R11_SPEC_BLOCKING}^..${C_R11_SPEC_BLOCKING}	R1
 commit-r11-spec-ok	diff	${C_R11_SPEC_OK}^..${C_R11_SPEC_OK}	R11 阴性：spec commit + 报告阻塞为 0 → 一条不报
 
 # ---------------- 跨门聚合（验证一个 range 内多门同时命中时的汇总口径）----------------
-range-multi-commit	diff	${C_UI_NO_PROTO}~1..${C_TEST_REAL}	多 commit 范围：行级 + 多道 commit 门同时命中，汇总计数须稳定
+range-multi-commit	diff	${C_UI_NO_PROTO}~1..${C_TEST_REAL}	多 commit 范围：行级 + 多道 commit 门同时命中，汇总计数须稳定｜含 R23（servers/api/src/main.ts 属共享面）
+commit-r23-missing	diff	${C_TS_MISSING}^..${C_TS_MISSING}	R23 阳性：改 scripts/ci（共享面）却未交代测试范围
+commit-r23-sample-missing	diff	${C_TS_SAMPLE_MISSING}^..${C_TS_SAMPLE_MISSING}	R23 阳性：TestScope 指向的抽样清单没随 commit 落盘（卡 2.2 真实性）
+commit-r23-pass	diff	${C_TS_PASS}^..${C_TS_PASS}	R23 阴性：TestScope: pass（全量已跑）放行
+commit-r23-sample	diff	${C_TS_SAMPLE}^..${C_TS_SAMPLE}	R23 阴性：TestScope 指向真实落盘的抽样清单放行

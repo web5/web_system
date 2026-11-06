@@ -256,6 +256,42 @@ Design: docs/ui/reviews/r11-blocked.md" $t; t=$((t + 60))
 Design: docs/ui/reviews/r11-clean.md" $t; t=$((t + 60))
   echo "C_R11_SPEC_OK $(git rev-parse HEAD)"
 
+  # ---- R23 测试范围决策（命中共享面 → 须交代全量/抽样）----
+  # 用 scripts/ci/* 作共享面代表：它命中 test_surface 但**不**命中 contract_file / release_file，
+  # 这样每条用例只报 R23，断言不被别的门污染。
+  _fx_write scripts/ci/changed-packages.sh 'echo changed'
+  git add -A
+  _fx_commit "chore(ci): 调整改动包选择" $t; t=$((t + 60))
+  echo "C_TS_MISSING $(git rev-parse HEAD)"
+
+  # 阳性：TestScope 指向没落盘的清单
+  _fx_write scripts/ci/changed-packages.sh 'echo changed' 'echo more'
+  git add -A
+  _fx_commit "chore(ci): 再调改动包选择
+TestScope: docs/test-scope/missing.md" $t; t=$((t + 60))
+  echo "C_TS_SAMPLE_MISSING $(git rev-parse HEAD)"
+
+  # 阴性：全量已跑
+  _fx_write scripts/ci/changed-packages.sh 'echo changed' 'echo more' 'echo full'
+  git add -A
+  _fx_commit "chore(ci): 全量已跑
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_TS_PASS $(git rev-parse HEAD)"
+
+  # 阴性：抽样，清单随本 commit 落盘
+  _fx_write docs/test-scope/scope.md \
+    '# 测试范围决策' \
+    '| 编号 | 接口 | 包 | 为什么核心 | 用例 |' \
+    '|---|---|---|---|---|' \
+    '| C-01 | a | servers/x | ① | a.spec.ts |' \
+    '| C-02 | b | servers/y | ② | b.spec.ts |' \
+    '核心接口 2 条（夹具只验证「清单已落盘」能放行，条数门槛由人审）'
+  _fx_write scripts/ci/changed-packages.sh 'echo changed' 'echo more' 'echo full' 'echo sample'
+  git add -A
+  _fx_commit "chore(ci): 抽样跑
+TestScope: docs/test-scope/scope.md" $t; t=$((t + 60))
+  echo "C_TS_SAMPLE $(git rev-parse HEAD)"
+
   # 劣质理由（只有 yes）——时间落在 R20 生效日之后，确保质量门会判
   _fx_write servers/api/src/ex_weak.ts 'export const e3 = 1;'
   git add -A

@@ -1171,6 +1171,8 @@ function scanDiffRange(range: string): void {
   runCredentialGates(["R15"]);
   runCredentialGates(["R17"]);
   runCredentialGates(["R18"]);
+  // R23 测试范围决策：命中共享面须交代全量/抽样（判据源 研发流程SOP.md §7）
+  runCredentialGates(["R23"]);
   runR19();
   runR12();
   runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"]);

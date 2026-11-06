@@ -1,5 +1,9 @@
 exit=0
 errors=0
-warnings=0
+warnings=1
 --- stdout ---
-✓ 红线扫描通过（0 error / 0 warning）
+══ 红线提示（warning）══
+  [R23] 测试范围决策 commit 缺评审凭证
+       feat(db): 加 note 列（单行微调）
+       message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+✓ 红线扫描通过（0 error / 1 warning）
