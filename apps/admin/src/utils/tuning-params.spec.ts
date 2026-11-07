@@ -27,6 +27,11 @@ import {
   buildStrategyPreview,
   formatTuningValue,
   buildTuningDiffs,
+  buildTuningFieldDiffs,
+  TUNING_DIFF_FIELDS,
+  TUNING_DIFF_LABELS,
+  THINKING_FORM_OPTIONS,
+  thinkingFormLabel,
   buildRuntimeNote,
   buildTuningAuditEntry,
   isWithinTuningAuditRetention,
@@ -427,5 +432,116 @@ describe('D4 审计留存期（近 7 天，时间口径）', () => {
     });
     expect(e.ts).toBe(NOW - 8 * DAY);
     expect(isWithinTuningAuditRetention(e.ts, NOW)).toBe(false);
+  });
+});
+
+/**
+ * B2c：未保存变更对比（字段级 badge / 面板级变更条）—— 真源 page-spec v2 §4。
+ *
+ * 这里守的是**口径**，不是渲染：
+ * ① 计数口径 = 只算真正下发给模型的 4 个参数（maxSteps 不算，采样方式属 UI 态也不算；
+ *    budget 不算 —— §4 表里列了它，但 v2.4 起它是只读派生值，不是可改字段，见 tuning-params.ts 注释）；
+ * ② 展示口径 = 业务词，禁把 enabled / maxTokens 这类契约值摆到用户面前（§3.2）；
+ * ③ badge 与变更条同源 —— 两边都调 buildTuningFieldDiffs，测试锁「同一函数同一结果」。
+ */
+describe('B2c 未保存变更对比（page-spec v2 §4 三级对比 · 字段级/面板级）', () => {
+  const base = (): TuningFields => ({
+    temperature: null,
+    maxTokens: null,
+    topP: null,
+    thinking: 'null',
+    maxSteps: 10,
+  });
+
+  it('无变更 → 空数组（变更条与全部 badge 的隐藏条件）', () => {
+    expect(buildTuningFieldDiffs(base(), base())).toEqual([]);
+  });
+
+  it('单字段变更 → 1 条，原值/新值都格式化', () => {
+    const d = buildTuningFieldDiffs(base(), { ...base(), temperature: 0.9 });
+    expect(d).toHaveLength(1);
+    expect(d[0].field).toBe('temperature');
+    expect(d[0].before).toBe('未配置');
+    expect(d[0].after).toBe('0.9');
+  });
+
+  it('清空字段 → 反向也能算出来（0.7 → 未配置）', () => {
+    const d = buildTuningFieldDiffs({ ...base(), temperature: 0.7 }, base());
+    expect(d).toHaveLength(1);
+    expect(d[0].before).toBe('0.7');
+    expect(d[0].after).toBe('未配置');
+  });
+
+  it('🔴 thinking 用业务词，不是契约值 enabled/disabled', () => {
+    const d = buildTuningFieldDiffs(base(), { ...base(), thinking: 'enabled' });
+    expect(d).toHaveLength(1);
+    expect(d[0].before).toBe('跟随默认');
+    expect(d[0].after).toBe('开启');
+    // 反向断言：绝不能把内部枚举漏到界面上
+    expect(d[0].after).not.toBe('enabled');
+    expect(buildTuningFieldDiffs({ ...base(), thinking: 'enabled' }, { ...base(), thinking: 'disabled' })[0].after).toBe(
+      '关闭',
+    );
+  });
+
+  it('🔴 maxSteps 不计入（引擎编排轮数，不是模型 API 参数）', () => {
+    expect(buildTuningFieldDiffs(base(), { ...base(), maxSteps: 30 })).toEqual([]);
+  });
+
+  it('🔴 字段集锁定：只含 4 个模型 API 参数，budget 与 maxSteps 都不在里面', () => {
+    // 锁的是「改动就变更计数口径」这件事本身：加字段必须同步改 page-spec §4 + 原型，
+    // 否则会出现「界面多了一条 badge、规格里查不到出处」。故这里正反两面都断言。
+    expect([...TUNING_DIFF_FIELDS]).toEqual(['temperature', 'maxTokens', 'topP', 'thinking']);
+    expect([...TUNING_DIFF_FIELDS] as string[]).not.toContain('budget');
+    expect([...TUNING_DIFF_FIELDS] as string[]).not.toContain('maxSteps');
+  });
+
+  it('🔴 thinking 缺字段/undefined 归一为「跟随默认」，不产出「跟随默认 → 跟随默认」假行', () => {
+    // 旧形状（DB 里 thinking 缺失）经 defToForm 理论上会归一，但 buildTuningFieldDiffs
+    // 是导出函数、也会被面板之外的调用方复用；一旦 b/a 里混进 undefined，
+    // 旧判据 String(undefined)!=='null' 会算成「有变更」，而两侧展示值都是「跟随默认」
+    // —— 界面上就会出现一条从「跟随默认」变到「跟随默认」的变更，用户完全无从理解。
+    const legacy = { ...base() } as Partial<TuningFields>;
+    delete legacy.thinking;
+    expect(buildTuningFieldDiffs(legacy as TuningFields, base())).toEqual([]);
+    expect(buildTuningFieldDiffs(base(), legacy as TuningFields)).toEqual([]);
+    // 真正的变更不能被这条归一化吞掉
+    expect(buildTuningFieldDiffs(legacy as TuningFields, { ...base(), thinking: 'enabled' })).toHaveLength(1);
+  });
+
+  it('多字段变更 → 计数 = 字段数（面板级计数与字段级 badge 同源）', () => {
+    const d = buildTuningFieldDiffs(base(), {
+      ...base(),
+      temperature: 0.5,
+      maxTokens: 4096,
+      thinking: 'disabled',
+    });
+    expect(d).toHaveLength(3);
+    expect(d.map((x) => x.field)).toEqual(['temperature', 'maxTokens', 'thinking']);
+  });
+
+  it('展示名全是业务词，不含内部字段名', () => {
+    const labels = Object.values(TUNING_DIFF_LABELS);
+    expect(labels).toContain('输出上限');
+    expect(labels).toContain('思考');
+    for (const l of labels) {
+      expect(l).not.toMatch(/maxTokens|topP|max_steps|thinking/);
+    }
+  });
+
+  it('对比字段集合与展示名表一一对应（漏配 label 会渲染成 undefined）', () => {
+    expect(Object.keys(TUNING_DIFF_LABELS).sort()).toEqual([...TUNING_DIFF_FIELDS].sort());
+  });
+
+  it('thinkingFormLabel 未知值回落「跟随默认」（防联调期旧形状污染界面）', () => {
+    expect(thinkingFormLabel('null')).toBe('跟随默认');
+    expect(thinkingFormLabel(undefined)).toBe('跟随默认');
+    expect(thinkingFormLabel(null)).toBe('跟随默认');
+    expect(thinkingFormLabel('weird' as ThinkingFormValue)).toBe('跟随默认');
+  });
+
+  it('面板 segmented 选项的唯一真源：THINKING_FORM_OPTIONS 仍是三态且值为契约字面量', () => {
+    expect(THINKING_FORM_OPTIONS.map((o) => o.value)).toEqual(['null', 'enabled', 'disabled']);
+    expect(THINKING_FORM_OPTIONS.map((o) => o.label)).toEqual(['跟随默认', '开启', '关闭']);
   });
 });

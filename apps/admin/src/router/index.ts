@@ -164,13 +164,40 @@ const routes: RouteRecordRaw[] = [
             path: 'definitions/new',
             name: 'AgentDefCreate',
             component: () => import('@/views/Agents/AgentDefDetail.vue'),
-            meta: { title: '新建 Agent', permission: 'agents:manage' },
+            // 新建仍要管理权（agents:manage 一字不动）
+            meta: {
+              title: '新建 Agent',
+              permission: 'agents:manage',
+              breadcrumb: [
+                { label: 'Agents', to: '/agents' },
+                { label: '定义管理', to: '/agents/definitions' },
+                { label: '新建' },
+              ],
+            },
           },
           {
             path: 'definitions/:id',
             name: 'AgentDefDetail',
             component: () => import('@/views/Agents/AgentDefDetail.vue'),
-            meta: { title: 'Agent 定义详情', permission: 'agents:manage' },
+            /**
+             * 权限口径订正（D2，2026-11-06 盲测）：
+             * 原 `permission: 'agents:manage'` 让 editor/viewer 整页 403，
+             * 而 page-spec v2 §5.1 要求「editor/viewer 能进详情页看基础配置，调参区隐藏 + 给降级提示」。
+             * 两处门禁本来就有分工：
+             *   · **路由** = 能不能进页面 → `agents:view`；
+             *   · **页面内** = 能不能调参/保存 → `canAccessTuning(roles)` + `hasPermission('agents:manage')`
+             *     （`AgentDefDetail.vue` 的 `canTune` / `canManage`，其 S5 门禁不动）。
+             * 只改前端路由元数据，**不动后端鉴权**：viewer 调保存接口若被后端拒，属预期。
+             */
+            meta: {
+              title: 'Agent 定义详情',
+              permission: 'agents:view',
+              breadcrumb: [
+                { label: 'Agents', to: '/agents' },
+                { label: '定义管理', to: '/agents/definitions' },
+                { label: ':id' },
+              ],
+            },
           },
           {
             path: 'skills',

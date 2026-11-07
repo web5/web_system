@@ -37,11 +37,13 @@
       :model="{}"
     >
       <!-- 控件 1 · temperature：空 = 不覆盖，运行时回落 0.7（禁止 ?? 0.7 预填）
-           placeholder 走「示例/格式」口径（2026-10-29 拍板，见 page-spec §2.1） -->
+           placeholder 走「示例/格式」口径（2026-10-29 拍板，见 page-spec §2.1）
+           B2c：hint 改走 #extra 插槽（原来用 extra prop）——antd FormItem 是
+           `props.extra ?? slots.extra`，prop 一存在插槽就被忽略。要同时放 hint 和 badge，
+           必须把 hint 也搬进插槽，不能靠两条并存。 -->
       <a-form-item
         data-dr="gen-params-temperature"
         label="Temperature"
-        extra="留空 = 不覆盖，运行时回落 0.7；与 topP 互斥"
         :help="errs.temperature"
         :validate-status="errs.temperature ? 'error' : ''"
       >
@@ -54,6 +56,17 @@
           style="width: 100%"
           @update:value="onTemperature"
         />
+        <template #extra>
+          <div class="hint-row">
+            <span>留空 = 不覆盖，运行时回落 0.7；与 Top P 互斥</span>
+            <span class="sp"></span>
+            <span
+              v-if="diffMap.temperature"
+              data-dr="gen-params-temperature-badge"
+              class="dr-badge"
+            >{{ diffMap.temperature?.before }}<span class="arw">→</span>{{ diffMap.temperature?.after }}</span>
+          </div>
+        </template>
       </a-form-item>
 
       <!-- 控件 2 · maxTokens：**无 placeholder**（2026-10-29 拍板口径 C）——留空 = 用满模型上限，
@@ -61,7 +74,6 @@
       <a-form-item
         data-dr="gen-params-maxTokens"
         label="输出上限"
-        :extra="hasTools ? `留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小` : '留空 = 系统默认'"
         :help="errs.maxTokens"
         :validate-status="errs.maxTokens ? 'error' : ''"
       >
@@ -72,13 +84,23 @@
           style="width: 100%"
           @update:value="onMaxTokens"
         />
+        <template #extra>
+          <div class="hint-row">
+            <span>{{ hasTools ? `留空 = 模型上限（${MODEL_MAX_TOKENS}），不人为压小` : '留空 = 系统默认' }}</span>
+            <span class="sp"></span>
+            <span
+              v-if="diffMap.maxTokens"
+              data-dr="gen-params-maxTokens-badge"
+              class="dr-badge"
+            >{{ diffMap.maxTokens?.before }}<span class="arw">→</span>{{ diffMap.maxTokens?.after }}</span>
+          </div>
+        </template>
       </a-form-item>
 
       <!-- 控件 3 · topP：与 temperature 互斥（C7-b）——同填保存被拒、红字、不清值 -->
       <a-form-item
         data-dr="gen-params-topP"
         label="Top P"
-        extra="核采样 top_p；与 temperature 互斥，同填保存将被拒绝"
         :help="errs.topP"
         :validate-status="errs.topP ? 'error' : ''"
       >
@@ -91,6 +113,17 @@
           style="width: 100%"
           @update:value="onTopP"
         />
+        <template #extra>
+          <div class="hint-row">
+            <span>核采样参数；与 Temperature 互斥，同填保存会被拒绝</span>
+            <span class="sp"></span>
+            <span
+              v-if="diffMap.topP"
+              data-dr="gen-params-topP-badge"
+              class="dr-badge"
+            >{{ diffMap.topP?.before }}<span class="arw">→</span>{{ diffMap.topP?.after }}</span>
+          </div>
+        </template>
       </a-form-item>
 
       <!-- 控件 4 · thinking：三态 segmented（D1）。文案走业务词，契约值留内部
@@ -98,7 +131,6 @@
       <a-form-item
         data-dr="gen-params-thinking"
         label="思考"
-        extra="跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）"
       >
         <a-radio-group
           :value="thinkingVal"
@@ -106,12 +138,26 @@
           :options="thinkingOptions"
           @change="onThinking"
         />
+        <template #extra>
+          <div class="hint-row">
+            <span>跟随默认 = 不在此层锁定，按优先级链决定（带工具时强制开启）</span>
+            <span class="sp"></span>
+            <span
+              v-if="diffMap.thinking"
+              data-dr="gen-params-thinking-badge"
+              class="dr-badge"
+            >{{ diffMap.thinking?.before }}<span class="arw">→</span>{{ diffMap.thinking?.after }}</span>
+          </div>
+        </template>
       </a-form-item>
 
-      <!-- 联动③：thinking=enabled → budget 只读预览（实时重算） -->
+      <!-- 联动③：thinking=enabled → budget 只读预览（实时重算）
+           D10：公式串（utils 里的 budgetFormula）自带前导「=」，模板再写一个「=」会拼出
+           「= 1000= min(8192, 2000/2)」双等号（盲测实测）。这里由 budgetFormulaText 去掉
+           前导等号并套括号 → 「= 1000（min(8192, 2000/2)）」，util 的单真源不动。 -->
       <div v-if="thinkingVal === 'enabled'" data-dr="gen-params-thinking-budget" class="b3-budget-preview">
         思考预算（只读预览）= <b>{{ preview.budgetTokens }}</b>
-        <span class="b3-formula">{{ preview.budgetFormula }}</span>
+        <span v-if="budgetFormulaText" class="b3-formula">{{ budgetFormulaText }}</span>
       </div>
 
       <!-- 控件 5 · max_steps -->
@@ -133,7 +179,9 @@
       </a-form-item>
     </a-form>
 
-    <!-- 联动①：挂工具误配 disabled → 红字警示（D2 可点+警示，不锁死控件） -->
+    <!-- 联动①：挂工具误配 disabled → 红字警示（D2 可点+警示，不锁死控件）
+         D6：原文案「按 D1 拍板（双保险 + 强制侧）…装配侧…」是内部决策代号与实现分工，
+         违反 page-spec §2.1「技术文案不进产品页面」；改讲用户能理解的行为与后果。 -->
     <a-alert
       v-if="misconfig"
       data-dr="misconfig-warn"
@@ -141,7 +189,7 @@
       type="error"
       show-icon
       message="该 Agent 挂载工具，「思考」将被强制开启"
-      description="按 D1 拍板（双保险 + 强制侧）：装配侧检测到带工具且未显式选择「开启」时强制开启——此处选「关闭」不会生效，运行时会被纠正。"
+      description="挂载了工具的 Agent 必须开启思考。此处选择「关闭」不会生效，运行时会自动纠正为「开启」。"
     />
   </div>
 </template>
@@ -150,9 +198,12 @@
 import { computed } from 'vue';
 import {
   MODEL_MAX_TOKENS,
+  THINKING_FORM_OPTIONS,
   isThinkingMisconfig,
   buildStrategyPreview,
   type ThinkingFormValue,
+  type TuningDiffField,
+  type TuningFieldDiff,
 } from '@/utils/tuning-params';
 
 const temperature = defineModel<number | null>('temperature');
@@ -166,17 +217,29 @@ const props = defineProps<{
   hasTools: boolean;
   /** 保存校验错误（C7-b 等），字段级红字 */
   errors?: Partial<Record<'temperature' | 'maxTokens' | 'topP' | 'maxSteps', string>>;
+  /**
+   * 未保存参数 diff（B2c）。由父组件按「草稿 vs 载入值」算好传入，
+   * 面板只负责在对应字段 hint 行右侧显示 `原值 → 新值`。
+   * 🔴 计数与 badge 必须同源：父组件的变更条计数也用 buildTuningFieldDiffs 的结果，
+   *    不许在这里另算一套（page-spec v2 §4「口径必须一致」）。
+   */
+  diffs?: TuningFieldDiff[];
 }>();
 
 const errs = computed(() => props.errors ?? {});
 
 /** 三态文案走业务词（2026-10-29 拍板），**value 一字不动**——onThinking 与后端契约
- *  依赖 'null' | 'enabled' | 'disabled' 三个字面量 */
-const thinkingOptions = [
-  { label: '跟随默认', value: 'null' },
-  { label: '开启', value: 'enabled' },
-  { label: '关闭', value: 'disabled' },
-];
+ *  依赖 'null' | 'enabled' | 'disabled' 三个字面量。
+ *  选项表已抽到 utils/tuning-params.ts（THINKING_FORM_OPTIONS）做单一真源：
+ *  diff badge 也要把三态显示成业务词，两处各写一份必然漂移。 */
+const thinkingOptions = THINKING_FORM_OPTIONS;
+
+/** 以字段名为键的 diff 索引（badge 用；无变更的字段不在里面） */
+const diffMap = computed<Partial<Record<TuningDiffField, TuningFieldDiff>>>(() => {
+  const m: Partial<Record<TuningDiffField, TuningFieldDiff>> = {};
+  for (const d of props.diffs ?? []) m[d.field] = d;
+  return m;
+});
 
 /** 归一化读值（defineModel 可能为 undefined） */
 const thinkingVal = computed<ThinkingFormValue>(() => thinking.value ?? 'null');
@@ -209,6 +272,18 @@ const preview = computed(() =>
     maxTokens: maxTokens.value ?? null,
   }),
 );
+
+/**
+ * 预算公式的展示串（D10）。
+ * `buildStrategyPreview().budgetFormula` 形如 `= min(8192, 2000/2)`，前导「=」是给
+ * 策略预览区「budget_tokens → 1000 = min(...)」那种句式用的；本预览行模板已写了
+ * 「…= 1000」，直接拼接就成了双等号。去掉前导等号、套一层括号，公式仍来自单一真源。
+ */
+const budgetFormulaText = computed(() => {
+  const f = preview.value.budgetFormula;
+  if (!f) return '';
+  return `（${f.replace(/^=\s*/, '')}）`;
+});
 </script>
 
 <style scoped>
@@ -300,6 +375,56 @@ const preview = computed(() =>
   margin-left: 6px;
   font-size: 12px;
   color: var(--ws-text-secondary, #525252);
+}
+/* ===== D1（P1，2026-11-06 盲测）：hint 排版三连对齐 page-spec v2 §3.2 =====
+   规格（page-specs/agent-def-detail-v2.md §3.2）：hint = **12px / --ws-text-secondary /
+   写在控件下方 6px**；§6 另明令 tertiary 不承载说明文字（对比度 AA 风险）。
+   实测偏差来自 antd 自身默认（`node_modules/ant-design-vue/es/form/style/index.js:214-226`）：
+     · `&-explain, &-extra { color: token.colorTextDescription; font-size: token.fontSize }`
+       → 14px + #A3A3A3（正好等于 --ws-text-tertiary）；
+     · `&-extra` 只给了 `min-height: controlHeightSM`，**没有上间距** → 距控件 0px。
+   三处全不符，故在此覆写。⚠️ 用**组件内** `:deep()` 收口，不动全局 antd 变量
+   （`ConfigProvider` token / `colorTextDescription` 一改会波及所有页面的说明文字）。 */
+.b3-tuning :deep(.ant-form-item-extra) {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ws-text-secondary, #525252);
+}
+/* ===== B2c：hint 行 + 字段级 diff badge =====
+   page-spec v2 §3.2 定稿口径：diff badge 出现在该字段 **hint 行右侧**（`.fhint.hintrow` +
+   `.sp` 撑开），**不在 label 后** —— label 列只有 84px，「Temperature」已占 82px，放不下。
+   原型同款：.fhint.hintrow{display:flex;gap:8px} / .badge{...}（:226-229 / :270-272）。
+   字号/色/间距由上面的 `.ant-form-item-extra` 规则统一（12px / secondary / 6px），
+   `.hint-row` 只负责让 hint 与 badge 同行。 */
+.hint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hint-row .sp {
+  flex: 1;
+}
+.dr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--ws-radius-sm);
+  font-size: 12px;
+  font-family: var(--ws-font-mono);
+  /* 底色：原型写的是 `--ws-brand-soft`，但该变量【尚未在 packages/ui/src/tokens.css 声明】
+     （page-spec §6 已把它列入「待入 tokens」，属存量缺口、不在本批范围）。
+     实现侧改用**已声明**的 `--ws-brand-50`（色值同为浅橙），而不是给未声明变量写 hex 兜底 ——
+     兜底会让「变量名写错/漏声明」静默变绿（page-spec §9 记过这个教训）。
+     token 补齐后可换回 `--ws-brand-soft`，视觉不会变。 */
+  background: var(--ws-brand-50);
+  color: var(--ws-brand-700);
+  white-space: nowrap;
+}
+.dr-badge .arw {
+  font-family: inherit;
+  color: var(--ws-text-secondary);
 }
 .b3-misconfig {
   margin-bottom: 16px;
