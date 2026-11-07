@@ -115,13 +115,21 @@
       <!-- 顶栏 -->
       <a-layout-header class="top-header">
         <div class="header-left">
-          <!-- 锚点 crumb-list：面包屑属**壳层**（所有页共享），详情页自身不再画一份
-               （page-spec v2:69 的「面包屑：Agents / 定义管理 / <id>」即此处的首页 → 当前页） -->
+          <!-- 锚点 crumb-list：面包屑属**壳层**（所有页共享），详情页自身不再画一份。
+               层级来源两级：
+               ① 路由 meta.breadcrumb（需要 3 段的页面显式声明，如详情页「Agents / 定义管理 / <id>」）；
+               ② 未声明时沿用旧口径「🏠 图标 + 当前页标题」—— **默认分支一字不动**，
+                  壳层共享组件不能因为给详情页补层级而改掉其它页面的面包屑。 -->
           <a-breadcrumb data-dr="crumb-list">
-            <a-breadcrumb-item>
-              <HomeOutlined />
+            <a-breadcrumb-item v-for="(c, i) in crumbs" :key="i">
+              <HomeOutlined v-if="c.isHome" />
+              <router-link v-else-if="c.to" :to="c.to">{{ c.label }}</router-link>
+              <!-- 纯文本用 template 直接出文本节点，不额外包 <span>：
+                   这样「无 meta.breadcrumb」的页面其 DOM 与本次改动前**完全一致**
+                   （旧写法 `<a-breadcrumb-item>{{ title }}</a-breadcrumb-item>` 也是纯文本节点，
+                   外层 span 由 antd 的 .ant-breadcrumb-link 提供）。壳层共享组件，能不动就不动。 -->
+              <template v-else>{{ c.label }}</template>
             </a-breadcrumb-item>
-            <a-breadcrumb-item>{{ currentTitle }}</a-breadcrumb-item>
           </a-breadcrumb>
         </div>
         <div class="header-right">
@@ -263,6 +271,51 @@ const currentTitle = computed(() => {
   };
   const matched = route.matched.find((r) => r.meta.title);
   return (matched?.meta.title as string) || '工作台';
+});
+
+/** 路由 meta.breadcrumb 的元素形状（标签可含 `:param` 占位，从 route.params 取值） */
+interface CrumbSpec {
+  label: string;
+  to?: string;
+}
+/** 渲染用面包屑项：isHome 走图标（旧口径），to 有值才渲染为可点链接 */
+interface Crumb {
+  label?: string;
+  to?: string;
+  isHome?: boolean;
+}
+
+/**
+ * 面包屑层级。
+ *
+ * 两种来源，**默认分支保持 R11b 之前的行为**：
+ * - 路由没声明 `meta.breadcrumb` → `[🏠, 当前页标题]`（所有存量页面的现状，不改）；
+ * - 路由声明了 → 按声明渲染，父级可点、**末段（当前页）不可点**。
+ *
+ * 三处刻意的收敛，别"优化"掉：
+ * 1. **末段强制去链接**：即使 meta 写了 to 也不给链接 —— 当前页自我跳转是无意义动作。
+ * 2. **无权限的父级降级为纯文本**：`定义管理` 指向 `/agents/definitions`（agents:manage），
+ *    viewer 点进去只会落 /403。宁可不可点，也不给一条必然 403 的链接。
+ * 3. 声明只加在需要的路由上（当前仅 Agent 定义详情/新建），不给全站补层级 ——
+ *    壳层共享组件改动面必须可枚举。
+ */
+const crumbs = computed<Crumb[]>(() => {
+  const spec = route.meta?.breadcrumb as CrumbSpec[] | undefined;
+  if (!Array.isArray(spec) || spec.length === 0) {
+    return [{ isHome: true }, { label: currentTitle.value }];
+  }
+  return spec.map((item, idx) => {
+    const label = item.label.replace(/:([A-Za-z0-9_]+)/g, (_m, key: string) =>
+      String((route.params as Record<string, unknown>)[key] ?? ''),
+    );
+    const isLast = idx === spec.length - 1;
+    let to = isLast ? undefined : item.to;
+    if (to) {
+      const perm = router.resolve(to).meta?.permission as string | undefined;
+      if (perm && !userStore.hasPermission(perm)) to = undefined;
+    }
+    return { label, to };
+  });
 });
 
 watch(() => route.path, (path) => {
