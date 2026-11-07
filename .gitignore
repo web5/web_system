@@ -134,3 +134,9 @@ archive/db-backups/
 tests/.env.test
 # 本地原型预览发布目录（sites 发布的干净目录，非源码）
 .preview/
+
+# Playwright 端到端测试产物（tests/ 统一入口运行输出，含截图/报告，非源码）
+test-results/
+
+# 红线扫描脚本（scripts/redline Python）字节码缓存
+scripts/redline/__pycache__/
