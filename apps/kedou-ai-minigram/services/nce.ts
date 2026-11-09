@@ -69,22 +69,29 @@ export interface NceLessonDetail {
   fetchedAt: string;
 }
 
-export async function getNceMeta(): Promise<NceMeta> {
-  const res = await get<Wrapped<NceMeta>>(`${BASE}/meta`);
-  return res?.data ?? { book: 'NCE2', bookTitle: '新概念英语第二册', total: 96, downloaded: 0 };
+export async function getNceMeta(book?: string): Promise<NceMeta> {
+  const q = book ? `${BASE}/meta?book=${book}` : `${BASE}/meta`;
+  const res = await get<Wrapped<NceMeta>>(q);
+  return res?.data ?? { book: book ?? 'NCE2', bookTitle: '新概念英语', total: 96, downloaded: 0 };
 }
 
 export async function listNceLessons(
   page = 1,
   pageSize = 100,
   keyword = '',
+  book?: string,
 ): Promise<{ total: number; items: NceLessonSummary[] }> {
-  const q = `${BASE}/lessons?page=${page}&pageSize=${pageSize}&keyword=${encodeURIComponent(keyword)}`;
-  const res = await get<Wrapped<{ total: number; items: NceLessonSummary[] }>>(q);
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('pageSize', String(pageSize));
+  if (keyword) params.set('keyword', keyword);
+  if (book) params.set('book', book);
+  const res = await get<Wrapped<{ total: number; items: NceLessonSummary[] }>>(`${BASE}/lessons?${params.toString()}`);
   return res?.data ?? { total: 0, items: [] };
 }
 
-export async function getNceLesson(id: number): Promise<NceLessonDetail | null> {
-  const res = await get<Wrapped<NceLessonDetail>>(`${BASE}/lessons/${id}`);
+export async function getNceLesson(id: number, book?: string): Promise<NceLessonDetail | null> {
+  const q = book ? `${BASE}/lessons/${id}?book=${book}` : `${BASE}/lessons/${id}`;
+  const res = await get<Wrapped<NceLessonDetail>>(q);
   return res?.data ?? null;
 }

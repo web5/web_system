@@ -75,14 +75,14 @@ export interface ListNceParams {
   book?: string;
 }
 
-export function getNceMeta(): Promise<NceMeta> {
-  return request.get('/content-admin/nce/meta');
+export function getNceMeta(book?: string): Promise<NceMeta> {
+  return request.get('/content-admin/nce/meta', { params: book ? { book } : undefined });
 }
 
 export function listNceLessons(params: ListNceParams = {}): Promise<{ total: number; items: NceLessonSummary[] }> {
   return request.get('/content-admin/nce/lessons', { params });
 }
 
-export function getNceLesson(id: number): Promise<NceLessonDetail> {
-  return request.get(`/content-admin/nce/lessons/${id}`);
+export function getNceLesson(id: number, book?: string): Promise<NceLessonDetail> {
+  return request.get(`/content-admin/nce/lessons/${id}`, { params: book ? { book } : undefined });
 }

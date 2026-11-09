@@ -18,6 +18,14 @@ import {
 } from '@/api/nce';
 import { moduleOverlayContainer } from '@/utils/mount';
 
+/** 册别切换：与后端 BOOKS 配置表保持一致（docs/development/reports/2026-11-09-NCE多册支持方案.md §2.1）。 */
+const BOOKS = [
+  { key: 'NCE2', label: '第二册' },
+  { key: 'NCE3', label: '第三册' },
+  { key: 'NCE4', label: '第四册' },
+];
+const activeBook = ref('NCE2');
+
 const loading = ref(false);
 const meta = ref<NceMeta | null>(null);
 const items = ref<NceLessonSummary[]>([]);
@@ -38,8 +46,8 @@ async function load() {
   loading.value = true;
   try {
     const [m, list] = await Promise.all([
-      getNceMeta(),
-      listNceLessons({ page: page.value, pageSize: pageSize.value, keyword: keyword.value }),
+      getNceMeta(activeBook.value),
+      listNceLessons({ page: page.value, pageSize: pageSize.value, keyword: keyword.value, book: activeBook.value }),
     ]);
     meta.value = m;
     items.value = list.items ?? [];
@@ -52,6 +60,12 @@ async function load() {
 }
 
 function onSearch() {
+  page.value = 1;
+  void load();
+}
+
+function onBookChange(k: string) {
+  activeBook.value = k;
   page.value = 1;
   void load();
 }
@@ -75,7 +89,7 @@ async function openPreview(row: NceLessonSummary) {
   previewLoading.value = true;
   preview.value = null;
   try {
-    preview.value = await getNceLesson(row.id);
+    preview.value = await getNceLesson(row.id, activeBook.value);
   } catch {
     previewVisible.value = false;
   } finally {
@@ -127,6 +141,10 @@ const columns = [
   <div class="page">
     <div class="page-head">
       <h2>新概念英语课文</h2>
+      <div class="book-tabs">
+        <button v-for="b in BOOKS" :key="b.key" type="button"
+          :class="{ on: activeBook === b.key }" @click="onBookChange(b.key)">{{ b.label }}</button>
+      </div>
       <span v-if="meta" class="stat">
         {{ meta.bookTitle }} · 已入库 <b>{{ meta.downloaded }}</b> / {{ meta.total }} 课
       </span>
@@ -281,6 +299,10 @@ const columns = [
 <style scoped>
 .page { padding: 4px 0; }
 .page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+.book-tabs { display: inline-flex; border: 1px solid rgba(0, 0, 0, .12); border-radius: 8px; overflow: hidden; }
+.book-tabs button { border: 0; background: #fff; color: #6b7280; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.book-tabs button + button { border-left: 1px solid rgba(0, 0, 0, .12); }
+.book-tabs button.on { background: #f97316; color: #fff; }
 .page-head h2 { margin: 0; font-size: 20px; color: #1a1a1f; }
 .stat { color: #6b7280; font-size: 13px; }
 .stat b { color: #f97316; font-size: 15px; }

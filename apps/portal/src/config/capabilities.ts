@@ -35,7 +35,7 @@ export const CAPABILITIES: Capability[] = [
   },
   {
     name: '新概念英语',
-    desc: 'NCE2 逐句精读 · 点句出译文 · 生词就地查',
+    desc: 'NCE2/3/4 逐句精读 · 点句出译文 · 生词就地查',
     icon: 'lang',
     to: '/nce',
     enabled: true,

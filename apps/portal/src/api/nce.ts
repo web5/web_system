@@ -63,14 +63,14 @@ export interface NceLessonDetail {
   fetchedAt: string;
 }
 
-export function getNceMeta(): Promise<NceMeta> {
-  return request.get<NceMeta>('/content-admin/nce/meta') as unknown as Promise<NceMeta>;
+export function getNceMeta(book?: string): Promise<NceMeta> {
+  return request.get<NceMeta>('/content-admin/nce/meta', { params: book ? { book } : undefined }) as unknown as Promise<NceMeta>;
 }
 
-export function listNceLessons(params: { page?: number; pageSize?: number; keyword?: string } = {}): Promise<{ total: number; items: NceLessonSummary[] }> {
+export function listNceLessons(params: { page?: number; pageSize?: number; keyword?: string; book?: string } = {}): Promise<{ total: number; items: NceLessonSummary[] }> {
   return request.get<{ total: number; items: NceLessonSummary[] }>('/content-admin/nce/lessons', { params }) as unknown as Promise<{ total: number; items: NceLessonSummary[] }>;
 }
 
-export function getNceLesson(id: number): Promise<NceLessonDetail> {
-  return request.get<NceLessonDetail>(`/content-admin/nce/lessons/${id}`) as unknown as Promise<NceLessonDetail>;
+export function getNceLesson(id: number, book?: string): Promise<NceLessonDetail> {
+  return request.get<NceLessonDetail>(`/content-admin/nce/lessons/${id}`, { params: book ? { book } : undefined }) as unknown as Promise<NceLessonDetail>;
 }
