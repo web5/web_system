@@ -66,48 +66,45 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 
 # F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
 #   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
-#   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用；
-#   E2E_TIMEOUT_KIND 记录闸门种类，E2E_TIMEOUT_CODE 记录该种闸门的超时码
-#   （perl→142 SIGALRM / timeout|gtimeout→124）；kind=none 时超时码留空 → 任何 rc 都不当超时。
+#   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用。
+#   超时判据取「信号」——既不看退出码字面值，也不看耗时：
+#     命令自己 exit / 自打信号，都会被当成「超时」或「通过」（前者曾用标记文件区分，但 exit 走不到写标记那行，
+#     与「被杀」同形）；只有父进程 waitpid 拿到子进程原始 status，才分得清「自己退出」与「被信号杀死」。
+#     perl 分支 fork+waitpid：子进程 sig=14(SIGALRM) → 哨兵码 250（真超时，降级）；
+#     其余信号 → 128+sig（非零 → 判红）；无信号 → 透传子进程真实退出码（exit 142→142 判红、exit 3→3 判红）。
+#   E2E_TIMEOUT_KIND / E2E_TIMEOUT_CODE 记录闸门种类与该种闸门的超时哨兵码
+#     （perl→250 / timeout·gtimeout→124；kind=none 时留空 → 任何 rc 都不当超时）。
+#   已知边界（本轮不修，仅记录）：① 命令主动模仿哨兵码（自行 exit 250 / exit 124）在对应 kind 下无法与真超时区分；
+#     ② perl 分支 kill 只杀直接子进程，孙进程（如 npm 下的 node）超时后可能留孤儿——与既有行为一致。
 E2E_LOG="${TMP}/e2e-list.log"
-E2E_DONE="${TMP}/e2e.done"
-E2E_RUN="${TMP}/e2e-run.sh"
-E2E_CMD_FILE="${TMP}/e2e-cmd.sh"
 E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
 E2E_TIMEOUT_KIND="none"
 E2E_TIMEOUT_CODE=""
 if command -v perl >/dev/null 2>&1; then
-  E2E_TIMEOUT_KIND="perl";    E2E_TIMEOUT_CODE=142
+  E2E_TIMEOUT_KIND="perl";    E2E_TIMEOUT_CODE=250
+  perl -e '
+    my $t = shift; my $pid;
+    $SIG{ALRM} = sub { kill "ALRM", $pid if $pid };
+    $pid = fork;
+    exit 127 unless defined $pid;
+    if (!$pid) { exec @ARGV; exit 127 }
+    alarm $t;
+    my $got;
+    do { $got = waitpid($pid, 0) } while ($got == -1 && $! == 4);   # 4=EINTR：被 alarm 打断后重试，避免取到陈旧 $?
+    alarm 0;
+    my $r = $?;
+    my $sig = $r & 127;
+    exit( $sig ? ($sig == 14 ? 250 : 128 + $sig) : ($r >> 8) );
+  ' 5 sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
 elif command -v timeout >/dev/null 2>&1; then
   E2E_TIMEOUT_KIND="timeout"; E2E_TIMEOUT_CODE=124
+  timeout 5 sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
 elif command -v gtimeout >/dev/null 2>&1; then
   E2E_TIMEOUT_KIND="gtimeout"; E2E_TIMEOUT_CODE=124
+  gtimeout 5 sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
+else
+  sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
 fi
-# 超时判据用「完成标记」而不是耗时比较（G1）：
-#   alarm 5 不可能在 5s 前触发，所以「命令自己跑完」必能执行到标记行（写 E2E_DONE），
-#   「被 alarm/timeout 杀掉」执行不到 → 标记不存在。=> 「超时码 + 无标记」才是真超时；
-#   「超时码 + 有标记」= 命令自行退出 142/124，属伪造/真实失败 → 判 FAIL。
-#   这样既不依赖 SECONDS 差值（e2e 与 ① 层并行，从启动算会把 ① 层耗时算进 e2e），也不会被 exit 142 骗过。
-#   被测命令落成**独立脚本文件**（不用 sh -c "…${E2E_CMD}…"，避开命令内含单引号时拼接炸裂）；
-#   且由包装脚本用 `sh 子文件` 转一手——否则命令若是内建 `exit 142`，会把包装 shell 一起带走、
-#   连标记行都执行不到，反而被误判成「真超时」。
-rm -f "${E2E_DONE}"
-printf '%s\n' "${E2E_CMD}" > "${E2E_CMD_FILE}"
-{
-  printf '%s\n' '#!/bin/sh'
-  printf 'sh "%s"\n' "${E2E_CMD_FILE}"
-  printf '%s\n' 'rc=$?'
-  printf ': > "%s"\n' "${E2E_DONE}"
-  printf '%s\n' 'exit $rc'
-} > "${E2E_RUN}"
-(
-  case "${E2E_TIMEOUT_KIND}" in
-    perl)     perl -e 'alarm shift; exec @ARGV' 5 sh "${E2E_RUN}" ;;
-    timeout)  timeout 5 sh "${E2E_RUN}" ;;
-    gtimeout) gtimeout 5 sh "${E2E_RUN}" ;;
-    *)        sh "${E2E_RUN}" ;;
-  esac
-) >"${E2E_LOG}" 2>&1 &
 E2E_PID=$!
 
 LABEL[1]='①'; NAME[1]='意图锚定'
@@ -166,9 +163,10 @@ need_pkg_script() {
     specs:index:check) target="gen-specs-index.mjs" ;;
     test:e2e:list)     target="playwright.config.ts" ;;
     check:governance)  target="check-governance.sh" ;;
-    *)                 # G3：未知键若静默放过，target 为空会让 node 侧 `if (target && …)` 短路成 OK（假绿）
-                       fail "内部错误：受检键 ${key} 未配目标子串映射（need_pkg_script 的 case 缺分支）" \
-                            "在 need_pkg_script 的 case 里为该键补 target 映射"; return 1 ;;
+    *)                 # G3：未知键若静默放过，target 为空会让 node 侧 `if (target && …)` 短路成 OK（假绿）。
+                       # 文案固定短语「内部错误：need_pkg_script 未知键」供外部机器判定命中本分支。
+                       fail "内部错误：need_pkg_script 未知键 ${key}（case 缺分支，未配目标子串映射）" \
+                            "在 need_pkg_script 的 case 里为 ${key} 补 target 映射后重跑"; return 1 ;;
   esac
   line="$(node -e '
     const fs=require("fs"), path=require("path");
@@ -281,32 +279,27 @@ L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
 # F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
-#   rc=0 → PASS；超时码 + 无完成标记 = 真超时 → 等价降级不判 FAIL；
-#   其余（含「超时码 + 有完成标记」的自行退出）→ FAIL ②。
+#   rc=0 → PASS；rc 等于该种闸门的超时哨兵码（perl 250 / timeout·gtimeout 124）= 子进程被闸门信号杀死
+#   → 等价降级不判 FAIL；其余 rc（含命令自行 exit 142/124 以外的失败）→ FAIL ②。
 E2E_RC=0
 wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
-# G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN，不静默、不阻断）
+# G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN + detail，不静默、不阻断）
 if [ "${E2E_TIMEOUT_KIND}" = "none" ]; then
-  warn "test:e2e:list：无 perl/timeout/gtimeout，5s 闸门未生效（rc=${E2E_RC}，仅裸跑无超时保护）" \
+  warn "test:e2e:list：无 perl/timeout，5s 闸门未生效（rc=${E2E_RC}，仅裸跑无超时保护）" \
        "安装 perl 或 coreutils 的 timeout/gtimeout 以启用 F3 5s 超时闸门（当前非阻断）"
-  add "E2E 闸门未生效（无 perl/timeout）"
+  add "无超时工具，闸门未生效（无 perl/timeout/gtimeout）"
 fi
 if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
 elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
-     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ] && [ ! -f "${E2E_DONE}" ]; then
-  # 真超时（双条件：对应超时码 + 无完成标记）→ 等价降级（§4.1.1），不判 FAIL
+     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ]; then
+  # 真超时（子进程被 alarm/timeout 以信号杀死 → 哨兵码）→ 等价降级（§4.1.1），不判 FAIL
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
     add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
-elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
-     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ]; then
-  # 超时码但已写出完成标记 → 命令自己退的 142/124，冒充满时 → 判 FAIL（G1）
-  fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}，命令自行退出未超时）" \
-       "npm run test:e2e:list --silent 查看真实错误；rc=${E2E_RC} 且已写出完成标记，判失败而非环境慢"
 else
   fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}）" \
        "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
