@@ -146,7 +146,7 @@ export class AuthService {
    */
   async miniprogramLogin(mpDto: MiniprogramLoginRequest): Promise<MiniprogramLoginResponse> {
     try {
-      const mpConfig = this.getMpConfig();
+      const mpConfig = this.getMpConfig(mpDto.appId);
 
       const sessionResponse = await axios.get(
         'https://api.weixin.qq.com/sns/jscode2session',
@@ -418,10 +418,30 @@ export class AuthService {
     }
   }
 
-  private getMpConfig() {
+  /**
+   * 解析「AppID → secret」映射（多 AppID 小程序）。
+   * 配置形如 JSON 字符串：{"wx...":"secret-a","wx...":"secret-b"}。
+   * 解析失败或非对象时返回空映射，调用方据此回退到默认 secret。
+   */
+  private getMpSecretMap(): Record<string, string> {
+    const raw = this.configService.get('MINI_PROGRAM_APP_SECRETS', '{}');
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, string>;
+      }
+      return {};
+    } catch {
+      return {};
+    }
+  }
+
+  private getMpConfig(appId?: string) {
+    const resolvedAppId = appId || this.configService.get<string>('MINI_PROGRAM_APP_ID', '');
+    const secret = this.getMpSecretMap()[resolvedAppId] || this.configService.get<string>('MINI_PROGRAM_SECRET', '');
     return {
-      appId: this.configService.get('MINI_PROGRAM_APP_ID', ''),
-      secret: this.configService.get('MINI_PROGRAM_SECRET', ''),
+      appId: resolvedAppId,
+      secret,
     };
   }
 
