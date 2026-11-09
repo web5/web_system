@@ -128,7 +128,15 @@ export function microFrontendConfig(opts) {
     resolve: {
       alias: {
         '@': resolve(process.cwd(), 'src'),
-        '@web-system/shared': resolve(process.cwd(), '../../packages/shared/src/index.ts'),
+        // ⚠️ 必须指 `browser.ts` 这个**浏览器安全入口**，不能指 `src/index.ts`（后端 barrel）。
+        //    barrel 里 re-export 了 storage-dir / typeorm 实体 / nest 守卫等 node-only 模块，
+        //    其中 storage-dir.ts 顶层就执行 `path.join(os.homedir(), ...)`；浏览器里 os/path
+        //    被换成空的 __viteBrowserExternal → 模块 execute 期抛
+        //    `TypeError: (void 0) is not a function`，admin / portal 双双启动即崩、整站白屏
+        //    （2026-11-06 P0，BCFD461A 引入）。指 browser.ts 后前端误引 node-only 符号会在
+        //    rollup 阶段报 `is not exported`，而不是运行时白屏。
+        //    机器校验：scripts/check-shared-browser-safety.mjs
+        '@web-system/shared': resolve(process.cwd(), '../../packages/shared/src/browser.ts'),
         // 与 standalone 模式（apps/*/vite.config.ts）同口径：该包未在 portal 的
         // package.json 声明，靠 alias 指到源码；MF 缺这条会 rollup 解析失败。
         '@web-system/agent-message': resolve(

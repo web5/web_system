@@ -1,0 +1,21 @@
+.page { min-height: 100vh; background: #FFFFFF; padding: 28rpx 28rpx 60rpx; color: #1A1A1F; }
+.head { margin-bottom: 24rpx; }
+.h1 { font-size: 40rpx; font-weight: 700; }
+.sub { margin-top: 8rpx; font-size: 24rpx; color: #6B7280; }
+.search-wrap { margin-bottom: 24rpx; }
+.search { background: #F9FAFB; border: 1rpx solid rgba(0,0,0,.08); border-radius: 16rpx; padding: 18rpx 24rpx; font-size: 26rpx; }
+.grp-t { font-size: 22rpx; color: #6B7280; letter-spacing: 1rpx; margin: 24rpx 0 12rpx; }
+.card { border: 1rpx solid rgba(0,0,0,.08); border-radius: 20rpx; padding: 24rpx 24rpx 20rpx; margin-bottom: 16rpx; background: #FFFFFF; box-shadow: 0 2rpx 8rpx rgba(0,0,0,.04); }
+.card:active { background: #FFF7ED; }
+.row1 { display: flex; align-items: baseline; }
+.no { flex: 0 0 60rpx; color: #0EA5A4; font-size: 26rpx; font-weight: 600; }
+.title { flex: 1; font-family: Georgia, serif; font-size: 30rpx; font-weight: 600; }
+.go { color: #9CA3AF; font-size: 34rpx; }
+.row2 { margin-top: 8rpx; display: flex; align-items: center; gap: 12rpx; }
+.cn { font-size: 24rpx; color: #6B7280; }
+.tag { font-size: 20rpx; padding: 3rpx 12rpx; border-radius: 12rpx; background: #ECFDF5; color: #047857; }
+.tag.lrc { background: #FFF7ED; color: #B45309; }
+.lead { margin-top: 12rpx; padding: 12rpx 16rpx; background: #FFF7ED; border-left: 4rpx solid #F97316; border-radius: 0 8rpx 8rpx 0; font-size: 24rpx; }
+.meta { margin-top: 12rpx; font-size: 22rpx; color: #9CA3AF; }
+.state { padding: 80rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
+.state.err { color: #DC2626; }

@@ -333,6 +333,13 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/Content/ContentAccountEdit.vue'),
             meta: { title: '编辑账号', permission: 'content:manage' },
           },
+          {
+            // 新概念英语课文（只读预览）：数据由入库器写入 nce_lessons，后台不提供编辑
+            path: 'nce-lessons',
+            name: 'NceLessons',
+            component: () => import('@/views/Content/NceLessons.vue'),
+            meta: { title: '新概念英语课文', permission: 'content:view' },
+          },
         ],
       },
     ],

@@ -32,7 +32,10 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src'),
-        '@web-system/shared': resolve(__dirname, '../../packages/shared/src/index.ts'),
+        // ⚠️ 只允许指 browser.ts（浏览器安全入口），不要改回 src/index.ts ——
+        //    后端 barrel 会把 storage-dir（顶层 os.homedir()）等 node-only 模块拖进产物，
+        //    模块 execute 期直接 TypeError、整站白屏（2026-11-06 P0）。详见该文件顶部注释。
+        '@web-system/shared': resolve(__dirname, '../../packages/shared/src/browser.ts'),
         '@web-system/agent-message': resolve(__dirname, '../../packages/agent-message/src/index.ts'),
       },
     },

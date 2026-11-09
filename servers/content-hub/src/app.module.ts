@@ -26,6 +26,7 @@ import { HotmoneySeatEntity } from './content/entities/hotmoney-seat.entity';
 import { CollectRunEntity } from './content/entities/collect-run.entity';
 import { PipelineRunEntity } from './content/entities/pipeline-run.entity';
 import { ContentAccountEntity } from './content/entities/content-account.entity';
+import { NceLessonEntity } from './content/entities/nce-lesson.entity';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { ContentAccountEntity } from './content/entities/content-account.entity'
           CollectRunEntity,
           ContentAccountEntity,
           PipelineRunEntity,
+          NceLessonEntity,
         ];
         if (dbType === 'mysql') {
           return {

@@ -507,6 +507,94 @@
     0%, 100% { opacity: .5; }
     50% { opacity: .9; }
   }
+
+  /* ===== NCE · 新概念英语（原型登记 2026-11-06）=====
+     作用域：仅 #p-nce 及其后代，不污染既有屏；固定浅色白底，不跟随 dark 主题。
+     token: #FFFFFF / #1A1A1F / #6B7280 / #F97316 / #0EA5A4（对比度达标青） */
+  #p-nce {
+    --nce-bg:#FFFFFF; --nce-text:#1A1A1F; --nce-2:#6B7280;
+    --nce-line:rgba(0,0,0,.08); --nce-brand:#F97316; --nce-accent:#0EA5A4;
+    background:#FFFFFF; color:#1A1A1F;
+  }
+  #p-nce * { box-sizing:border-box; }
+  .nce-view { display:none; }
+  .nce-view.on { display:block; }
+  .nce-kicker { font-size:11.5px; color:#6B7280; letter-spacing:.04em; margin:2px 0 6px; }
+  .nce-h1 { font-size:21px; font-weight:700; color:#1A1A1F; margin:0 0 4px; letter-spacing:-.02em; }
+  .nce-sub { font-size:12.5px; color:#6B7280; margin:0 0 16px; }
+  .nce-stat { display:flex; gap:8px; margin-bottom:14px; }
+  .nce-stat div { flex:1; background:#FFFFFF; border:1px solid rgba(0,0,0,.08);
+    border-radius:10px; padding:9px 10px; font-size:11.5px; color:#6B7280; }
+  .nce-stat b { display:block; font-size:17px; color:#1A1A1F; font-weight:700; margin-bottom:2px; }
+  .nce-search { width:100%; border:1px solid rgba(0,0,0,.08); background:#FFFFFF;
+    border-radius:9px; padding:9px 11px; font-size:13px; color:#1A1A1F; margin-bottom:14px; outline:none; }
+  .nce-search:focus { border-color:#0EA5A4; }
+  .nce-grp { font-size:12px; color:#6B7280; margin:14px 0 8px; display:flex; justify-content:space-between; }
+  .nce-card { display:block; width:100%; text-align:left; background:#FFFFFF;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:12px 13px; margin-bottom:9px; cursor:pointer; }
+  .nce-card .r1 { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .nce-card .no { font-size:11px; font-weight:700; color:#F97316; letter-spacing:.06em; }
+  .nce-card .tt { font-size:14.5px; font-weight:600; color:#1A1A1F; }
+  .nce-card .lead { font-size:12.5px; color:#1A1A1F; margin:7px 0 4px; line-height:1.55; }
+  .nce-card .leaden { font-size:11.5px; color:#6B7280; line-height:1.45; }
+  .nce-card .meta { display:flex; gap:8px; align-items:center; margin-top:9px; font-size:11px; color:#6B7280; }
+  .nce-tag { font-size:10.5px; padding:2px 7px; border-radius:5px; border:1px solid transparent; }
+  .nce-tag.xdf { color:#0EA5A4; border-color:rgba(14,165,164,.35); background:rgba(14,165,164,.07); }
+  .nce-tag.lrc { color:#F97316; border-color:rgba(249,115,22,.35); background:rgba(249,115,22,.07); }
+  .nce-empty { text-align:center; font-size:12.5px; color:#6B7280; padding:18px 10px;
+    border:1px dashed rgba(0,0,0,.10); border-radius:10px; }
+  .nce-back { display:inline-flex; align-items:center; gap:4px; font-size:12.5px;
+    color:#6B7280; cursor:pointer; margin-bottom:12px; }
+  .nce-leadbox { background:#FFFFFF; border-left:3px solid #F97316; border-radius:0 10px 10px 0;
+    border-top:1px solid rgba(0,0,0,.08); border-right:1px solid rgba(0,0,0,.08);
+    border-bottom:1px solid rgba(0,0,0,.08); padding:12px 13px; margin-bottom:14px; }
+  .nce-leadbox .q { font-size:16px; font-weight:600; color:#1A1A1F; line-height:1.5; }
+  .nce-leadbox .qe { font-size:12px; color:#6B7280; margin-top:5px; line-height:1.45; }
+  .nce-tools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px; }
+  .nce-tools .lb { font-size:11px; color:#6B7280; margin-right:2px; }
+  .nce-chip { font-size:11.5px; padding:5px 10px; border-radius:7px; cursor:pointer;
+    background:#FFFFFF; color:#6B7280; border:1px solid rgba(0,0,0,.08); }
+  .nce-chip.on { background:#F97316; color:#FFFFFF; border-color:#F97316; }
+  .nce-hint { font-size:11px; color:#6B7280; margin:0 0 10px; }
+  .nce-line { padding:10px 2px; border-bottom:1px solid rgba(0,0,0,.06); cursor:pointer; }
+  .nce-line .en { line-height:1.7; color:#1A1A1F; }
+  .nce-line .cn { display:none; font-size:12.5px; color:#6B7280; margin-top:5px; line-height:1.6; }
+  .nce-line.show .cn { display:block; }
+  #p-nce[data-mode="bilingual"] .nce-line .cn { display:block; }
+  #p-nce[data-font="sm"] .nce-line .en { font-size:14px; }
+  #p-nce[data-font="md"] .nce-line .en { font-size:16px; }
+  #p-nce[data-font="lg"] .nce-line .en { font-size:18px; }
+  .nce-w { color:#0EA5A4; border-bottom:1px dashed #0EA5A4; cursor:pointer; }
+  .nce-wordcard { display:none; margin:8px 0 2px; background:#FFFFFF;
+    border:1px solid rgba(14,165,164,.35); border-radius:9px; padding:10px 12px; }
+  .nce-wordcard.on { display:block; }
+  .nce-wordcard .w1 { font-size:14px; font-weight:700; color:#1A1A1F; }
+  .nce-wordcard .w1 span { font-size:11.5px; font-weight:400; color:#6B7280; margin-left:7px; }
+  .nce-wordcard .w2 { font-size:12.5px; color:#1A1A1F; margin-top:5px; line-height:1.6; }
+  .nce-wordcard .w3 { font-size:11.5px; color:#6B7280; margin-top:4px; font-style:italic; }
+  .nce-cta { display:block; width:100%; text-align:center; background:#F97316; color:#FFFFFF;
+    border-radius:10px; padding:11px; font-size:13.5px; font-weight:600; cursor:pointer; margin:16px 0 10px; }
+  .nce-ex { display:none; max-height:52vh; overflow-y:auto; background:#FFFFFF;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:13px; margin-bottom:12px; }
+  .nce-ex.on { display:block; }
+  .nce-ex .q { font-size:13.5px; font-weight:600; color:#1A1A1F; margin-bottom:9px; }
+  .nce-opt { font-size:12.5px; color:#1A1A1F; padding:9px 11px; border:1px solid rgba(0,0,0,.08);
+    border-radius:8px; margin-bottom:7px; cursor:pointer; }
+  .nce-opt.ok { border-color:#0EA5A4; background:rgba(14,165,164,.07); }
+  .nce-opt.bad { border-color:#F97316; background:rgba(249,115,22,.07); }
+  .nce-fb { display:none; font-size:12px; color:#6B7280; margin-top:8px; line-height:1.6; }
+  .nce-fb.on { display:block; }
+  .nce-fold { border:1px solid rgba(0,0,0,.08); border-radius:10px; background:#FFFFFF; margin-bottom:12px; }
+  .nce-fold .h { display:flex; justify-content:space-between; padding:11px 13px;
+    font-size:12.5px; color:#1A1A1F; cursor:pointer; }
+  .nce-fold .h b { font-weight:400; color:#6B7280; font-size:11.5px; }
+  .nce-fold .c { display:none; padding:0 13px 12px; font-size:12.5px; color:#6B7280; line-height:1.7; }
+  .nce-fold.open .c { display:block; }
+  .nce-nav { display:flex; justify-content:space-between; gap:10px; margin-top:6px; }
+  .nce-nav div { flex:1; text-align:center; font-size:12.5px; color:#6B7280;
+    border:1px solid rgba(0,0,0,.08); border-radius:9px; padding:9px; cursor:pointer; }
+  .nce-foot { text-align:center; font-size:11px; color:#6B7280; margin-top:16px; }
+
 </style>
 </head>
 <body>
@@ -790,7 +878,15 @@
           <span class="go">›</span>
         </div>
 
-        <div class="sec-t" style="margin-top:22px">即将上线</div>
+        <div class="cap" onclick="openNce()">
+          <span class="ic n" style="background:rgba(14,165,164,.10);color:#0EA5A4">
+            <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M8 8h7M8 11.5h7M8 15h4"/></svg>
+          </span>
+          <span class="tx"><b>新概念英语</b><em>NCE2 逐句精读 · 沉浸英文 + 就地生词</em></span>
+          <span class="go">&#8250;</span>
+        </div>
+
+<div class="sec-t" style="margin-top:22px">即将上线</div>
 
         <div class="cap soon" onclick="wxToast('论文速读 · 敬请期待')">
           <span class="ic">
@@ -1348,6 +1444,92 @@
           演示：任意合法邮箱 + 6 位数字即可提交
         </div>
       </div>
+
+      <!-- ================= 二级页：新概念英语（原型登记 2026-11-06）=================
+           W1-W8 判据的原型表达。单 sub 页 + 双 view，复用既有 navigateTo/goBack 状态机，
+           不新增第二层 sub，避免 tabBar 切换时残留 open 页。数据为 NCE2 Lesson 1 公版演示稿。 -->
+      <div class="page sub" id="p-nce" data-mode="immersion" data-font="md">
+        <!-- 目录 view -->
+        <div class="nce-view on" id="nce-view-index">
+          <div class="nce-kicker">NEW CONCEPT ENGLISH · BOOK 2</div>
+          <div class="nce-h1">新概念英语 第二册</div>
+          <div class="nce-sub">逐句精读 · 先读懂英文，再按需看中文</div>
+          <div class="nce-stat">
+            <div><b>1 / 96</b>已入库课文</div>
+            <div><b>24</b>课 / 单元分组</div>
+            <div><b>2</b>全文来源 xdf · lrc</div>
+          </div>
+          <input class="nce-search" id="nceSearch" placeholder="搜索课号或标题，如 Lesson 1" oninput="nceFilter(this.value)" />
+          <div class="nce-grp"><span>UNIT 1 · Lesson 1–24</span><span id="nceCount">1 课已入库</span></div>
+          <div id="nceList">
+            <div class="nce-card" data-key="lesson 1 a private conversation 上星期我去看戏" onclick="nceOpenDetail()">
+              <div class="r1"><span class="no">LESSON 1</span><span class="nce-tag xdf">权威全文</span></div>
+              <div class="tt" style="margin-top:6px">A private conversation</div>
+              <div class="lead">作者为什么向坐在他身后的人抱怨？</div>
+              <div class="leaden">Why did the writer complain to the people behind him?</div>
+              <div class="meta"><span>6 句</span><span>·</span><span>4 生词</span><span>·</span><span>1 题</span></div>
+            </div>
+          </div>
+          <div class="nce-empty" id="nceEmpty" style="display:none">未找到匹配课文 · 其余 95 课待入库</div>
+          <div class="nce-foot">数据源 /api/content-admin/nce/* · 只读 3 个 GET</div>
+        </div>
+
+        <!-- 详情 view -->
+        <div class="nce-view" id="nce-view-detail">
+          <div class="nce-back" onclick="nceBackToIndex()">&#8249; 返回课文目录</div>
+          <div class="nce-kicker">LESSON 1 · UNIT 1</div>
+          <div class="nce-h1">A <span class="nce-w" onclick="nceWord(event)">private</span> conversation</div>
+          <div class="nce-sub">私人谈话 · 6 句 / 4 生词 / 1 题</div>
+          <div class="nce-leadbox">
+            <div class="q">作者为什么向坐在他身后的人抱怨？</div>
+            <div class="qe">Why did the writer complain to the people behind him?</div>
+          </div>
+          <div class="nce-tools">
+            <span class="lb">阅读档</span>
+            <span class="nce-chip on" data-g="mode" data-v="immersion" onclick="nceMode('immersion')">沉浸</span>
+            <span class="nce-chip" data-g="mode" data-v="bilingual" onclick="nceMode('bilingual')">双语</span>
+            <span class="nce-chip" data-g="mode" data-v="tap" onclick="nceMode('tap')">点按</span>
+          </div>
+          <div class="nce-tools">
+            <span class="lb">字号</span>
+            <span class="nce-chip" data-g="font" data-v="sm" onclick="nceFont('sm')">小</span>
+            <span class="nce-chip on" data-g="font" data-v="md" onclick="nceFont('md')">中</span>
+            <span class="nce-chip" data-g="font" data-v="lg" onclick="nceFont('lg')">大</span>
+          </div>
+          <div class="nce-hint" id="nceHint">默认纯英文 · 点任意一句才显示该句中文</div>
+          <div id="nceLines">
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">Last week I went to the theatre.</div><div class="cn">上星期我去看戏。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I had a very good seat.</div><div class="cn">我的座位很好。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">The play was interesting.</div><div class="cn">戏很有意思。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I did not enjoy it.</div><div class="cn">但我却无法欣赏。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">A young man and a young woman were sitting behind me. They were talking <span class="nce-w" onclick="nceWord(event)">loudly</span>.</div><div class="cn">一青年男子与一青年女子坐在我的身后，大声地说着话。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I got very angry. I could not hear the actors.</div><div class="cn">我非常生气，因为我听不见演员在说什么。</div></div>
+          </div>
+          <div class="nce-wordcard" id="nceWordCard">
+            <div class="w1" id="nceW1"></div>
+            <div class="w2" id="nceW2"></div>
+            <div class="w3" id="nceW3"></div>
+          </div>
+          <div class="nce-cta" id="nceCta" onclick="nceOpenEx()">开始练习（1 题）</div>
+          <div class="nce-ex" id="nceEx">
+            <div class="q">Why did the writer not enjoy the play?</div>
+            <div class="nce-opt" onclick="nceAnswer(this,false)">A. The play was not interesting.</div>
+            <div class="nce-opt" onclick="nceAnswer(this,true)">B. A young man and a young woman were talking loudly.</div>
+            <div class="nce-opt" onclick="nceAnswer(this,false)">C. He arrived late and had a bad seat.</div>
+            <div class="nce-fb" id="nceFb"></div>
+            <div style="font-size:11.5px;color:#6B7280;margin-top:10px;cursor:pointer" onclick="nceCloseEx()">收起练习，继续看正文</div>
+          </div>
+          <div class="nce-fold" id="nceFold">
+            <div class="h" onclick="nceToggleFold()"><span>参考译文</span><b id="nceFoldTxt">展开</b></div>
+            <div class="c">上星期我去看戏。我的座位很好，戏也很有意思，但我却无法欣赏。一青年男子与一青年女子坐在我的身后，大声地说着话。我非常生气，因为我听不见演员在说什么。</div>
+          </div>
+          <div class="nce-nav">
+            <div onclick="wxToast('已是第 1 课')">&#8249; 上一课</div>
+            <div onclick="wxToast('第 2 课待入库')">下一课 &#8250;</div>
+          </div>
+          <div class="nce-foot">逐句中文默认折叠 · 生词就地查零跳转 · 习题读完再展开</div>
+        </div>
+      </div>
     </div>
 
     <div class="tabbar">
@@ -1724,7 +1906,8 @@ var SUB_TITLE = {
   'p-assess': '合同评估', 'p-as-result': '评估报告', 'p-as-settings': '合同评估设置',
   'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置', 'p-agreement': '用户协议与隐私政策',
   'p-bind-email': '绑定邮箱',
-  'p-taste': '音乐口味', 'p-memory': '用户记忆', 'p-glossary': '生词本'
+  'p-taste': '音乐口味', 'p-memory': '用户记忆', 'p-glossary': '生词本',
+  'p-nce': '新概念英语 · NCE2'
 };
 
 /* ---------- 账号：登录态 / 退出 / 绑定手机号 / 合并 ----------
@@ -1968,6 +2151,108 @@ $('tasteAdd').onclick = function () {
 };
 refreshSummary();
 /* 二级页右上角的动作 */
+/* ---------- 新概念英语（NCE）· 原型状态机 2026-11-06 ----------
+   与真机 M1-M9 / W1-W8 同口径：默认沉浸纯英文、点句出中文、生词就地零跳转、
+   习题读完再展开且 ≤52vh、参考译文默认折叠、三档 + 字号三档。
+   真机持久化走 wx.setStorageSync('nce-mode' / 'nce-font')，原型仅内存态。 */
+var NCE_WORDS = {
+  'private': { ph:'/ˈpraɪvət/', pos:'adj.', def:'私人的；私下的', ex:'A private conversation. 一次私人谈话。' },
+  'loudly':  { ph:'/ˈlaʊdli/', pos:'adv.', def:'大声地', ex:'They were talking loudly. 他们大声地说着话。' }
+};
+function openNce() { nceShow('index'); navigateTo('p-nce', '新概念英语 · NCE2'); }
+function nceShow(v) {
+  $('nce-view-index').classList.toggle('on', v === 'index');
+  $('nce-view-detail').classList.toggle('on', v === 'detail');
+}
+function nceOpenDetail() {
+  nceShow('detail');
+  $('navTitle').textContent = 'Lesson 1';
+  $('p-nce').scrollTop = 0;
+  nceMode('immersion'); nceFont('md');
+  nceCloseEx(); nceToggleFold(true);
+  $('nceWordCard').classList.remove('on');
+}
+function nceBackToIndex() {
+  nceShow('index');
+  $('navTitle').textContent = '新概念英语 · NCE2';
+  $('p-nce').scrollTop = 0;
+}
+function nceToggleLine(el) {
+  if (NCE_MODE === 'bilingual') return;
+  el.classList.toggle('show');
+}
+var NCE_MODE = 'immersion';
+function nceMode(m) {
+  NCE_MODE = m;
+  $('p-nce').dataset.mode = m;
+  Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="mode"]'), function (c) {
+    c.classList.toggle('on', c.dataset.v === m);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#nceLines .nce-line'), function (l) {
+    l.classList.remove('show');
+  });
+  $('nceHint').textContent = m === 'bilingual'
+    ? '双语档：全部中文可见'
+    : '默认纯英文 · 点任意一句才显示该句中文';
+}
+function nceFont(f) {
+  $('p-nce').dataset.font = f;
+  Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="font"]'), function (c) {
+    c.classList.toggle('on', c.dataset.v === f);
+  });
+}
+function nceWord(ev) {
+  ev.stopPropagation();
+  var w = ev.target.textContent.trim().toLowerCase();
+  var d = NCE_WORDS[w];
+  if (!d) return;
+  $('nceW1').innerHTML = w + '<span>' + d.ph + ' · ' + d.pos + '</span>';
+  $('nceW2').textContent = d.def;
+  $('nceW3').textContent = d.ex;
+  $('nceWordCard').classList.add('on');
+}
+function nceOpenEx() {
+  $('nceEx').classList.add('on');
+  $('nceCta').style.display = 'none';
+}
+function nceCloseEx() {
+  $('nceEx').classList.remove('on');
+  $('nceCta').style.display = '';
+}
+function nceAnswer(el, ok) {
+  Array.prototype.forEach.call(document.querySelectorAll('#nceEx .nce-opt'), function (o) {
+    o.classList.remove('ok', 'bad');
+  });
+  el.classList.add(ok ? 'ok' : 'bad');
+  var fb = $('nceFb');
+  fb.classList.add('on');
+  fb.textContent = ok
+    ? '正确。作者生气的原因是身后两人一直大声说话，导致听不见演员台词。'
+    : '再想想：课文说戏本身很有意思，问题出在身后的两个人。';
+}
+function nceToggleFold(forceClose) {
+  var f = $('nceFold');
+  var open = forceClose ? false : !f.classList.contains('open');
+  f.classList.toggle('open', open);
+  $('nceFoldTxt').textContent = open ? '收起' : '展开';
+}
+function nceFilter(v) {
+  var q = (v || '').trim().toLowerCase();
+  var cards = document.querySelectorAll('#nceList .nce-card');
+  var hit = 0;
+  Array.prototype.forEach.call(cards, function (c) {
+    var show = !q || (c.dataset.key || '').indexOf(q) >= 0;
+    c.style.display = show ? '' : 'none';
+    if (show) hit++;
+  });
+  $('nceCount').textContent = hit + ' 课已入库';
+  $('nceEmpty').style.display = hit ? 'none' : '';
+}
+/*
+ * 注：goBack() 的 NCE 分支见下方 —— 详情页返回目录而非直接退回发现 tab，
+ * 保证 W2「返回后 tabBar 高亮仍在发现」且目录态不丢。
+ */
+
 var SUB_ACT = {
   'p-translate': { text: '设置', fn: function () { navigateTo('p-tr-settings', '语言翻译官设置'); } },
   'p-assess': { text: '设置', fn: function () { navigateTo('p-as-settings', '合同评估设置'); } }
@@ -2021,6 +2306,10 @@ function resumeConv(title) {
 }
 
 function goBack() {
+  // NCE：详情 view 先回目录 view（单 sub 页，不动 tabBar 高亮）
+  if (cur.sub === 'p-nce' && $('nce-view-detail').classList.contains('on')) {
+    nceBackToIndex(); return;
+  }
   // 二级页：退回所在 tab 首页（对话页仍显示返回 icon）
   if (cur.sub) {
     $(cur.sub).classList.remove('open');

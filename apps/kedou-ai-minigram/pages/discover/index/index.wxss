@@ -58,6 +58,8 @@ page {
 }
 .ic.t { background: var(--brand-soft); color: var(--brand-txt); }
 .ic.c { background: var(--accent-soft); color: var(--accent); }
+/* 新概念英语：青色点缀，与阅读页 #0EA5A4 呼应 */
+.ic.n { background: rgba(14, 165, 164, .10); color: #0EA5A4; }
 
 .tx { flex: 1; min-width: 0; }
 .tx .b {

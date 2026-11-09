@@ -86,7 +86,10 @@ export class DeployApprovalEntity {
 
   /**
    * 审批来源通道（卡② · deploy_approvals 加 3 列）。
-   * 历史行由 DB DEFAULT 'console' 回填；不新增 expiresAt（本期不做过期）。
+   * 历史行由 DB DEFAULT 'console' 回填。
+   *
+   * 过期（`expiresAt`）与换会话次数（`wecomSessionCount`）是 2026-11-06
+   * 鉴权时效收口时补的两列，见 tech-design-wecom-approval-lifecycle.md。
    */
   @Column({
     type: 'varchar', length: 16, default: 'console', name: 'channel',
@@ -109,15 +112,49 @@ export class DeployApprovalEntity {
   sourceIp?: string | null;
 
   /**
-   * 企微通道换平台会话的时间（毫秒）。非空 = 该单的会话已发过一次。
+   * 企微通道**最近一次**换平台会话的时间（毫秒）。非空 = 该单换过至少一次。
    *
-   * 🔴 一次性语义由 DB 原子更新保证：换会话时用
-   * `UPDATE ... SET wecom_session_issued_at = ? WHERE id = ? AND wecom_session_issued_at IS NULL`，
-   * affectedRows=0 即已换过 → 拒绝，避免同一张短票据被反复兑换成长会话。
+   * 只用于展示与排障（「最后一次是什么时候换的」），**不再承担拦截语义** ——
+   * 一次性已经放开为「≤3 次」，次数判定见 `wecomSessionCount`。
    */
   @Column({
     type: 'bigint', nullable: true, name: 'wecom_session_issued_at',
-    comment: '企微换平台会话时间（毫秒，一次性）',
+    comment: '企微换平台会话最近一次时间（毫秒）',
   })
   wecomSessionIssuedAt?: number | null;
+
+  /**
+   * 企微通道换平台会话的**已用次数**（上限见 `WecomSessionService.MAX_EXCHANGES`）。
+   *
+   * 🔴 为什么从「一次性」放开成「有限次」：一次性把「手滑关掉页面 / 换个设备再看」
+   * 全部变成死路，而票据本身只有 15 分钟写窗口、会话只有 30 分钟 ——
+   * 真正的风险不是「换了几次」，而是「票据被反复兑换成长会话」。
+   * 3 次既能覆盖人的正常重试，又把滥用面钉死在 3 个 30 分钟窗口内。
+   *
+   * 🔴 次数由 DB 原子更新保证：
+   * `UPDATE ... SET wecom_session_count = wecom_session_count + 1
+   *   WHERE id = ? AND wecom_session_count < 3`，
+   * affectedRows=0 即用尽 → 拒绝。**不先查后写**，并发两次只会有一次成功。
+   */
+  @Column({
+    type: 'int', default: 0, name: 'wecom_session_count',
+    comment: '企微换平台会话已用次数（上限 3）',
+  })
+  wecomSessionCount: number;
+
+  /**
+   * 审批单超时作废时刻（毫秒）。NULL = 不过期。
+   *
+   * 🔴 只对新单写入（`createdAt + APPROVAL_TTL_MS`），**历史单不回填** ——
+   * 回填会上线瞬间把一批在途 pending 单按「已过期」清掉。
+   *
+   * 作废由 `ApprovalExpiryService` 定时扫描，走 `PipelineService.cancel`
+   * （内含 CAS + 流水线联动 + 双审计），**不另写一套作废 SQL**。
+   */
+  @Column({
+    type: 'bigint', nullable: true, name: 'expires_at',
+    comment: '审批单超时作废时刻（毫秒；NULL=不过期）',
+  })
+  @Index()
+  expiresAt?: number | null;
 }

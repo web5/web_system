@@ -26,9 +26,13 @@ import { WecomIdentityClient } from './wecom-identity.client';
  *
  * 🔴 **这是对卡②「泄漏面只限这一单」边界的一次**受控**扩大，必须同时满足**：
  *  1. 只由**已通过企微 OAuth + 白名单校验**的审批本人触发（身份再 resolve 一次，fail-closed）；
- *  2. **一次性**：靠 DB 原子更新 `WHERE wecom_session_issued_at IS NULL` 判定，不先查后写；
+ *  2. **有限次（≤3）**：靠 DB 原子更新 `WHERE wecom_session_count < 3` 判定，不先查后写；
  *  3. **短 TTL**：30 分钟（远短于平台登录的 24h），过期必须重新从企微进入；
- *  4. **必须留审计**：`wecom.session`，含 approvalId / 外部身份 / 来源 IP。
+ *  4. **必须留审计**：`wecom.session`，含第几次 / approvalId / 外部身份 / 来源 IP。
+ *
+ * 为什么不是「一次性」（2026-11-06 调整）：一次性把「手滑关页面 / 换台设备再看」
+ * 全变成死路，而这些都不是安全事件。风险的真实边界是「票据能否被反复兑换成长会话」，
+ * 3 次 + 30min TTL 已经把滥用面钉死在与「人正常重试」同量级。
  *
  * ⚠️ 已知妥协：token 由 console 自己用 `JWT_SECRET` 签（与 auth-service 同源密钥），
  * 严格说 IAM 一期期望「唯一签发者是 auth-service」。auth-service 目前没有内部代签端点，
@@ -48,6 +52,14 @@ export class WecomSessionService {
 
   /** 会话 TTL：30 分钟。刻意远短于平台登录的 24h */
   static readonly TTL_SEC = 1800;
+
+  /**
+   * 同一张审批单最多能换几次平台会话。
+   *
+   * 3 = 正常人重试的合理上限（关错页 / 换设备 / token 过期再点一次）。
+   * 改这个数字等于改凭据面的暴露上限，**不是**可以随手调的体验参数。
+   */
+  static readonly MAX_EXCHANGES = 3;
 
   constructor(
     private readonly config: WecomConfigService,
@@ -92,10 +104,12 @@ export class WecomSessionService {
       throw new ForbiddenException('该账号不属于运维控制台（deploy）');
     }
 
-    // ── 2) 一次性占位（原子）──
+    // ── 2) 占位（原子，≤MAX_EXCHANGES 次）──
+    // 次数条件写进 WHERE：并发两个请求只有一个能把 n 加成 n+1，不先查后写。
     const claimed = await this.repo.query(
-      'UPDATE deploy_approvals SET wecom_session_issued_at = ? WHERE id = ? AND wecom_session_issued_at IS NULL',
-      [nowMs, approvalId],
+      'UPDATE deploy_approvals SET wecom_session_count = wecom_session_count + 1, ' +
+        'wecom_session_issued_at = ? WHERE id = ? AND wecom_session_count < ?',
+      [nowMs, approvalId, WecomSessionService.MAX_EXCHANGES],
     );
     const affected = Number(
       (claimed as { affectedRows?: number })?.affectedRows ??
@@ -103,10 +117,17 @@ export class WecomSessionService {
         0,
     );
     if (affected !== 1) {
-      throw new ConflictException('该审批单的会话已换取过，请重新从企业微信进入');
+      // 回读只为把「次数用尽」和「单不存在」说清楚；判定已在 DB 侧完成
+      const used = await this.currentCount(approvalId);
+      // 🔴 文案不能写「请重新从企业微信进入」：重新点卡片走 OAuth 签的是**新票据**，
+      //    但次数是按 approvalId 记的，同一张单重进还是 3/3 —— 那等于把用户引回同一个死路。
+      throw new ConflictException(
+        `该审批单的会话次数已用尽（${used}/${WecomSessionService.MAX_EXCHANGES}），请到发布控制台直接登录`,
+      );
     }
+    const usedCount = await this.currentCount(approvalId);
 
-    // ── 3) 签平台会话；失败必须回滚占位，否则这张单永远换不到 ──
+    // ── 3) 签平台会话；失败必须回滚占位，否则这张单会被白扣一次配额 ──
     const roles: string[] = Array.isArray(identity.roles) ? identity.roles : [];
     const role = roles.includes('super_admin') ? 'super_admin' : 'admin';
     let token: string;
@@ -125,7 +146,11 @@ export class WecomSessionService {
       );
     } catch (e) {
       await this.repo
-        .query('UPDATE deploy_approvals SET wecom_session_issued_at = NULL WHERE id = ?', [approvalId])
+        .query(
+          'UPDATE deploy_approvals SET wecom_session_count = wecom_session_count - 1 ' +
+            'WHERE id = ? AND wecom_session_count > 0',
+          [approvalId],
+        )
         .catch(() => undefined);
       this.logger.error(`签发平台会话失败 approvalId=${approvalId}: ${(e as Error).message}`);
       throw new InternalServerErrorException('签发平台会话失败，请到控制台处理');
@@ -139,10 +164,26 @@ export class WecomSessionService {
       component: approval.moduleKey,
       status: 'issued',
       detail:
-        `用企微审批票据换取平台会话；channel=wecom；identityExternalId=${actor.ext || '-'}；` +
-        `sourceIp=${sourceIp || '-'}；approvalId=${approval.id}；ttlSec=${WecomSessionService.TTL_SEC}`,
+        `用企微审批票据换取平台会话（第 ${usedCount}/${WecomSessionService.MAX_EXCHANGES} 次）；channel=wecom；` +
+        `identityExternalId=${actor.ext || '-'}；sourceIp=${sourceIp || '-'}；` +
+        `approvalId=${approval.id}；ttlSec=${WecomSessionService.TTL_SEC}`,
     });
 
     return { token, user: { username: identity.username, role }, expiresInSec: WecomSessionService.TTL_SEC };
+  }
+
+  /** 当前已用次数（只用于文案/审计；判定不依赖它） */
+  private async currentCount(approvalId: string): Promise<number> {
+    try {
+      const rows = await this.repo.query(
+        'SELECT wecom_session_count AS n FROM deploy_approvals WHERE id = ?',
+        [approvalId],
+      );
+      const row = (Array.isArray(rows) ? rows[0] : undefined) as { n?: unknown } | undefined;
+      const n = Number(row?.n);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    } catch {
+      return 0;
+    }
   }
 }

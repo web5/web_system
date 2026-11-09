@@ -58,6 +58,13 @@ async function main() {
   if (!existsSync(appDir)) die(`应用目录不存在: ${appDir}`);
   ensureWorkspaceDeps(appDir);
 
+  // 3.5 构建前守卫：前端唯一合法入口 `packages/shared/src/browser.ts` 的模块图
+  //     不得含 node-only 依赖（fs/os/path/typeorm/@nestjs…）。
+  //     为什么放在**构建前**：静态图毫秒级，且能在产物出来之前就告诉人「你把后端 barrel 拖进前端了」。
+  //     背景：2026-11-06 admin/portal 启动即崩、整站白屏，根因就是 barrel 里的
+  //     storage-dir（顶层 os.homedir()）被浏览器产物拖入 —— 当时 vite build 退出码 0。
+  runBrowserSafetyCheck(['--graph-only'], '构建前静态图');
+
   // 4. 构建
   const buildCmd = moduleDef.buildCmd || `npx vite build --mode mf`;
   log(`执行构建: cd apps/${moduleDef.dir} && ${buildCmd}`);
@@ -82,7 +89,38 @@ async function main() {
   };
   writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   log(`产物: ${distDir}/ (index.js${cssExists ? ' + index.css' : ''} + manifest.json)`);
+
+  // 5.5 构建后守卫：扫本次产物，出现 `__viteBrowserExternal` 即失败。
+  //     这条是「运行时白屏」的产物侧等价物：Vite 把 node 内置模块替换成空对象时会留这个标记。
+  //     只跑静态图不够 —— 静态图看的是 browser.ts 入口，而真正决定产物的是
+  //     vite alias / external / 插件注入，三者任一配错都会绕过静态图。
+  runBrowserSafetyCheck(['--artifacts', distDir], '构建后产物扫描');
+
   console.log(JSON.stringify(manifest, null, 2));
+}
+
+/**
+ * 调用前端产物安全守卫脚本（scripts/check-shared-browser-safety.mjs）。
+ * 该脚本自己负责输出与退出码；这里只负责在失败时给出上下文。
+ */
+function runBrowserSafetyCheck(args, stage) {
+  const script = join(REPO_ROOT, 'scripts', 'check-shared-browser-safety.mjs');
+  if (!existsSync(script)) {
+    die(`守卫脚本缺失: ${script}（页面会因 node-only 模块进产物而白屏，不能跳过）`);
+  }
+  try {
+    execSync(`"${process.execPath}" "${script}" ${args.join(' ')}`, {
+      cwd: REPO_ROOT,
+      stdio: 'inherit',
+      env: { ...process.env },
+    });
+  } catch {
+    die(
+      `${stage}未通过（见上方 [shared-browser-safety] 输出）。` +
+        `前端 import '@web-system/shared' 必须解析到 packages/shared/src/browser.ts，` +
+        `不要指回后端 barrel src/index.ts。`,
+    );
+  }
 }
 
 /* ------------------------------------------------------------------ *

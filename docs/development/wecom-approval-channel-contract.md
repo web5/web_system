@@ -139,7 +139,8 @@ console 启动 → runBootstrap()（src/bootstrap/load.ts）连库读 global+env
 - ❌ 精确按节点白名单反查企微 userid（卡① 缺反向 lookup 契约，另开卡）
 - ❌ A 模式 `signed-link` 审批端点：签名链接不证明「是谁」，在卡① 补齐绑定前实现等于绕过白名单；工具层保留 `issueSignedLink/verifySignedLink`，端点不注册
 - ❌ 企微原生卡片按钮回调 `/wecom/callback`（spec 定为二期）
-- ❌ 审批单过期、多级审批、企微 OA 审批对接
+- ⚠️ 审批单过期：卡② 时列为「不做」，**2026-11-06 已补**（`deploy_approvals.expires_at` + 7 天定时作废，见 `specs/deploy-console/tech-design-wecom-approval-lifecycle.md` §6）
+- ❌ 多级审批、企微 OA 审批对接（仍未做）
 - ❌ 修改 `ApproverService` 既有降级放行策略（独立卡）
 - ❌ 本轮不 commit / 不 push / 不发布 / 不执行任何 DDL / 不重启服务
 - ❌ H5 真机走查（V2/V6/V8 需本人手机企微，安卓/iOS 各一次）

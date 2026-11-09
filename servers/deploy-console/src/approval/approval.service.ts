@@ -6,7 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import {
   DeployApprovalEntity,
   ApprovalStatus,
@@ -16,6 +16,17 @@ import { AuditService } from '../audit/audit.service';
 
 /** 系统设置键：需要审批的环境列表（逗号分隔；未配置默认 prod） */
 export const REQUIRE_APPROVAL_ENVS_KEY = 'REQUIRE_APPROVAL_ENVS';
+
+/**
+ * 审批单默认有效期：7 天。
+ *
+ * 🔴 为什么要有：`pending` 单此前**永不过期**，一张没人处理的 prod 单会永久卡住
+ * 同模块同环境的后续提交（`create` 的 pending 查重直接 409），只能靠人工作废。
+ * 7 天覆盖「跨周末 + 出差」的正常审批节奏，再长就应该重新发起（代码/分支可能已变）。
+ *
+ * 只对**新单**写入；历史单 `expires_at` 为 NULL = 不过期，不被扫描。
+ */
+export const APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ApprovalCreateSpec {
   pipelineId: string;
@@ -79,8 +90,9 @@ export class ApprovalService {
         `模块 ${spec.moduleKey} 在 ${spec.env} 已有待审批的发布请求 ${dup.pipelineId}，请等待审批结果`,
       );
     }
+    const now = Date.now();
     const row = this.repo.create({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: `${now}-${Math.random().toString(36).slice(2, 9)}`,
       pipelineId: spec.pipelineId,
       env: spec.env,
       moduleKey: spec.moduleKey,
@@ -89,7 +101,8 @@ export class ApprovalService {
       commitId: spec.commitId,
       operator: spec.operator,
       status: 'pending',
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: now + APPROVAL_TTL_MS,
     });
     return this.repo.save(row);
   }
@@ -106,8 +119,9 @@ export class ApprovalService {
   async createNode(spec: NodeApprovalCreateSpec): Promise<DeployApprovalEntity> {
     const dup = await this.pendingForNode(spec.pipelineId, spec.nodeKey);
     if (dup) return dup;
+    const now = Date.now();
     const row = this.repo.create({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      id: `${now}-${Math.random().toString(36).slice(2, 9)}`,
       pipelineId: spec.pipelineId,
       nodeKey: spec.nodeKey,
       nodeLabel: spec.nodeLabel,
@@ -118,9 +132,24 @@ export class ApprovalService {
       commitId: spec.commitId,
       operator: spec.operator,
       status: 'pending',
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: now + APPROVAL_TTL_MS,
     });
     return this.repo.save(row);
+  }
+
+  /**
+   * 已超时但仍 `pending` 的审批单（供 `ApprovalExpiryService` 定时扫描）。
+   *
+   * 🔴 `expires_at IS NULL` 的老单**永远不会**被选中 —— 这正是「历史单不回填」的
+   * 运行时保证：上线不会顺手清掉一批在途单。
+   */
+  async findExpiredPending(nowMs: number, limit = 100): Promise<DeployApprovalEntity[]> {
+    return this.repo.find({
+      where: { status: 'pending' as ApprovalStatus, expiresAt: LessThanOrEqual(nowMs) },
+      order: { expiresAt: 'ASC' },
+      take: limit,
+    });
   }
 
   /**

@@ -91,6 +91,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 前端 node-only 依赖守卫（2026-11-06 微前端白屏 P0 后立）
+      #
+      # 拦什么：`packages/shared/src/browser.ts`（前端唯一合法入口）的模块图里出现
+      #   fs/os/path / typeorm / @nestjs/* / process.env 一律红。
+      # 为什么必须有：那次事故 **`vite build` 退出码 0、产物看着正常、运行时 init 期才炸**
+      #   （admin/portal 双双启动即崩、整站白屏）。只靠「构建通过」这个信号完全不够。
+      # 为什么放在 install 之前：脚本只用 Node 内置模块，毫秒级，是这条 PR 最早能拿到的反馈。
+      # 发布路径另有更严的两道（scripts/build-module.mjs 构建前静态图 + 构建后产物扫描）。
+      - name: 前端 node-only 依赖守卫
+        run: node scripts/check-shared-browser-safety.mjs --graph-only
+
       - uses: pnpm/action-setup@v4
         name: pnpm setup
         with:
