@@ -113,6 +113,7 @@ export interface MiniprogramSessionResponse {
 // 小程序登录请求
 export interface MiniprogramLoginRequest {
   code: string;
+  appId?: string;
   nickname?: string;
   avatar?: string;
 }
