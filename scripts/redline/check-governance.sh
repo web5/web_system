@@ -67,22 +67,19 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 # F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
 #   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
 #   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用。
-#   超时判据 = **双信号一致**，且两信号由不同主体产生：
-#     ① 退出码 250 —— 由 perl 包装器退；② 标记文件 —— 由 perl 判定到点后写。
-#   且 perl 支**不装任何信号 handler**，超时只由父进程自己的时钟判定（waitpid WNOHANG 50ms 轮询）：
-#     · 命令自己 `exit 250` → 没有标记 → 判红（挡「自报哨兵码」）
-#     · 命令给 perl 投 SIGALRM → 没有 handler，perl 直接被 142 打死 → 142≠250 → 判红
-#       （挡「投信号冒充超时」；若装了 handler，外部 ALRM 与 alarm 到期在信号层不可区分，只能靠等候≥4s 区分）
-#   对照废弃过的三版：① 单看 rc=142 → 命令 `exit 142` 即冒充满时；② 单看「命令自己写的完成标记」
-#     → `exit` 会吞掉标记行，与「被杀」同形；③ 单 rc=250 哨兵 → 命令 `exit 250` 即满时。
-#     都只靠单一信号或单一主体，故都能被一个动作洗白。
-#   E2E_TIMEOUT_KIND / E2E_TIMEOUT_CODE 记录闸门种类与该种闸门的**主**超时码
-#     （perl→250 / timeout·gtimeout→124；kind=none 留空 → 任何 rc 都不当超时）。
-#   残余（记录不修）：timeout/gtimeout 支写不出标记，只能单看 rc=124 —— 命令自己 `exit 124`
-#     可伪造，但不判红（降级），仅影响「无 perl 的环境」；macOS/主流 CI 有 perl，走不到那一支。
+#   超时判据 = **只有父级实测耗时**（rd-product 裁定）：命令拖不动父级时钟，这是唯一天然不可伪造的量。
+#     到点就 TERM 子进程（为约束运行时长），但「谁杀的、退出码多少、有没有写标记」一律不参与判定。
+#   perl 支必须用 Time::HiRes：整数 time 的截止点会落在 4.0–5.0s 随机（实测 sleep 4.8 被误判超时），
+#     精度不足会把「真验过」说成「没验过」，等于自己丢掉刚建立起来的证据。
+#   250 是**父级独占码**：只由 perl 的父级时钟产出；子进程自报 250 会被改写成 251（防撞码），
+#     否则命令自己 `exit 250` 立刻冒充满时 —— 那是前一版的老洞。
+#   废弃过的四版：① 单看 rc=142 → `exit 142` 即洗白；② 命令自己写完成标记 → `exit` 吞掉标记行；
+#     ③ 单 rc=250 哨兵 → `exit 250` 洗白；④ rc=250 + 可枚举 flag → 两量都在命令可达域
+#        （`for d in ${TMPDIR}/gov-check.*; do : > $d/e2e.timeout; done; exit 250` 同时伪造两条件）。
+#   残余（记录不修）：`timeout`/`gtimeout` 支**无撞码封堵**：它们没有父级时钟，`exit 124` 自报即等价 T13 假绿。
+#     仅影响「无 perl 的环境」（macOS/主流 CI 有 perl，走不到那一支）。三支强度不等价，注释不得让人误读成同强度。
 E2E_LOG="${TMP}/e2e-list.log"
 E2E_RUN="${TMP}/e2e-run.sh"
-E2E_TIMEOUT_FLAG="${TMP}/e2e.timeout"
 E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
 E2E_TIMEOUT_KIND="none"
 E2E_TIMEOUT_CODE=""
@@ -94,36 +91,39 @@ elif command -v gtimeout >/dev/null 2>&1; then
   E2E_TIMEOUT_KIND="gtimeout"; E2E_TIMEOUT_CODE=124
 fi
 # 被测命令落独立脚本（不用 sh -c "…${E2E_CMD}…" 拼串，避开命令内含引号时炸裂）
-rm -f "${E2E_TIMEOUT_FLAG}"
 printf '%s\n' "${E2E_CMD}" > "${E2E_RUN}"
 (
   case "${E2E_TIMEOUT_KIND}" in
     perl)
       perl -e '
-        my $t = shift; my $flag = shift;
-        my $t0 = time; my $timedout = 0;
+        use Time::HiRes qw(time);
+        my $t = shift;
         my $pid = fork;
         exit 127 unless defined $pid;
         if (!$pid) { exec @ARGV; exit 127 }
-        # 不装任何信号 handler：超时只由**父进程自己的时钟**判定。
-        # 这样「外部投递 SIGALRM」既不能冒充超时（没有 handler，直接把 perl 打死 → 128+14=142 ≠ 250），
-        # 也不会像 handler 方案那样被迫等到 ≥4s 才能区分。
+        my $t0 = time();
+        my $timedout = 0;
+        # 不装任何信号 handler：超时只由父级时钟判定（外部投递 SIGALRM 只会把 perl 打死 → 142 ≠ 250）
         while (1) {
-          my $got = waitpid($pid, 1);            # 1 = WNOHANG
-          if ($got == $pid) { last }             # 子进程自己结束
-          if (time - $t0 >= $t) {                # 父级时钟说到点了
+          my $got = waitpid($pid, 1);              # 1 = WNOHANG
+          last if $got == $pid;                    # 子进程自己结束
+          if (time() - $t0 >= $t) {                # 到点：TERM 子进程（只为约束时长，不参与判定）
             $timedout = 1;
             kill "TERM", $pid;
             waitpid($pid, 0);
             last;
           }
-          select(undef, undef, undef, 0.05);     # 50ms 轮询，CPU 开销可忽略
+          select(undef, undef, undef, 0.02);       # 20ms 轮询，CPU 开销可忽略
         }
         my $r = $?;
-        if ($timedout) { open(my $fh, ">", $flag) or exit 251; close($fh); exit 250 }
-        my $sig = $r & 127;
-        exit($sig ? 128 + $sig : ($r >> 8));
-      ' 5 "${E2E_TIMEOUT_FLAG}" sh "${E2E_RUN}" ;;
+        exit 250 if $timedout;                     # 250 只由父级时钟产出
+        my $sig  = $r & 127;
+        my $code = $r >> 8;
+        # 必须 == 250 精确等值，禁止放宽成 >= 250 —— 会把 252–255 一起吞掉，
+        #   且下一个改的人极易顺手放宽。安全前提是「250 的原像唯一」，不需要映射可逆。
+        $code = 251 if $code == 250;                # 子进程自报 250 → 改写，封撞码
+        exit($sig ? 128 + $sig : $code);
+      ' 5 sh "${E2E_RUN}" ;;
     timeout)  timeout 5 sh "${E2E_RUN}" ;;
     gtimeout) gtimeout 5 sh "${E2E_RUN}" ;;
     *)        sh "${E2E_RUN}" ;;
@@ -138,6 +138,7 @@ LABEL[4]='④'; NAME[4]='约束强制'
 LABEL[5]='⑤'; NAME[5]='人机协作'
 L=1
 DETAIL[1]=''; DETAIL[2]=''; DETAIL[3]=''; DETAIL[4]=''; DETAIL[5]=''
+L2_INC=0   # ② 层降级=未判定（INCONCLUSIVE）：超时把「命令没跑完」伪装成「验过了」时，禁止报 OK
 
 fail() { printf 'FAIL\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$REC"; return 0; }
 warn() { printf 'WARN\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$WARNF"; return 0; }
@@ -302,8 +303,9 @@ L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
 # F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
-#   rc=0 → PASS；真超时 = 双信号一致（rc=250 且 perl 判定到点后写了标记）→ 等价降级不判 FAIL；
-#   其余 rc 一律 FAIL（含「命令自报 250／给 perl 投 SIGALRM」两种伪造：前者无标记、后者 perl 被 142 打死）。
+#   rc=0 → PASS；真超时 = **只有父级时钟到点**（perl 支 rc=250）→ 未判定（INCONCLUSIVE）不判 FAIL；
+#   其余 rc 一律 FAIL（含 `exit 250`：子进程自报 250 由 perl 改写成 251，落不进降级支；
+#   含给 perl 投 SIGALRM：没装 handler，perl 被打死 → 142）。
 E2E_RC=0
 wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
 # G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN + detail，不静默、不阻断）
@@ -314,25 +316,36 @@ if [ "${E2E_TIMEOUT_KIND}" = "none" ]; then
 fi
 if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
-elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ] && [ -f "${E2E_TIMEOUT_FLAG}" ]; then
-  # 真超时：双信号一致（perl 退 250 + perl 在自己的时钟到点后写的标记）→ 等价降级（§4.1.1）
+elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ]; then
+  # 真超时：父级时钟到点 → 未判定（§4.1.1）。250 是父级独占码，命令自报已被改写成 251。
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
-    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+    L2_INC=1
+    warn "test:e2e:list 超时降级：未真跑完，判「未判定」" \
+         "高负载下 E2E 可能被 5s 闸门 TERM，真失败被掩盖；确认本轮 E2E 是否由 --full/CI 真跑兜底"
+    add "未判定（超时降级：E2E 未真跑完）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
 elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
-     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ] && [ "${E2E_TIMEOUT_CODE}" -ne 250 ]; then
-  # timeout/gtimeout 支写不出标记，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
+     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ]; then
+  # timeout/gtimeout 支没有父级时钟，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
-    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+    L2_INC=1
+    warn "test:e2e:list 超时降级：未真跑完，判「未判定」" \
+         "高负载下 E2E 可能被 5s 闸门 TERM，真失败被掩盖；确认本轮 E2E 是否由 --full/CI 真跑兜底"
+    add "未判定（超时降级：E2E 未真跑完）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
 else
-  fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}）" \
+  # rc=251 是 perl 支改写的防撞码，直接报 251 会让排障者去追一个不存在的码
+  E2E_RC_NOTE="（rc=${E2E_RC}）"
+  if [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 251 ]; then
+    E2E_RC_NOTE="（rc=250，与超时哨兵撞码，已改写为 251）"
+  fi
+  fail "关键门实跑 test:e2e:list --list 非零${E2E_RC_NOTE}" \
        "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
 fi
 need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
@@ -551,7 +564,7 @@ STAMP="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 if [ "$JSON" -eq 1 ]; then
   GOV_REC="$REC" GOV_WARN="$WARNF" GOV_EXIT="$EXIT_CODE" GOV_STAMP="$STAMP" \
   GOV_D1="${DETAIL[1]}" GOV_D2="${DETAIL[2]}" GOV_D3="${DETAIL[3]}" \
-  GOV_D4="${DETAIL[4]}" GOV_D5="${DETAIL[5]}" GOV_FULL="$FULL" \
+  GOV_D4="${DETAIL[4]}" GOV_D5="${DETAIL[5]}" GOV_FULL="$FULL" GOV_INC="$L2_INC" \
   python3 <<'PY'
 import os, json
 rec, warn = os.environ['GOV_REC'], os.environ['GOV_WARN']
@@ -566,12 +579,13 @@ def load(p):
                 out.append(dict(level=parts[0], layer=parts[1], item=parts[2], fix=parts[3]))
     return out
 fails, warns = load(rec), load(warn)
+inc = os.environ.get('GOV_INC','0') == '1'
 layers=[]
 for i in range(1,6):
     fs=[x for x in fails if x['layer']==str(i)]
     ws=[x for x in warns if x['layer']==str(i)]
     layers.append(dict(id=i, label=labels[i-1], name=names[i-1],
-                       status='FAIL' if fs else 'OK',
+                       status='FAIL' if fs else ('INCONCLUSIVE' if (i==2 and inc) else 'OK'),
                        detail=os.environ.get('GOV_D%d'%i,''),
                        fails=fs, warnings=ws))
 print(json.dumps(dict(
@@ -588,6 +602,7 @@ else
   for i in 1 2 3 4 5; do
     ST=OK
     awk -F'\t' -v l="$i" '$1=="FAIL" && $2==l {found=1} END{exit found?0:1}' "$REC" && ST=FAIL
+    [ "$L2_INC" -eq 1 ] && [ "$i" -eq 2 ] && [ "$ST" = "OK" ] && ST="未判定"
     WN=$(awk -F'\t' -v l="$i" '$1=="WARN" && $2==l' "$WARNF" | wc -l | tr -d ' ')
     printf '%s %-6s %-4s (%s)' "${LABEL[$i]}" "${NAME[$i]}" "$ST" "${DETAIL[$i]}"
     [ "$WN" -gt 0 ] && printf '  [WARN %s]' "$WN"
