@@ -57,6 +57,6 @@ export class CollectRunEntity {
   @Column({ type: 'datetime', precision: 3, comment: '批次结束时间' })
   finished_at: Date;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
   created_at: Date;
 }

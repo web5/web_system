@@ -37,6 +37,6 @@ export class HotmoneySeatEntity {
   @Column({ type: 'varchar', length: 255, nullable: true, comment: '备注' })
   note: string | null;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
   created_at: Date;
 }
