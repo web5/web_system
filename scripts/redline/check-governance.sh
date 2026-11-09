@@ -197,7 +197,19 @@ fi
 WT_N=$(git worktree list 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
 [ -n "$WT_N" ] || fail "git worktree list 不可用" "检查 git 仓库完整性（git worktree list）"
 BRANCH="$(git branch --show-current 2>/dev/null)"
-[ -n "$BRANCH" ] || fail "git branch --show-current 无返回" "检查当前是否处于 detached HEAD 或仓库损坏"
+if [ -z "$BRANCH" ]; then
+  # CI checkout / 临时验收 worktree 默认就是 detached HEAD，属合法形态
+  #（2026-11-09 在 origin/master 干净快照实跑踩到误报 FAIL 3，规格 03 §3 只要求
+  #  「能返回分支名即可，不要求等于 master」，意图是防分支归属误判，不是禁 detached）。
+  # 只有连 HEAD 都解析不出来才算仓库损坏。
+  HEAD_SHA="$(git rev-parse --verify --short HEAD 2>/dev/null || true)"
+  if [ -n "$HEAD_SHA" ]; then
+    BRANCH="detached@${HEAD_SHA}"
+  else
+    fail "git branch --show-current 无返回且 HEAD 不可解析（仓库损坏）" \
+         "git rev-parse --verify HEAD 定位；确认 .git 完整"
+  fi
+fi
 # roster 是 gitignored 的本地状态，CI / 新 worktree 必然没有 → 只做信息项，不 WARN
 ROSTER_N=0
 [ -d "$TOP/.agent-roster" ] && ROSTER_N=$(find "$TOP/.agent-roster" -maxdepth 1 -type f | wc -l | tr -d ' ')
