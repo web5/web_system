@@ -420,6 +420,7 @@ is_test_surface_file() {
     packages/agent-core/src/interfaces/*) return 0 ;;   # Agent 协议：各端 switch case
     servers/*/src/main.ts) return 0 ;;                  # 服务入口：全局 filter / guard / interceptor / pipe
     apps/*/src/main.ts) return 0 ;;                     # 前端入口：全局拦截器 / 错误码映射
+    apps/*/src/layouts/*) return 0 ;;                   # 应用壳层：导航/菜单/面包屑/全局布局 —— 改一处影响该应用所有页面
     archive/migrations/*) return 0 ;;                   # 数据迁移：全部查询与写入
     jest.config.*) return 0 ;;                          # 测试基建：影响「测试本身是否可信」
     */jest.config.*) return 0 ;;
@@ -438,6 +439,32 @@ is_test_surface_file() {
 # 阈值：UI 文件改动累计行数 >= 5，或 diff 含结构标签（<view / <template / <block）。
 # 豁免：同 range 内 commit message 带 `Micro-exempt: <理由>`。
 R9B_LINE_THRESHOLD="${R9B_LINE_THRESHOLD:-5}"
+
+# 正规流程的第二种通行证：`Proto: <sha>` 指向更早的原型/规格 commit。
+# 🔴 起因（#8613，2026-11-06 B2a 实测）：三段式流程是「原型 commit 先行 → UI commit 带 Proto:」，
+#   而 R9b 跑在单 commit range（pre-commit 的 HEAD~1..HEAD）里，此时原型在**更早的 commit**、
+#   range 内根本看不到 passport 文件 → 完全合规的走法被判「无同行原型」，逼人回头用 Micro-exempt 后门。
+#   实测 bc306f42（原型）→ 46d254fb（UI，带 Proto: bc306f42）仍报 R9b。
+# 合法性三要件（缺一不可，否则随便填个 sha 就成了后门）：
+#   ① sha 能解析  ② 是该 commit 的**祖先**（不许指向未来/兄弟分支）  ③ 该 sha 确实改过 passport 文件。
+r9b_proto_passport() {
+  local range="$1" c sha f hit
+  [ -n "$range" ] || return 1
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    sha="$(git log -1 --format=%B "$c" 2>/dev/null | grep -E '^Proto:[[:space:]]*' | head -n 1 | grep -oE '[0-9a-fA-F]{7,40}' | head -n 1)"
+    [ -n "$sha" ] || continue
+    git merge-base --is-ancestor "$sha" "$c" 2>/dev/null || continue
+    hit=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if is_passport_file "$f"; then hit=1; break; fi
+    done < <(git show --name-only --format= "$sha" 2>/dev/null)
+    [ "$hit" = "1" ] && return 0
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
+  return 1
+}
+
 check_r9b() {
   local range="$1" st path passport=0
   local -a ui_files=()
@@ -454,6 +481,8 @@ check_r9b() {
 
   [ ${#ui_files[@]} -eq 0 ] && return 0
   [ "$passport" = "1" ] && return 0
+  # 第二种通行证：range 内某个 commit 带合法的 Proto: <原型 sha>（三段式流程的正规走法）
+  r9b_proto_passport "$range" && return 0
 
   local lines=0 struct=0
   lines="$(git diff --numstat --no-renames "$range" -- "${ui_files[@]}" 2>/dev/null | awk '{a+=$1+$2} END{print a+0}')"
@@ -482,7 +511,7 @@ check_r9b() {
     fi
     add_warn "R20" "豁免理由不达标（豁免未生效）" "$(git log -1 --format=%s "$_sha" 2>/dev/null)" "${EXEMPT_QUALITY_MSG}；请补充可审计的理由后重写 trailer"
   done < <(exempt_commits_in_range "$range")
-  add_warn "R9b" "既有 UI 改动无同行原型/豁免" "${#ui_files[@]} 个文件 / ${lines} 行" "须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）"
+  add_warn "R9b" "既有 UI 改动无同行原型/豁免" "${#ui_files[@]} 个文件 / ${lines} 行" "须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Proto: <已落库原型 sha>（三段式流程），或 Micro-exempt: <理由>（§3.5.1）"
 }
 # ---- R10 UI commit 须带 Proto 凭证（commit 级 · warning 级）----
 # 方案 B 的 CI 兜底：本地可被 --no-verify 绕过，故这里再验一次（§3.8）。
@@ -491,7 +520,7 @@ check_r10() {
   local -a commits=()
   while IFS= read -r c; do
     [ -n "$c" ] && commits+=("$c")
-  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   [ ${#commits[@]} -eq 0 ] && return 0
 
   local c f sha isui
@@ -531,7 +560,7 @@ check_r11() {
   local -a commits=()
   while IFS= read -r c; do
     [ -n "$c" ] && commits+=("$c")
-  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   [ ${#commits[@]} -eq 0 ] && return 0
 
   local c f body dval n isui
