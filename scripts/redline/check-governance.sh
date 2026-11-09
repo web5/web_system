@@ -67,22 +67,19 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 # F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
 #   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
 #   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用。
-#   超时判据 = **双信号一致**，且两信号由不同主体产生：
-#     ① 退出码 250 —— 由 perl 包装器退；② 标记文件 —— 由 perl 判定到点后写。
-#   且 perl 支**不装任何信号 handler**，超时只由父进程自己的时钟判定（waitpid WNOHANG 50ms 轮询）：
-#     · 命令自己 `exit 250` → 没有标记 → 判红（挡「自报哨兵码」）
-#     · 命令给 perl 投 SIGALRM → 没有 handler，perl 直接被 142 打死 → 142≠250 → 判红
-#       （挡「投信号冒充超时」；若装了 handler，外部 ALRM 与 alarm 到期在信号层不可区分，只能靠等候≥4s 区分）
-#   对照废弃过的三版：① 单看 rc=142 → 命令 `exit 142` 即冒充满时；② 单看「命令自己写的完成标记」
-#     → `exit` 会吞掉标记行，与「被杀」同形；③ 单 rc=250 哨兵 → 命令 `exit 250` 即满时。
-#     都只靠单一信号或单一主体，故都能被一个动作洗白。
-#   E2E_TIMEOUT_KIND / E2E_TIMEOUT_CODE 记录闸门种类与该种闸门的**主**超时码
-#     （perl→250 / timeout·gtimeout→124；kind=none 留空 → 任何 rc 都不当超时）。
-#   残余（记录不修）：timeout/gtimeout 支写不出标记，只能单看 rc=124 —— 命令自己 `exit 124`
-#     可伪造，但不判红（降级），仅影响「无 perl 的环境」；macOS/主流 CI 有 perl，走不到那一支。
+#   超时判据 = **只有父级实测耗时**（rd-product 裁定）：命令拖不动父级时钟，这是唯一天然不可伪造的量。
+#     到点就 TERM 子进程（为约束运行时长），但「谁杀的、退出码多少、有没有写标记」一律不参与判定。
+#   perl 支必须用 Time::HiRes：整数 time 的截止点会落在 4.0–5.0s 随机（实测 sleep 4.8 被误判超时），
+#     精度不足会把「真验过」说成「没验过」，等于自己丢掉刚建立起来的证据。
+#   250 是**父级独占码**：只由 perl 的父级时钟产出；子进程自报 250 会被改写成 251（防撞码），
+#     否则命令自己 `exit 250` 立刻冒充满时 —— 那是前一版的老洞。
+#   废弃过的四版：① 单看 rc=142 → `exit 142` 即洗白；② 命令自己写完成标记 → `exit` 吞掉标记行；
+#     ③ 单 rc=250 哨兵 → `exit 250` 洗白；④ rc=250 + 可枚举 flag → 两量都在命令可达域
+#        （`for d in ${TMPDIR}/gov-check.*; do : > $d/e2e.timeout; done; exit 250` 同时伪造两条件）。
+#   残余（记录不修）：timeout/gtimeout 支没有父级时钟，只能单看 rc=124 —— 命令自己 `exit 124`
+#     可伪造降级，仅影响「无 perl 的环境」；macOS/主流 CI 有 perl，走不到那一支。
 E2E_LOG="${TMP}/e2e-list.log"
 E2E_RUN="${TMP}/e2e-run.sh"
-E2E_TIMEOUT_FLAG="${TMP}/e2e.timeout"
 E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
 E2E_TIMEOUT_KIND="none"
 E2E_TIMEOUT_CODE=""
@@ -94,36 +91,37 @@ elif command -v gtimeout >/dev/null 2>&1; then
   E2E_TIMEOUT_KIND="gtimeout"; E2E_TIMEOUT_CODE=124
 fi
 # 被测命令落独立脚本（不用 sh -c "…${E2E_CMD}…" 拼串，避开命令内含引号时炸裂）
-rm -f "${E2E_TIMEOUT_FLAG}"
 printf '%s\n' "${E2E_CMD}" > "${E2E_RUN}"
 (
   case "${E2E_TIMEOUT_KIND}" in
     perl)
       perl -e '
-        my $t = shift; my $flag = shift;
-        my $t0 = time; my $timedout = 0;
+        use Time::HiRes qw(time);
+        my $t = shift;
         my $pid = fork;
         exit 127 unless defined $pid;
         if (!$pid) { exec @ARGV; exit 127 }
-        # 不装任何信号 handler：超时只由**父进程自己的时钟**判定。
-        # 这样「外部投递 SIGALRM」既不能冒充超时（没有 handler，直接把 perl 打死 → 128+14=142 ≠ 250），
-        # 也不会像 handler 方案那样被迫等到 ≥4s 才能区分。
+        my $t0 = time();
+        my $timedout = 0;
+        # 不装任何信号 handler：超时只由父级时钟判定（外部投递 SIGALRM 只会把 perl 打死 → 142 ≠ 250）
         while (1) {
-          my $got = waitpid($pid, 1);            # 1 = WNOHANG
-          if ($got == $pid) { last }             # 子进程自己结束
-          if (time - $t0 >= $t) {                # 父级时钟说到点了
+          my $got = waitpid($pid, 1);              # 1 = WNOHANG
+          last if $got == $pid;                    # 子进程自己结束
+          if (time() - $t0 >= $t) {                # 到点：TERM 子进程（只为约束时长，不参与判定）
             $timedout = 1;
             kill "TERM", $pid;
             waitpid($pid, 0);
             last;
           }
-          select(undef, undef, undef, 0.05);     # 50ms 轮询，CPU 开销可忽略
+          select(undef, undef, undef, 0.02);       # 20ms 轮询，CPU 开销可忽略
         }
         my $r = $?;
-        if ($timedout) { open(my $fh, ">", $flag) or exit 251; close($fh); exit 250 }
-        my $sig = $r & 127;
-        exit($sig ? 128 + $sig : ($r >> 8));
-      ' 5 "${E2E_TIMEOUT_FLAG}" sh "${E2E_RUN}" ;;
+        exit 250 if $timedout;                     # 250 只由父级时钟产出
+        my $sig  = $r & 127;
+        my $code = $r >> 8;
+        $code = 251 if $code == 250;                # 子进程自报 250 → 改写，防撞码
+        exit($sig ? 128 + $sig : $code);
+      ' 5 sh "${E2E_RUN}" ;;
     timeout)  timeout 5 sh "${E2E_RUN}" ;;
     gtimeout) gtimeout 5 sh "${E2E_RUN}" ;;
     *)        sh "${E2E_RUN}" ;;
@@ -302,8 +300,9 @@ L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
 # F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
-#   rc=0 → PASS；真超时 = 双信号一致（rc=250 且 perl 判定到点后写了标记）→ 等价降级不判 FAIL；
-#   其余 rc 一律 FAIL（含「命令自报 250／给 perl 投 SIGALRM」两种伪造：前者无标记、后者 perl 被 142 打死）。
+#   rc=0 → PASS；真超时 = **只有父级时钟到点**（perl 支 rc=250）→ 等价降级不判 FAIL；
+#   其余 rc 一律 FAIL（含 `exit 250`：子进程自报 250 由 perl 改写成 251，落不进降级支；
+#   含给 perl 投 SIGALRM：没装 handler，perl 被打死 → 142）。
 E2E_RC=0
 wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
 # G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN + detail，不静默、不阻断）
@@ -314,8 +313,8 @@ if [ "${E2E_TIMEOUT_KIND}" = "none" ]; then
 fi
 if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
-elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ] && [ -f "${E2E_TIMEOUT_FLAG}" ]; then
-  # 真超时：双信号一致（perl 退 250 + perl 在自己的时钟到点后写的标记）→ 等价降级（§4.1.1）
+elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ]; then
+  # 真超时：父级时钟到点 → 等价降级（§4.1.1）。250 是父级独占码，命令自报已被改写成 251。
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
     add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
   else
@@ -323,8 +322,8 @@ elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ] && [ -f "${E2
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
 elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
-     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ] && [ "${E2E_TIMEOUT_CODE}" -ne 250 ]; then
-  # timeout/gtimeout 支写不出标记，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
+     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ]; then
+  # timeout/gtimeout 支没有父级时钟，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
     add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
   else
