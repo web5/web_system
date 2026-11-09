@@ -13,6 +13,7 @@
     "check:agent-core-exports": "node scripts/check-agent-core-exports.mjs",
     "check:shared-browser": "node scripts/check-shared-browser-safety.mjs",
     "check:specs": "node scripts/audit-specs.mjs",
+    "check:governance": "bash scripts/redline/check-governance.sh",
     "specs:index": "node scripts/gen-specs-index.mjs",
     "specs:index:check": "node scripts/gen-specs-index.mjs --check",
     "new:spec": "node scripts/new-spec.mjs",
