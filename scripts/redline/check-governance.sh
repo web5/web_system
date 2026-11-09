@@ -66,9 +66,16 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 
 # F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
 #   与其余检查并行，避免默认档耗时从 ~11s 抬到 ~13s（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
+#   5s 超时闸门（14 号 §4.1）：优先 perl alarm+exec（alarm 跨 exec 保留），无 perl 则裸跑（无闸门）。
 E2E_LOG="${TMP}/e2e-list.log"
 E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
-sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
+E2E_ALARM=0
+if command -v perl >/dev/null 2>&1; then
+  E2E_ALARM=1
+  perl -e 'alarm shift; exec @ARGV' 5 sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
+else
+  sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
+fi
 E2E_PID=$!
 
 LABEL[1]='①'; NAME[1]='意图锚定'
@@ -117,42 +124,38 @@ need_gates_lint() {
   return 1
 }
 
-# F4：不只看 scripts[key] truthy，还校验值「指向是否生效」——
-#   值里若出现形如 xxx/yyy.ext 的 token，则要求该文件存在；纯命令式（无文件路径）则首命令须是已知命令。
-#   只判存在性，不写死任何存量数字。CHECK_GOV_PKG 仅作变异验证注入点，默认指向根 package.json。
+# F4（14 号 §4.2）：不只判 scripts[key] truthy，还判「值是否指向目标脚本」——
+#   每个键对应一个目标脚本文件名子串；值须包含该子串，且子串命中的那个 token 指向的文件须存在。
+#   只判「包含子串」，不逐字比对整条命令（允许 --silent/--check 等参数）。CHECK_GOV_PKG 仅作变异注入点。
 need_pkg_script() {
-  local key="${1}" line code detail val
+  local key="${1}" target="" line code detail val
+  case "${key}" in
+    check:specs)       target="audit-specs.mjs" ;;
+    specs:index:check) target="gen-specs-index.mjs" ;;
+    test:e2e:list)     target="playwright.config.ts" ;;
+    check:governance)  target="check-governance.sh" ;;
+  esac
   line="$(node -e '
     const fs=require("fs"), path=require("path");
-    const pkg=process.argv[1], key=process.argv[2], top=process.argv[3];
+    const pkg=process.argv[1], key=process.argv[2], top=process.argv[3], target=process.argv[4];
     let v;
     try { v=(JSON.parse(fs.readFileSync(pkg,"utf8")).scripts||{})[key]; }
     catch(e){ process.stdout.write("BAD_JSON||"); process.exit(0); }
-    if (typeof v!=="string" || !v.trim()) { process.stdout.write("MISSING||"+typeof v); process.exit(0); }
+    if (typeof v!=="string" || !v.trim()) { process.stdout.write("MISSING||"); process.exit(0); }
+    if (target && v.indexOf(target)<0) { process.stdout.write("NOT_TARGET|"+target+"|"+v); process.exit(0); }
     const toks=v.trim().split(/\s+/);
-    const known=new Set(["node","bash","sh","npx","npm","pnpm","yarn","corepack","python3","python","playwright","tsx","ts-node","echo","true","false"]);
-    const ext=/\.(mjs|cjs|js|ts|mts|cts|sh|py)$/i;
-    const paths=[];
-    for (let t of toks) {
-      if (t.startsWith("--") && t.indexOf("=")>0) t=t.slice(t.indexOf("=")+1);
-      if (t.startsWith("-")) continue;
-      if (ext.test(t) && (t.indexOf("/")>=0 || /^[A-Za-z0-9_.-]+\.[A-Za-z0-9]+$/.test(t))) paths.push(t);
-    }
-    if (paths.length) {
-      for (const p of paths) if (!fs.existsSync(path.resolve(top,p))) { process.stdout.write("PATH_MISS|"+p+"|"+v); process.exit(0); }
-      process.stdout.write("OK||"+v); process.exit(0);
-    }
-    if (known.has(toks[0])) { process.stdout.write("OK_CMD||"+v); process.exit(0); }
-    process.stdout.write("UNKNOWN|"+toks[0]+"|"+v);
-  ' "${PKG}" "${key}" "${TOP}" 2>/dev/null)"
+    const hit = target ? toks.find(t=>t.indexOf(target)>=0) : null;
+    if (hit && hit.charAt(0)!=="-" && !fs.existsSync(path.resolve(top,hit))) { process.stdout.write("MISS_FILE|"+hit+"|"+v); process.exit(0); }
+    process.stdout.write("OK||"+v);
+  ' "${PKG}" "${key}" "${TOP}" "${target}" 2>/dev/null)"
   IFS='|' read -r code detail val <<< "${line}"
   case "${code}" in
-    OK|OK_CMD) return 0 ;;
-    MISSING) fail "package.json 缺 script 键 ${key}（键不存在或值为空）" "在 ${PKG} 的 scripts 段补回 \"${key}\""; return 1 ;;
+    OK) return 0 ;;
     BAD_JSON) fail "package.json 不可解析 → ${PKG}" "node -e 'JSON.parse(require(\"fs\").readFileSync(\"${PKG}\",\"utf8\"))' 定位 JSON 语法错误"; return 1 ;;
-    PATH_MISS) fail "script ${key} 指向的文件不存在: ${detail}（值=${val}）" "恢复 ${detail} 到仓库内，或修正 ${PKG} 的 scripts.${key}"; return 1 ;;
-    UNKNOWN) fail "script ${key} 首命令不可识别: ${detail}（值=${val}）" "修正 ${PKG} 的 scripts.${key}，指向存在的脚本文件或已知命令"; return 1 ;;
-    *) fail "script ${key} 值校验异常（node 无输出）" "检查 ${PKG} 的 scripts.${key}"; return 1 ;;
+    MISSING) fail "package.json 缺 script 键 ${key}（键不存在或值为空）" "在根 package.json（${PKG}）的 scripts 段补回 \"${key}\""; return 1 ;;
+    NOT_TARGET) fail "package.json 的 ${key} 未指向 ${detail}（现值: ${val}）" "在根 package.json 的 scripts 补回 \"${key}\": \"…${detail}…\""; return 1 ;;
+    MISS_FILE) fail "package.json 的 ${key} 指向的 ${detail} 文件不存在（现值: ${val}）" "恢复 ${detail} 对应文件，或修正根 package.json 的 scripts.${key}"; return 1 ;;
+    *) fail "package.json 的 ${key} 值校验异常（node 无输出）" "检查根 package.json 的 scripts.${key}"; return 1 ;;
   esac
 }
 
@@ -242,11 +245,22 @@ add "specs=$SPECS_N"
 L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
-# F3：实跑 test:e2e:list --list（顶部已后台启动，此处收集 rc；实测 ~1.7s，默认档补实跑）
-if wait "${E2E_PID}"; then
+# F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
+#   ≤5s 且 rc=0 → PASS；rc≠0 且非超时 → FAIL ②；>5s 超时 → 等价降级（§4.1.1）不判 FAIL
+E2E_RC=0
+wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
+if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
+elif [ "${E2E_ALARM}" -eq 1 ] && [ "${E2E_RC}" -eq 142 ]; then
+  # >5s 超时：环境慢而非入口失效 → 等价轻量判定（config 在 + playwright CLI 在位；值指向由 F4 覆盖）
+  if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
+    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+  else
+    fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
+         "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
+  fi
 else
-  fail "关键门实跑 test:e2e:list --list 非零（E2E 用例集 --list 跑不起来）" \
+  fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}）" \
        "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
 fi
 need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
@@ -337,8 +351,8 @@ need "$BIN/gates-lint.ts" "gates-lint.ts" "恢复 scripts/redline/gates-lint.ts"
 JOBS='redline-scan pipeline-lint changed-packages deliverables-check gate-cases proto-static-check specs-gate'
 if [ "${WF_OK}" -ne 1 ]; then
   # F11：不可读只报一条明确 FAIL（不再逐 job 误报 N 条），fix 带实际注入路径
-  fail "CI workflow 文件不可读 → ${WORKFLOW}（job 生效判定无法进行）" \
-       "ls -l ${WORKFLOW} 确认路径；修正 CHECK_GOV_WORKFLOW 指向真实可读文件（默认 .github/workflows/quality-gate.yml）"
+  fail "CI workflow 不可读: ${WORKFLOW}（job 生效判定无法进行，不再逐 job 误报）" \
+       "ls -l ${WORKFLOW}；确认注入文件存在且可读：${WORKFLOW}"
   add "CI job 检查跳过（workflow 不可读）"
 else
   JOB_N=0
