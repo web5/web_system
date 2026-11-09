@@ -22,8 +22,9 @@
 #   2) 禁止写死存量数字：specs / *.spec.ts / worktree 数量只输出，不设阈值
 #   3) 任一 FAIL → exit 1，且每条 FAIL 必须给可执行的修复命令
 #
-# CHECK_GOV_LEDGER / CHECK_GOV_WORKFLOW 是**变异验证注入点**（默认指向真源），
-#   用于在不改动共享台账与 CI 文件的前提下验证 FAIL 判定确实生效。
+# 变异验证注入点（默认指向真源，用于不改共享文件即可验证 FAIL 判定确实生效）：
+#   CHECK_GOV_LEDGER→台账  CHECK_GOV_WORKFLOW→CI 文件
+#   CHECK_GOV_PKG→package.json（F4 值校验变异）  CHECK_GOV_E2E_CMD→② 层实跑命令（F3 变异）
 # ============================================================================
 set -uo pipefail
 
@@ -46,6 +47,10 @@ done
 # ---- 真源路径（本机专用：本脚本要检查用户级 hook / 台账 / 保护状态） ----
 LEDGER="${CHECK_GOV_LEDGER:-$HOME/AiWorkspace/30-任务产物/_待验证清单.md}"
 WORKFLOW="${CHECK_GOV_WORKFLOW:-$TOP/.github/workflows/quality-gate.yml}"
+PKG="${CHECK_GOV_PKG:-$TOP/package.json}"
+# F11：workflow 可读性只算一次；不可读时不调 awk → 不泄漏 stderr、不把「不可读」误报成「N 个 job 全缺」
+WF_OK=0
+if [ -f "${WORKFLOW}" ] && [ -r "${WORKFLOW}" ]; then WF_OK=1; fi
 SDD_SOP="$HOME/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md"
 THREE_TABLES="$HOME/AiWorkspace/20-私域资产/AI协作交付规范-表格化收尾.md"
 USER_SETTINGS="$HOME/.workbuddy/settings.json"
@@ -58,6 +63,13 @@ trap 'rm -rf "$TMP"' EXIT
 REC="$TMP/records.tsv"    # FAIL: level \t layer \t item \t fix
 WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 : > "$REC"; : > "$WARNF"
+
+# F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
+#   与其余检查并行，避免默认档耗时从 ~11s 抬到 ~13s（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
+E2E_LOG="${TMP}/e2e-list.log"
+E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
+sh -c "${E2E_CMD}" >"${E2E_LOG}" 2>&1 &
+E2E_PID=$!
 
 LABEL[1]='①'; NAME[1]='意图锚定'
 LABEL[2]='②'; NAME[2]='验证契约'
@@ -105,27 +117,100 @@ need_gates_lint() {
   return 1
 }
 
+# F4：不只看 scripts[key] truthy，还校验值「指向是否生效」——
+#   值里若出现形如 xxx/yyy.ext 的 token，则要求该文件存在；纯命令式（无文件路径）则首命令须是已知命令。
+#   只判存在性，不写死任何存量数字。CHECK_GOV_PKG 仅作变异验证注入点，默认指向根 package.json。
 need_pkg_script() {
-  local key="$1"
-  if node -e 'const p=require(process.argv[1]); process.exit(p.scripts&&p.scripts[process.argv[2]]?0:1)' \
-      "$TOP/package.json" "$key" >/dev/null 2>&1; then return 0; fi
-  fail "package.json 缺 script 键 $key" "在根 package.json 的 scripts 段补回 \"$key\""
-  return 1
+  local key="${1}" line code detail val
+  line="$(node -e '
+    const fs=require("fs"), path=require("path");
+    const pkg=process.argv[1], key=process.argv[2], top=process.argv[3];
+    let v;
+    try { v=(JSON.parse(fs.readFileSync(pkg,"utf8")).scripts||{})[key]; }
+    catch(e){ process.stdout.write("BAD_JSON||"); process.exit(0); }
+    if (typeof v!=="string" || !v.trim()) { process.stdout.write("MISSING||"+typeof v); process.exit(0); }
+    const toks=v.trim().split(/\s+/);
+    const known=new Set(["node","bash","sh","npx","npm","pnpm","yarn","corepack","python3","python","playwright","tsx","ts-node","echo","true","false"]);
+    const ext=/\.(mjs|cjs|js|ts|mts|cts|sh|py)$/i;
+    const paths=[];
+    for (let t of toks) {
+      if (t.startsWith("--") && t.indexOf("=")>0) t=t.slice(t.indexOf("=")+1);
+      if (t.startsWith("-")) continue;
+      if (ext.test(t) && (t.indexOf("/")>=0 || /^[A-Za-z0-9_.-]+\.[A-Za-z0-9]+$/.test(t))) paths.push(t);
+    }
+    if (paths.length) {
+      for (const p of paths) if (!fs.existsSync(path.resolve(top,p))) { process.stdout.write("PATH_MISS|"+p+"|"+v); process.exit(0); }
+      process.stdout.write("OK||"+v); process.exit(0);
+    }
+    if (known.has(toks[0])) { process.stdout.write("OK_CMD||"+v); process.exit(0); }
+    process.stdout.write("UNKNOWN|"+toks[0]+"|"+v);
+  ' "${PKG}" "${key}" "${TOP}" 2>/dev/null)"
+  IFS='|' read -r code detail val <<< "${line}"
+  case "${code}" in
+    OK|OK_CMD) return 0 ;;
+    MISSING) fail "package.json 缺 script 键 ${key}（键不存在或值为空）" "在 ${PKG} 的 scripts 段补回 \"${key}\""; return 1 ;;
+    BAD_JSON) fail "package.json 不可解析 → ${PKG}" "node -e 'JSON.parse(require(\"fs\").readFileSync(\"${PKG}\",\"utf8\"))' 定位 JSON 语法错误"; return 1 ;;
+    PATH_MISS) fail "script ${key} 指向的文件不存在: ${detail}（值=${val}）" "恢复 ${detail} 到仓库内，或修正 ${PKG} 的 scripts.${key}"; return 1 ;;
+    UNKNOWN) fail "script ${key} 首命令不可识别: ${detail}（值=${val}）" "修正 ${PKG} 的 scripts.${key}，指向存在的脚本文件或已知命令"; return 1 ;;
+    *) fail "script ${key} 值校验异常（node 无输出）" "检查 ${PKG} 的 scripts.${key}"; return 1 ;;
+  esac
 }
 
 # 按 jobs: 块解析 job 名（不全文 grep，避免把 on: 下的事件名当成 job）
+#   WF_OK=0 时不调用 awk → 不泄漏 stderr、不把「不可读」误报成「N 个 job 全缺」（F11）
 ci_jobs() {
+  [ "${WF_OK}" -eq 1 ] || return 0
   awk '
     /^jobs:[[:space:]]*$/ { inj=1; next }
     inj && /^[^[:space:]#]/ { inj=0 }
     inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { line=$0; gsub(/[:[:space:]]/,"",line); print line }
-  ' "$WORKFLOW"
+  ' "${WORKFLOW}" 2>/dev/null
+}
+# F2：判 job 是否「真会执行」——输出每 job 一行 <job> <if恒假:0|1> <has_steps:0|1> <steps非空:0|1>
+#   只解析 jobs: 块（job 名 2 空格 / job 级键 4 空格 / step 列表项 6 空格，与 ci_jobs 同一约定）。
+#   恒假 if 用严格白名单匹配（false/0/-0/0.0/null/''/""，含 ${{ }} 包装），
+#   合法条件表达式（含 github./==/contains 等）一律不命中 → 不误阻断。
+ci_job_health() {
+  [ "${WF_OK}" -eq 1 ] || return 0
+  awk '
+    function trim(s){ gsub(/^[[:space:]]+/,"",s); gsub(/[[:space:]]+$/,"",s); return s }
+    function is_false(v,  t){
+      v=trim(v)
+      if (index(v,"#")>0) return 0
+      if (substr(v,1,3)=="${{" && substr(v,length(v)-1,2)=="}}") { t=substr(v,4,length(v)-5); v=trim(t) }
+      return (v=="false"||v=="FALSE"||v=="False"||v=="0"||v=="-0"||v=="0.0"||v=="null"||v=="NULL"||v=="Null"||v=="\047\047"||v=="\"\"")
+    }
+    function emit(){ if (cur!="") printf "%s %d %d %d\n", cur, iffalse, hassteps, stepsok }
+    /^jobs:[[:space:]]*$/ { inj=1; next }
+    inj && /^[^[:space:]#]/ { inj=0 }
+    inj {
+      line=$0
+      if (line ~ /^[[:space:]]*$/ || line ~ /^[[:space:]]*#/) next
+      ind=0; n=length(line)
+      for (k=1;k<=n;k++){ if (substr(line,k,1)==" ") ind++; else break }
+      if (ind==2 && line ~ /^  [A-Za-z0-9_-]+:[[:space:]]*$/) {
+        emit()
+        cur=line; sub(/^  /,"",cur); sub(/[[:space:]]*:[[:space:]]*$/,"",cur)
+        iffalse=0; hassteps=0; stepsok=0; in_steps=0
+        next
+      }
+      if (ind==4) {
+        in_steps=0
+        if (line ~ /^    if:/) { v=line; sub(/^    if:[[:space:]]*/,"",v); if (is_false(v)) iffalse=1 }
+        if (line ~ /^    steps:/) { hassteps=1; in_steps=1 }
+        next
+      }
+      if (ind>=6 && in_steps==1 && line ~ /^      -[[:space:]]/) stepsok=1
+    }
+    END { emit() }
+  ' "${WORKFLOW}" 2>/dev/null
 }
 need_job() {
-  local j="$1"
-  if ci_jobs | grep -qx "$j"; then return 0; fi
+  local j="${1}"
+  [ "${WF_OK}" -eq 1 ] || return 0
+  if ci_jobs | grep -qx "${j}"; then return 0; fi
   fail "CI job 缺失: ${j}（job 被改名或删掉是静默失效高发点）" \
-       "检查 .github/workflows/quality-gate.yml 的 jobs 段，补回 $j"
+       "检查 ${WORKFLOW} 的 jobs 段，补回 ${j}"
   return 1
 }
 
@@ -157,6 +242,13 @@ add "specs=$SPECS_N"
 L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
+# F3：实跑 test:e2e:list --list（顶部已后台启动，此处收集 rc；实测 ~1.7s，默认档补实跑）
+if wait "${E2E_PID}"; then
+  add "test:e2e:list --list 实跑 exit 0"
+else
+  fail "关键门实跑 test:e2e:list --list 非零（E2E 用例集 --list 跑不起来）" \
+       "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
+fi
 need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
      "恢复 servers/ai-agent/e2e/contract-risk/README.md" file
 FIX_N=0
@@ -194,8 +286,16 @@ if [ -f "$BIN/hook-worktree-gate.py" ]; then
 else
   fail "守卫脚本 hook-worktree-gate.py 缺失" "恢复 scripts/redline/hook-worktree-gate.py"
 fi
-WT_N=$(git worktree list 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
-[ -n "$WT_N" ] || fail "git worktree list 不可用" "检查 git 仓库完整性（git worktree list）"
+# F1：判 `git worktree list` 的**退出码**——
+#   旧实现 `[ -n "$WT_N" ]` 判 wc -l 的输出字符串，空输入恒返回 "0"（非空）→ FAIL 分支永不触发。
+WT_OUT="$(git worktree list 2>/dev/null)"; WT_RC=$?
+if [ "${WT_RC}" -ne 0 ]; then
+  WT_N=0
+  fail "git worktree list 不可用（rc=${WT_RC}，会话自发现失效）" \
+       "检查 git 仓库完整性：git worktree list 查看报错；确认 .git 完整"
+else
+  WT_N=$(printf '%s\n' "${WT_OUT}" | tail -n +2 | wc -l | tr -d ' ')
+fi
 BRANCH="$(git branch --show-current 2>/dev/null)"
 if [ -z "$BRANCH" ]; then
   # CI checkout / 临时验收 worktree 默认就是 detached HEAD，属合法形态
@@ -235,9 +335,34 @@ need_gates_lint && add "gates-lint 实跑通过"
 need "$BIN/gate.ts" "gate.ts" "恢复 scripts/redline/gate.ts" file
 need "$BIN/gates-lint.ts" "gates-lint.ts" "恢复 scripts/redline/gates-lint.ts" file
 JOBS='redline-scan pipeline-lint changed-packages deliverables-check gate-cases proto-static-check specs-gate'
-JOB_N=0
-for j in $JOBS; do need_job "$j" && JOB_N=$((JOB_N+1)); done
-add "$JOB_N/7 CI job 齐"
+if [ "${WF_OK}" -ne 1 ]; then
+  # F11：不可读只报一条明确 FAIL（不再逐 job 误报 N 条），fix 带实际注入路径
+  fail "CI workflow 文件不可读 → ${WORKFLOW}（job 生效判定无法进行）" \
+       "ls -l ${WORKFLOW} 确认路径；修正 CHECK_GOV_WORKFLOW 指向真实可读文件（默认 .github/workflows/quality-gate.yml）"
+  add "CI job 检查跳过（workflow 不可读）"
+else
+  JOB_N=0
+  for j in ${JOBS}; do need_job "${j}" && JOB_N=$((JOB_N+1)); done
+  # F2：白名单内逐个 job 判「真会执行」——恒假 if: / steps: 缺失或为空 → FAIL ④
+  JOB_HEALTH="${TMP}/job-health.tsv"
+  ci_job_health > "${JOB_HEALTH}" 2>/dev/null
+  while read -r _hbj _iffalse _hassteps _stepsok; do
+    [ -z "${_hbj}" ] && continue
+    case " ${JOBS} " in *" ${_hbj} "*) : ;; *) continue ;; esac
+    if [ "${_iffalse:-0}" = "1" ]; then
+      fail "CI job ${_hbj} 被 job 级恒假 if 禁用（CI 上永不执行，闸门被悄悄关掉）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后删除其 job 级 'if: false'，或改成合法条件如 if: github.event_name == 'push'"
+    fi
+    if [ "${_hassteps:-0}" = "1" ]; then
+      [ "${_stepsok:-0}" = "1" ] || fail "CI job ${_hbj} 的 steps: 为空（job 体被掏空）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后给 steps: 补回至少一个 '      - run: …' 或 '      - uses: …'"
+    else
+      fail "CI job ${_hbj} 缺 steps:（job 无可执行步骤）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后补回 '    steps:' 及至少一个步骤"
+    fi
+  done < "${JOB_HEALTH}"
+  add "$JOB_N/7 CI job 齐 / job 级 if:·steps: 已判生效"
+fi
 if need_json "$USER_SETTINGS" "用户级 hook settings" \
     "恢复 ~/.workbuddy/settings.json 顶层 hooks"; then
   if node -e '
