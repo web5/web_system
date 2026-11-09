@@ -76,8 +76,8 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 #   废弃过的四版：① 单看 rc=142 → `exit 142` 即洗白；② 命令自己写完成标记 → `exit` 吞掉标记行；
 #     ③ 单 rc=250 哨兵 → `exit 250` 洗白；④ rc=250 + 可枚举 flag → 两量都在命令可达域
 #        （`for d in ${TMPDIR}/gov-check.*; do : > $d/e2e.timeout; done; exit 250` 同时伪造两条件）。
-#   残余（记录不修）：timeout/gtimeout 支没有父级时钟，只能单看 rc=124 —— 命令自己 `exit 124`
-#     可伪造降级，仅影响「无 perl 的环境」；macOS/主流 CI 有 perl，走不到那一支。
+#   残余（记录不修）：`timeout`/`gtimeout` 支**无撞码封堵**：它们没有父级时钟，`exit 124` 自报即等价 T13 假绿。
+#     仅影响「无 perl 的环境」（macOS/主流 CI 有 perl，走不到那一支）。三支强度不等价，注释不得让人误读成同强度。
 E2E_LOG="${TMP}/e2e-list.log"
 E2E_RUN="${TMP}/e2e-run.sh"
 E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
@@ -119,7 +119,9 @@ printf '%s\n' "${E2E_CMD}" > "${E2E_RUN}"
         exit 250 if $timedout;                     # 250 只由父级时钟产出
         my $sig  = $r & 127;
         my $code = $r >> 8;
-        $code = 251 if $code == 250;                # 子进程自报 250 → 改写，防撞码
+        # 必须 == 250 精确等值，禁止放宽成 >= 250 —— 会把 252–255 一起吞掉，
+        #   且下一个改的人极易顺手放宽。安全前提是「250 的原像唯一」，不需要映射可逆。
+        $code = 251 if $code == 250;                # 子进程自报 250 → 改写，封撞码
         exit($sig ? 128 + $sig : $code);
       ' 5 sh "${E2E_RUN}" ;;
     timeout)  timeout 5 sh "${E2E_RUN}" ;;
@@ -331,7 +333,12 @@ elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
 else
-  fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}）" \
+  # rc=251 是 perl 支改写的防撞码，直接报 251 会让排障者去追一个不存在的码
+  E2E_RC_NOTE="（rc=${E2E_RC}）"
+  if [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 251 ]; then
+    E2E_RC_NOTE="（rc=250，与超时哨兵撞码，已改写为 251）"
+  fi
+  fail "关键门实跑 test:e2e:list --list 非零${E2E_RC_NOTE}" \
        "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
 fi
 need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
