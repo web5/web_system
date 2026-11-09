@@ -9,7 +9,7 @@ warnings=3
 ══ 红线提示（warning）══
   [R9b] 既有 UI 改动无同行原型/豁免
        1 个文件 / 5 行
-       须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）
+       须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Proto: <已落库原型 sha>（三段式流程），或 Micro-exempt: <理由>（§3.5.1）
   [R10] UI commit 缺 Proto 凭证
        feat(admin): 调整卡片布局
        UI 源码 commit 的 message 须带 Proto: <已确认原型的 sha>（§3.8）

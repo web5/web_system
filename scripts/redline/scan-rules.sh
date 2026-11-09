@@ -461,7 +461,7 @@ r9b_proto_passport() {
       if is_passport_file "$f"; then hit=1; break; fi
     done < <(git show --name-only --format= "$sha" 2>/dev/null)
     [ "$hit" = "1" ] && return 0
-  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   return 1
 }
 
@@ -520,7 +520,7 @@ check_r10() {
   local -a commits=()
   while IFS= read -r c; do
     [ -n "$c" ] && commits+=("$c")
-  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   [ ${#commits[@]} -eq 0 ] && return 0
 
   local c f sha isui
@@ -560,7 +560,7 @@ check_r11() {
   local -a commits=()
   while IFS= read -r c; do
     [ -n "$c" ] && commits+=("$c")
-  done < <(git rev-list --reverse "$range" 2>/dev/null)
+  done < <(git rev-list --reverse --no-merges "$range" 2>/dev/null)
   [ ${#commits[@]} -eq 0 ] && return 0
 
   local c f body dval n isui
