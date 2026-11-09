@@ -1,0 +1,2549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>kedou-ai-minigram · 科豆 AI 小程序原型</title>
+<style>
+  :root {
+    --stage: #ECE8E3;
+    --nav-bg: #FFFFFF; --nav-text: #000000;
+    --page-bg: #F7F4F0; --card: #FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --code-bg:#1C1E26; --code-hd:#16181F; --code-text:#E2E8F0; --code-hd-text:#A5ACBA;
+    --text-body:#3F3F46; --text-strong:#18181B;
+    /* 新规范阶梯（design-system E11/E13/G12，2026-09-22）：落码同步到 app.wxss token 层 */
+    --leading-tight:1.25; --leading-snug:1.4; --leading-normal:1.6; --leading-relaxed:1.75;
+    --tracking-tight:-0.02em; --tracking-normal:0; --tracking-wide:0.02em;
+    --duration-fast:150ms; --duration-base:200ms; --duration-slow:300ms;
+    --ease-out:cubic-bezier(0.16, 1, 0.3, 1);
+    --control-sm:24px; --control-md:32px; --control-lg:40px;
+    --icon-inline:16px; --icon-action:20px; --icon-feature:24px;
+    --t1: #10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand: #F97316; --brand-50: #FFF7ED; --brand-soft: #FFF2E6; --brand-deep: #E8620A; --brand-txt: #EA580C;
+    --accent: #0E9B8C; --accent-soft: #E4F6F2;
+    --orange: #F97316; --orange-soft: #FFF2E6;
+    --green: #12A150; --green-soft: #E7F7EE;
+    --amber: #D98200; --amber-soft: #FFF6E5; --amber-deep: #78350F;
+    --red: #E5484D; --red-soft: #FDECEC;
+    --on-brand: #FFFFFF;
+    --capsule: rgba(255,255,255,.86); --capsule-bd: rgba(0,0,0,.08);
+    --tab-bg: #FFFFFF; --tab-off: #8A90A0;
+    --mask: rgba(0,0,0,.45); --sheet: #FFFFFF; --sheet-gap: #F2F2F7;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+  }
+  body[data-theme="dark"] {
+    --stage: #0E1016;
+    --nav-bg: #1A1C24; --nav-text: #FFFFFF;
+    --page-bg: #0B0D12; --card: #171A22;
+    --line: rgba(255,255,255,.10);
+    --code-bg:#17181D; --code-hd:#121318; --code-text:#D4D4D8; --code-hd-text:#8B90A0;
+    --text-body:#D4D4D8; --text-strong:#F4F4F5;
+    --t1: #FFFFFF; --t2: rgba(235,235,245,.60); --t3: rgba(235,235,245,.32);
+    --brand: #FF9F45; --brand-50: #3A2414; --brand-soft: #3A2414; --brand-deep: #FFC08A; --brand-txt: #FFB27A;
+    --accent: #4ECDC4; --accent-soft: #14332F;
+    --orange: #F97316; --orange-soft: #3A2414;
+    --green: #3DBE77; --green-soft: #10301F;
+    --amber: #E5A13B; --amber-soft: #33270E;
+    --red: #FF6B6F; --red-soft: #3A1A1C;
+    --on-brand: #1A1005;
+    --capsule: rgba(255,255,255,.10); --capsule-bd: rgba(255,255,255,.14);
+    --tab-bg: #12141B; --tab-off: #6E7385;
+    --mask: rgba(0,0,0,.62); --sheet: #1A1C24; --sheet-gap: #000000;
+    --shadow: 0 20px 56px rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--stage); color: var(--t1);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    font-size: 14px; line-height: 1.6; min-height: 100vh; padding: 20px 12px 40px;
+    transition: background .25s, color .25s;
+  }
+  .head { text-align: center; margin-bottom: 14px; }
+  .head h1 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .head p { margin: 0; font-size: 12px; color: var(--t2); }
+  .head p b { color: var(--brand-txt); font-weight: 500; }
+  .stage { display: flex; gap: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+
+  /* ---------- 手机壳 ---------- */
+  .phone {
+    width: 390px; height: 812px; max-height: calc(100vh - 130px); flex: none;
+    background: var(--page-bg); border-radius: 50px; position: relative; overflow: hidden;
+    box-shadow: var(--shadow); border: 1px solid var(--line); display: flex; flex-direction: column;
+  }
+  .wxbar { height: 44px; flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 5px; font-size: 13px; font-weight: 600; }
+  .wxbar .sig { display: flex; gap: 3px; align-items: flex-end; height: 11px; }
+  .wxbar .sig i { width: 3px; background: var(--t1); border-radius: 1px; display: block; }
+  .wxbar .bat { width: 25px; height: 12px; border: 1px solid var(--t1); border-radius: 3.5px; position: relative; opacity: .9; }
+  .wxbar .bat::after { content: ""; position: absolute; inset: 1.5px; width: 70%; background: var(--t1); border-radius: 1.5px; }
+
+  .navbar { height: 44px; flex: none; position: relative; display: flex; align-items: center; justify-content: center; background: var(--nav-bg); border-bottom: .5px solid var(--line); z-index: 12; }
+  .navbar .title { font-size: 17px; font-weight: 600; color: var(--nav-text); }
+  .navbar .back { position: absolute; left: 12px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .navbar .back svg { width: 11px; height: 18px; }
+  .navbar.has-back .back { opacity: 1; pointer-events: auto; }
+  .navbar .act { position: absolute; right: 104px; font-size: 13px; color: var(--brand-txt); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  /* 对话页右上角「新建对话」= IM 语义的「气泡 + 加号」icon；用导航中性色（品牌橙在小尺寸下显轻，不够大气） */
+  .navbar .act .ic { width: 18px; height: 18px; fill: none; stroke: var(--tab-off); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+  /* 对话页：返回 icon 旁的「对话记录」入口（列表 icon）。仅对话页显示，二级页隐藏 */
+  .navbar .hist { position: absolute; left: 30px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--tab-off); opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .navbar .hist svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+  .navbar.has-hist .hist { opacity: 1; pointer-events: auto; }
+  .navbar.has-act .act { opacity: 1; pointer-events: auto; }
+  .capsule { position: absolute; right: 7px; width: 87px; height: 32px; border-radius: 16px; background: var(--capsule); border: .5px solid var(--capsule-bd); display: flex; align-items: center; justify-content: space-around; cursor: pointer; backdrop-filter: blur(8px); }
+  .capsule .dots { display: flex; gap: 2.5px; }
+  .capsule .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--nav-text); display: block; }
+  .capsule .circle { width: 17px; height: 17px; border: 1.4px solid var(--nav-text); border-radius: 50%; position: relative; }
+  .capsule .circle::after { content: ""; position: absolute; left: 50%; top: 50%; width: 2.2px; height: 5.5px; border-radius: 1px; background: var(--nav-text); transform: translate(-50%, -62%); }
+  .capsule .sep { width: .5px; height: 18px; background: var(--capsule-bd); }
+
+  .stack { flex: 1; position: relative; overflow: hidden; }
+  .page { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 22px; background: var(--page-bg); transition: transform .26s cubic-bezier(.32,.72,0,1), opacity .26s; }
+  .page::-webkit-scrollbar { width: 0; }
+  .page.tab { display: none; }
+  .page.tab.active { display: block; }
+  #p-chat.active { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  .page.sub { transform: translateX(100%); opacity: 0; pointer-events: none; z-index: 8; }
+  .page.sub.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+  /* ---------- 通用组件 ---------- */
+  .cell { background: var(--card); border-radius: 12px; padding: 13px 14px; }
+  .sec-t { font-size: 12.5px; color: var(--t2); margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .sec-t em { font-style: normal; font-size: 11.5px; color: var(--t3); }
+  .chip { font-size: 12.5px; padding: 6px 13px; border-radius: 8px; white-space: nowrap; cursor: pointer; background: var(--card); color: var(--t2); border: .5px solid var(--line); }
+  .chip.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .scroll-x { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; }
+  .scroll-x::-webkit-scrollbar { display: none; }
+  .btn { margin-top: 18px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; font-size: 16px; font-weight: 500; cursor: pointer; }
+  .btn:active { transform: scale(.985); }
+  .btn.dis { opacity: .35; }
+  .btn.ghost { background: var(--card); color: var(--t1); border: .5px solid var(--line); }
+  .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .list .r { display: flex; justify-content: space-between; align-items: center; padding: 14px; border-bottom: .5px solid var(--line); font-size: 14px; cursor: pointer; }
+  .list .r:last-child { border-bottom: none; }
+  .list .r span { color: var(--t3); font-size: 13px; }
+  .list .r .v { color: var(--t2); font-size: 13px; }
+  .list .r .sic { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: none; margin-right: 10px; }
+  .list .r .sic svg { width: 15px; height: 15px; fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .list .r .sic.t { background: linear-gradient(140deg, #F97316, #E8620A); }
+  .list .r .sic.c { background: linear-gradient(140deg, #12B5A4, #0E9B8C); }
+  .list .r .nm { flex: 1; text-align: left; color: var(--t1); }
+  .foot { margin-top: 20px; font-size: 10.5px; color: var(--t3); text-align: center; line-height: 1.9; }
+
+  /* ---------- AI 记忆 / 生词本（本次新增） ---------- */
+  .note-tip { background: var(--brand-soft); color: var(--brand-txt); font-size: 12px; border-radius: 12px; padding: 10px 12px; margin: 4px 0 12px; line-height: 1.7; }
+  .tagbox { display: flex; flex-wrap: wrap; gap: 8px; background: var(--card); border-radius: 12px; padding: 14px; }
+  .tag-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--brand-soft); color: var(--brand-txt); }
+  .tag-item.dis { background: var(--red-soft); color: var(--red); }
+  .tag-item i, .mem-item i, .gloss-item i { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: .55; flex: none; }
+  .tag-item i svg, .mem-item i svg, .gloss-item i svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .addrow { display: flex; gap: 8px; align-items: center; }
+  .addrow input { flex: 1; height: 36px; border-radius: 8px; border: .5px solid var(--line); background: var(--page-bg); padding: 0 12px; font-size: 13px; color: var(--t1); outline: none; }
+  .addbtn { flex: none; height: 36px; padding: 0 14px; border-radius: 8px; background: var(--brand-soft); color: var(--brand-txt); font-size: 13px; display: inline-flex; align-items: center; cursor: pointer; }
+  .danger-btn { margin-top: 16px; height: 44px; border-radius: 12px; border: .5px solid var(--line); background: var(--card); color: var(--red); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .mem-item { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: .5px solid var(--line); }
+  .mem-item:last-child { border-bottom: none; }
+  .mem-item .m-c { flex: 1; font-size: 14px; color: var(--t1); }
+  .gloss-item { position: relative; background: var(--card); border-radius: 12px; padding: 14px 40px 14px 14px; margin-bottom: 10px; }
+  .gloss-item .g-en { font-size: 15px; font-weight: 600; color: var(--t1); }
+  .gloss-item .g-src { font-size: 13px; color: var(--t2); margin-top: 4px; }
+  .gloss-item .g-note { font-size: 12px; color: var(--t2); margin-top: 8px; padding-top: 8px; border-top: .5px dashed var(--line); }
+  .gloss-item .g-meta { font-size: 11px; color: var(--brand-txt); margin-top: 6px; }
+  .gloss-item i { position: absolute; top: 12px; right: 12px; }
+  .empty-box { text-align: center; padding: 48px 20px; }
+  .empty-box .e-t { font-size: 14px; color: var(--t1); }
+  .empty-box .e-d { font-size: 12.5px; color: var(--t2); margin-top: 6px; }
+  .ai-note { margin-top: 14px; font-size: 10.5px; color: var(--t3); text-align: center; }
+
+  /* ---------- 失败态 ---------- */
+  .fail { text-align: center; padding: 34px 16px 20px; }
+  .fail .fi { width: 56px; height: 56px; margin: 0 auto 14px; }
+  .fail .fi svg { width: 56px; height: 56px; fill: none; stroke: var(--red); stroke-width: 1.5; }
+  .fail .ft { font-size: 17px; font-weight: 600; color: var(--t1); }
+  .fail .fr { margin: 8px auto 0; max-width: 260px; font-size: 12.5px; color: var(--t2); line-height: 1.65; }
+
+  /* ---------- 对话内的失败态（气泡级，不是整页错误） ---------- */
+  .msg .bub.fail { background: var(--red-soft); border: .5px solid var(--red-soft); }
+  .msg .bub .ft { font-size: 14px; font-weight: 600; color: var(--red); }
+  .msg .bub .fr { margin-top: 5px; font-size: 12px; color: var(--t2); line-height: 1.6; }
+  /* 流式中途断：保留已收到部分，再标中断位置 */
+  .msg .bub .cut { margin-top: 9px; padding-top: 9px; border-top: .5px solid var(--line); font-size: 11.5px; color: var(--t3); text-align: center; }
+  .msg .bub .fa { margin-top: 10px; display: flex; gap: 16px; }
+  .msg .bub .fa u { font-size: 12.5px; color: var(--brand-txt); cursor: pointer; }
+
+  /* ---------- 翻译中中间态（结果卡片内动点） ---------- */
+  .tdots { display: inline-flex; gap: 3px; margin-left: 3px; vertical-align: middle; }
+  .tdots i { width: 4px; height: 4px; border-radius: 50%; background: var(--t3); animation: blinkdot 1.2s infinite; }
+  .tdots i:nth-child(2) { animation-delay: .2s; }
+  .tdots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blinkdot { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+  /* ---------- 欢迎页 ---------- */
+  .welcome { position: absolute; inset: 0; background: var(--page-bg); z-index: 20; display: flex; flex-direction: column; padding: 0 24px 26px; transition: opacity .26s, transform .3s; }
+  .welcome.hide { opacity: 0; transform: scale(1.04); pointer-events: none; }
+  .w-group { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-bottom: 10px; }
+  .w-hello { font-size: 54px; font-weight: 600; line-height: 1; letter-spacing: -1.8px; color: var(--t1); }
+  .w-hello i { font-style: normal; color: var(--brand); }
+  .w-sub { margin-top: 15px; font-size: 13.5px; color: var(--t3); letter-spacing: .3px; }
+  .w-quote { margin-top: 40px; padding: 17px 18px; border-radius: 14px; background: var(--card);
+             box-shadow: 0 2px 4px rgba(20,30,60,.035), 0 12px 30px rgba(20,30,60,.075); }
+  .w-quote .k { font-size: 10.5px; color: var(--brand-txt); letter-spacing: .5px; }
+  .w-quote .cn { margin-top: 7px; font-size: 14.5px; line-height: 1.75; color: var(--t1); }
+  .w-quote .en { margin-top: 6px; font-size: 12.5px; line-height: 1.7; color: var(--t3); font-style: italic; }
+  .w-foot { padding-top: 20px; }
+  .w-foot .btn { margin-top: 0; }
+  .w-foot .claim { margin-top: 14px; font-size: 10.5px; color: var(--t3); line-height: 1.8; text-align: center; }
+  body[data-theme="dark"] .w-quote { box-shadow: 0 10px 26px rgba(0,0,0,.34); }
+  body[data-theme="dark"] .res { box-shadow: 0 8px 22px rgba(0,0,0,.3); }
+  body[data-theme="dark"] .vipcard { background: linear-gradient(120deg, #C2410C 0%, #9A3412 100%); }
+
+  /* ---------- 对话页 · 翻译官作答的推荐译文卡片（与 pages/translate/result 同语言） ---------- */
+  .msg .bub.en-card { padding: 0; overflow: hidden; }
+
+/* ---------- 歌曲推荐卡片（SSE `card` 事件 kind=music） ----------
+   来源：prototype/music-taste.html 的 .mcard 系列，迁入整体稿以消除孤立稿。
+   同构约束：圆角/字号/间距对齐本稿翻译卡（.en-card）口径，不引入新 token。 */
+  .msg .bub.music-card { padding: 0; overflow: hidden; }
+  .music-card .mc-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
+  .music-card .mc-tag { font-size: 10px; color: #fff; background: var(--brand); border-radius: 3px; padding: 1px 6px; font-weight: 500; flex: none; }
+  .music-card .mc-meta { font-size: 11px; color: var(--t3); }
+  .music-card .mc-song { padding: 10px 12px; border-top: .5px solid var(--line); }
+  .music-card .mc-song:first-of-type { margin-top: 8px; }
+  .music-card .mc-song .t { font-size: 14px; font-weight: 500; color: var(--t1); display: flex; justify-content: space-between; gap: 8px; }
+  .music-card .mc-song .t .ar { font-weight: 400; font-size: 13px; color: var(--t2); flex: none; }
+  .music-card .mc-song .why { font-size: 12px; color: var(--t2); margin-top: 2px; }
+  .music-card .mc-ops { display: flex; border-top: .5px solid var(--line); }
+  .music-card .mc-ops u { flex: 1; text-align: center; padding: 9px 0; font-size: 12px; color: var(--t2); }
+  .music-card .mc-ops u + u { border-left: .5px solid var(--line); }
+  .music-card .mc-ops u.play { color: var(--brand-txt); font-weight: 500; }
+  .music-card .mc-note { padding: 8px 12px 12px; border-top: .5px solid var(--line); font-size: 11px; color: var(--t3); }
+
+  .en-card .ec-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; }
+  .en-card .ec-tag { font-size: 10px; color: #fff; background: var(--brand); border-radius: 3px; padding: 1px 6px; font-weight: 500; flex: none; }
+  .en-card .ec-meta { font-size: 11px; color: var(--t3); }
+  .en-card .ec-main { padding: 8px 12px 12px; font-size: 16px; font-weight: 600; line-height: 1.5; color: var(--t1); }
+  .en-card .ec-note { padding: 8px 12px; border-top: .5px solid var(--line); font-size: 12px; color: var(--t2); line-height: 1.6; }
+  .en-card .ec-ops { display: flex; border-top: .5px solid var(--line); }
+  .en-card .ec-ops u { flex: 1; text-align: center; padding: 9px 0; font-size: 12px; color: var(--t2); }
+  .en-card .ec-ops u + u { border-left: .5px solid var(--line); }
+  .en-card .ec-ops u.fwd { color: var(--brand-txt); font-weight: 500; }
+
+  /* ---------- 转发演示：好友视角（微信聊天壳）+ 极简文本卡片 ---------- */
+  .wxchat { background: #EDEDED; border-radius: 10px; padding: 12px; }
+  .wxm { display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-start; }
+  .wxm:last-child { margin-bottom: 0; }
+  .wxm .wav { width: 30px; height: 30px; border-radius: 5px; color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .wxm .wtxt { background: #fff; border-radius: 6px; padding: 8px 10px; font-size: 13px; max-width: 65%; }
+  .mini-card { width: 200px; background: #fff; border-radius: 6px; overflow: hidden; border: .5px solid rgba(0,0,0,.06); cursor: pointer; }
+  .mini-card .mc-body { padding: 10px 11px; font-size: 14px; color: var(--t1); line-height: 1.5; }
+  .mini-card .mc-foot { padding: 0 11px 9px; font-size: 10px; color: var(--t3); }
+  .fwd-note { margin-top: 14px; font-size: 11.5px; color: var(--t2); line-height: 1.7; }
+  .fwd-note b { color: var(--brand-txt); font-weight: 500; }
+
+  /* ---------- 转发落地页（好友点卡片进入，只看译文） ---------- */
+  .fwd-res { margin-top: 0; border-left: none; }
+  .fwd-from { margin-top: 12px; font-size: 11px; color: var(--t3); text-align: center; }
+  .fwd-cta { margin-top: 16px; height: 46px; border-radius: 23px; background: var(--brand); color: #fff; font-size: 15px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  /* ---------- 翻译卡片流式两态（T0 翻译中 / T1 逐字 + 光标，原 chat-en-style 稿整合） ---------- */
+  .en-card .ec-typing { display: flex; align-items: center; gap: 6px; padding: 10px 12px 12px; font-size: 12px; color: var(--t2); }
+  .en-card .ec-caret { display: inline-block; width: 2px; height: 15px; background: var(--brand); vertical-align: -2px; margin-left: 3px; animation: blinkdot 1s steps(1) infinite; }
+
+  /* ---------- 对话页 ---------- */
+  .msgs { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 6px; }
+  .msgs::-webkit-scrollbar { width: 0; }
+  .msg { display: flex; gap: 9px; margin-bottom: 16px; }
+  .msg .av { width: 30px; height: 30px; border-radius: 50%; flex: none; background: linear-gradient(140deg, var(--brand), var(--brand-deep)); color: #fff; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+  .msg.me { flex-direction: row-reverse; }
+  .msg.me .av { background: var(--line); color: var(--t2); }
+  .msg .bd { max-width: 78%; }
+  .msg .bub { background: var(--card); border-radius: 4px 14px 14px 14px; padding: 12px 14px; font-size: 14px; line-height: var(--leading-relaxed); color: var(--text-body); }
+  /* 焦点态（G11）+ 动效（G12）：统一 150ms ease-out 微交互 */
+  :focus-visible { outline: none; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px rgba(249, 115, 22, 0.55); }
+  u[onclick], .msg .bub .blk-code .chd .cp { transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out); }
+  .msg.me .bub { background: var(--brand); color: #fff; border-radius: 14px 4px 14px 14px; }
+  .msg .bub .daily { display: inline-block; font-size: 10px; color: var(--brand-txt); background: var(--brand-soft); border-radius: 4px; padding: 2px 6px; margin-bottom: 7px; letter-spacing: .4px; }
+  .msg .bub .en { display: block; margin-top: 7px; font-size: 12.5px; line-height: 1.7; font-style: italic; color: var(--t3); }
+  /* —— AI 回答 blocks 渲染（视觉对齐 portal AiChat 的 .ans，同一套 blocks 设计语言）—— */
+  .msg .bub .blk-p { margin: 0 0 16px; }
+  .msg .bub .blk-p:last-child { margin-bottom: 0; }
+  .msg .bub .blk-p.lead { font-size: 14.5px; font-weight: 500; color: var(--text-strong); }
+  .msg .bub .blk-h { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; margin: 24px 0 8px; color: var(--text-strong); letter-spacing: var(--tracking-tight); }
+  .msg .bub .blk-h::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: var(--brand); flex: 0 0 3px; }
+  .msg .bub .blk-ol { margin: 0 0 16px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .msg .bub .blk-ol li { display: flex; gap: 10px; align-items: flex-start; }
+  .msg .bub .blk-ol li .n { width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-txt); font-size: 12px; font-weight: 600; display: grid; place-items: center; margin-top: 4px; }
+  .msg .bub .blk-law { margin: 0 0 16px; padding: 8px 16px; border-left: 3px solid var(--brand); background: var(--brand-soft); border-radius: 0 4px 4px 0; font-size: 13px; line-height: var(--leading-relaxed); color: var(--t2); }
+  .msg .bub .blk-law b { display: block; font-size: 12px; font-weight: 600; color: var(--brand-txt); margin-bottom: 2px; }
+  .msg .bub .blk-code { margin: 0 0 16px; border-radius: 6px; background: var(--code-bg); overflow: hidden; }
+  .msg .bub .blk-code .chd { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--code-hd); }
+  .msg .bub .blk-code .chd b { font-weight: 600; font-size: 12px; letter-spacing: .3px; color: var(--code-hd-text); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .msg .bub .blk-code .chd .cp { margin-left: auto; color: var(--code-hd-text); }
+  /* 12.5px = 字阶例外（代码块专用，等宽场景惯例），已在 specs/agent-message-extract/page-spec.md 登记 */
+  .msg .bub .blk-code pre { margin: 0; padding: 12px 16px; overflow-x: auto; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: var(--leading-relaxed); color: var(--code-text); white-space: pre; }
+  .msg.me .bub .en { color: rgba(255,255,255,.8); }
+  .msg .meta { margin-top: 5px; font-size: 10px; color: var(--t3); }
+  .msg.me .meta { text-align: right; }
+  .sugs { display: flex; flex-wrap: wrap; gap: 7px; margin: 2px 0 4px 39px; }
+  .sugs span { font-size: 12.5px; padding: 7px 12px; border-radius: 15px; background: var(--card); color: var(--t2); border: .5px solid var(--line); cursor: pointer; }
+  .sugs span:active { background: var(--brand-soft); color: var(--brand-txt); }
+  .composer { flex: none; display: flex; align-items: center; gap: 9px; padding: 9px 14px 12px; background: var(--nav-bg); border-top: .5px solid var(--line); }
+  /* 输入栏圆钮（+ / 麦克风）：常态线性 —— 浅橙底 + 橙细描边（spec §8 定稿 v1.0.10） */
+  .composer .plus, .composer .mic { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-50); color: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+  .composer .plus svg, .composer .mic svg { width: 19px; height: 19px; display: block; }
+  .composer .plus:active, .composer .mic:active { opacity: .75; }
+  /* 录音中（按住）= 面性：实心橙底 + 白图标（激活态视觉跃迁） */
+  /* 声波 icon 几何 = L1 立弧定稿（v1.0.13），详见 docs/语音输入icon设计规范.md；SVG 即资产包 svg/wave-current.svg 同源 */
+  .composer .mic.is-rec { background: var(--brand); color: #fff; }
+  /* 输入区为单行 input（与真机一致）：回车 / 键盘「发送」直接发送，回车不再换行 */
+  .composer input { flex: 1; min-height: 38px; max-height: 96px; border-radius: 19px; background: var(--page-bg); border: none; outline: none; padding: 9px 15px; font-family: inherit; font-size: 14px; line-height: 1.45; color: var(--t1); resize: none; box-sizing: border-box; overflow-y: auto; field-sizing: content; }
+  .composer input::placeholder { color: var(--t3); }
+  .composer .send { width: 32px; height: 32px; border-radius: 50%; background: var(--line); color: var(--card); display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; cursor: pointer; transition: background .18s; }
+  .composer .send.on { background: var(--brand); color: #fff; }
+  /* 录音浮层（按住说话）：覆盖手机壳，展示 preparing / recording / recognizing 文案 */
+  .voice-mask { position: absolute; inset: 0; background: rgba(0,0,0,.32); z-index: 31; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .18s; }
+  .voice-mask.show { opacity: 1; pointer-events: auto; }
+  .vm-card { background: var(--card); border-radius: 18px; padding: 22px 28px; text-align: center; min-width: 190px; box-shadow: var(--shadow); }
+  .vm-wave { display: flex; gap: 3px; align-items: center; justify-content: center; height: 22px; }
+  .vm-wave i { width: 4px; background: var(--brand); border-radius: 2px; }
+  .vm-wave i:nth-child(1) { height: 10px; } .vm-wave i:nth-child(2) { height: 18px; } .vm-wave i:nth-child(3) { height: 14px; } .vm-wave i:nth-child(4) { height: 20px; } .vm-wave i:nth-child(5) { height: 12px; }
+  .vm-card .vm-sec { font-size: 22px; font-weight: 600; color: var(--brand); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .vm-card .vm-tip { font-size: 13px; color: var(--t2); margin-top: 4px; }
+
+  /* ---------- 发现页 ---------- */
+  .cap { display: flex; align-items: center; gap: 13px; background: var(--card); border-radius: 14px; padding: 15px 15px; margin-bottom: 10px; cursor: pointer; }
+  .cap .ic { width: 42px; height: 42px; border-radius: 13px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .cap .ic svg { width: 21px; height: 21px; fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .cap .ic.t { background: linear-gradient(140deg, #F97316, #E8620A); box-shadow: 0 4px 12px rgba(249,115,22,.28); }
+  .cap .ic.c { background: linear-gradient(140deg, #12B5A4, #0E9B8C); box-shadow: 0 4px 12px rgba(14,155,140,.24); }
+  /* 暗色下实心彩色块降调，避免过曝 */
+  body[data-theme="dark"] .cap .ic.t, body[data-theme="dark"] .list .r .sic.t { background: linear-gradient(140deg, #C2410C, #9A3412); box-shadow: none; }
+  body[data-theme="dark"] .cap .ic.c, body[data-theme="dark"] .list .r .sic.c { background: linear-gradient(140deg, #0E7C70, #0B5F57); box-shadow: none; }
+  body[data-theme="dark"] .msg .av { background: linear-gradient(140deg, #C2410C, #9A3412); }
+  body[data-theme="dark"] .msg.me .bub { background: linear-gradient(140deg, #C2410C, #9A3412); color: #fff; }
+  .cap .tx { flex: 1; min-width: 0; }
+  .cap .tx b { display: block; font-size: 15.5px; font-weight: 600; letter-spacing: .3px; }
+  .cap .tx em { display: block; font-style: normal; font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+  .cap .go { color: var(--t3); font-size: 17px; flex: none; }
+  .cap.soon { background: transparent; border: 1px dashed var(--line); }
+  .cap.soon .ic { background: var(--line); box-shadow: none; }
+  .cap.soon .ic svg { stroke: var(--t3); }
+  .cap.soon .tx b { color: var(--t3); }
+  .cap.soon .tag { font-size: 10px; color: var(--t3); border: .5px solid var(--line); border-radius: 4px; padding: 2px 6px; flex: none; }
+
+  /* ---------- 翻译 ---------- */
+  .langbar { display: flex; align-items: center; gap: 10px; }
+  .langbar .side { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .langbar .side em { font-style: normal; font-size: 9px; color: var(--t3); }
+  .langbar .sw { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+  textarea.inp { width: 100%; min-height: 100px; max-height: 170px; resize: none; margin-top: 10px; background: var(--card); border: none; border-radius: 12px; padding: 13px 14px; font-family: inherit; font-size: 15px; line-height: 1.7; color: var(--t1); outline: none; }
+  textarea.inp::placeholder { color: var(--t3); }
+  .counter { text-align: right; font-size: 11px; color: var(--t3); margin: 5px 2px 0; }
+  .notice { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--brand-soft); font-size: 12.5px; color: var(--brand-txt); cursor: pointer; }
+  .notice em { font-style: normal; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t2); }
+  .grid3 { display: flex; gap: 9px; margin-top: 15px; }
+  .grid3 .g { flex: 1; background: var(--card); border-radius: 12px; padding: 11px 0 9px; text-align: center; cursor: pointer; }
+  .grid3 .g svg { width: 19px; height: 19px; stroke: var(--t1); fill: none; stroke-width: 1.6; }
+  .grid3 .g div { font-size: 11.5px; color: var(--t2); margin-top: 4px; }
+  .samples .s { font-size: 13px; color: var(--t2); padding: 10px 13px; border-radius: 10px; background: var(--card); margin-bottom: 6px; cursor: pointer; }
+  .srcbox { background: var(--card); border-radius: 12px; padding: 11px 13px; }
+  .srcbox b { display: block; font-size: 11px; color: var(--t3); font-weight: 400; margin-bottom: 4px; }
+  .srcbox span { font-size: 13px; color: var(--t2); }
+  .res { margin-top: 10px; padding: 16px 16px; border-radius: 12px; background: var(--card);
+         box-shadow: 0 1px 2px rgba(20,30,60,.03), 0 8px 22px rgba(20,30,60,.06); }
+  .res .tags { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; }
+  .res .tags i { font-style: normal; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--brand-soft); color: var(--brand-txt); }
+  .res .tags span { font-size: 10.5px; color: var(--t3); }
+  .res .txt { font-size: 16px; line-height: 1.75; min-height: 28px; }
+  .res .ops { display: flex; margin-top: 13px; padding-top: 11px; border-top: .5px solid var(--line); }
+  .res .ops u { flex: 1; text-decoration: none; font-size: 12px; color: var(--t2); text-align: center; cursor: pointer; }
+  .fold { margin-top: 10px; background: var(--card); border-radius: 12px; overflow: hidden; }
+  .fold .h { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; font-size: 13px; cursor: pointer; }
+  .fold .h b { font-weight: 400; font-size: 12px; color: var(--brand-txt); }
+  .fold .c { display: none; padding: 0 14px 13px; }
+  .fold.open .c { display: block; }
+  .fold .m { margin-bottom: 11px; }
+  .fold .m .k { font-size: 11px; color: var(--t3); margin-bottom: 3px; }
+  .fold .m .v { font-size: 13.5px; line-height: 1.7; }
+  .vip { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); display: flex; justify-content: space-between; font-size: 12.5px; color: var(--accent); cursor: pointer; }
+  .rowbtn { display: flex; gap: 9px; margin-top: 12px; }
+  .rowbtn div { flex: 1; height: 42px; border-radius: 21px; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 13.5px; cursor: pointer; }
+
+  /* ---------- 合同评估 ---------- */
+  .upload { background: var(--card); border-radius: 14px; padding: 20px 16px; text-align: center; border: 1px dashed var(--line); cursor: pointer; }
+  .upload .ic { width: 46px; height: 46px; margin: 0 auto 10px; border-radius: 14px; background: var(--brand-soft); display: flex; align-items: center; justify-content: center; }
+  .upload .ic svg { width: 23px; height: 23px; stroke: var(--brand); fill: none; stroke-width: 1.6; }
+  .upload .t { font-size: 14.5px; font-weight: 500; }
+  .upload .d { font-size: 11.5px; color: var(--t3); margin-top: 3px; }
+  .u-row { display: flex; gap: 9px; margin-top: 11px; }
+  .u-row div { flex: 1; height: 40px; border-radius: 20px; background: var(--card); display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; cursor: pointer; }
+  .u-row div svg { width: 15px; height: 15px; stroke: var(--t2); fill: none; stroke-width: 1.6; }
+  .score { display: flex; align-items: center; gap: 15px; background: var(--card); border-radius: 14px; padding: 16px; }
+  .score .ring { width: 74px; height: 74px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; flex-direction: column; background: conic-gradient(var(--amber) 0 62%, var(--line) 62% 100%); position: relative; }
+  .score .ring::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card); }
+  .score .ring .n { position: relative; z-index: 1; font-size: 22px; font-weight: 600; color: var(--amber); line-height: 1.1; }
+  .score .ring .l { position: relative; z-index: 1; font-size: 9px; color: var(--t3); }
+  .score .info .lv { font-size: 15.5px; font-weight: 600; color: var(--amber); }
+  .score .info .d { font-size: 12px; color: var(--t2); margin-top: 3px; line-height: 1.6; }
+  .risk { background: var(--card); border-radius: 12px; padding: 13px 14px; margin-bottom: 8px; }
+  .risk .rh { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .risk .rh i { font-style: normal; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+  .risk .rh .high { background: var(--red-soft); color: var(--red); }
+  .risk .rh .mid { background: var(--amber-soft); color: var(--amber); }
+  .risk .rh .low { background: var(--green-soft); color: var(--green); }
+  .risk .rh b { font-size: 13.5px; font-weight: 500; flex: 1; }
+  .risk .rc { font-size: 12.5px; color: var(--t2); line-height: 1.7; }
+  .risk .rf { font-size: 11.5px; color: var(--brand-txt); margin-top: 6px; padding-top: 6px; border-top: .5px solid var(--line); }
+
+  /* ---------- 我的 ---------- */
+  .profile { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 12px; padding: 15px 14px; cursor: pointer; }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; flex: none; }
+  .profile .n { font-size: 16px; font-weight: 500; }
+  .profile .d { font-size: 12px; color: var(--t3); margin-top: 2px; }
+  .vipcard { margin-top: 10px; padding: 14px; border-radius: 12px; background: linear-gradient(120deg, var(--brand), var(--brand-deep)); color: #fff; cursor: pointer; }
+  .vipcard .a { font-size: 15px; font-weight: 600; }
+  .vipcard .b { font-size: 12px; opacity: .92; margin-top: 3px; }
+  .logout { margin-top: 18px; text-align: center; font-size: 13.5px; color: var(--red); cursor: pointer; }
+
+  /* ---------- 账号：登录引导卡 / 原生弹窗模拟 ----------
+     真机语义：登录卡对应「未登录态整页拦截」（必须登录才可用，Q1 已拍板）；
+     .wxmodal 对应 wx.showModal 原生弹窗（退出确认 / 合并二次确认），原型只模拟形态与文案。 */
+  .gate { position: absolute; inset: 0; z-index: 22; background: var(--page-bg); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px; text-align: center; }
+  .gate.show { display: flex; }
+  .gate .g-ic { width: 56px; height: 56px; border-radius: 28px; background: var(--brand-soft); color: var(--brand-txt); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .gate .g-t { font-size: 16px; font-weight: 600; color: var(--t1); }
+  .gate .g-d { margin-top: 8px; font-size: 12.5px; color: var(--t2); line-height: var(--leading-normal); }
+  .g-btn { margin-top: 24px; width: 100%; max-width: 224px; height: var(--control-lg); border-radius: 20px; background: var(--brand); color: var(--on-brand); font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  /* 合规告知（协议链接）不取 --t3：灰档在 --page-bg 上仅 ~1.8:1，不可读（design-system G3） */
+  .gate .g-note { margin-top: 16px; font-size: 11px; color: var(--t2); line-height: var(--leading-normal); }
+  .gate .g-link { color: var(--t2); font-weight: 500; text-decoration: underline; cursor: pointer; }
+  .page.locked { overflow: hidden; } /* 未登录态锁滚动：登录墙不可被滚出视野 */
+  .wxmodal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96); width: 76%; background: var(--sheet); border-radius: 14px; z-index: 62; overflow: hidden; display: none; opacity: 0; transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
+  .wxmodal.show { display: block; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .wxmodal .m-t { padding: 20px 18px 0; font-size: 15.5px; font-weight: 600; color: var(--t1); text-align: center; }
+  .wxmodal .m-c { padding: 10px 18px 20px; font-size: 13px; color: var(--text-body); line-height: var(--leading-normal); text-align: center; }
+  .wxmodal .m-b { display: flex; border-top: 1px solid var(--line); }
+  .wxmodal .m-b div { flex: 1; height: 46px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--t2); cursor: pointer; }
+  .wxmodal .m-b div + div { border-left: 1px solid var(--line); color: var(--brand-txt); font-weight: 500; }
+  .ph-bind { color: var(--brand-txt); font-weight: 500; cursor: pointer; }
+  .doc { background: var(--card); border-radius: 12px; padding: 14px; font-size: 12.5px; color: var(--text-body); line-height: var(--leading-relaxed); }
+  .doc p { margin: 0 0 8px; }
+  .doc p:last-child { margin-bottom: 0; }
+  .ei-row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+  .ei { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font-size: 13.5px; color: var(--t1); }
+  .ei::placeholder { color: var(--t3); }
+  .ei-btn { flex: none; font-size: 12.5px; color: var(--brand-txt); font-weight: 500; cursor: pointer; }
+  .ei-btn.off { color: var(--t3); pointer-events: none; }
+  .err { min-height: 16px; margin: 6px 4px 0; font-size: 11.5px; color: var(--red); }
+  .g-btn.wide { margin: 24px auto 0; max-width: none; }
+
+  /* ---------- tabBar ---------- */
+  /* z-index 必须高于 .welcome(20)：欢迎页要显示 tabBar（作为进入「发现 / 我的」的枢纽），
+     低了会被欢迎页覆盖层挡住 —— 视觉上还在，但点击被拦截。 */
+  .tabbar { flex: none; height: calc(50px + 34px); background: var(--tab-bg); border-top: .5px solid var(--line); display: flex; padding-top: 5px; transition: transform .3s; z-index: 25; }
+  /* 欢迎页保留 tabBar：它是进入「发现 / 我的」的枢纽（只有对话页隐藏 tabBar 走沉浸） */
+  .phone.welcome-mode .tabbar { display: flex; }
+  /* 对话页隐藏 tabBar（沉浸式）；隐藏后的导航补偿入口见页首「待确认」 */
+  .phone.chat-mode .tabbar { display: none; }
+  .phone.chat-mode .composer { padding-bottom: 24px; }
+  .tabbar .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding-bottom: 26px; }
+  .tabbar .tb svg { width: 23px; height: 23px; fill: none; stroke-width: 1.7; stroke: var(--tab-off); }
+  .tabbar .tb div { font-size: 10px; color: var(--tab-off); }
+  .tabbar .tb.on svg { stroke: var(--brand); }
+  .tabbar .tb.on div { color: var(--brand); }
+  .home-ind { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: var(--t1); opacity: .28; }
+  .phone.welcome-mode .home-ind { display: none; }
+
+  /* ---------- 浮层 ---------- */
+  .mask { position: absolute; inset: 0; background: var(--mask); opacity: 0; pointer-events: none; transition: opacity .22s; z-index: 30; }
+  .mask.show { opacity: 1; pointer-events: auto; }
+  .wx-toast { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.92); max-width: 72%; background: rgba(0,0,0,.78); color: #fff; font-size: 13.5px; line-height: 1.5; padding: 11px 17px; border-radius: 8px; text-align: center; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
+  .wx-toast.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  .wx-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,.72); color: #fff; border-radius: 10px; padding: 17px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 60; min-width: 108px; }
+  .wx-loading.show { opacity: 1; }
+  .wx-loading .sp { width: 30px; height: 30px; border: 2.5px solid rgba(255,255,255,.22); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .wx-sheet { position: absolute; left: 0; right: 0; bottom: 0; transform: translateY(100%); transition: transform .28s cubic-bezier(.32,.72,0,1); z-index: 60; padding: 0 8px 8px; }
+  .wx-sheet.show { transform: translateY(0); }
+  .wx-sheet .grp2 { background: var(--sheet); border-radius: 13px; overflow: hidden; margin-bottom: 8px; }
+  .wx-sheet .grp2 .t { font-size: 12px; color: var(--t3); text-align: center; padding: 11px 0 9px; border-bottom: .5px solid var(--line); }
+  .wx-sheet .grp2 .i { height: 52px; display: flex; align-items: center; justify-content: center; font-size: 16px; border-bottom: .5px solid var(--line); cursor: pointer; }
+  .wx-sheet .grp2 .i:last-child { border-bottom: none; }
+  .wx-sheet .grp2 .i.on { color: var(--brand); }
+  .wx-sheet .cancel { background: var(--sheet); border-radius: 13px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 500; cursor: pointer; margin-bottom: 30px; }
+  .cap-menu { position: absolute; right: 8px; top: 96px; width: 156px; background: rgba(30,30,32,.94); border-radius: 9px; padding: 5px 0; z-index: 55; opacity: 0; transform: scale(.9); transform-origin: 100% 0; transition: opacity .16s, transform .16s; pointer-events: none; backdrop-filter: blur(10px); }
+  .cap-menu.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+  .cap-menu .i { padding: 11px 15px; font-size: 14px; color: #fff; cursor: pointer; border-bottom: .5px solid rgba(255,255,255,.1); }
+  .cap-menu .i:last-child { border-bottom: none; }
+
+  /* ---------- 右侧说明 ---------- */
+  .notes { width: 316px; flex: none; }
+  .notes h3 { font-size: 13px; margin: 0 0 10px; font-weight: 600; }
+  .notes .n { background: rgba(255,255,255,.72); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 9px; font-size: 12.5px; line-height: 1.75; color: var(--t2); }
+  body[data-theme="dark"] .notes .n { background: rgba(255,255,255,.05); }
+  .notes .n b { color: var(--t1); font-weight: 600; }
+  .notes .n code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--brand-txt); }
+  .notes ul { margin: 5px 0 0; padding-left: 16px; }
+  .notes li { margin-bottom: 3px; }
+  @media (max-width: 780px) { .notes { display: none; } }
+
+  .ctrls { display: flex; gap: 9px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  .ctrls button { font-family: inherit; font-size: 12.5px; color: var(--t2); background: var(--card); border: .5px solid var(--line); border-radius: 10px; padding: 8px 16px; cursor: pointer; }
+  .ctrls button.on { color: var(--brand); border-color: var(--brand); }
+  /* 意图路由徽标：标出本轮由哪个 agent 作答（与小程序 currentAgent 一致） */
+  .agent-badge { display:flex; align-items:center; justify-content:center; gap:5px; margin:0 auto 12px; width:fit-content; padding:4px 11px; border-radius:999px; background:var(--brand-50); color:var(--brand); font-size:10.5px; }
+  .agent-badge .ab-dot { width:5px; height:5px; border-radius:50%; background:var(--brand); }
+  /* 载入历史会话时的占位气泡 */
+  .bub.loading { color: var(--t3); }
+
+  /* 骨架占位：最近对话「加载中」的占位条。用 --t3 token 做脉冲，不引入裸 hex */
+  .sk {
+    background: var(--t3);
+    border-radius: 4px;
+    animation: sk-pulse 1.3s ease-in-out infinite;
+  }
+  @keyframes sk-pulse {
+    0%, 100% { opacity: .5; }
+    50% { opacity: .9; }
+  }
+
+  /* ===== NCE · 新概念英语（原型登记 2026-11-06）=====
+     作用域：仅 #p-nce 及其后代，不污染既有屏；固定浅色白底，不跟随 dark 主题。
+     token: #FFFFFF / #1A1A1F / #6B7280 / #F97316 / #0EA5A4（对比度达标青） */
+  #p-nce {
+    --nce-bg:#FFFFFF; --nce-text:#1A1A1F; --nce-2:#6B7280;
+    --nce-line:rgba(0,0,0,.08); --nce-brand:#F97316; --nce-accent:#0EA5A4;
+    background:#FFFFFF; color:#1A1A1F;
+  }
+  #p-nce * { box-sizing:border-box; }
+  .nce-view { display:none; }
+  .nce-view.on { display:block; }
+  .nce-kicker { font-size:11.5px; color:#6B7280; letter-spacing:.04em; margin:2px 0 6px; }
+  .nce-h1 { font-size:21px; font-weight:700; color:#1A1A1F; margin:0 0 4px; letter-spacing:-.02em; }
+  .nce-sub { font-size:12.5px; color:#6B7280; margin:0 0 16px; }
+  .nce-stat { display:flex; gap:8px; margin-bottom:14px; }
+  .nce-stat div { flex:1; background:#FFFFFF; border:1px solid rgba(0,0,0,.08);
+    border-radius:10px; padding:9px 10px; font-size:11.5px; color:#6B7280; }
+  .nce-stat b { display:block; font-size:17px; color:#1A1A1F; font-weight:700; margin-bottom:2px; }
+  .nce-search { width:100%; border:1px solid rgba(0,0,0,.08); background:#FFFFFF;
+    border-radius:9px; padding:9px 11px; font-size:13px; color:#1A1A1F; margin-bottom:14px; outline:none; }
+  .nce-search:focus { border-color:#0EA5A4; }
+  .nce-grp { font-size:12px; color:#6B7280; margin:14px 0 8px; display:flex; justify-content:space-between; }
+  .nce-card { display:block; width:100%; text-align:left; background:#FFFFFF;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:12px 13px; margin-bottom:9px; cursor:pointer; }
+  .nce-card .r1 { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .nce-card .no { font-size:11px; font-weight:700; color:#F97316; letter-spacing:.06em; }
+  .nce-card .tt { font-size:14.5px; font-weight:600; color:#1A1A1F; }
+  .nce-card .lead { font-size:12.5px; color:#1A1A1F; margin:7px 0 4px; line-height:1.55; }
+  .nce-card .leaden { font-size:11.5px; color:#6B7280; line-height:1.45; }
+  .nce-card .meta { display:flex; gap:8px; align-items:center; margin-top:9px; font-size:11px; color:#6B7280; }
+  .nce-tag { font-size:10.5px; padding:2px 7px; border-radius:5px; border:1px solid transparent; }
+  .nce-tag.xdf { color:#0EA5A4; border-color:rgba(14,165,164,.35); background:rgba(14,165,164,.07); }
+  .nce-tag.lrc { color:#F97316; border-color:rgba(249,115,22,.35); background:rgba(249,115,22,.07); }
+  .nce-empty { text-align:center; font-size:12.5px; color:#6B7280; padding:18px 10px;
+    border:1px dashed rgba(0,0,0,.10); border-radius:10px; }
+  .nce-back { display:inline-flex; align-items:center; gap:4px; font-size:12.5px;
+    color:#6B7280; cursor:pointer; margin-bottom:12px; }
+  .nce-leadbox { background:#FFFFFF; border-left:3px solid #F97316; border-radius:0 10px 10px 0;
+    border-top:1px solid rgba(0,0,0,.08); border-right:1px solid rgba(0,0,0,.08);
+    border-bottom:1px solid rgba(0,0,0,.08); padding:12px 13px; margin-bottom:14px; }
+  .nce-leadbox .q { font-size:16px; font-weight:600; color:#1A1A1F; line-height:1.5; }
+  .nce-leadbox .qe { font-size:12px; color:#6B7280; margin-top:5px; line-height:1.45; }
+  .nce-tools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:12px; }
+  .nce-tools .lb { font-size:11px; color:#6B7280; margin-right:2px; }
+  .nce-chip { font-size:11.5px; padding:5px 10px; border-radius:7px; cursor:pointer;
+    background:#FFFFFF; color:#6B7280; border:1px solid rgba(0,0,0,.08); }
+  .nce-chip.on { background:#F97316; color:#FFFFFF; border-color:#F97316; }
+  .nce-hint { font-size:11px; color:#6B7280; margin:0 0 10px; }
+  .nce-line { padding:10px 2px; border-bottom:1px solid rgba(0,0,0,.06); cursor:pointer; }
+  .nce-line .en { line-height:1.7; color:#1A1A1F; }
+  .nce-line .cn { display:none; font-size:12.5px; color:#6B7280; margin-top:5px; line-height:1.6; }
+  .nce-line.show .cn { display:block; }
+  #p-nce[data-mode="bilingual"] .nce-line .cn { display:block; }
+  #p-nce[data-font="sm"] .nce-line .en { font-size:14px; }
+  #p-nce[data-font="md"] .nce-line .en { font-size:16px; }
+  #p-nce[data-font="lg"] .nce-line .en { font-size:18px; }
+  .nce-w { color:#0EA5A4; border-bottom:1px dashed #0EA5A4; cursor:pointer; }
+  .nce-wordcard { display:none; margin:8px 0 2px; background:#FFFFFF;
+    border:1px solid rgba(14,165,164,.35); border-radius:9px; padding:10px 12px; }
+  .nce-wordcard.on { display:block; }
+  .nce-wordcard .w1 { font-size:14px; font-weight:700; color:#1A1A1F; }
+  .nce-wordcard .w1 span { font-size:11.5px; font-weight:400; color:#6B7280; margin-left:7px; }
+  .nce-wordcard .w2 { font-size:12.5px; color:#1A1A1F; margin-top:5px; line-height:1.6; }
+  .nce-wordcard .w3 { font-size:11.5px; color:#6B7280; margin-top:4px; font-style:italic; }
+  .nce-cta { display:block; width:100%; text-align:center; background:#F97316; color:#FFFFFF;
+    border-radius:10px; padding:11px; font-size:13.5px; font-weight:600; cursor:pointer; margin:16px 0 10px; }
+  .nce-ex { display:none; max-height:52vh; overflow-y:auto; background:#FFFFFF;
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:13px; margin-bottom:12px; }
+  .nce-ex.on { display:block; }
+  .nce-ex .q { font-size:13.5px; font-weight:600; color:#1A1A1F; margin-bottom:9px; }
+  .nce-opt { font-size:12.5px; color:#1A1A1F; padding:9px 11px; border:1px solid rgba(0,0,0,.08);
+    border-radius:8px; margin-bottom:7px; cursor:pointer; }
+  .nce-opt.ok { border-color:#0EA5A4; background:rgba(14,165,164,.07); }
+  .nce-opt.bad { border-color:#F97316; background:rgba(249,115,22,.07); }
+  .nce-fb { display:none; font-size:12px; color:#6B7280; margin-top:8px; line-height:1.6; }
+  .nce-fb.on { display:block; }
+  .nce-fold { border:1px solid rgba(0,0,0,.08); border-radius:10px; background:#FFFFFF; margin-bottom:12px; }
+  .nce-fold .h { display:flex; justify-content:space-between; padding:11px 13px;
+    font-size:12.5px; color:#1A1A1F; cursor:pointer; }
+  .nce-fold .h b { font-weight:400; color:#6B7280; font-size:11.5px; }
+  .nce-fold .c { display:none; padding:0 13px 12px; font-size:12.5px; color:#6B7280; line-height:1.7; }
+  .nce-fold.open .c { display:block; }
+  .nce-nav { display:flex; justify-content:space-between; gap:10px; margin-top:6px; }
+  .nce-nav div { flex:1; text-align:center; font-size:12.5px; color:#6B7280;
+    border:1px solid rgba(0,0,0,.08); border-radius:9px; padding:9px; cursor:pointer; }
+  .nce-foot { text-align:center; font-size:11px; color:#6B7280; margin-top:16px; }
+
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>kedou-ai-minigram · 科豆 AI 小程序原型</h1>
+  <p>主界面 <b>AI 对话</b>（默认一句每日哲言）· 三个 tab：<b>对话 / 发现 / 我的</b> · 能力放发现，设置收进我的</p>
+  <p style="margin-top:10px"><b>本次修订 · 2026-09-20</b>：① 对话页 <b>隐藏 tabBar</b>（沉浸式）；② 输入区改为<b>可换行</b>（行高与单行高度解耦，修多行间距过大）。</p>
+  <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--amber-soft);color:var(--amber-deep);font-size:12.5px;line-height:1.8">
+    <b>本版已定稿（2026-09-20 已确认）</b>：<br>
+    ① 对话页<b>隐藏 tabBar</b>（沉浸式）；②「发现 / 我的」由输入区 <b>「+」菜单</b> 承接；
+    ③ 顶部左侧新增<b>返回 icon</b> 回欢迎页。<br>
+    <b>验证路径</b>：开始对话 → 底部无 tabBar → 点顶部返回 icon 回欢迎页 → 点右下「+」→ 选「发现能力 / 我的」。<br>
+    <b>真机说明</b>：原生导航栏不能自绘按钮，故对话页用 <code>navigationStyle: custom</code>；
+    tabBar 用 <code>tabBar.custom</code>（<code>wx.hideTabBar()</code> 会留底部空白）。
+  </div>
+  <div style="margin-top:12px;font-size:12.5px;color:var(--t2);line-height:1.9">
+    <b>演示入口</b>（点击直接看状态矩阵；对话正常发送也会先经过「正在思考」）：
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showChatFail('send')">对话 · 发送失败</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showIntentBadge('语言翻译官')">意图徽标</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showLoadingBubble()">载入占位</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showChatFail('stream')">对话 · 回复中断</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showTranslateFail()">翻译 · 失败态</u> ·
+    <u style="color:var(--brand-txt);cursor:pointer" onclick="showBlocksDemo()">对话 · markdown 代码块（blocks 渲染）</u>
+    <div style="margin-top:8px;color:var(--t2)">
+      <b>平台原生能力（原型不模拟，标注真机语义）</b>：<br>
+      ① 输入框<b>回车 / 键盘「发送」= 直接发送</b>，回车不再换行 —— 真机用 <code>input</code> 单行 +
+      <code>confirm-type="send"</code> + <code>bindconfirm</code>；<br>
+      ② <b>长按气泡 → 气泡内出现「复制」入口</b> —— 真机用 <code>bindlongpress</code> +
+      <code>wx.setClipboardData</code>。
+    </div>
+  </div>
+  <div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line)">
+    <div style="font-size:12.5px;line-height:1.8;color:var(--t1)">
+      <b>待确认 · 「新建对话」图标</b><br>
+      母形 = 底部 tabBar「对话」的<b>圆润气泡</b>。前一版误画成直角矩形气泡（形状不对）。下面放大到 34px 对照，<b>确认后才同步小程序代码</b>。
+    </div>
+    <div style="display:flex;gap:26px;margin-top:12px">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <svg viewBox="0 0 24 24" style="width:34px;height:34px;fill:none;stroke:var(--tab-off);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/></svg>
+        <span style="font-size:11px;color:var(--t2)">母形（参照）</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <svg viewBox="0 0 24 24" style="width:34px;height:34px;fill:none;stroke:var(--brand);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/><path d="M12 8.5v6M9 11.5h6"/></svg>
+        <span style="font-size:11px;color:var(--brand)">B 中心加号 · 推荐</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <svg viewBox="0 0 24 24" style="width:34px;height:34px;fill:none;stroke:var(--tab-off);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/><path d="M12 7.6v8M8 11.6h8"/></svg>
+        <span style="font-size:11px;color:var(--t2)">C 加号加大</span>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--t2);margin-top:8px">
+      对话页右上角当前用的就是 <b>B</b>（18px）。大小按返回箭头等量调整后仍偏小的，可在 C 与 B 之间定。
+    </div>
+    <div style="margin-top:12px;font-size:12px"><a href="hub.html" style="color:var(--brand-txt);text-decoration:none">← 原型总入口（hub.html）· 各功能页面原型稿索引</a></div>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="phone welcome-mode" id="phone">
+    <div class="wxbar">
+      <span id="clock">9:41</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>
+        <span class="bat"></span>
+      </div>
+    </div>
+
+    <div class="navbar" id="navbar">
+      <div class="back" onclick="goBack()">
+        <svg viewBox="0 0 11 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 1L1.5 9l8 8"/></svg>
+      </div>
+      <div class="title" id="navTitle">科豆 AI</div>
+      <div class="hist" id="navHist" onclick="openHistory()">
+        <svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M5 6h.01M5 12h.01M5 18h.01"/></svg>
+      </div>
+      <div class="act" id="navAct">设置</div>
+      <div class="capsule" onclick="toggleCapMenu()">
+        <span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span>
+      </div>
+    </div>
+
+    <div class="stack">
+      <!-- ================= 欢迎页（启动页，非 tab） ================= -->
+      <div class="welcome" id="welcome">
+        <div class="w-group">
+          <div class="w-hello">Hello<i>.</i></div>
+          <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+
+          <div class="w-quote">
+            <div class="k">今日一句</div>
+            <div class="cn">我们无法决定风的方向，但可以调整帆的角度。</div>
+            <div class="en">We cannot direct the wind, but we can adjust the sails.</div>
+          </div>
+
+          <!-- 最近对话 · 加载中：骨架占位（真机：拉列表 + 详情期间显示） -->
+          <div id="wr-skeleton" style="margin-top:22px">
+            <div style="font-size:11px;color:var(--t3);margin-bottom:8px">最近对话</div>
+            <div style="background:var(--card);border-radius:10px;padding:12px 14px;box-shadow:0 1px 5px rgba(0,0,0,.04)">
+              <div class="sk" style="width:54%;height:10px"></div>
+              <div class="sk" style="width:100%;height:11px;margin-top:11px"></div>
+              <div class="sk" style="width:76%;height:11px;margin-top:7px"></div>
+              <div class="sk" style="width:26%;height:9px;margin-top:11px"></div>
+            </div>
+          </div>
+
+          <!-- 最近对话 · 加载完成：只展示最近一次会话的最近一条对话 -->
+          <div id="wr-card" style="display:none;margin-top:22px">
+            <div style="font-size:11px;color:var(--t3);margin-bottom:8px">最近对话</div>
+            <div onclick="resumeConv('这个报价我们再商量商量…')" style="background:var(--card);border-radius:10px;padding:12px 14px;box-shadow:0 1px 5px rgba(0,0,0,.04);cursor:pointer">
+              <div style="font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">这个报价我们再商量商量…</div>
+              <div style="font-size:12.5px;color:var(--t1);line-height:1.55;margin-top:6px">Could you confirm at your earliest convenience? We can adjust the payment terms if that helps.</div>
+              <div style="font-size:10px;color:var(--t3);margin-top:7px">10:24</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="w-foot">
+          <div class="btn" onclick="enterTab('chat')">开始对话</div>
+          <div class="claim">内容由 AI 生成，仅供参考，不构成法律意见<br>已依法完成大模型与算法备案</div>
+        </div>
+      </div>
+
+      <!-- ================= 对话（tab 1，默认主界面） ================= -->
+      <div class="page tab active" id="p-chat">
+        <!-- 未登录态：登录引导卡（Q1 已拍板「必须登录才可用」，整页拦截，不发业务请求） -->
+        <div class="gate" id="gate-chat" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">AI 对话、翻译与合翻都需要登录后使用</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
+        <div class="msgs" id="msgs">
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub">
+                科豆 AI · 体验不一样的 AI
+              </div>
+              <div class="meta">内容由 AI 生成 · 09:41</div>
+            </div>
+          </div>
+          <div class="sugs" id="sugs">
+            <span onclick="ask('帮我翻一句话')">帮我翻一句话</span>
+            <span onclick="ask('看看合同风险')">看看合同风险</span>
+            <span onclick="ask('今天该做什么')">今天该做什么</span>
+          </div>
+          <!-- 翻译官作答示例：流式两态 + 完成态（操作行含「转发」，与结果页同一交互） -->
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-typing">翻译中<span class="tdots"><i></i><i></i><i></i></span></div>
+              </div>
+              <div class="meta">T0 · 收到 intent，卡片骨架先到位（操作行不占位）</div>
+            </div>
+          </div>
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-main">Thank you for your<span class="ec-caret"></span></div>
+                <div class="ec-note" style="color:var(--t3)">…</div>
+              </div>
+              <div class="meta">T1 · 英文逐字流入 + 品牌色光标</div>
+            </div>
+          </div>
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub en-card">
+                <div class="ec-head"><span class="ec-tag">推荐译文</span><span class="ec-meta">中文 → 英语</span></div>
+                <div class="ec-main">Thank you for your help.</div>
+                <div class="ec-note">for your help 点明感谢对象，商务邮件与正式场合均适用。</div>
+                <div class="ec-ops">
+                  <u onclick="wxToast('已复制')">复制</u>
+                  <u onclick="wxToast('朗读中…')">朗读</u>
+                  <u onclick="wxToast('已收进生词本')">收藏</u>
+                  <u class="fwd" onclick="showForward('Thank you for your help.')">转发</u>
+                </div>
+              </div>
+              <div class="meta">T2 · 完成：操作行出现，含转发 · 语言翻译官 作答</div>
+              <!-- 歌曲推荐卡片示例：由 SSE `card` 事件渲染（kind=music），与翻译卡同一时刻落地 -->
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub music-card">
+                <div class="mc-head"><span class="mc-tag">为你推荐</span><span class="mc-meta">按你的口味 · 安静</span></div>
+                <div class="mc-song">
+                  <div class="t"><span>安静</span><span class="ar">周杰伦</span></div>
+                  <div class="why">你常在夜里听慢歌</div>
+                </div>
+              </div>
+              <div class="meta">T1 · 卡片随正文一起流式补齐</div>
+            </div>
+          </div>
+          <div class="msg ai">
+            <div class="av">豆</div>
+            <div class="bd">
+              <div class="bub music-card">
+                <div class="mc-head"><span class="mc-tag">为你推荐</span><span class="mc-meta">按你的口味 · 安静</span></div>
+                <div class="mc-song">
+                  <div class="t"><span>安静</span><span class="ar">周杰伦</span></div>
+                  <div class="why">你常在夜里听慢歌</div>
+                </div>
+                <div class="mc-song">
+                  <div class="t"><span>晴天</span><span class="ar">周杰伦</span></div>
+                  <div class="why">适合白天通勤</div>
+                </div>
+                <div class="mc-ops">
+                  <u onclick="wxToast('换一批')">换一批</u>
+                  <u onclick="wxToast('已记录，不再推荐')">不感兴趣</u>
+                </div>
+                <div class="mc-ops" style="border-top:none;padding-top:0">
+                  <u class="play" onclick="wxToast('跳转 QQ音乐搜索播放')">去 QQ音乐听</u>
+                </div>
+                <div class="mc-note">跳转后在 QQ音乐搜索并播放，本小程序不提供音频播放</div>
+              </div>
+              <div class="meta">T2 · 完成：操作行出现 · 音乐推荐 作答</div>
+            </div>
+          </div>
+        </div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="plus" onclick="openPlusMenu()" aria-label="更多">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+          </div>
+          <!--
+            录音键 icon = 声波 L1 立弧定稿（v1.0.13, 2026-10-12）
+            几何：圆点 cx6.90 cy12 r2.5 实心 + 双层同心弧 r7.25/r11.55，端点同 x 严格镜像
+            资产包（三态 SVG/多尺寸 PNG/WXSS base64）：assets/voice-icon/（本仓库 prototype 下）
+            通用版（PC 端复用）：web_system 仓库根 assets/voice-icon/
+            换挡改参重跑：scripts/gen-mic-icon.py；规范与最佳实践：docs/语音输入icon设计规范.md
+          -->
+          <div class="mic" id="micBtn" aria-label="按住说话"
+               onmousedown="voiceStart(event)" onmouseup="voiceEnd(event)"
+               ontouchstart="voiceStart(event)" ontouchend="voiceEnd(event)" ontouchcancel="voiceCancel(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6.90" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+              <path d="M11.75 6.61A7.25 7.25 0 0 1 11.75 17.39"/>
+              <path d="M14.63 3.42A11.55 11.55 0 0 1 14.63 20.58"/>
+            </svg>
+          </div>
+          <input id="cinp" placeholder="问问科豆…" oninput="onType()" onkeydown="if(event.key==='Enter'){event.preventDefault();send();}" />
+          <div class="send" id="sendBtn" onclick="send()">↑</div>
+        </div>
+      </div>
+
+      <!-- ================= 发现（tab 2） ================= -->
+      <div class="page tab" id="p-discover">
+        <div class="gate" id="gate-discover" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">发现页的能力与记录都关联你的账号</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
+        <div class="sec-t" style="margin-top:4px">AI 能力<em>点开即用</em></div>
+
+        <div class="cap" onclick="openApp('translate')">
+          <span class="ic t">
+            <svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg>
+          </span>
+          <span class="tx"><b>语言翻译官</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+          <span class="go">›</span>
+        </div>
+
+        <div class="cap" onclick="openApp('assess')">
+          <span class="ic c">
+            <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          </span>
+          <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+          <span class="go">›</span>
+        </div>
+
+        <div class="cap" onclick="openNce()">
+          <span class="ic n" style="background:rgba(14,165,164,.10);color:#0EA5A4">
+            <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M8 8h7M8 11.5h7M8 15h4"/></svg>
+          </span>
+          <span class="tx"><b>新概念英语</b><em>NCE2 逐句精读 · 沉浸英文 + 就地生词</em></span>
+          <span class="go">&#8250;</span>
+        </div>
+
+<div class="sec-t" style="margin-top:22px">即将上线</div>
+
+        <div class="cap soon" onclick="wxToast('论文速读 · 敬请期待')">
+          <span class="ic">
+            <svg viewBox="0 0 24 24"><path d="M4 5h7v14H4z"/><path d="M13 5h7v14h-7"/><path d="M15.5 9h2M15.5 12h2"/></svg>
+          </span>
+          <span class="tx"><b>论文速读</b><em>arXiv 每日精选 · 中英双语摘要</em></span>
+          <span class="tag">敬请期待</span>
+        </div>
+
+        <div class="cap soon" onclick="wxToast('文案改写 · 敬请期待')">
+          <span class="ic">
+            <svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/><path d="M14 6l4 4"/></svg>
+          </span>
+          <span class="tx"><b>文案改写</b><em>小红书 / 独立站 · 多平台语气适配</em></span>
+          <span class="tag">敬请期待</span>
+        </div>
+
+        <div class="foot">新能力会持续加在这里，设置统一收在「我的」</div>
+      </div>
+
+      <!-- ================= 我的（tab 3） ================= -->
+      <div class="page tab" id="p-mine">
+        <div class="gate" id="gate-mine" data-dr="gate">
+          <div class="g-ic">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>
+          </div>
+          <div class="g-t">登录后继续使用</div>
+          <div class="g-d">口味记忆、生词本与手机号都跟着账号走</div>
+          <div class="g-btn" onclick="doLogin()">微信一键登录</div>
+          <div class="g-note">登录即表示同意<span class="g-link" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">《用户协议与隐私政策》</span><br>真机：wx.login 静默登录，无授权弹窗</div>
+        </div>
+        <div class="profile" onclick="navigateTo('p-mine-profile', '个人信息')">
+          <div class="avatar">橙</div>
+          <div style="flex:1">
+            <div class="n">橙子哥哥</div>
+            <div class="d" id="mineSub">已实名 · 未绑定手机号</div>
+          </div>
+          <span style="color:var(--t3);font-size:13px">›</span>
+        </div>
+        <div class="vipcard" onclick="wxToast('会员：虚拟支付需走「虚拟内容」子类目')">
+          <div class="a">专业版</div>
+          <div class="b">深度润色 · 术语库 · 合同不限次评估</div>
+        </div>
+
+        <div class="sec-t">AI 记忆<em>AI 在对话中自动积累</em></div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-taste', '音乐口味')">
+            <span class="nm">音乐口味</span><span class="v" id="tasteSummary">民谣 · 周杰伦 · 安静 ›</span>
+          </div>
+          <div class="r" onclick="navigateTo('p-memory', '用户记忆')">
+            <span class="nm">用户记忆</span><span class="v" id="memorySummary">3 条 ›</span>
+          </div>
+        </div>
+
+        <div class="sec-t">应用设置<em>各管各的</em></div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-tr-settings', '语言翻译官设置')">
+            <span class="sic t"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+            <span class="nm">语言翻译官</span><span>默认语气 · 术语库 ›</span>
+          </div>
+          <div class="r" onclick="navigateTo('p-as-settings', '合同评估设置')">
+            <span class="sic c"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+            <span class="nm">合同评估</span><span>严格度 · 关注风险点 ›</span>
+          </div>
+        </div>
+
+        <div class="sec-t">通用</div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-mine-settings', '小程序设置')">小程序设置<span>›</span></div>
+          <div class="r" onclick="wxToast('消息通知已开启')">消息通知<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('已清除 24.6MB 缓存')">清除缓存<span class="v">24.6MB ›</span></div>
+        </div>
+
+        <div class="sec-t">我的数据</div>
+        <div class="list">
+          <div class="r" onclick="navigateTo('p-glossary', '生词本')">生词本<span class="v" id="glossarySummary">8 条 ›</span></div>
+          <div class="r" onclick="navigateTo('p-tr-history', '翻译历史')">我的翻译<span class="v">128 条 ›</span></div>
+          <div class="r" onclick="wxToast('我的合同')">我的合同<span class="v">12 份 ›</span></div>
+          <div class="r" onclick="wxToast('对话记录仅本机保留 30 天')">对话记录<span class="v">46 条 ›</span></div>
+        </div>
+
+        <div class="list" style="margin-top:10px">
+          <div class="r" onclick="navigateTo('p-agreement', '用户协议与隐私政策')">用户协议与隐私政策<span>›</span></div>
+          <div class="r" onclick="wxToast('关于科豆 AI')">关于科豆 AI<span class="v">v1.0.0 ›</span></div>
+        </div>
+        <div class="logout" data-dr="logout-entry" onclick="askLogout()">退出登录</div>
+        <div class="foot">
+          本服务使用生成式人工智能<br>已依法完成大模型与算法备案
+        </div>
+      </div>
+
+      <!-- ================= 二级页：语言翻译官 ================= -->
+      <div class="page sub" id="p-translate">
+        <div class="cell langbar">
+          <div class="side" onclick="pickLang('src')"><span id="langA">中文</span><em>▾</em></div>
+          <div class="sw" onclick="swap()">⇄</div>
+          <div class="side" onclick="pickLang('tgt')"><span id="langB">英语</span><em>▾</em></div>
+        </div>
+        <textarea class="inp" id="inp" placeholder="粘贴或输入要翻译的内容…"></textarea>
+        <div class="counter"><span id="cnt">0</span> / 500</div>
+        <div class="notice" id="pastebar" onclick="doPaste()">
+          <em>检测到复制的内容：这个报价我们再商量商量…</em><b>粘贴</b>
+        </div>
+        <div class="sec-t">语气</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="reg">正式</span><span class="chip" data-g="reg">商务</span>
+          <span class="chip" data-g="reg">日常</span><span class="chip" data-g="reg">学术</span>
+          <span class="chip" data-g="reg">轻松</span>
+        </div>
+        <div class="sec-t">风格</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="sty">完整</span><span class="chip" data-g="sty">简洁</span>
+          <span class="chip" data-g="sty">有说服力</span>
+        </div>
+        <div class="grid3">
+          <div class="g" onclick="wxToast('图片翻译：OCR 约 1.5–3s')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-6 6"/></svg><div>图片</div>
+          </div>
+          <div class="g" onclick="wxToast('语音：走微信同声传译插件')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg><div>语音</div>
+          </div>
+          <div class="g" onclick="navigateTo('p-tr-history', '翻译历史')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><div>历史</div>
+          </div>
+        </div>
+        <div class="btn dis" id="go" onclick="doTranslate()">翻　译</div>
+        <div class="sec-t">不知道怎么开口？试试这些</div>
+        <div class="samples">
+          <div class="s" data-s="0">这个报价我们再商量商量，下周给你答复。</div>
+          <div class="s" data-s="1">麻烦尽快确认一下，我们这边等着排产。</div>
+          <div class="s" data-s="2">实在抱歉，这批货可能要晚两天到。</div>
+        </div>
+
+        <!-- 原型演示入口：失败态（真实场景由服务端 error 事件 / HTTP 错误触发） -->
+        <div class="sec-t">原型演示 · 状态矩阵</div>
+        <div class="list">
+          <div class="r" onclick="showTranslateFail()">请求失败（网络）<span class="v">›</span></div>
+          <div class="r" onclick="showTranslateFail('服务暂时不可用（HTTP 503）')">服务不可用（HTTP 503）<span class="v">›</span></div>
+          <div class="r" onclick="showTranslateFail('翻译超时，请缩短文本后重试')">超时<span class="v">›</span></div>
+        </div>
+      </div>
+
+      <div class="page sub" id="p-tr-result">
+        <div class="srcbox"><b>原文 · <span id="rSrcLang">中文</span></b><span id="rSrc"></span></div>
+        <div class="res">
+          <div class="tags"><i>推荐</i><span id="rTag"></span></div>
+          <div class="txt" id="rNatural"></div>
+          <div class="ops">
+            <u onclick="wxToast('已复制到剪贴板')">复制</u>
+            <u onclick="wxToast('朗读：TTS 合成中')">朗读</u>
+            <u onclick="wxToast('已收进生词本')">收藏</u>
+            <u onclick="showForward()">转发</u>
+            <u onclick="showAction()">更多</u>
+          </div>
+        </div>
+        <div class="fold" id="fold">
+          <div class="h" onclick="toggleFold()"><span>直译对照 · 委婉版 · 语气要点</span><b id="foldTxt">展开</b></div>
+          <div class="c">
+            <div class="m"><div class="k">直译对照</div><div class="v" id="rLiteral"></div></div>
+            <div class="m"><div class="k">委婉版</div><div class="v" id="rPolite"></div></div>
+            <div class="m" style="margin-bottom:0"><div class="k">语气要点</div><div class="v" id="rNotes"></div></div>
+          </div>
+        </div>
+        <div class="vip" onclick="wxToast('会员功能：旗舰模型深度润色')"><span>深度润色（旗舰模型）</span><span>会员 ›</span></div>
+        <div class="rowbtn">
+          <div onclick="goBack()">重新翻译</div>
+          <div onclick="wxToast('生成分享卡：canvas 出图 + 小程序码')">生成分享卡</div>
+        </div>
+        <div class="ai-note">内容由 AI 生成，仅供参考</div>
+      </div>
+
+      <!-- ================= 二级页：转发演示 · 好友视角（微信聊天壳） =================
+        真机：转发面板为微信原生 UI，此处为模拟壳；卡片底部「小程序名」灰字为微信强制展示。 -->
+      <div class="page sub" id="p-wx-fwd">
+        <div class="wxchat">
+          <div class="wxm">
+            <div class="wav" style="background:#7BBF6A">张</div>
+            <div class="wtxt">在吗，帮我看句英文</div>
+          </div>
+          <div class="wxm" style="flex-direction: row-reverse;">
+            <div class="wav" style="background:linear-gradient(140deg,#F97316,#E8620A)">豆</div>
+            <div class="mini-card" onclick="navigateTo('p-tr-fwd', '翻译 · 来自好友分享')">
+              <div class="mc-body" id="fwdCardText">Thank you for your help.</div>
+              <div class="mc-foot">科豆翻译官</div>
+            </div>
+          </div>
+          <div class="wxm">
+            <div class="wav" style="background:#7BBF6A">张</div>
+            <div class="wtxt">挺地道的，直接拿去用</div>
+          </div>
+        </div>
+        <div class="fwd-note">
+          <b>极简文本式卡片</b>：标题即译文、缩略图白底显译文 —— 好友<b>不点开即可读完整译文</b>，观感接近一条消息。<br />
+          卡片底部「科豆翻译官」灰字为微信强制展示（来源小程序名，去不掉）。<br />
+          点击右侧卡片 → 演示好友落地页。
+        </div>
+      </div>
+
+      <!-- ================= 二级页：转发落地页（好友只看译文） ================= -->
+      <div class="page sub" id="p-tr-fwd">
+        <div class="res fwd-res">
+          <div class="tags"><i>译文</i><span id="fwdText">Thank you for your help.</span></div>
+          <div class="txt" id="fwdNatural">Thank you for your help.</div>
+          <div class="ops">
+            <u onclick="wxToast('已复制到剪贴板')">复制</u>
+            <u onclick="wxToast('朗读：TTS 合成中')">朗读</u>
+            <u onclick="wxToast('已收进生词本')">收藏</u>
+          </div>
+        </div>
+        <div class="fwd-from">来自好友分享 · 科豆翻译官</div>
+        <div class="fwd-cta" onclick="goBack();openApp('translate')">我也要翻译</div>
+        <div class="ai-note">落地只展示译文：无原文卡、无提问、不重翻；超长译文截断 + 「去翻译完整版」</div>
+      </div>
+
+      <!-- ================= 二级页：翻译失败态 ================= -->
+      <div class="page sub" id="p-tr-fail">
+        <div class="fail">
+          <div class="fi">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="M12 7.6v5.6"/><path d="M12 16.4v.7"/>
+            </svg>
+          </div>
+          <div class="ft">翻译失败</div>
+          <!-- 原因明确：不吞错，用户知道发生了什么 -->
+          <div class="fr" id="failReason">网络连接不稳定，请求没能送达</div>
+        </div>
+
+        <!-- 保留用户输入：重试时不需重新录入 -->
+        <div class="srcbox"><b>原文 · <span id="fSrcLang">中文</span></b><span id="fSrc">这个报价我们再商量商量…</span></div>
+
+        <!-- 唯一主操作 = 重试；次操作 = 返回 / 复制原文 -->
+        <div class="btn" onclick="retryTranslate()">重试</div>
+        <div class="rowbtn">
+          <div onclick="goBack()">返回</div>
+          <div onclick="wxToast('已复制原文，可稍后再试')">复制原文</div>
+        </div>
+        <div class="ai-note">内容由 AI 生成，仅供参考</div>
+      </div>
+
+      <!-- ================= 二级页：对话记录（对话页导航栏「列表」icon 进入） ================= -->
+      <div class="page sub" id="p-history">
+        <!-- 加载中：骨架占位（真机：首次进入 / 点击重试时显示，避免一片空白） -->
+        <div class="list" id="hi-skeleton">
+          <div class="r"><div class="sk" style="width:70%;height:13px"></div><div class="sk" style="width:30%;height:10px;margin-top:7px"></div></div>
+          <div class="r"><div class="sk" style="width:62%;height:13px"></div><div class="sk" style="width:26%;height:10px;margin-top:7px"></div></div>
+          <div class="r"><div class="sk" style="width:74%;height:13px"></div><div class="sk" style="width:32%;height:10px;margin-top:7px"></div></div>
+          <div class="r"><div class="sk" style="width:58%;height:13px"></div><div class="sk" style="width:28%;height:10px;margin-top:7px"></div></div>
+          <div class="r"><div class="sk" style="width:68%;height:13px"></div><div class="sk" style="width:24%;height:10px;margin-top:7px"></div></div>
+        </div>
+
+        <div id="hi-list" style="display:none">
+        <div class="list">
+          <div class="r" onclick="resumeConv('这个报价我们再商量商量…')">这个报价我们再商量商量…<span>10:24 ›</span></div>
+          <div class="r" onclick="resumeConv('帮我看看这份合同的违约条款')">帮我看看这份合同的违约条款<span>昨天 ›</span></div>
+          <div class="r" onclick="resumeConv('今天心情有点糟')">今天心情有点糟<span>2 天前 ›</span></div>
+          <div class="r" onclick="resumeConv('量子纠缠是什么')">量子纠缠是什么<span>3 天前 ›</span></div>
+          <div class="r" onclick="resumeConv('Could you confirm at your earliest…')">Could you confirm at your earliest…<span>4 天前 ›</span></div>
+          <!-- 分页：滚到底触发加载下一页（真机 onReachBottom + page/pageSize） -->
+          <div class="foot" style="margin-top:0;padding-top:10px" onclick="wxToast('已加载第 2 页（每页 20 条）')">下拉加载更多 · 每页 20 条</div>
+        </div>
+        <div class="foot">只显示你自己的对话 · 按最近更新排序</div>
+        </div><!-- /#hi-list -->
+      </div>
+
+      <div class="page sub" id="p-tr-history">
+        <div class="list">
+          <div class="r" onclick="wxToast('打开该条记录')">这个报价我们再商量商量…<span>10:24 ›</span></div>
+          <div class="r" onclick="wxToast('打开该条记录')">Could you confirm at your earliest…<span>昨天 ›</span></div>
+          <div class="r" onclick="wxToast('打开该条记录')">实在抱歉，这批货可能要晚两天到。<span>3 天前 ›</span></div>
+        </div>
+        <div class="foot">仅本机保留最近 30 天</div>
+      </div>
+
+      <div class="page sub" id="p-tr-settings">
+        <div class="sec-t" style="margin-top:4px">默认参数</div>
+        <div class="list">
+          <div class="r" onclick="showPicker('默认源语言', ['中文','英语','日语','德语'], '中文')">默认源语言<span class="v">中文 ›</span></div>
+          <div class="r" onclick="showPicker('默认目标语言', ['英语','中文','日语','德语'], '英语')">默认目标语言<span class="v">英语 ›</span></div>
+          <div class="r" onclick="showPicker('默认语气', ['正式','商务','日常','学术','轻松'], '正式')">默认语气<span class="v">正式 ›</span></div>
+          <div class="r" onclick="showPicker('默认风格', ['完整','简洁','有说服力'], '完整')">默认风格<span class="v">完整 ›</span></div>
+        </div>
+        <div class="sec-t">术语与历史</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('个人术语库：盘扣 / 贝母扣 固定译法')">个人术语库<span class="v">12 条 ›</span></div>
+          <div class="r" onclick="wxToast('流式输出已开启')">逐字流式输出<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('发音：美音')">朗读发音<span class="v">美音 ›</span></div>
+          <div class="r" onclick="wxToast('已清空翻译历史')">清空翻译历史<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置只影响「语言翻译官」</div>
+      </div>
+
+      <!-- ================= 二级页：合同评估 ================= -->
+      <div class="page sub" id="p-assess">
+        <div class="upload" onclick="runAssess()">
+          <div class="ic">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></svg>
+          </div>
+          <div class="t">上传或粘贴合同</div>
+          <div class="d">支持 PDF / Word / 图片 / 直接粘贴文本</div>
+        </div>
+        <div class="u-row">
+          <div onclick="wxToast('拍照：wx.chooseMedia')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg>拍照
+          </div>
+          <div onclick="wxToast('相册：wx.chooseMedia')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4"/></svg>相册
+          </div>
+          <div onclick="wxToast('微信聊天文件：chooseMessageFile')">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>文件
+          </div>
+        </div>
+
+        <div class="sec-t">合同类型</div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="ct">采购</span><span class="chip" data-g="ct">劳动</span>
+          <span class="chip" data-g="ct">租赁</span><span class="chip" data-g="ct">服务</span>
+          <span class="chip" data-g="ct">保密</span><span class="chip" data-g="ct">借款</span>
+        </div>
+
+        <div class="sec-t">关注风险点<em>可多选</em></div>
+        <div class="scroll-x">
+          <span class="chip on" data-g="rk" data-multi="1">付款条件</span>
+          <span class="chip on" data-g="rk" data-multi="1">违约责任</span>
+          <span class="chip" data-g="rk" data-multi="1">知识产权</span>
+          <span class="chip" data-g="rk" data-multi="1">保密</span>
+          <span class="chip" data-g="rk" data-multi="1">争议解决</span>
+          <span class="chip" data-g="rk" data-multi="1">不可抗力</span>
+        </div>
+
+        <div class="btn" onclick="runAssess()">开始评估</div>
+
+        <div class="sec-t">最近评估</div>
+        <div class="list">
+          <div class="r" onclick="showAssessResult()">设备采购合同_2026Q3<span>62 分 · 昨天 ›</span></div>
+          <div class="r" onclick="showAssessResult()">办公室租赁合同<span>81 分 · 3 天前 ›</span></div>
+        </div>
+        <div class="ai-note">评估结果由 AI 生成，仅供参考，不构成法律意见</div>
+      </div>
+
+      <div class="page sub" id="p-as-result">
+        <div class="score">
+          <div class="ring"><span class="n">62</span><span class="l">风险分</span></div>
+          <div class="info">
+            <div class="lv">中等风险</div>
+            <div class="d">共识别 7 处风险点：2 高 · 3 中 · 2 低<br>建议重点处理付款与违约条款</div>
+          </div>
+        </div>
+        <div class="sec-t">风险清单</div>
+        <div class="risk">
+          <div class="rh"><i class="high">高</i><b>付款条件：验收后 90 天付款</b></div>
+          <div class="rc">原条款「甲方于验收合格后 90 日内支付全部款项」——账期明显长于行业惯例（30–60 天），占用资金压力大，且未约定逾期利息。</div>
+          <div class="rf">建议：改为 30 天，并加「逾期按日万分之五支付违约金」</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="high">高</i><b>违约责任：仅单方约定</b></div>
+          <div class="rc">第 8 条只约定了乙方违约责任，甲方逾期付款无对应责任，权利义务不对等。</div>
+          <div class="rf">建议：补充甲方逾期付款的对称责任条款</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="mid">中</i><b>知识产权：成果归属含糊</b></div>
+          <div class="rc">未明确交付成果的知识产权归属与授权范围，后续二次开发可能受限。</div>
+          <div class="rf">建议：明确「交付即转移」或「授权使用」二选一</div>
+        </div>
+        <div class="risk">
+          <div class="rh"><i class="low">低</i><b>争议解决：管辖法院</b></div>
+          <div class="rc">约定在甲方所在地法院，异地诉讼成本较高。</div>
+          <div class="rf">建议：争取改为仲裁或己方所在地</div>
+        </div>
+        <div class="rowbtn">
+          <div onclick="wxToast('导出评估报告 PDF')">导出报告</div>
+          <div onclick="wxToast('针对条款继续追问 AI')">继续追问</div>
+        </div>
+        <div class="ai-note">评估结果由 AI 生成，仅供参考，不构成法律意见</div>
+      </div>
+
+      <div class="page sub" id="p-as-settings">
+        <div class="sec-t" style="margin-top:4px">评估偏好</div>
+        <div class="list">
+          <div class="r" onclick="showPicker('默认合同类型', ['采购','劳动','租赁','服务','保密','借款'], '采购')">默认合同类型<span class="v">采购 ›</span></div>
+          <div class="r" onclick="showPicker('评估严格度', ['宽松','标准','严格'], '标准')">评估严格度<span class="v">标准 ›</span></div>
+          <div class="r" onclick="wxToast('关注风险点：6 选 2 已配置')">默认关注风险点<span class="v">2 项 ›</span></div>
+          <div class="r" onclick="wxToast('适用法域：中国大陆')">适用法域<span class="v">中国大陆 ›</span></div>
+        </div>
+        <div class="sec-t">数据与导出</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('自动保存评估结果已开启')">自动保存评估结果<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('报告格式：PDF')">报告导出格式<span class="v">PDF ›</span></div>
+          <div class="r" onclick="wxToast('合同默认保留 180 天')">合同保留期限<span class="v">180 天 ›</span></div>
+          <div class="r" onclick="wxToast('已删除全部合同数据')">删除全部合同数据<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置只影响「合同评估」</div>
+      </div>
+
+      <!-- ================= 二级页：音乐口味（AI 记忆） ================= -->
+      <div class="page sub" id="p-taste">
+        <div class="sec-t" style="margin-top:4px">全部标签<em>AI 自动归类 · 红色为不想听</em></div>
+        <div class="tagbox" id="tasteTags">
+          <span class="tag-item">民谣<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item">周杰伦<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item">安静<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+          <span class="tag-item dis">不想听：摇滚<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></span>
+        </div>
+        <div class="empty-box" id="tasteEmpty" style="display:none">
+          <div class="e-t">还没记住你的口味</div>
+          <div class="e-d">在对话里告诉 AI 喜欢什么、不想听什么，它会自动记下</div>
+        </div>
+        <div class="sec-t">手动补充</div>
+        <div class="cell addrow">
+          <input id="tasteInput" placeholder="补充口味，例如：爵士" />
+          <span class="addbtn" id="tasteAdd">添加</span>
+        </div>
+        <div class="danger-btn" onclick="confirmClearTaste()">清空口味记忆</div>
+        <div class="foot">口味由 AI 在对话中自动积累，也可在此手动调整<br>只用于音乐推荐，不用于其他用途</div>
+      </div>
+
+      <!-- ================= 二级页：用户记忆（AI 记忆） ================= -->
+      <div class="page sub" id="p-memory">
+        <div class="note-tip">AI 每次对话后，从你们的聊天里提炼关于你的稳定信息，跨会话记住。可单条删除。</div>
+        <div class="empty-box" id="memEmpty" style="display:none">
+          <div class="e-t">还没有记忆</div>
+          <div class="e-d">去对话里聊聊，AI 会慢慢记住你</div>
+        </div>
+        <div class="sec-t">事实<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">你在备考雅思，目标 7 分</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="sec-t">偏好<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">偏好正式、商务语气</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="sec-t">习惯<em>1 条</em></div>
+        <div class="list">
+          <div class="mem-item"><div class="m-c">习惯在晚上集中处理工作</div><i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i></div>
+        </div>
+        <div class="foot">记忆仅自己可见，随时可删</div>
+      </div>
+
+      <!-- ================= 二级页：生词本（收藏） ================= -->
+      <div class="page sub" id="p-glossary">
+        <div class="note-tip">你收藏的译文会一直保留在这里，即使原对话删除。</div>
+        <div class="empty-box" id="glossEmpty" style="display:none">
+          <div class="e-t">还没有收藏</div>
+          <div class="e-d">在翻译卡片或翻译结果页点「收藏」</div>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">Thank you for your help.</div>
+          <div class="g-src">非常感谢你的帮助</div>
+          <div class="g-note">for your help 点明感谢对象，商务邮件常用</div>
+          <div class="g-meta">正式 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">Could you elaborate on that?</div>
+          <div class="g-src">你能详细说说吗</div>
+          <div class="g-note">elaborate 比 explain 更正式，会议/邮件常用</div>
+          <div class="g-meta">商务 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="gloss-item">
+          <div class="g-en">I look forward to hearing from you.</div>
+          <div class="g-src">期待你的回复</div>
+          <div class="g-note">邮件结尾高频句式</div>
+          <div class="g-meta">正式 · 中文→英语</div>
+          <i data-del><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>
+        </div>
+        <div class="foot">点 × 删除收藏</div>
+      </div>
+
+      <div class="page sub" id="p-mine-profile">
+        <div class="profile" style="cursor:default">
+          <div class="avatar">橙</div>
+          <div style="flex:1">
+            <div class="n">橙子哥哥</div>
+            <div class="d">ID: 100238 · 2026-03 加入</div>
+          </div>
+        </div>
+        <div class="list" style="margin-top:10px">
+          <div class="r" onclick="wxToast('修改昵称')">昵称<span class="v">橙子哥哥 ›</span></div>
+          <div class="r" id="phoneRow" data-dr="phone-row" onclick="onPhoneRow()">手机号<span class="v" id="phoneVal">未绑定 ›</span></div>
+          <div class="r" id="emailRow" data-dr="email-row" onclick="onEmailRow()">邮箱<span class="v" id="emailVal">未绑定 ›</span></div>
+          <div class="r" onclick="wxToast('已实名认证')">实名认证<span class="v">已认证 ›</span></div>
+          <div class="r" onclick="wxToast('已绑定微信')">微信账号<span class="v">已绑定 ›</span></div>
+        </div>
+        <div class="foot">实名信息用于合同评估的合规留痕<br>
+          <span class="g-link" onclick="demoQuota()">演示：额度不足</span> · <span class="g-link" onclick="demoBindFail()">演示：绑定失败</span>
+        </div>
+      </div>
+
+      <div class="page sub" id="p-mine-settings">
+        <div class="sec-t" style="margin-top:4px">外观</div>
+        <div class="list">
+          <div class="r" onclick="toggleTheme();wxToast('已切换主题（darkmode）')">深色模式<span class="v" id="themeVal">跟随系统 ›</span></div>
+          <div class="r" onclick="wxToast('字体大小：标准')">字体大小<span class="v">标准 ›</span></div>
+        </div>
+        <div class="sec-t">通知与隐私</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('消息通知已开启')">消息通知<span class="v">已开启 ›</span></div>
+          <div class="r" onclick="wxToast('个性化推荐已关闭')">个性化推荐<span class="v">已关闭 ›</span></div>
+          <div class="r" onclick="wxToast('隐私设置')">隐私设置<span class="v">›</span></div>
+        </div>
+        <div class="sec-t">通用</div>
+        <div class="list">
+          <div class="r" onclick="wxToast('已清除 24.6MB 缓存')">清除缓存<span class="v">24.6MB ›</span></div>
+          <div class="r" onclick="backWelcome()">返回欢迎页<span class="v">›</span></div>
+          <div class="r" data-dr="logout-entry" onclick="askLogout()">退出登录<span class="v">›</span></div>
+        </div>
+        <div class="foot">这里的设置影响整个小程序</div>
+      </div>
+
+      <!-- ================= 二级页：用户协议与隐私政策（M4，收手机号的合规前置） ================= -->
+      <div class="page sub" id="p-agreement" data-dr="agreement">
+        <div class="sec-t" style="margin-top:4px">我们收集什么</div>
+        <div class="doc">
+          <p><b>微信身份标识（openid）</b>：首次进入时通过 wx.login 静默获取，用于建立你的账号，不弹授权窗。</p>
+          <p><b>手机号</b>：仅在你主动点击「绑定手机号」并授权后，经微信手机号验证组件获取，用于<b>多端账号打通</b>。不绑定不影响任何功能使用。</p>
+          <p><b>对话与学习数据</b>：对话记录、生词本、口味记忆，保存在你的账号下。</p>
+        </div>
+        <div class="sec-t">手机号怎么用</div>
+        <div class="doc">
+          <p>仅作为账号打通的标识；接口与页面一律只展示脱敏号（138****6688）。</p>
+          <p>若该手机号已注册过科豆账号，会先征求你的同意，再把当前小程序的数据合并到那个账号 —— <b>合并不可撤销</b>。</p>
+        </div>
+        <div class="sec-t">你的控制权</div>
+        <div class="doc">
+          <p>可在「我的 → 个人信息」绑定或更换手机号，更换需重新微信授权。</p>
+          <p>可在「我的 → 小程序设置」退出登录：本地登录态清除，同时服务端凭证失效。</p>
+          <p>账号注销：<b>开发中</b>，上线后入口放在「小程序设置」。</p>
+        </div>
+        <div class="foot">文案待运营 / 法务确认（M4）<br>生效日期：____ 年 __ 月 __ 日</div>
+      </div>
+
+      <!-- ================= 二级页：绑定邮箱（R3，与手机号同为打通键） ================= -->
+      <div class="page sub" id="p-bind-email" data-dr="bind-email">
+        <div class="sec-t" style="margin-top:4px">绑定邮箱</div>
+        <div class="doc">
+          <p>邮箱与手机号一样用于<b>多端账号打通</b>。验证码发送到该邮箱，<b>仅服务端校验</b>，不下发到小程序。</p>
+        </div>
+        <div class="sec-t">邮箱</div>
+        <div class="list">
+          <div class="r ei-row">
+            <input class="ei" id="emailInput" type="text" placeholder="you@example.com" oninput="clearErr()" />
+            <span class="ei-btn" id="codeBtn" onclick="sendEmailCode()">获取验证码</span>
+          </div>
+        </div>
+        <div class="err" id="emailErr"></div>
+        <div class="sec-t">验证码</div>
+        <div class="list">
+          <div class="r ei-row">
+            <input class="ei" id="codeInput" type="text" placeholder="6 位数字" maxlength="6" oninput="clearErr()" />
+          </div>
+        </div>
+        <div class="g-btn wide" id="bindEmailBtn" onclick="submitEmailCode()">绑定邮箱</div>
+        <div class="foot">
+          真机：自绘页面（wx.showModal 无输入框）；60s 重发限频，连续错误 5 次该验证码作废<br>
+          演示：任意合法邮箱 + 6 位数字即可提交
+        </div>
+      </div>
+
+      <!-- ================= 二级页：新概念英语（原型登记 2026-11-06）=================
+           W1-W8 判据的原型表达。单 sub 页 + 双 view，复用既有 navigateTo/goBack 状态机，
+           不新增第二层 sub，避免 tabBar 切换时残留 open 页。数据为 NCE2 Lesson 1 公版演示稿。 -->
+      <div class="page sub" id="p-nce" data-mode="immersion" data-font="md">
+        <!-- 目录 view -->
+        <div class="nce-view on" id="nce-view-index">
+          <div class="nce-kicker">NEW CONCEPT ENGLISH · BOOK 2</div>
+          <div class="nce-h1">新概念英语 第二册</div>
+          <div class="nce-sub">逐句精读 · 先读懂英文，再按需看中文</div>
+          <div class="nce-stat">
+            <div><b>1 / 96</b>已入库课文</div>
+            <div><b>24</b>课 / 单元分组</div>
+            <div><b>2</b>全文来源 xdf · lrc</div>
+          </div>
+          <input class="nce-search" id="nceSearch" placeholder="搜索课号或标题，如 Lesson 1" oninput="nceFilter(this.value)" />
+          <div class="nce-grp"><span>UNIT 1 · Lesson 1–24</span><span id="nceCount">1 课已入库</span></div>
+          <div id="nceList">
+            <div class="nce-card" data-key="lesson 1 a private conversation 上星期我去看戏" onclick="nceOpenDetail()">
+              <div class="r1"><span class="no">LESSON 1</span><span class="nce-tag xdf">权威全文</span></div>
+              <div class="tt" style="margin-top:6px">A private conversation</div>
+              <div class="lead">作者为什么向坐在他身后的人抱怨？</div>
+              <div class="leaden">Why did the writer complain to the people behind him?</div>
+              <div class="meta"><span>6 句</span><span>·</span><span>4 生词</span><span>·</span><span>1 题</span></div>
+            </div>
+          </div>
+          <div class="nce-empty" id="nceEmpty" style="display:none">未找到匹配课文 · 其余 95 课待入库</div>
+          <div class="nce-foot">数据源 /api/content-admin/nce/* · 只读 3 个 GET</div>
+        </div>
+
+        <!-- 详情 view -->
+        <div class="nce-view" id="nce-view-detail">
+          <div class="nce-back" onclick="nceBackToIndex()">&#8249; 返回课文目录</div>
+          <div class="nce-kicker">LESSON 1 · UNIT 1</div>
+          <div class="nce-h1">A <span class="nce-w" onclick="nceWord(event)">private</span> conversation</div>
+          <div class="nce-sub">私人谈话 · 6 句 / 4 生词 / 1 题</div>
+          <div class="nce-leadbox">
+            <div class="q">作者为什么向坐在他身后的人抱怨？</div>
+            <div class="qe">Why did the writer complain to the people behind him?</div>
+          </div>
+          <div class="nce-tools">
+            <span class="lb">阅读档</span>
+            <span class="nce-chip on" data-g="mode" data-v="immersion" onclick="nceMode('immersion')">沉浸</span>
+            <span class="nce-chip" data-g="mode" data-v="bilingual" onclick="nceMode('bilingual')">双语</span>
+            <span class="nce-chip" data-g="mode" data-v="tap" onclick="nceMode('tap')">点按</span>
+          </div>
+          <div class="nce-tools">
+            <span class="lb">字号</span>
+            <span class="nce-chip" data-g="font" data-v="sm" onclick="nceFont('sm')">小</span>
+            <span class="nce-chip on" data-g="font" data-v="md" onclick="nceFont('md')">中</span>
+            <span class="nce-chip" data-g="font" data-v="lg" onclick="nceFont('lg')">大</span>
+          </div>
+          <div class="nce-hint" id="nceHint">默认纯英文 · 点任意一句才显示该句中文</div>
+          <div id="nceLines">
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">Last week I went to the theatre.</div><div class="cn">上星期我去看戏。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I had a very good seat.</div><div class="cn">我的座位很好。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">The play was interesting.</div><div class="cn">戏很有意思。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I did not enjoy it.</div><div class="cn">但我却无法欣赏。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">A young man and a young woman were sitting behind me. They were talking <span class="nce-w" onclick="nceWord(event)">loudly</span>.</div><div class="cn">一青年男子与一青年女子坐在我的身后，大声地说着话。</div></div>
+            <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I got very angry. I could not hear the actors.</div><div class="cn">我非常生气，因为我听不见演员在说什么。</div></div>
+          </div>
+          <div class="nce-wordcard" id="nceWordCard">
+            <div class="w1" id="nceW1"></div>
+            <div class="w2" id="nceW2"></div>
+            <div class="w3" id="nceW3"></div>
+          </div>
+          <div class="nce-cta" id="nceCta" onclick="nceOpenEx()">开始练习（1 题）</div>
+          <div class="nce-ex" id="nceEx">
+            <div class="q">Why did the writer not enjoy the play?</div>
+            <div class="nce-opt" onclick="nceAnswer(this,false)">A. The play was not interesting.</div>
+            <div class="nce-opt" onclick="nceAnswer(this,true)">B. A young man and a young woman were talking loudly.</div>
+            <div class="nce-opt" onclick="nceAnswer(this,false)">C. He arrived late and had a bad seat.</div>
+            <div class="nce-fb" id="nceFb"></div>
+            <div style="font-size:11.5px;color:#6B7280;margin-top:10px;cursor:pointer" onclick="nceCloseEx()">收起练习，继续看正文</div>
+          </div>
+          <div class="nce-fold" id="nceFold">
+            <div class="h" onclick="nceToggleFold()"><span>参考译文</span><b id="nceFoldTxt">展开</b></div>
+            <div class="c">上星期我去看戏。我的座位很好，戏也很有意思，但我却无法欣赏。一青年男子与一青年女子坐在我的身后，大声地说着话。我非常生气，因为我听不见演员在说什么。</div>
+          </div>
+          <div class="nce-nav">
+            <div onclick="wxToast('已是第 1 课')">&#8249; 上一课</div>
+            <div onclick="wxToast('第 2 课待入库')">下一课 &#8250;</div>
+          </div>
+          <div class="nce-foot">逐句中文默认折叠 · 生词就地查零跳转 · 习题读完再展开</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tb on" data-t="chat">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/></svg>
+        <div>对话</div>
+      </div>
+      <div class="tb" data-t="discover">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/></svg>
+        <div>发现</div>
+      </div>
+      <div class="tb" data-t="mine">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/></svg>
+        <div>我的</div>
+      </div>
+    </div>
+    <div class="home-ind"></div>
+
+    <div class="cap-menu" id="capMenu">
+      <div class="i" onclick="wxToast('转发给朋友')">⤴ 转发给朋友</div>
+      <div class="i" onclick="wxToast('分享到朋友圈')">◎ 分享到朋友圈</div>
+      <div class="i" onclick="backWelcome()">⌂ 回到欢迎页</div>
+      <div class="i" onclick="showChatFail('send')">演示：这一轮发送失败</div>
+      <div class="i" onclick="showChatFail('stream')">演示：回复流式中断</div>
+    </div>
+    <div class="wx-toast" id="wxToast"></div>
+    <div class="wx-loading" id="wxLoading"><span class="sp"></span><span id="wxLoadTxt">处理中…</span></div>
+    <div class="mask" id="mask" onclick="closeAll()"></div>
+    <!-- 录音浮层（按住说话）：状态机 preparing → recording → recognizing，见 voice-input-spec.md §2 -->
+    <div class="voice-mask" id="voiceMask">
+      <div class="vm-card">
+        <div class="vm-wave"><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="vm-sec" id="vmSec">0″</div>
+        <div class="vm-tip" id="vmTip">准备中…</div>
+      </div>
+    </div>
+
+    <!-- 原生弹窗模拟：wx.showModal（退出确认 / 合并二次确认）。真机由微信渲染，原型只复刻形态与文案 -->
+    <div class="wxmodal" id="wxModal" data-dr="modal">
+      <div class="m-t" id="mTitle">标题</div>
+      <div class="m-c" id="mContent"></div>
+      <div class="m-b">
+        <div id="mCancel">取消</div>
+        <div id="mOk">确定</div>
+      </div>
+    </div>
+    <div class="wx-sheet" id="wxSheet">
+      <div class="grp2" id="sheetBody"></div>
+      <div class="cancel" onclick="closeAll()">取消</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <h3>本版改动</h3>
+    <div class="n">
+      <b>① 主界面 = 通用 AI 对话</b><br>
+      默认进入就是对话页。首条消息是<b>每日一句</b>（中文 + 英文），下方三个建议问题可直接点，底部输入栏常驻。简单问答在这里闭环，不用跳转。
+    </div>
+    <div class="n">
+      <b>② tabBar：对话 / 发现 / 我的</b><br>
+      翻译与合同评估从 tab <b>降级为「发现」里的能力卡</b>——它们是使用频率低、用完即走的功能，不该占一级入口。
+    </div>
+    <div class="n">
+      <b>③ 发现 = 能力市场</b><br>
+      当前两个可用能力（语言翻译官 / 合同评估）+ 两个占位（论文速读 / 文案改写）。<b>后续加新能力只改这一页</b>，不动 tabBar 结构。
+    </div>
+    <div class="n">
+      <b>④ 设置全部收进「我的」</b><br>
+      <ul>
+        <li><b>应用设置</b>：语言翻译官 / 合同评估 —— 带图标，标明管什么</li>
+        <li><b>通用</b>：小程序设置、通知、缓存</li>
+      </ul>
+      业务参数不再挂在业务页右上角，符合"设置就该在设置里"的直觉。
+    </div>
+    <div class="n">
+      <b>⑤ 欢迎页保留</b><br>
+      启动页仍是 <b>Hello.</b>，但入口从两个 icon 换成「今日一句 + 开始对话」——和对话页首条消息一致，形成连续感。
+    </div>
+    <div class="n">
+      <b>合规位</b><br>
+      对话气泡下方、两个业务结果页、欢迎页底部均有 AI 声明；合同评估额外标注<b>不构成法律意见</b>。隐式水印在返回体 metadata 里，原型不体现。
+    </div>
+    <div class="n">
+      <b>⑥ 账号：退出 / 绑定手机号 / 合并（本次新增）</b><br>
+      <ul>
+        <li><b>退出登录</b>：我的页底部 或 小程序设置 → 原生确认弹窗 → 三 tab 全部切到<b>登录引导卡</b>（已拍板：必须登录才可用）</li>
+        <li><b>绑定手机号</b>：我的 → 个人信息 → 手机号「未绑定」→ 微信授权半屏 → 绑定成功显示脱敏号</li>
+        <li><b>合并路径</b>：授权后若号码已注册 → 二次确认「合并不可撤销」→ 合并成功并<b>重签凭证</b>（原型 toast 说明）</li>
+        <li><b>绑定邮箱</b>：我的 → 个人信息 → 邮箱「未绑定」→ 自绘绑定页（输入邮箱 → 获取验证码 → 60s 倒计时 → 填 6 位码）→ 命中已注册则走同一套合并</li>
+        <li><b>协议页</b>：我的 → 用户协议与隐私政策（收手机号的合规前置，文案待运营/法务）</li>
+      </ul>
+      演示开关在 JS 的 <code>requestPhone()</code> 里：<code>CONFLICT=true</code> 走合并路径，改 false 即直接绑定成功。
+    </div>
+  </div>
+</div>
+
+<div class="ctrls">
+  <button onclick="toggleTheme()">深色 / 浅色</button>
+  <button onclick="backWelcome()">回到欢迎页</button>
+</div>
+
+<script>
+var DEMO = [
+  { src: '这个报价我们再商量商量，下周给你答复。',
+    literal: 'Let us discuss this quotation a bit more, and give you a reply next week.',
+    natural: 'We would like to discuss this quotation further and will get back to you next week.',
+    polite: 'We would like to give this quotation further consideration and will provide you with our reply next week.',
+    notes: '「再商量商量」口语色彩重，正式场合宜用 discuss further；「下周给你答复」用 get back to you 更自然。' },
+  { src: '麻烦尽快确认一下，我们这边等着排产。',
+    literal: 'Please confirm as soon as possible, we are waiting to schedule production.',
+    natural: 'Could you confirm at your earliest convenience? We are holding the production slot.',
+    polite: 'Whenever you have a moment, could you let me know? We are keeping the production line open for this order.',
+    notes: '「尽快」直译 as soon as possible 显得强硬，用 at your earliest convenience 更得体。' },
+  { src: '实在抱歉，这批货可能要晚两天到。',
+    literal: 'Really sorry, this batch of goods may arrive two days late.',
+    natural: 'We sincerely apologize — this shipment will be delayed by two days.',
+    polite: 'We are very sorry for the inconvenience, but this shipment may arrive about two days later than planned.',
+    notes: '中文道歉常加「实在」，英文 sincerely apologize 已足够；will be 比 may be 更显担当。' }
+];
+var LANGS = ['中文', '英语', '日语', '德语'];
+var cur = { src: '中文', tgt: '英语', reg: '正式', sty: '完整', tab: 'chat', sub: null };
+
+/* 对话演示回复 */
+var DAILY = { cn: '我们无法决定风的方向，但可以调整帆的角度。', en: 'We cannot direct the wind, but we can adjust the sails.' };
+/** 新会话首屏的统一欢迎语（替代「今日一句」：用户还没开始对话时，给一句稳定的招呼） */
+var WELCOME_GREETING = '科豆 AI · 体验不一样的 AI';
+var REPLY = {
+  '帮我翻一句话': { cn: '直接把要翻的内容发给我就行。如果要三版译文和语气点评，去「发现」页用「语言翻译官」——支持中英日德，还会告诉你哪句更得体、哪句容易冒犯人。', en: '' },
+  '看看合同风险': { cn: '把合同文本粘贴过来我先扫一遍。完整流程在「发现」页的「合同评估」：上传后按条款逐条标出高风险点，并给出可直接改的建议文案。', en: '' },
+  '今天该做什么': { cn: '挑一件最重要的事，只做 25 分钟。', en: 'Pick the one thing that matters most — and give it just 25 minutes.' },
+  'default': { cn: '我可以陪你聊聊天、翻一句话、看一份合同，也可以帮你把想法理清楚。复杂的事也可以直接说，我会拆成几步给你。', en: '' }
+};
+
+function $(id) { return document.getElementById(id); }
+
+/* ---------- 微信原生反馈 ---------- */
+var toastTimer;
+function wxToast(msg) {
+  var t = $('wxToast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1600);
+}
+function wxLoading(msg) { $('wxLoadTxt').textContent = msg || '处理中…'; $('wxLoading').classList.add('show'); }
+function hideLoading() { $('wxLoading').classList.remove('show'); }
+function closeAll() {
+  $('mask').classList.remove('show');
+  $('wxSheet').classList.remove('show');
+  $('capMenu').classList.remove('show');
+  $('mask').onclick = closeAll;
+}
+/** 演示入口通用：把视口滚到手机壳（入口在页首文档区，手机壳在页面下方） */
+function revealPhone() { $('phone').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+/* ---------- ActionSheet ---------- */
+function openSheet(title, items, onPick) {
+  var html = '<div class="t">' + title + '</div>';
+  items.forEach(function (it) {
+    html += '<div class="i' + (it.on ? ' on' : '') + '" data-v="' + it.label + '">' + it.label + '</div>';
+  });
+  $('sheetBody').innerHTML = html;
+  Array.prototype.forEach.call($('sheetBody').querySelectorAll('.i'), function (el) {
+    el.addEventListener('click', function () { closeAll(); if (onPick) onPick(el.dataset.v); });
+  });
+  $('mask').classList.add('show');
+  $('wxSheet').classList.add('show');
+}
+function showPicker(title, opts, curVal) {
+  openSheet(title, opts.map(function (o) { return { label: o, on: o === curVal }; }), function (v) { wxToast(title + '：' + v); });
+}
+var ACTION_HTML = ['复制译文', '加入生词本', '生成分享图', '举报'];
+function showAction() {
+  openSheet('译文操作', ACTION_HTML.map(function (o) { return { label: o }; }), function (v) { wxToast(v + '（演示）'); });
+}
+
+/* ---------- 转发（极简文本式卡片） ----------
+ * 真机：button open-type="share" 拉起微信原生转发面板；卡片标题=译文、缩略图=白底译文。
+ * 原型演示：sheet 模拟「选择一个聊天」→ toast 说明好友视角卡片 + 落地。
+ * 卡片底部「小程序名」灰字为微信强制展示（原型以提示语说明，不伪装可去除）。
+ */
+function showForward(text) {
+  var t = String(text || $('rNatural').textContent || '').trim();
+  if (!t) { wxToast('译文未就绪，不能转发'); return; }
+  openSheet('选择一个聊天', [
+    { label: '张同学' },
+    { label: '李老师' },
+    { label: 'AI 学习群' },
+  ], function (v) {
+    // 同步转发文本到好友视角卡片与落地页，再进入微信聊天演示
+    $('fwdCardText').textContent = t;
+    $('fwdText').textContent = '中文 → 英语';
+    $('fwdNatural').textContent = t;
+    navigateTo('p-wx-fwd', '微信 · 已发给 ' + v);
+  });
+}
+
+/* ---------- 对话输入区「+」菜单 ----------
+ * 对话页隐藏 tabBar 后，「发现 / 我的」由此承接（原生导航栏不能自绘按钮）。
+ */
+function openPlusMenu() {
+  /* 「+」菜单只承载媒体输入；导航不放这里（隐藏 tabBar 后的入口方案见页首「待确认」） */
+  openSheet('更多', [
+    { label: '图片' },
+    { label: '拍照' },
+    { label: '文件' },
+  ], function (v) {
+    wxToast(v + '（演示）');
+  });
+}
+
+/* ---------- 对话输入区「按住说话」（语音输入，spec §2 状态机） ----------
+ * 原型复刻真机四态：idle → preparing（按下即同步入态，等授权）→ recording（开麦计时）
+ * → recognizing（松手等识别）→ idle；preparing 期间松手 = 作废不开麦。
+ * 关键交互：常态线性 icon、录音中 .is-rec 面性（实心橙底白图），浮层随态切换文案。
+ */
+var voice = { phase: 'idle', started: 0, timer: null };
+function voiceStart(e) {
+  if (e) e.preventDefault();
+  if (voice.phase !== 'idle') return;
+  voice.phase = 'preparing';
+  $('micBtn').classList.add('is-rec');
+  $('voiceMask').classList.add('show');
+  $('vmSec').textContent = '0″';
+  $('vmTip').textContent = '准备中…';
+  /* 模拟隐私协议 + 录音授权（首次约 200ms 异步窗口期） */
+  setTimeout(function () {
+    if (voice.phase !== 'preparing') return;
+    voice.phase = 'recording';
+    voice.started = Date.now();
+    $('vmTip').textContent = '松手识别，上滑取消';
+    voice.timer = setInterval(function () {
+      $('vmSec').textContent = Math.floor((Date.now() - voice.started) / 1000) + '″';
+    }, 250);
+  }, 220);
+}
+function voiceEnd(e) {
+  if (e) e.preventDefault();
+  if (voice.phase === 'preparing') { voiceReset(); return; }   // 授权未回就松手 → 作废，不开麦
+  if (voice.phase !== 'recording') return;
+  clearInterval(voice.timer);
+  voice.phase = 'recognizing';
+  $('vmTip').textContent = '识别中…';
+  setTimeout(function () {
+    $('cinp').value = '帮我写一份周报';   // 识别结果回填输入框（可编辑再发），不直接发送
+    onType();
+    voiceReset();
+  }, 900);
+}
+function voiceCancel() { voiceReset(); }
+function voiceReset() {
+  clearInterval(voice.timer);
+  voice.phase = 'idle';
+  $('micBtn').classList.remove('is-rec');
+  $('voiceMask').classList.remove('show');
+}
+
+/* ---------- 翻译失败态（原型演示） ---------- */
+/** 真实场景由服务端 error 事件或 HTTP 错误触发；这里做演示入口便于评审状态矩阵 */
+function showTranslateFail(reason) {
+  enterTab('discover');
+  $('fSrc').textContent = $('inp').value.trim() || '这个报价我们再商量商量…';
+  $('fSrcLang').textContent = cur.src || '中文';
+  $('failReason').textContent = reason || '网络连接不稳定，请求没能送达';
+  navigateTo('p-tr-fail', '翻译失败');
+  revealPhone();
+}
+/** 重试：保留原文重新发起（演示为回到成功结果页） */
+function retryTranslate() {
+  wxLoading('重试中…');
+  setTimeout(function () {
+    hideLoading();
+    $('p-tr-fail').classList.remove('open');
+    doTranslate();
+  }, 900);
+}
+
+/* ---------- 对话内的失败态（原型演示） ----------
+ * 对话是流式的，失败有两种形态，UI 必须区分：
+ *   send   整轮没发出去 → 气泡内给出原因 + 重试/删除
+ *   stream 回复中途断流 → 保留已收到的部分 + 标出中断位置 + 重试/删除
+ * 真实场景由 SSE error 事件 / wx.request fail / HTTP 错误触发。
+ */
+function showChatFail(kind) {
+  closeAll();
+  enterTab('chat');
+  var box = $('msgs');
+  var el = document.createElement('div');
+  el.className = 'msg ai';
+  if (kind === 'stream') {
+    el.innerHTML =
+      '<div class="av">豆</div>' +
+      '<div class="bd"><div class="bub">' +
+      '<div class="txt">翻译这件事，关键不是字面对应，而是让对方读起来像本地人写的…</div>' +
+      '<div class="cut">回复在此中断</div>' +
+      '<div class="fr">网络连接中断，只收到了上面这部分</div>' +
+      '<div class="fa"><u onclick="retryChat(this)">重试</u><u onclick="dropChat(this)">删除这一轮</u></div>' +
+      '</div><div class="meta">内容由 AI 生成 · ' + now() + '</div></div>';
+  } else {
+    el.innerHTML =
+      '<div class="av">豆</div>' +
+      '<div class="bd"><div class="bub fail">' +
+      '<div class="ft">发送失败</div>' +
+      '<div class="fr">网络连接不稳定，这一条没有发出去</div>' +
+      '<div class="fa"><u onclick="retryChat(this)">重试</u><u onclick="dropChat(this)">删除这一轮</u></div>' +
+      '</div><div class="meta">' + now() + '</div></div>';
+  }
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  revealPhone();
+}
+/** 重试：重发这一轮（演示为原地恢复成成功态） */
+function retryChat(u) {
+  var bub = u.parentNode.parentNode;
+  bub.classList.remove('fail');
+  bub.innerHTML = '<div class="txt">正在重试…</div>';
+  setTimeout(function () {
+    bub.innerHTML = '<div class="txt">（重试成功）翻译这件事，关键不是字面对应，而是让对方读起来像本地人写的。语气上建议把「尽快」换成 at your earliest convenience，更克制也更商务。</div>';
+  }, 900);
+}
+/** 删除这一轮：丢弃失败的气泡，不留在会话里 */
+function dropChat(u) {
+  var msg = u.parentNode.parentNode.parentNode.parentNode;
+  if (msg && msg.parentNode) msg.parentNode.removeChild(msg);
+}
+
+/* ---------- AI 回答 blocks 渲染（markdown 代码块）演示 ----------
+ * 对应方案：agent 纯文本 → parseAnswer 解析为 blocks（p/h/ol/law/code），
+ * 小程序 chat 页 WXML 按块类型渲染（复用 @web-system/agent-message 解析层）。
+ */
+function showBlocksDemo() {
+  closeAll();
+  /* enterTab：退欢迎覆盖层 + 切到对话屏（初始是欢迎态且 cur.tab 已是 chat，
+     单纯 switchTab 条件判断会跳过 → 消息插到覆盖层下面，看起来「点了没反应」） */
+  enterTab('chat');
+  var box = $('msgs');
+  var u = document.createElement('div');
+  u.className = 'msg me';
+  u.innerHTML = '<div class="av">我</div><div class="bd"><div class="bub">帮我写一个 JS 防抖函数</div></div>';
+  box.appendChild(u);
+  var a = document.createElement('div');
+  a.className = 'msg ai';
+  a.innerHTML =
+    '<div class="av">豆</div>' +
+    '<div class="bd"><div class="bub">' +
+    '<p class="blk-p lead">防抖函数把高频触发合并成一次执行，核心是「清旧定时器 → 重新计时」。</p>' +
+    '<div class="blk-code"><div class="chd"><b>js</b><span class="cp">复制</span></div>' +
+    '<pre>function debounce(fn, wait = 300) {\n  let timer = null;\n  return function (...args) {\n    clearTimeout(timer);\n    timer = setTimeout(() =&gt; fn.apply(this, args), wait);\n  };\n}</pre></div>' +
+    '<div class="blk-h">注意两点</div>' +
+    '<div class="blk-ol">' +
+    '<li><span class="n">1</span><span><b>定时器放闭包</b>，避免全局污染；</span></li>' +
+    '<li><span class="n">2</span><span>组件卸载时 <b>clearTimeout</b>，防内存泄漏。</span></li>' +
+    '</div>' +
+    '<div class="blk-law"><b>《民法典》第 510 条</b>合同生效后，当事人就价款等内容没有约定或约定不明确的，可以协议补充。</div>' +
+    '</div><div class="meta">内容由 AI 生成 · ' + now() + '</div></div>';
+  box.appendChild(a);
+  box.scrollTop = box.scrollHeight;
+  /* 演示入口在页首文档区，手机壳在页面下方：把视口滚到手机壳，插入的消息立刻可见 */
+  $('phone').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ---------- 胶囊菜单 ---------- */
+function toggleCapMenu() {
+  var m = $('capMenu');
+  var on = m.classList.toggle('show');
+  $('mask').classList.toggle('show', on);
+  if (on) $('mask').onclick = function () { m.classList.remove('show'); closeAll(); };
+  else $('mask').onclick = closeAll;
+}
+
+/* ---------- 导航 ---------- */
+var TAB_TITLE = { chat: '科豆 AI', discover: '发现', mine: '我的' };
+var SUB_TITLE = {
+  'p-translate': '语言翻译官', 'p-tr-result': '翻译结果', 'p-tr-history': '翻译历史', 'p-tr-settings': '语言翻译官设置',
+  'p-assess': '合同评估', 'p-as-result': '评估报告', 'p-as-settings': '合同评估设置',
+  'p-mine-profile': '个人信息', 'p-mine-settings': '小程序设置', 'p-agreement': '用户协议与隐私政策',
+  'p-bind-email': '绑定邮箱',
+  'p-taste': '音乐口味', 'p-memory': '用户记忆', 'p-glossary': '生词本',
+  'p-nce': '新概念英语 · NCE2'
+};
+
+/* ---------- 账号：登录态 / 退出 / 绑定手机号 / 合并 ----------
+ * 已拍板口径：Q1 必须登录才可用（未登录 = 登录墙，三 tab 全拦截）；Q15 = c 合并账号。
+ * 真机语义：wx.login 静默登录（无授权弹窗）；手机号走 button open-type="getPhoneNumber" 原生半屏；
+ *          wx.showModal 为微信原生弹窗，此处仅复刻形态与文案。
+ */
+var ACCOUNT = { loggedIn: true, phone: '', pendingPhone: '', email: '', pendingEmail: '', pendingSource: '', busy: false };
+
+function showModal(title, content, okText, onOk, onCancel) {
+  $('mTitle').textContent = title;
+  $('mContent').innerHTML = content;
+  $('mOk').textContent = okText || '确定';
+  $('mCancel').textContent = '取消';
+  $('mOk').onclick = function () { hideModal(); if (onOk) onOk(); };
+  $('mCancel').onclick = function () { hideModal(); if (onCancel) onCancel(); };
+  $('mask').classList.add('show');
+  /* 真机 wx.showModal 点蒙层不会关闭 —— 原型同口径：遮罩不关闭，
+     取消只能走「取消」按钮，保证 onCancel 必被执行（否则会留下解不开的进行中锁） */
+  $('mask').onclick = function () {};
+  $('wxModal').classList.add('show');
+}
+function hideModal() {
+  $('wxModal').classList.remove('show');
+  $('mask').classList.remove('show');
+  $('mask').onclick = closeAll;
+}
+function applyAccountState() {
+  var out = !ACCOUNT.loggedIn;
+  ['gate-chat', 'gate-discover', 'gate-mine'].forEach(function (id) {
+    $(id).classList.toggle('show', out);
+  });
+  /* 未登录：锁住三个 tab 的滚动，登录墙不被滚出视野（否则我的页能滚出内容与退出入口） */
+  ['p-chat', 'p-discover', 'p-mine'].forEach(function (id) {
+    $(id).classList.toggle('locked', out);
+  });
+  /* 未登录：收起导航栏的「新建对话」与「对话记录」入口（它们不在 .page 内，登录墙盖不到） */
+  if (out) { $('navbar').classList.remove('has-act'); $('navbar').classList.remove('has-hist'); }
+  else syncNavForAccount();
+  $('mineSub').textContent = ACCOUNT.phone ? '已实名 · ' + ACCOUNT.phone : '已实名 · 未绑定手机号';
+  $('phoneVal').textContent = ACCOUNT.phone ? ACCOUNT.phone + ' ›' : '未绑定 ›';
+  $('phoneVal').className = ACCOUNT.phone ? 'v' : 'v ph-bind';
+  $('emailVal').textContent = ACCOUNT.email ? ACCOUNT.email + ' ›' : '未绑定 ›';
+  $('emailVal').className = ACCOUNT.email ? 'v' : 'v ph-bind';
+}
+/** 登录态变化时同步导航栏入口：未登录一律不显示需要账号的入口（新建对话 / 对话记录） */
+function syncNavForAccount() {
+  if (!ACCOUNT.loggedIn) {
+    $('navbar').classList.remove('has-act');
+    $('navbar').classList.remove('has-hist');
+    return;
+  }
+  if (cur.tab === 'chat' && !cur.sub) {
+    $('navbar').classList.add('has-act');
+    $('navbar').classList.add('has-hist');
+  }
+}
+function askLogout() {
+  showModal('退出登录', '退出后需要重新登录才能继续使用。<br>服务端登录凭证会同时失效。', '退出', function () {
+    ACCOUNT.loggedIn = false;
+    applyAccountState();
+    if (cur.sub) goBack();
+    wxToast('已退出登录');
+  }, '取消');
+}
+function doLogin() {
+  wxLoading('登录中…');
+  setTimeout(function () {
+    hideLoading();
+    ACCOUNT.loggedIn = true;
+    applyAccountState();
+    wxToast('已登录');
+  }, 600);
+}
+function onPhoneRow() {
+  if (!ACCOUNT.loggedIn) { wxToast('请先登录'); return; }
+  if (ACCOUNT.phone) {
+    showModal('更换手机号', '更换需要重新微信授权，当前号码 ' + ACCOUNT.phone + ' <b>将被新号码替换</b>。', '更换', function () { requestPhone(); });
+  } else {
+    requestPhone();
+  }
+}
+/** 模拟微信手机号快速验证组件（原型用 modal 复刻原生半屏授权） */
+function requestPhone() {
+  if (ACCOUNT.busy) return; /* 重复提交锁：真机由后端 + 一次性 code 兜底 */
+  showModal('微信手机号授权', '微信将把你绑定的手机号提供给科豆 AI，仅用于账号打通。<br><span style="color:var(--t2)">真机：button open-type="getPhoneNumber" 拉起原生半屏；点「拒绝」= 静默返回，不提示</span>', '允许', function () {
+    ACCOUNT.busy = true;
+    wxLoading('绑定中…');
+    setTimeout(function () {
+      hideLoading();
+      /* 演示开关：CONFLICT=true 走「已注册 → 合并」路径，false 走直接绑定成功 */
+      var CONFLICT = true;
+      ACCOUNT.pendingPhone = '138****6688';
+      ACCOUNT.pendingSource = 'phone';
+      if (CONFLICT) {
+        showModal('该手机号已注册', '138****6688 已注册科豆账号。<br>绑定后会把当前小程序的对话、生词本与口味记忆<b>合并</b>到该账号，<b>合并不可撤销</b>。', '确认合并', function () {
+          doMerge('phone');
+        }, function () { ACCOUNT.busy = false; });
+      } else {
+        ACCOUNT.phone = ACCOUNT.pendingPhone;
+        ACCOUNT.busy = false;
+        applyAccountState();
+        wxToast('绑定成功');
+      }
+    }, 700);
+  });
+}
+/** 合并：手机号与邮箱共用同一套流程，仅 bindSource 不同（凭证重签、留痕、去重全部复用） */
+function doMerge(source) {
+  var src = source || ACCOUNT.pendingSource || 'phone';
+  wxLoading('合并中…');
+  setTimeout(function () {
+    hideLoading();
+    if (src === 'email') { ACCOUNT.email = ACCOUNT.pendingEmail; ACCOUNT.pendingEmail = ''; }
+    else { ACCOUNT.phone = ACCOUNT.pendingPhone; ACCOUNT.pendingPhone = ''; }
+    ACCOUNT.pendingSource = '';
+    ACCOUNT.busy = false;
+    applyAccountState();
+    if (cur.sub) goBack();
+    /* 真机：合并后凭证重签（sub = 目标账号），旧 token 立即失效 */
+    wxToast('已合并到该账号（凭证已重签）');
+  }, 900);
+}
+
+/* ---------- 绑定邮箱（R3）：与手机号同为打通键，冲突走同一套合并 ---------- */
+function onEmailRow() {
+  if (!ACCOUNT.loggedIn) { wxToast('请先登录'); return; }
+  if (ACCOUNT.email) {
+    showModal('更换邮箱', '更换需要重新验证新邮箱，当前 ' + ACCOUNT.email + ' <b>将被新邮箱替换</b>。', '更换', function () { openBindEmail(); });
+  } else {
+    openBindEmail();
+  }
+}
+function openBindEmail() {
+  $('emailInput').value = '';
+  $('codeInput').value = '';
+  clearErr();
+  $('codeBtn').textContent = '获取验证码';
+  $('codeBtn').classList.remove('off');
+  navigateTo('p-bind-email', '绑定邮箱');
+}
+function clearErr() { $('emailErr').textContent = ''; }
+function sendEmailCode() {
+  var v = ($('emailInput').value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { $('emailErr').textContent = '邮箱格式不正确，请检查'; return; }
+  clearErr();
+  var left = 60, btn = $('codeBtn');
+  btn.classList.add('off');
+  btn.textContent = left + 's 后重发';
+  var timer = setInterval(function () {
+    left -= 1;
+    if (left <= 0) { clearInterval(timer); btn.textContent = '获取验证码'; btn.classList.remove('off'); return; }
+    btn.textContent = left + 's 后重发';
+  }, 1000);
+  wxToast('验证码已发送至 ' + v);
+}
+function submitEmailCode() {
+  var email = ($('emailInput').value || '').trim();
+  var code = ($('codeInput').value || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $('emailErr').textContent = '邮箱格式不正确，请检查'; return; }
+  if (!/^\d{6}$/.test(code)) { $('emailErr').textContent = '请输入 6 位数字验证码'; return; }
+  clearErr();
+  wxLoading('验证中…');
+  setTimeout(function () {
+    hideLoading();
+    /* 演示开关：CONFLICT=true 走「已注册 → 合并」，false 走直接绑定成功 */
+    var CONFLICT = true;
+    ACCOUNT.pendingEmail = maskEmail(email);
+    ACCOUNT.pendingSource = 'email';
+    if (CONFLICT) {
+      showModal('该邮箱已注册', ACCOUNT.pendingEmail + ' 已注册科豆账号。<br>绑定后会把当前小程序的数据<b>合并</b>到该账号，<b>合并不可撤销</b>。', '确认合并', function () {
+        doMerge('email');
+      }, function () { ACCOUNT.busy = false; });
+    } else {
+      ACCOUNT.email = ACCOUNT.pendingEmail;
+      ACCOUNT.pendingEmail = '';
+      ACCOUNT.pendingSource = '';
+      applyAccountState();
+      goBack();
+      wxToast('绑定成功');
+    }
+  }, 700);
+}
+/** 邮箱脱敏：a***@example.com —— 与手机号口径一致，只展示脱敏形式 */
+function maskEmail(e) {
+  var at = e.indexOf('@');
+  if (at <= 0) return e;
+  return e.slice(0, 1) + '***' + e.slice(at);
+}
+/* 异常分支演示：额度不足（errno 1400001）与绑定失败 —— 真机由组件与后端返回决定 */
+function demoQuota() {
+  wxToast('服务暂不可用，请稍后再试');
+}
+function demoBindFail() {
+  showModal('绑定失败', '微信校验未通过或网络异常。<br>请稍后重试；其他功能不受影响。', '重试', function () { requestPhone(); });
+}
+applyAccountState();
+
+/* ---------- AI 记忆 / 生词本：删除 + 补充 + 摘要（原型演示） ---------- */
+function refreshSummary() {
+  var memCount = document.querySelectorAll('#p-memory .mem-item').length;
+  var glossCount = document.querySelectorAll('#p-glossary .gloss-item').length;
+  var tasteCount = document.querySelectorAll('#tasteTags .tag-item:not(.dis)').length;
+  $('memorySummary').textContent = memCount + ' 条 ›';
+  $('glossarySummary').textContent = glossCount + ' 条 ›';
+  $('tasteSummary').textContent = tasteCount ? '已记录 ' + tasteCount + ' 个口味 ›' : '未设置 ›';
+  $('memEmpty').style.display = memCount ? 'none' : 'block';
+  $('glossEmpty').style.display = glossCount ? 'none' : 'block';
+  $('tasteEmpty').style.display = document.querySelectorAll('#tasteTags .tag-item').length ? 'none' : 'block';
+}
+function confirmClearTaste() {
+  openSheet('清空口味记忆', [{ label: '确认清空（AI 将不再按你的口味推荐）' }], function () {
+    Array.prototype.forEach.call(document.querySelectorAll('#tasteTags .tag-item'), function (el) { el.remove(); });
+    refreshSummary();
+    wxToast('已清空口味记忆');
+  });
+}
+function bindDelItem(selector, toastText) {
+  Array.prototype.forEach.call(document.querySelectorAll(selector), function (el) {
+    el.onclick = function () {
+      el.closest('.mem-item, .gloss-item, .tag-item').remove();
+      refreshSummary();
+      wxToast(toastText);
+    };
+  });
+}
+bindDelItem('#p-memory .mem-item [data-del]', '已删除这条记忆');
+bindDelItem('#p-glossary .gloss-item [data-del]', '已移出收藏');
+bindDelItem('#tasteTags .tag-item [data-x]', '已移除该口味');
+$('tasteAdd').onclick = function () {
+  var v = ($('tasteInput').value || '').trim();
+  if (!v) { wxToast('请输入口味关键词'); return; }
+  $('tasteInput').value = '';
+  var el = document.createElement('span');
+  el.className = 'tag-item';
+  el.innerHTML = v + '<i data-x><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></i>';
+  $('tasteTags').appendChild(el);
+  el.querySelector('[data-x]').onclick = function () { el.remove(); refreshSummary(); wxToast('已移除该口味'); };
+  refreshSummary();
+  wxToast('已添加：' + v);
+};
+refreshSummary();
+/* 二级页右上角的动作 */
+/* ---------- 新概念英语（NCE）· 原型状态机 2026-11-06 ----------
+   与真机 M1-M9 / W1-W8 同口径：默认沉浸纯英文、点句出中文、生词就地零跳转、
+   习题读完再展开且 ≤52vh、参考译文默认折叠、三档 + 字号三档。
+   真机持久化走 wx.setStorageSync('nce-mode' / 'nce-font')，原型仅内存态。 */
+var NCE_WORDS = {
+  'private': { ph:'/ˈpraɪvət/', pos:'adj.', def:'私人的；私下的', ex:'A private conversation. 一次私人谈话。' },
+  'loudly':  { ph:'/ˈlaʊdli/', pos:'adv.', def:'大声地', ex:'They were talking loudly. 他们大声地说着话。' }
+};
+function openNce() { nceShow('index'); navigateTo('p-nce', '新概念英语 · NCE2'); }
+function nceShow(v) {
+  $('nce-view-index').classList.toggle('on', v === 'index');
+  $('nce-view-detail').classList.toggle('on', v === 'detail');
+}
+function nceOpenDetail() {
+  nceShow('detail');
+  $('navTitle').textContent = 'Lesson 1';
+  $('p-nce').scrollTop = 0;
+  nceMode('immersion'); nceFont('md');
+  nceCloseEx(); nceToggleFold(true);
+  $('nceWordCard').classList.remove('on');
+}
+function nceBackToIndex() {
+  nceShow('index');
+  $('navTitle').textContent = '新概念英语 · NCE2';
+  $('p-nce').scrollTop = 0;
+}
+function nceToggleLine(el) {
+  if (NCE_MODE === 'bilingual') return;
+  el.classList.toggle('show');
+}
+var NCE_MODE = 'immersion';
+function nceMode(m) {
+  NCE_MODE = m;
+  $('p-nce').dataset.mode = m;
+  Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="mode"]'), function (c) {
+    c.classList.toggle('on', c.dataset.v === m);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#nceLines .nce-line'), function (l) {
+    l.classList.remove('show');
+  });
+  $('nceHint').textContent = m === 'bilingual'
+    ? '双语档：全部中文可见'
+    : '默认纯英文 · 点任意一句才显示该句中文';
+}
+function nceFont(f) {
+  $('p-nce').dataset.font = f;
+  Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="font"]'), function (c) {
+    c.classList.toggle('on', c.dataset.v === f);
+  });
+}
+function nceWord(ev) {
+  ev.stopPropagation();
+  var w = ev.target.textContent.trim().toLowerCase();
+  var d = NCE_WORDS[w];
+  if (!d) return;
+  $('nceW1').innerHTML = w + '<span>' + d.ph + ' · ' + d.pos + '</span>';
+  $('nceW2').textContent = d.def;
+  $('nceW3').textContent = d.ex;
+  $('nceWordCard').classList.add('on');
+}
+function nceOpenEx() {
+  $('nceEx').classList.add('on');
+  $('nceCta').style.display = 'none';
+}
+function nceCloseEx() {
+  $('nceEx').classList.remove('on');
+  $('nceCta').style.display = '';
+}
+function nceAnswer(el, ok) {
+  Array.prototype.forEach.call(document.querySelectorAll('#nceEx .nce-opt'), function (o) {
+    o.classList.remove('ok', 'bad');
+  });
+  el.classList.add(ok ? 'ok' : 'bad');
+  var fb = $('nceFb');
+  fb.classList.add('on');
+  fb.textContent = ok
+    ? '正确。作者生气的原因是身后两人一直大声说话，导致听不见演员台词。'
+    : '再想想：课文说戏本身很有意思，问题出在身后的两个人。';
+}
+function nceToggleFold(forceClose) {
+  var f = $('nceFold');
+  var open = forceClose ? false : !f.classList.contains('open');
+  f.classList.toggle('open', open);
+  $('nceFoldTxt').textContent = open ? '收起' : '展开';
+}
+function nceFilter(v) {
+  var q = (v || '').trim().toLowerCase();
+  var cards = document.querySelectorAll('#nceList .nce-card');
+  var hit = 0;
+  Array.prototype.forEach.call(cards, function (c) {
+    var show = !q || (c.dataset.key || '').indexOf(q) >= 0;
+    c.style.display = show ? '' : 'none';
+    if (show) hit++;
+  });
+  $('nceCount').textContent = hit + ' 课已入库';
+  $('nceEmpty').style.display = hit ? 'none' : '';
+}
+/*
+ * 注：goBack() 的 NCE 分支见下方 —— 详情页返回目录而非直接退回发现 tab，
+ * 保证 W2「返回后 tabBar 高亮仍在发现」且目录态不丢。
+ */
+
+var SUB_ACT = {
+  'p-translate': { text: '设置', fn: function () { navigateTo('p-tr-settings', '语言翻译官设置'); } },
+  'p-assess': { text: '设置', fn: function () { navigateTo('p-as-settings', '合同评估设置'); } }
+};
+
+function navigateTo(id, title) {
+  /* 登录墙守卫：未登录只允许进协议页（合规必读），其余二级页一律拦下 */
+  if (!ACCOUNT.loggedIn && id !== 'p-agreement') { wxToast('请先登录'); return; }
+  cur.sub = id;
+  $(id).classList.add('open');
+  $(id).scrollTop = 0;
+  $('navbar').classList.add('has-back');
+  $('navbar').classList.remove('has-hist'); /* 二级页不显示「对话记录」入口 */
+  $('navTitle').textContent = title || SUB_TITLE[id] || '';
+  var a = SUB_ACT[id];
+  if (a) { $('navAct').textContent = a.text; $('navAct').onclick = a.fn; $('navbar').classList.add('has-act'); }
+  else $('navbar').classList.remove('has-act');
+
+  /* 对话记录：进入时先显示骨架，模拟列表请求完成后再显示列表 */
+  if (id === 'p-history') {
+    var sk = $('hi-skeleton');
+    var lst = $('hi-list');
+    if (sk) sk.style.display = '';
+    if (lst) lst.style.display = 'none';
+    setTimeout(function () {
+      if (sk) sk.style.display = 'none';
+      if (lst) lst.style.display = '';
+    }, 1000);
+  }
+}
+
+/** 打开「对话记录」（由对话页导航栏的「列表」icon 触发） */
+function openHistory() {
+  navigateTo('p-history', '对话记录');
+}
+
+/**
+ * 从记录回到某个会话：关闭二级页 → 回到对话页 → 标出该会话由哪个 agent 作答。
+ * 真机对应：带 conversationId 进对话页并拉取历史消息续聊（GET /agent/conversations/:id）。
+ */
+function resumeConv(title) {
+  /* 从欢迎页「最近对话」卡片点击：先退出欢迎态进入对话页（真机对应 switchTab） */
+  if (!$('welcome').classList.contains('hide')) enterTab('chat');
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  // 对话页**始终**显示返回 icon（此前误写成 remove，导致从记录进入后返回键消失）
+  $('navbar').classList.add('has-back');
+  $('navbar').classList.toggle('has-hist', cur.tab === 'chat');
+  $('navbar').classList.toggle('has-act', cur.tab === 'chat');
+  $('navTitle').textContent = TAB_TITLE[cur.tab || 'chat'];
+  wxToast('已载入会话：' + (title || '').slice(0, 14));
+}
+
+function goBack() {
+  // NCE：详情 view 先回目录 view（单 sub 页，不动 tabBar 高亮）
+  if (cur.sub === 'p-nce' && $('nce-view-detail').classList.contains('on')) {
+    nceBackToIndex(); return;
+  }
+  // 二级页：退回所在 tab 首页（对话页仍显示返回 icon）
+  if (cur.sub) {
+    $(cur.sub).classList.remove('open');
+    cur.sub = null;
+    $('navbar').classList.toggle('has-back', cur.tab === 'chat');
+    $('navbar').classList.toggle('has-hist', cur.tab === 'chat');
+    $('navTitle').textContent = TAB_TITLE[cur.tab];
+    return;
+  }
+  // 对话页无 tabBar，返回 icon = 回欢迎页。
+  // 落点**统一**为欢迎页：无论本次会话是从「开始对话」、记录页还是欢迎页卡片进入的，
+  // 返回都回欢迎页 —— 记录页有自己的返回（原生导航栏）可以退回。
+  if (cur.tab === 'chat') { backWelcome(); return; }
+  $('navbar').classList.remove('has-back');
+}
+function enterTab(tab) {
+  $('phone').classList.remove('welcome-mode');
+  $('welcome').classList.add('hide');
+  switchTab(tab);
+}
+function backWelcome() {
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  $('phone').classList.add('welcome-mode');
+  $('phone').classList.remove('chat-mode');
+  $('welcome').classList.remove('hide');
+  $('navbar').classList.remove('has-back');
+  $('navTitle').textContent = '科豆 AI';
+  $('navbar').classList.remove('has-act');
+  // 欢迎页不是 tab，tabBar 显示但不高亮任何一项
+  Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (x) {
+    x.classList.remove('on');
+  });
+}
+function switchTab(tab) {
+  cur.tab = tab;
+  if (cur.sub) { $(cur.sub).classList.remove('open'); cur.sub = null; }
+  /* 退出欢迎态：从欢迎页点 tabBar 进入时，必须先收起欢迎页覆盖层，
+     否则只有导航栏标题变了、主界面仍停在欢迎页。
+     （真机 wx.switchTab 会自动关闭非 tab 页，无需此步——这是原型模拟的差异） */
+  $('phone').classList.remove('welcome-mode');
+  $('welcome').classList.add('hide');
+  ['chat', 'discover', 'mine'].forEach(function (n) { $('p-' + n).classList.toggle('active', n === tab); });
+  Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (x) {
+    x.classList.toggle('on', x.dataset.t === tab);
+  });
+  $('navTitle').textContent = TAB_TITLE[tab];
+  /* 对话页隐藏 tabBar（沉浸式）→ 顶部补一个返回 icon 回欢迎页 */
+  $('navbar').classList.toggle('has-back', tab === 'chat');
+  $('phone').classList.toggle('chat-mode', tab === 'chat');
+  if (tab === 'chat') {
+    /* 对话页右上角 = 「新建对话」icon（+）：与返回键同为线性 icon、视觉大小一致 */
+    $('navAct').innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M20.5 11.6c0 4.2-3.8 7.6-8.5 7.6-1 0-2-.15-2.9-.44L4 20.5l1.7-4.3C4.3 15 3.5 13.4 3.5 11.6c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6z"/><path d="M12 8.5v6M9 11.5h6"/></svg>';
+    $('navAct').onclick = newChat;
+    $('navbar').classList.add('has-act');
+    /* 「对话记录」入口：仅对话页显示 */
+    $('navbar').classList.add('has-hist');
+  }
+  else { $('navbar').classList.remove('has-act'); $('navbar').classList.remove('has-hist'); }
+  syncNavForAccount();
+  if (tab !== 'chat') $('p-' + tab).scrollTop = 0;
+}
+function openApp(name) {
+  if (name === 'translate') navigateTo('p-translate', '语言翻译官');
+  else navigateTo('p-assess', '合同评估');
+}
+
+/* ---------- 对话 ---------- */
+function now() { var d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function addMsg(who, cn, en) {
+  var box = $('msgs');
+  var el = document.createElement('div');
+  el.className = 'msg ' + who;
+  el.innerHTML =
+    '<div class="av">' + (who === 'ai' ? '豆' : '橙') + '</div>' +
+    '<div class="bd"><div class="bub">' + cn + (en ? '<span class="en">' + en + '</span>' : '') + '</div>' +
+    '<div class="meta">' + (who === 'ai' ? '内容由 AI 生成 · ' : '') + now() + '</div></div>';
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  return el;
+}
+function onType() { $('sendBtn').classList.toggle('on', $('cinp').value.trim().length > 0); }
+function send() {
+  var v = $('cinp').value.trim();
+  if (!v) { wxToast('说点什么吧'); return; }
+  $('cinp').value = ''; onType();
+  addMsg('me', v);
+  var sugs = $('sugs'); if (sugs) { sugs.parentNode.removeChild(sugs); }
+  setTimeout(function () { ask(v, true); }, 420);
+}
+function ask(q, fromInput) {
+  if (!fromInput) { addMsg('me', q); var s = $('sugs'); if (s) { s.parentNode.removeChild(s); } }
+  var r = REPLY[q] || REPLY['default'];
+  var el = addMsg('ai', '');
+  var bub = el.querySelector('.bub');
+  /* loading 中间态：先显示「正在思考」动点，再切逐字输出（状态矩阵的 loading 态） */
+  bub.innerHTML = '正在思考<span class="tdots"><i></i><i></i><i></i></span>';
+  setTimeout(function () { typeIn(bub, r.cn, r.en); }, 600);
+}
+function typeIn(el, text, en) {
+  el.textContent = ''; var i = 0;
+  var t = setInterval(function () {
+    el.textContent = text.slice(0, ++i);
+    $('msgs').scrollTop = $('msgs').scrollHeight;
+    if (i >= text.length) {
+      clearInterval(t);
+      if (en) { var s = document.createElement('span'); s.className = 'en'; s.textContent = en; el.appendChild(s); $('msgs').scrollTop = $('msgs').scrollHeight; }
+    }
+  }, 18);
+}
+function showIntentBadge(name){enterTab('chat');var m=$('msgs');var b=document.createElement('div');b.className='agent-badge';b.innerHTML='<span class="ab-dot"></span>'+name+' 作答';m.insertBefore(b,m.firstChild);revealPhone();}
+function showLoadingBubble(){enterTab('chat');var m=$('msgs');var d=document.createElement('div');d.className='msg ai';d.innerHTML='<div class="av">豆</div><div class="bd"><div class="bub loading">正在载入…</div></div>';m.appendChild(d);m.scrollTop=m.scrollHeight;revealPhone();}
+
+function newChat() {
+  // 新会话首屏 = 统一欢迎语（不再是「今日一句」）：用户没开始对话时，先给一句稳定的招呼
+  $('msgs').innerHTML =
+    '<div class="msg ai"><div class="av">豆</div><div class="bd">' +
+    '<div class="bub">' + WELCOME_GREETING + '</div>' +
+    '<div class="meta">内容由 AI 生成 · ' + now() + '</div></div></div>' +
+    '<div class="sugs" id="sugs">' +
+    '<span onclick="ask(\'帮我翻一句话\')">帮我翻一句话</span>' +
+    '<span onclick="ask(\'看看合同风险\')">看看合同风险</span>' +
+    '<span onclick="ask(\'今天该做什么\')">今天该做什么</span></div>';
+  wxToast('已开启新对话');
+}
+
+/* ---------- 翻译 ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="reg"], .chip[data-g="sty"]'), function (c) {
+  c.addEventListener('click', function () {
+    var g = c.dataset.g;
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="' + g + '"]'), function (x) { x.classList.remove('on'); });
+    c.classList.add('on');
+    if (g === 'reg') cur.reg = c.textContent; else cur.sty = c.textContent;
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="ct"]'), function (c) {
+  c.addEventListener('click', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('.chip[data-g="ct"]'), function (x) { x.classList.remove('on'); });
+    c.classList.add('on');
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('.chip[data-multi="1"]'), function (c) {
+  c.addEventListener('click', function () { c.classList.toggle('on'); });
+});
+
+function swap() { var a = cur.src; cur.src = cur.tgt; cur.tgt = a; $('langA').textContent = cur.src; $('langB').textContent = cur.tgt; }
+function pickLang(which) {
+  openSheet('选择' + (which === 'src' ? '源语言' : '目标语言'),
+    LANGS.map(function (l) { return { label: l, on: (which === 'src' ? cur.src : cur.tgt) === l }; }),
+    function (v) { if (which === 'src') { cur.src = v; $('langA').textContent = v; } else { cur.tgt = v; $('langB').textContent = v; } });
+}
+
+$('inp').addEventListener('input', function () {
+  var n = this.value.length;
+  if (n > 500) { this.value = this.value.slice(0, 500); n = 500; }
+  $('cnt').textContent = n;
+  $('go').classList.toggle('dis', n === 0);
+});
+function doPaste() {
+  $('inp').value = DEMO[0].src; $('cnt').textContent = DEMO[0].src.length;
+  $('go').classList.remove('dis'); $('pastebar').style.display = 'none';
+  wxToast('已粘贴剪贴板内容');
+}
+Array.prototype.forEach.call(document.querySelectorAll('.samples .s'), function (s) {
+  s.addEventListener('click', function () {
+    $('inp').value = DEMO[+s.dataset.s].src;
+    $('cnt').textContent = DEMO[+s.dataset.s].src.length;
+    $('go').classList.remove('dis');
+  });
+});
+function pick(text) {
+  for (var i = 0; i < DEMO.length; i++) if (DEMO[i].src === text) return DEMO[i];
+  return { src: text, literal: '（演示）Literal version here.', natural: '（演示）Natural, idiomatic translation appears here.', polite: '（演示）Softer version here.', notes: '原型内置三句示例的完整效果，自由输入走演示文案。' };
+}
+function doTranslate() {
+  var text = $('inp').value.trim();
+  if (!text) { wxToast('先输入内容'); return; }
+  if (cur.src === cur.tgt) { wxToast('源语言和目标语言不能相同'); return; }
+  var d = pick(text);
+  $('rSrc').textContent = d.src; $('rSrcLang').textContent = cur.src;
+  $('rTag').textContent = cur.reg + ' · ' + cur.sty + ' · ' + cur.src + '→' + cur.tgt;
+  $('rLiteral').textContent = d.literal;
+  $('rPolite').textContent = d.polite;
+  $('rNotes').textContent = d.notes;
+  $('fold').classList.remove('open'); $('foldTxt').textContent = '展开';
+  navigateTo('p-tr-result');
+  /* 中间态：结果卡片内先显示「翻译中」动点，随后 typeIn 逐字输出——
+     补齐状态矩阵的 loading 态（原先这 950ms 结果卡片是空白，只有全局 toast） */
+  $('rNatural').innerHTML = '翻译中<span class="tdots"><i></i><i></i><i></i></span>';
+  setTimeout(function () { typeIn($('rNatural'), d.natural); }, 950);
+}
+function toggleFold() {
+  var f = $('fold'); var open = !f.classList.contains('open');
+  f.classList.toggle('open', open);
+  $('foldTxt').textContent = open ? '收起' : '展开';
+  if (open) wxToast('按需生成：展开才请求模型');
+}
+
+/* ---------- 合同评估 ---------- */
+function runAssess() {
+  wxLoading('识别与评估中…');
+  setTimeout(function () { hideLoading(); showAssessResult(); }, 1100);
+}
+function showAssessResult() { navigateTo('p-as-result'); }
+
+/* ---------- tabBar ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('.tabbar .tb'), function (tb) {
+  tb.addEventListener('click', function () { switchTab(tb.dataset.t); });
+});
+
+/* ---------- 主题 ---------- */
+function toggleTheme() {
+  var dark = document.body.dataset.theme === 'dark';
+  document.body.dataset.theme = dark ? 'light' : 'dark';
+  $('themeVal').textContent = (dark ? '浅色' : '深色') + ' ›';
+}
+
+(function tick() {
+  var d = new Date();
+  $('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  setTimeout(tick, 20000);
+})();
+
+/* 初始化：navAct 默认指向新对话 */
+$('navAct').textContent = '新对话';
+$('navAct').onclick = newChat;
+
+/* 初始化：欢迎页「最近对话」骨架 → 真实卡片。
+   两段请求（列表 + 详情）在这里合并模拟为一次 1.2s 的加载态展示。 */
+setTimeout(function () {
+  var sk = $('wr-skeleton');
+  var card = $('wr-card');
+  if (sk) sk.style.display = 'none';
+  if (card) card.style.display = '';
+}, 1200);
+</script>
+</body>
+</html>

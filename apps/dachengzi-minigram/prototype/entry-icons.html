@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>科豆 AI · 欢迎页入口 · 简单 icon 四变体</title>
+<style>
+  :root {
+    --nav-bg:#FFFFFF; --nav-text:#000;
+    --page-bg:#F7F4F0; --card:#FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1:#10131A; --t3: rgba(60,60,67,.34);
+    --brand:#F97316; --brand-soft:#FFE7D1; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#D6F1EB;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+  }
+  * { box-sizing:border-box; -webkit-font-smoothing:antialiased; }
+  html,body { margin:0; padding:0; }
+  body { background:#EDEAE5; color:var(--t1); padding:28px 28px 40px;
+         font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif; line-height:1.6; }
+  .head { text-align:center; margin-bottom:24px; }
+  .head h1 { font-size:19px; font-weight:700; margin:0 0 6px; letter-spacing:-.2px; }
+  .head p { margin:0; font-size:12.5px; color:rgba(60,60,67,.62); }
+  .head p b { color:var(--brand-txt); font-weight:500; }
+  .grid { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+
+  .col { width:390px; flex:none; }
+  .cap { text-align:center; margin-bottom:12px; }
+  .cap b { font-size:14px; font-weight:600; }
+  .cap span { display:block; font-size:11.5px; color:rgba(60,60,67,.55); margin-top:2px; }
+
+  .phone { width:390px; height:812px; background:var(--page-bg); border-radius:46px;
+           position:relative; overflow:hidden; box-shadow:var(--shadow); border:1px solid var(--line);
+           display:flex; flex-direction:column; }
+  .wxbar { height:44px; flex:none; display:flex; align-items:flex-end; justify-content:space-between; padding:0 18px 5px; font-size:13px; font-weight:600; }
+  .wxbar .sig { display:flex; gap:3px; align-items:flex-end; height:11px; }
+  .wxbar .sig i { width:3px; background:var(--t1); border-radius:1px; display:block; }
+  .wxbar .bat { width:25px; height:12px; border:1px solid var(--t1); border-radius:3.5px; position:relative; opacity:.9; }
+  .wxbar .bat::after { content:""; position:absolute; inset:1.5px; width:70%; background:var(--t1); border-radius:1.5px; }
+  .navbar { height:44px; flex:none; position:relative; display:flex; align-items:center; justify-content:center; background:var(--nav-bg); border-bottom:.5px solid var(--line); }
+  .navbar .title { font-size:17px; font-weight:600; }
+  .capsule { position:absolute; right:7px; width:87px; height:32px; border-radius:16px; background:rgba(255,255,255,.86); border:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-around; }
+  .capsule .dots { display:flex; gap:2.5px; }
+  .capsule .dots i { width:4px; height:4px; border-radius:50%; background:var(--nav-text); display:block; }
+  .capsule .circle { width:17px; height:17px; border:1.4px solid var(--nav-text); border-radius:50%; position:relative; }
+  .capsule .circle::after { content:""; position:absolute; left:50%; top:50%; width:2.2px; height:5.5px; border-radius:1px; background:var(--nav-text); transform:translate(-50%,-62%); }
+  .capsule .sep { width:.5px; height:18px; background:rgba(0,0,0,.08); }
+
+  .screen { flex:1; display:flex; flex-direction:column; padding:0 28px 24px; overflow:hidden; }
+  .w-group { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .w-top { padding-bottom:44px; }
+  .w-hello { font-size:54px; font-weight:600; line-height:1; letter-spacing:-1.8px; }
+  .w-hello i { font-style:normal; color:var(--brand); }
+  .w-sub { margin-top:15px; font-size:13.5px; color:var(--t3); letter-spacing:.3px; }
+  .w-foot { padding-top:20px; }
+  .claim { font-size:10.5px; color:var(--t3); line-height:1.8; }
+
+  /* ============ F1｜并排圆标 ============ */
+  .F1 .w-entry { display:flex; gap:34px; justify-content:center; }
+  .F1 .e { text-align:center; }
+  .F1 .e .ic { width:78px; height:78px; border-radius:28px; margin:0 auto 13px; display:flex; align-items:center; justify-content:center; }
+  .F1 .e.a .ic { background:var(--brand-soft); }
+  .F1 .e.b .ic { background:var(--accent-soft); }
+  .F1 .e .ic svg { width:34px; height:34px; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .F1 .e.a .ic svg { stroke:var(--brand); }
+  .F1 .e.b .ic svg { stroke:var(--accent); }
+  .F1 .e b { font-size:14.5px; font-weight:500; letter-spacing:.2px; }
+
+  /* ============ F2｜图标 + 标题（无说明） ============ */
+  .F2 .w-entry { display:flex; flex-direction:column; gap:18px; }
+  .F2 .e { display:flex; align-items:center; gap:17px; }
+  .F2 .e .ic { width:52px; height:52px; border-radius:18px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .F2 .e.a .ic { background:var(--brand-soft); }
+  .F2 .e.b .ic { background:var(--accent-soft); }
+  .F2 .e .ic svg { width:25px; height:25px; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .F2 .e.a .ic svg { stroke:var(--brand); }
+  .F2 .e.b .ic svg { stroke:var(--accent); }
+  .F2 .e b { font-size:20px; font-weight:600; letter-spacing:-.2px; }
+
+  /* ============ F3｜图标 + 标题 + 箭头 ============ */
+  .F3 .w-entry { display:flex; flex-direction:column; }
+  .F3 .e { display:flex; align-items:center; gap:16px; padding:19px 0; }
+  .F3 .e + .e { border-top:1px solid rgba(60,60,67,.10); }
+  .F3 .e .ic { width:46px; height:46px; border-radius:16px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .F3 .e.a .ic { background:var(--brand-soft); }
+  .F3 .e.b .ic { background:var(--accent-soft); }
+  .F3 .e .ic svg { width:22px; height:22px; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .F3 .e.a .ic svg { stroke:var(--brand); }
+  .F3 .e.b .ic svg { stroke:var(--accent); }
+  .F3 .e b { font-size:18.5px; font-weight:600; letter-spacing:-.1px; flex:1; }
+  .F3 .e .go { color:var(--t3); font-size:17px; line-height:1; }
+
+  /* ============ F4｜并排大图标（实心渐变） ============ */
+  .F4 .w-entry { display:flex; gap:48px; justify-content:center; }
+  .F4 .e { text-align:center; }
+  .F4 .e .ic { width:88px; height:88px; border-radius:30px; margin:0 auto 15px; display:flex; align-items:center; justify-content:center; position:relative; }
+  .F4 .e.a .ic { background:linear-gradient(145deg,#FFAE63 0%,#F97316 55%,#E2650B 100%); box-shadow:0 12px 26px -10px rgba(249,115,22,.55); }
+  .F4 .e.b .ic { background:linear-gradient(145deg,#48C7B8 0%,#0E9B8C 55%,#0A8073 100%); box-shadow:0 12px 26px -10px rgba(14,155,140,.5); }
+  .F4 .e .ic::after { content:""; position:absolute; left:15px; top:11px; width:30px; height:13px; border-radius:50%; background:rgba(255,255,255,.42); filter:blur(3px); }
+  .F4 .e .ic svg { width:38px; height:38px; fill:none; stroke:#fff; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; position:relative; }
+  .F4 .e b { font-size:15px; font-weight:600; letter-spacing:.3px; }
+
+  @media (max-width: 880px) {
+    body { padding:16px 6px 30px; }
+    .grid { gap:30px; }
+    .col { zoom: .85; }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>入口 · 简单 icon 四变体</h1>
+  <p>砍掉说明文字、卡片、装饰，只留图标本身。<b>选一个，我落进原型。</b></p>
+</div>
+
+<div class="grid">
+
+  <!-- ============ F1 ============ -->
+  <div class="col">
+    <div class="cap"><b>F1｜并排圆标</b><span>两个大圆并排，下方一行名称 · 最像 App 首屏</span></div>
+    <div class="phone F1">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <b>翻译</b>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <b>合同</b>
+            </div>
+          </div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ F2 ============ -->
+  <div class="col">
+    <div class="cap"><b>F2｜图标 + 标题</b><span>纵向两行，大图标 + 大字 · 无卡片无说明，最干净</span></div>
+    <div class="phone F2">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <b>AI 翻译</b>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <b>合同评估</b>
+            </div>
+          </div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ F3 ============ -->
+  <div class="col">
+    <div class="cap"><b>F3｜图标 + 标题 + 箭头</b><span>F2 加一条细线与箭头 · 保留一点"可进入"的暗示</span></div>
+    <div class="phone F3">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <b>AI 翻译</b>
+              <span class="go">›</span>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <b>合同评估</b>
+              <span class="go">›</span>
+            </div>
+          </div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ F4 ============ -->
+  <div class="col">
+    <div class="cap"><b>F4｜并排大图标（实心渐变）</b><span>F1 加强版：图标放大到 94px、实心渐变、带光晕 · 视觉重量最足</span></div>
+    <div class="phone F4">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <b>翻译</b>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <b>合同</b>
+            </div>
+          </div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
