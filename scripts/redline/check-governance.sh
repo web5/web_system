@@ -1,0 +1,386 @@
+#!/usr/bin/env bash
+# ============================================================================
+# check-governance.sh — 五层闸门健康检查（薄编排 / A6 / #8577）
+#
+# 形态：不重写体检逻辑。复用 scripts/redline/ 下已有 741 行三脚本
+#       （selfcheck-ui-gate.sh / test-gate-hardening.sh / mutation-test.sh），
+#       本文件只做「挂载关系 + 生效判定 + 分层汇总 + 退出码契约」。
+# 规格：30-任务产物/2026-11-09-五层治理SOP落地跟进/03-五层闸门自检-规格与派单.md
+#       §2 三条硬约束 / §3 五层检查项 / §4 退出码与输出契约
+#
+# 用法：
+#   npm run check:governance                 # 巡检/默认档：轻量，秒级，只读
+#   npm run check:governance -- --json      # 同上，JSON 输出供 automation 消费
+#   npm run check:governance -- --full      # 手动/验收档：追加三脚本 + 黄金用例实跑
+#
+# 分档理由（2026-11-09 实测）：三脚本单跑 selfcheck 18s / test-gate-hardening 86s，
+#   全套 >2min；mutation-test.sh 会临时改写 scan-rules.sh 再还原，被强杀会留下
+#   未还原的实现改动。默认档必须保持只读且秒级，否则每日 16:00 巡检会污染工作树。
+#
+# 硬约束：
+#   1) 判「生效」不判「存在」：存在 + 可解析/可执行 + 挂载关系 + 关键门实跑/实读
+#   2) 禁止写死存量数字：specs / *.spec.ts / worktree 数量只输出，不设阈值
+#   3) 任一 FAIL → exit 1，且每条 FAIL 必须给可执行的修复命令
+#
+# CHECK_GOV_LEDGER / CHECK_GOV_WORKFLOW 是**变异验证注入点**（默认指向真源），
+#   用于在不改动共享台账与 CI 文件的前提下验证 FAIL 判定确实生效。
+# ============================================================================
+set -uo pipefail
+
+TOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" || exit 1
+cd "$TOP" || exit 1
+export CODEBUDDY_PROJECT_DIR="$TOP"
+
+BIN="$TOP/scripts/redline"
+JSON=0
+FULL=0
+for a in "$@"; do
+  case "$a" in
+    --json) JSON=1 ;;
+    --full) FULL=1 ;;
+    -h|--help) sed -n '2,32p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) printf '未知参数: %s（可用 --json / --full / --help）\n' "$a" >&2; exit 2 ;;
+  esac
+done
+
+# ---- 真源路径（本机专用：本脚本要检查用户级 hook / 台账 / 保护状态） ----
+LEDGER="${CHECK_GOV_LEDGER:-$HOME/AiWorkspace/30-任务产物/_待验证清单.md}"
+WORKFLOW="${CHECK_GOV_WORKFLOW:-$TOP/.github/workflows/quality-gate.yml}"
+SDD_SOP="$HOME/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md"
+THREE_TABLES="$HOME/AiWorkspace/20-私域资产/AI协作交付规范-表格化收尾.md"
+USER_SETTINGS="$HOME/.workbuddy/settings.json"
+USER_HOOK="$HOME/.workbuddy/hooks/session-cost-gate.py"
+PROTECT="$HOME/AiWorkspace/90-工具/保护.sh"
+HOME_AW="$HOME/AiWorkspace"
+
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/gov-check.XXXXXX")" || exit 1
+trap 'rm -rf "$TMP"' EXIT
+REC="$TMP/records.tsv"    # FAIL: level \t layer \t item \t fix
+WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
+: > "$REC"; : > "$WARNF"
+
+LABEL[1]='①'; NAME[1]='意图锚定'
+LABEL[2]='②'; NAME[2]='验证契约'
+LABEL[3]='③'; NAME[3]='执行隔离'
+LABEL[4]='④'; NAME[4]='约束强制'
+LABEL[5]='⑤'; NAME[5]='人机协作'
+L=1
+DETAIL[1]=''; DETAIL[2]=''; DETAIL[3]=''; DETAIL[4]=''; DETAIL[5]=''
+
+fail() { printf 'FAIL\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$REC"; return 0; }
+warn() { printf 'WARN\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$WARNF"; return 0; }
+add()  { [ -z "${DETAIL[$L]}" ] && DETAIL[$L]="$1" || DETAIL[$L]="${DETAIL[$L]}, $1"; }
+
+# mode: file | dir | exec | any
+need() {
+  local p="$1" desc="$2" fix="$3" mode="${4:-file}" ok=0
+  case "$mode" in
+    dir)  [ -d "$p" ] && ok=1 ;;
+    exec) [ -f "$p" ] && [ -x "$p" ] && ok=1 ;;
+    any)  [ -e "$p" ] && ok=1 ;;
+    *)    [ -f "$p" ] && ok=1 ;;
+  esac
+  if [ "$ok" -ne 1 ]; then fail "$desc → $p" "$fix"; return 1; fi
+  return 0
+}
+
+need_json() {
+  local p="$1" desc="$2" fix="$3"
+  [ -f "$p" ] || { fail "$desc → $p 不存在" "$fix"; return 1; }
+  if node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$p" >/dev/null 2>&1; then
+    return 0
+  fi
+  fail "$desc 不可解析（JSON 损坏）" "$fix"; return 1
+}
+
+# gates.yaml 不是标准 YAML（含未加引号的 @，PyYAML 会直接拒），
+# 项目用自带的 lib/yaml-mini.ts 解析。真「生效」判据 = gates-lint.ts 自检器实跑：
+# 它既解析声明，又校验 gates.yaml ↔ bash 的接线漂移（CI gate-cases job 同款命令）。
+need_gates_lint() {
+  [ -f "$BIN/gates.yaml" ] || { fail "gates.yaml 缺失" "恢复 scripts/redline/gates.yaml"; return 1; }
+  [ -f "$BIN/gates-lint.ts" ] || { fail "gates-lint.ts 缺失" "恢复 scripts/redline/gates-lint.ts"; return 1; }
+  if node "$BIN/gates-lint.ts" >"$TMP/gates-lint.log" 2>&1; then return 0; fi
+  fail "gates-lint.ts 实跑非零（gates.yaml 与 bash 接线漂移，或 Node 不支持原生 TS）" \
+       "node scripts/redline/gates-lint.ts 查看漂移项；以 bash 为准改 gates.yaml；本机需 Node ≥22"
+  return 1
+}
+
+need_pkg_script() {
+  local key="$1"
+  if node -e 'const p=require(process.argv[1]); process.exit(p.scripts&&p.scripts[process.argv[2]]?0:1)' \
+      "$TOP/package.json" "$key" >/dev/null 2>&1; then return 0; fi
+  fail "package.json 缺 script 键 $key" "在根 package.json 的 scripts 段补回 \"$key\""
+  return 1
+}
+
+# 按 jobs: 块解析 job 名（不全文 grep，避免把 on: 下的事件名当成 job）
+ci_jobs() {
+  awk '
+    /^jobs:[[:space:]]*$/ { inj=1; next }
+    inj && /^[^[:space:]#]/ { inj=0 }
+    inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { line=$0; gsub(/[:[:space:]]/,"",line); print line }
+  ' "$WORKFLOW"
+}
+need_job() {
+  local j="$1"
+  if ci_jobs | grep -qx "$j"; then return 0; fi
+  fail "CI job 缺失: ${j}（job 被改名或删掉是静默失效高发点）" \
+       "检查 .github/workflows/quality-gate.yml 的 jobs 段，补回 $j"
+  return 1
+}
+
+# ============================ ① 意图锚定层 ============================
+L=1
+SPECS_N=0
+if [ -d "$TOP/specs" ]; then SPECS_N=$(find "$TOP/specs" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' '); fi
+[ "$SPECS_N" -gt 0 ] || fail "specs/ 为空或不存在" "恢复 specs/ 规格目录（数量只输出，不设阈值）"
+need "$TOP/scripts/audit-specs.mjs" "规格门禁脚本" "恢复 scripts/audit-specs.mjs" file
+if node --check "$TOP/scripts/audit-specs.mjs" >/dev/null 2>&1; then :; else
+  fail "audit-specs.mjs 不可解析" "node --check scripts/audit-specs.mjs 定位语法错误并修复"
+fi
+need_pkg_script 'check:specs'
+need_pkg_script 'specs:index:check'
+# 关键门实跑
+if npm run check:specs --silent >"$TMP/check-specs.log" 2>&1; then
+  add "check:specs exit 0"
+else
+  fail "关键门实跑 npm run check:specs 非零" "npm run check:specs 查看违规明细并修复"
+fi
+need_job 'specs-gate'
+need "$SDD_SOP" "规格驱动开发 SDD-SOP 真源" "恢复 ~/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md" file
+if [ -d "$TOP/docs/decisions" ]; then add "ADR 落点在"; else
+  warn "docs/decisions/ 未建（已知缺口 A5 / #8605，按规格不计 FAIL）" "见台账 #8605，由研发部落地 ADR 仓库目录"
+fi
+add "specs=$SPECS_N"
+
+# ============================ ② 验证契约层 ============================
+L=2
+need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
+need_pkg_script 'test:e2e:list'
+need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
+     "恢复 servers/ai-agent/e2e/contract-risk/README.md" file
+FIX_N=0
+[ -d "$TOP/servers/ai-agent/e2e/contract-risk/fixtures" ] && \
+  FIX_N=$(find "$TOP/servers/ai-agent/e2e/contract-risk/fixtures" -type f | wc -l | tr -d ' ')
+[ "$FIX_N" -gt 0 ] || fail "eval harness golden fixtures 为空" \
+  "补回 servers/ai-agent/e2e/contract-risk/fixtures/ 下的黄金用例"
+need_job 'changed-packages'
+need_job 'gate-cases'
+need "$TOP/scripts/ci/changed-packages.sh" "改动包选择器" \
+     "chmod +x scripts/ci/changed-packages.sh" exec
+need "$BIN/cases/run.sh" "黄金用例集 run.sh" "chmod +x scripts/redline/cases/run.sh" exec
+need "$BIN/cases/shadow.sh" "黄金用例集 shadow.sh" "chmod +x scripts/redline/cases/shadow.sh" exec
+SPEC_N=$(find . -path ./.git -prune -o -path ./node_modules -prune -o -name '*.spec.ts' -type f -print 2>/dev/null | wc -l | tr -d ' ')
+add "harness fixtures=$FIX_N / spec=${SPEC_N}（仅信息）"
+
+# ============================ ③ 执行隔离层 ============================
+L=3
+if need_json "$TOP/.codebuddy/settings.json" "项目级 hook 配置" \
+    "恢复 .codebuddy/settings.json 并保证 JSON 可解析"; then
+  if node -e '
+    const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const all=JSON.stringify(s.hooks||{});
+    process.exit(all.includes("hook-worktree-gate.py")?0:1);
+  ' "$TOP/.codebuddy/settings.json" >/dev/null 2>&1; then add "worktree hook 挂载"; else
+    fail ".codebuddy/settings.json 未挂载 hook-worktree-gate.py" \
+         "在 hooks.PreToolUse[].hooks[] 补回 python3 .../scripts/redline/hook-worktree-gate.py"
+  fi
+fi
+# python hook 由解释器调用，按「可解析」口径判生效（不要求 +x）
+if [ -f "$BIN/hook-worktree-gate.py" ]; then
+  if python3 -m py_compile "$BIN/hook-worktree-gate.py" >/dev/null 2>&1; then :; else
+    fail "hook-worktree-gate.py 不可解析" "python3 -m py_compile scripts/redline/hook-worktree-gate.py 定位错误"
+  fi
+else
+  fail "守卫脚本 hook-worktree-gate.py 缺失" "恢复 scripts/redline/hook-worktree-gate.py"
+fi
+WT_N=$(git worktree list 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
+[ -n "$WT_N" ] || fail "git worktree list 不可用" "检查 git 仓库完整性（git worktree list）"
+BRANCH="$(git branch --show-current 2>/dev/null)"
+[ -n "$BRANCH" ] || fail "git branch --show-current 无返回" "检查当前是否处于 detached HEAD 或仓库损坏"
+# roster 是 gitignored 的本地状态，CI / 新 worktree 必然没有 → 只做信息项，不 WARN
+ROSTER_N=0
+[ -d "$TOP/.agent-roster" ] && ROSTER_N=$(find "$TOP/.agent-roster" -maxdepth 1 -type f | wc -l | tr -d ' ')
+if [ -d "$TOP/.agent-roster" ] && [ "$WT_N" -gt 0 ] && [ $((WT_N - ROSTER_N)) -gt 3 ]; then
+  warn "roster=$ROSTER_N 与 worktree=$WT_N 差值过大（roster 允许滞后，不判 FAIL）" \
+       "清理退出的会话：git worktree prune 并同步 .agent-roster/"
+  add "roster 差值 $((WT_N - ROSTER_N))"
+else
+  add "roster=${ROSTER_N}（仅信息）"
+fi
+add "hooks 挂载 / worktree=$WT_N / branch=$BRANCH"
+
+# ============================ ④ 约束强制层 ============================
+L=4
+# 最易静默失效的一项：hooksPath 被改掉时，脚本存在也照样绿
+HP="$(git config --get core.hooksPath 2>/dev/null || true)"
+if [ "$HP" = ".githooks" ]; then add "hooksPath=.githooks"; else
+  fail "core.hooksPath='${HP:-<空>}'（应为 .githooks）" "git config core.hooksPath .githooks"
+fi
+need "$TOP/.githooks/pre-commit" "pre-commit hook" "chmod +x .githooks/pre-commit 并恢复文件" exec
+need "$BIN/scan-rules.sh" "红线扫描器" "恢复 scripts/redline/scan-rules.sh" file
+need_gates_lint && add "gates-lint 实跑通过"
+need "$BIN/gate.ts" "gate.ts" "恢复 scripts/redline/gate.ts" file
+need "$BIN/gates-lint.ts" "gates-lint.ts" "恢复 scripts/redline/gates-lint.ts" file
+JOBS='redline-scan pipeline-lint changed-packages deliverables-check gate-cases proto-static-check specs-gate'
+JOB_N=0
+for j in $JOBS; do need_job "$j" && JOB_N=$((JOB_N+1)); done
+add "$JOB_N/7 CI job 齐"
+if need_json "$USER_SETTINGS" "用户级 hook settings" \
+    "恢复 ~/.workbuddy/settings.json 顶层 hooks"; then
+  if node -e '
+    const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
+    const a=(s.hooks&&s.hooks.PreToolUse)||[];
+    process.exit(a.length>0?0:1);
+  ' "$USER_SETTINGS" >/dev/null 2>&1; then :; else
+    fail "用户级 hooks.PreToolUse 为空" "在 ~/.workbuddy/settings.json 顶层 hooks.PreToolUse 补回门禁"
+  fi
+fi
+need "$USER_HOOK" "用户级会话成本门禁" "恢复 ~/.workbuddy/hooks/session-cost-gate.py" exec
+# 等价快速判定（实测 0.3s）：保护.sh status 的「可写」= 权限 != 444，
+#   list_files() 覆盖三个受保护目录 + 根 README.md / AGENTS.md。
+#   完整 status 逐文件 ls -l 实测 31s，巡检档不跑；--full 里跑一次做判据交叉校验。
+P_N=0
+for d in "$HOME_AW/00-总控台" "$HOME_AW/10-主线工作" "$HOME_AW/20-私域资产"; do
+  [ -d "$d" ] && P_N=$((P_N + $(find "$d" -type f ! -perm 444 2>/dev/null | wc -l | tr -d ' ')))
+done
+for f in "$HOME_AW/README.md" "$HOME_AW/AGENTS.md"; do
+  [ -f "$f" ] && [ "$(stat -f '%Lp' "$f" 2>/dev/null)" != "444" ] && P_N=$((P_N+1))
+done
+if [ "$P_N" -eq 0 ]; then add "保护=只读"; else
+  warn "保护状态：可写文件 ${P_N} 个（非 0 不判 FAIL；常见为 16:00 日报幂等解锁的两个看板生成物）" \
+       "确认无人在改真源后运行 bash ~/AiWorkspace/90-工具/保护.sh on"
+fi
+if [ "$FULL" -eq 1 ] && [ -f "$PROTECT" ]; then
+  FULL_N="$(bash "$PROTECT" status 2>/dev/null | grep -oE '可写文件：[0-9]+' | grep -oE '[0-9]+' | tail -1)"
+  [ "${FULL_N:-?}" = "$P_N" ] || \
+    fail "保护状态快速判定($P_N) 与 保护.sh status(${FULL_N:-?}) 不一致" \
+         "同步 check-governance.sh 的保护口径与 ~/AiWorkspace/90-工具/保护.sh 的 list_files/status"
+fi
+# 薄编排接线：三脚本存在 + 可执行位 + npm 入口挂载（实跑放 --full）
+SELFTESTS='selfcheck-ui-gate.sh test-gate-hardening.sh mutation-test.sh'
+for s in $SELFTESTS; do
+  need "$BIN/$s" "自检脚本 $s" "chmod +x scripts/redline/$s" exec
+done
+need_pkg_script 'check:governance'
+if [ "$FULL" -eq 1 ]; then
+  # 工作树守护：mutation-test.sh 靠 trap 还原被它故意改坏的实现；若进程被强杀，
+  #   trap 不执行就会留下变异态实现（2026-11-09 实测两次：scan-rules.sh / gate-shared.sh）。
+  #   跑前记下所有已有改动，跑后凡是「新增」的已跟踪文件改动一律还原并判 FAIL。
+  SNAP="$TMP/tracked-before.txt"
+  git diff --name-only HEAD > "$SNAP" 2>/dev/null || : > "$SNAP"
+  gov_restore_guard() {
+    local f
+    for f in $(git diff --name-only HEAD 2>/dev/null); do
+      grep -qxF "$f" "$SNAP" 2>/dev/null || git restore --source=HEAD -- "$f" 2>/dev/null
+    done
+  }
+  trap 'gov_restore_guard; rm -rf "$TMP"' EXIT
+  FULL_OK=0
+  for s in $SELFTESTS; do
+    if bash "$BIN/$s" >"$TMP/$s.log" 2>&1; then FULL_OK=$((FULL_OK+1)); else
+      fail "--full 实跑 $s 非零" "bash scripts/redline/$s 查看失败用例（日志摘要见 --json 的 fails）"
+    fi
+  done
+  if bash "$BIN/cases/run.sh" >"$TMP/cases-run.log" 2>&1; then :; else
+    fail "--full 实跑 cases/run.sh 非零" "bash scripts/redline/cases/run.sh 查看失败用例"
+  fi
+  if bash "$BIN/cases/shadow.sh" >"$TMP/cases-shadow.log" 2>&1; then :; else
+    fail "--full 实跑 cases/shadow.sh 非零" "bash scripts/redline/cases/shadow.sh 查看失败用例"
+  fi
+  LEFTOVER=""
+  for f in $(git diff --name-only HEAD 2>/dev/null); do
+    grep -qxF "$f" "$SNAP" 2>/dev/null || LEFTOVER="$LEFTOVER $f"
+  done
+  if [ -n "$LEFTOVER" ]; then
+    fail "--full 后工作树出现预期外改动:$LEFTOVER（变异脚本未还原，已自动还原）" \
+         "排查 scripts/redline/mutation-test.sh 的 restore_all；被强杀会漏还原，须在隔离 worktree 跑"
+    gov_restore_guard
+  fi
+  add "--full 自检 $FULL_OK/3 通过"
+else
+  add "三脚本接线 3/3（实跑用 --full）"
+fi
+
+# ============================ ⑤ 人机协作层 ============================
+L=5
+if [ -f "$LEDGER" ]; then
+  [ -w "$LEDGER" ] || fail "台账被锁成只读（登记率会归零）" "chmod u+w $LEDGER"
+  DUP="$(grep -oE '^\| [0-9]+ \|' "$LEDGER" | tr -d '| ' | sort -n | uniq -d | head -5 | tr '\n' ' ')"
+  DUP="$(printf '%s' "$DUP" | sed 's/[[:space:]]*$//')"
+  if [ -n "$DUP" ]; then
+    fail "台账重号: ${DUP}（回执会落不到唯一一条）" "合并重复编号行：grep -nE '^\\| ($(printf '%s' "$DUP" | tr ' ' '|')) ' $LEDGER"
+  else
+    add "台账可写 / 无重号"
+  fi
+else
+  fail "台账不存在 → $LEDGER" "恢复 30-任务产物/_待验证清单.md（唯一入口）"
+fi
+need "$THREE_TABLES" "三表化交付规范真源" \
+     "恢复 ~/AiWorkspace/20-私域资产/AI协作交付规范-表格化收尾.md" file
+
+# ============================ 汇总与输出 ============================
+N_FAIL=$(awk -F'\t' '$1=="FAIL"' "$REC" | wc -l | tr -d ' ')
+N_WARN=$(awk -F'\t' '$1=="WARN"' "$WARNF" | wc -l | tr -d ' ')
+[ "$N_FAIL" -gt 0 ] && EXIT_CODE=1 || EXIT_CODE=0
+STAMP="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+
+if [ "$JSON" -eq 1 ]; then
+  GOV_REC="$REC" GOV_WARN="$WARNF" GOV_EXIT="$EXIT_CODE" GOV_STAMP="$STAMP" \
+  GOV_D1="${DETAIL[1]}" GOV_D2="${DETAIL[2]}" GOV_D3="${DETAIL[3]}" \
+  GOV_D4="${DETAIL[4]}" GOV_D5="${DETAIL[5]}" GOV_FULL="$FULL" \
+  python3 <<'PY'
+import os, json
+rec, warn = os.environ['GOV_REC'], os.environ['GOV_WARN']
+names = ['意图锚定','验证契约','执行隔离','约束强制','人机协作']
+labels = ['①','②','③','④','⑤']
+def load(p):
+    out=[]
+    with open(p, encoding='utf-8') as f:
+        for line in f:
+            parts=line.rstrip('\n').split('\t')
+            if len(parts)>=4 and parts[0] in ('FAIL','WARN'):
+                out.append(dict(level=parts[0], layer=parts[1], item=parts[2], fix=parts[3]))
+    return out
+fails, warns = load(rec), load(warn)
+layers=[]
+for i in range(1,6):
+    fs=[x for x in fails if x['layer']==str(i)]
+    ws=[x for x in warns if x['layer']==str(i)]
+    layers.append(dict(id=i, label=labels[i-1], name=names[i-1],
+                       status='FAIL' if fs else 'OK',
+                       detail=os.environ.get('GOV_D%d'%i,''),
+                       fails=fs, warnings=ws))
+print(json.dumps(dict(
+    script='check-governance', timestamp=os.environ['GOV_STAMP'],
+    mode='full' if os.environ['GOV_FULL']=='1' else 'quick',
+    exitCode=int(os.environ['GOV_EXIT']),
+    summary=dict(fail=len(fails), warn=len(warns)),
+    layers=layers,
+    fails=fails,
+    warnings=warns,
+), ensure_ascii=False, indent=2))
+PY
+else
+  for i in 1 2 3 4 5; do
+    ST=OK
+    awk -F'\t' -v l="$i" '$1=="FAIL" && $2==l {found=1} END{exit found?0:1}' "$REC" && ST=FAIL
+    WN=$(awk -F'\t' -v l="$i" '$1=="WARN" && $2==l' "$WARNF" | wc -l | tr -d ' ')
+    printf '%s %-6s %-4s (%s)' "${LABEL[$i]}" "${NAME[$i]}" "$ST" "${DETAIL[$i]}"
+    [ "$WN" -gt 0 ] && printf '  [WARN %s]' "$WN"
+    printf '\n'
+  done
+  printf -- '--\n'
+  if [ "$N_FAIL" -gt 0 ]; then
+    awk -F'\t' '$1=="FAIL"{
+      printf "FAIL %s · %s\n", $2, $3;
+      if ($4 != "") printf "  → 修复: %s\n", $4
+    }' "$REC"
+  fi
+  if [ "$N_WARN" -gt 0 ]; then
+    awk -F'\t' '$1=="WARN"{ printf "WARN %s · %s\n", $2, $3 }' "$WARNF"
+  fi
+  printf 'FAIL: %s  WARN: %s  → exit %s\n' "$N_FAIL" "$N_WARN" "$EXIT_CODE"
+fi
+
+exit "$EXIT_CODE"
