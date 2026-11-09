@@ -22,8 +22,9 @@
 #   2) 禁止写死存量数字：specs / *.spec.ts / worktree 数量只输出，不设阈值
 #   3) 任一 FAIL → exit 1，且每条 FAIL 必须给可执行的修复命令
 #
-# CHECK_GOV_LEDGER / CHECK_GOV_WORKFLOW 是**变异验证注入点**（默认指向真源），
-#   用于在不改动共享台账与 CI 文件的前提下验证 FAIL 判定确实生效。
+# 变异验证注入点（默认指向真源，用于不改共享文件即可验证 FAIL 判定确实生效）：
+#   CHECK_GOV_LEDGER→台账  CHECK_GOV_WORKFLOW→CI 文件
+#   CHECK_GOV_PKG→package.json（F4 值校验变异）  CHECK_GOV_E2E_CMD→② 层实跑命令（F3 变异）
 # ============================================================================
 set -uo pipefail
 
@@ -46,6 +47,10 @@ done
 # ---- 真源路径（本机专用：本脚本要检查用户级 hook / 台账 / 保护状态） ----
 LEDGER="${CHECK_GOV_LEDGER:-$HOME/AiWorkspace/30-任务产物/_待验证清单.md}"
 WORKFLOW="${CHECK_GOV_WORKFLOW:-$TOP/.github/workflows/quality-gate.yml}"
+PKG="${CHECK_GOV_PKG:-$TOP/package.json}"
+# F11：workflow 可读性只算一次；不可读时不调 awk → 不泄漏 stderr、不把「不可读」误报成「N 个 job 全缺」
+WF_OK=0
+if [ -f "${WORKFLOW}" ] && [ -r "${WORKFLOW}" ]; then WF_OK=1; fi
 SDD_SOP="$HOME/AiWorkspace/20-私域资产/规格驱动开发SDD-SOP.md"
 THREE_TABLES="$HOME/AiWorkspace/20-私域资产/AI协作交付规范-表格化收尾.md"
 USER_SETTINGS="$HOME/.workbuddy/settings.json"
@@ -58,6 +63,73 @@ trap 'rm -rf "$TMP"' EXIT
 REC="$TMP/records.tsv"    # FAIL: level \t layer \t item \t fix
 WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 : > "$REC"; : > "$WARNF"
+
+# F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
+#   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
+#   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用。
+#   超时判据 = **双信号一致**，且两信号由不同主体产生：
+#     ① 退出码 250 —— 由 perl 包装器退；② 标记文件 —— 由 perl 判定到点后写。
+#   且 perl 支**不装任何信号 handler**，超时只由父进程自己的时钟判定（waitpid WNOHANG 50ms 轮询）：
+#     · 命令自己 `exit 250` → 没有标记 → 判红（挡「自报哨兵码」）
+#     · 命令给 perl 投 SIGALRM → 没有 handler，perl 直接被 142 打死 → 142≠250 → 判红
+#       （挡「投信号冒充超时」；若装了 handler，外部 ALRM 与 alarm 到期在信号层不可区分，只能靠等候≥4s 区分）
+#   对照废弃过的三版：① 单看 rc=142 → 命令 `exit 142` 即冒充满时；② 单看「命令自己写的完成标记」
+#     → `exit` 会吞掉标记行，与「被杀」同形；③ 单 rc=250 哨兵 → 命令 `exit 250` 即满时。
+#     都只靠单一信号或单一主体，故都能被一个动作洗白。
+#   E2E_TIMEOUT_KIND / E2E_TIMEOUT_CODE 记录闸门种类与该种闸门的**主**超时码
+#     （perl→250 / timeout·gtimeout→124；kind=none 留空 → 任何 rc 都不当超时）。
+#   残余（记录不修）：timeout/gtimeout 支写不出标记，只能单看 rc=124 —— 命令自己 `exit 124`
+#     可伪造，但不判红（降级），仅影响「无 perl 的环境」；macOS/主流 CI 有 perl，走不到那一支。
+E2E_LOG="${TMP}/e2e-list.log"
+E2E_RUN="${TMP}/e2e-run.sh"
+E2E_TIMEOUT_FLAG="${TMP}/e2e.timeout"
+E2E_CMD="${CHECK_GOV_E2E_CMD:-npm run test:e2e:list --silent}"
+E2E_TIMEOUT_KIND="none"
+E2E_TIMEOUT_CODE=""
+if command -v perl >/dev/null 2>&1; then
+  E2E_TIMEOUT_KIND="perl";    E2E_TIMEOUT_CODE=250
+elif command -v timeout >/dev/null 2>&1; then
+  E2E_TIMEOUT_KIND="timeout"; E2E_TIMEOUT_CODE=124
+elif command -v gtimeout >/dev/null 2>&1; then
+  E2E_TIMEOUT_KIND="gtimeout"; E2E_TIMEOUT_CODE=124
+fi
+# 被测命令落独立脚本（不用 sh -c "…${E2E_CMD}…" 拼串，避开命令内含引号时炸裂）
+rm -f "${E2E_TIMEOUT_FLAG}"
+printf '%s\n' "${E2E_CMD}" > "${E2E_RUN}"
+(
+  case "${E2E_TIMEOUT_KIND}" in
+    perl)
+      perl -e '
+        my $t = shift; my $flag = shift;
+        my $t0 = time; my $timedout = 0;
+        my $pid = fork;
+        exit 127 unless defined $pid;
+        if (!$pid) { exec @ARGV; exit 127 }
+        # 不装任何信号 handler：超时只由**父进程自己的时钟**判定。
+        # 这样「外部投递 SIGALRM」既不能冒充超时（没有 handler，直接把 perl 打死 → 128+14=142 ≠ 250），
+        # 也不会像 handler 方案那样被迫等到 ≥4s 才能区分。
+        while (1) {
+          my $got = waitpid($pid, 1);            # 1 = WNOHANG
+          if ($got == $pid) { last }             # 子进程自己结束
+          if (time - $t0 >= $t) {                # 父级时钟说到点了
+            $timedout = 1;
+            kill "TERM", $pid;
+            waitpid($pid, 0);
+            last;
+          }
+          select(undef, undef, undef, 0.05);     # 50ms 轮询，CPU 开销可忽略
+        }
+        my $r = $?;
+        if ($timedout) { open(my $fh, ">", $flag) or exit 251; close($fh); exit 250 }
+        my $sig = $r & 127;
+        exit($sig ? 128 + $sig : ($r >> 8));
+      ' 5 "${E2E_TIMEOUT_FLAG}" sh "${E2E_RUN}" ;;
+    timeout)  timeout 5 sh "${E2E_RUN}" ;;
+    gtimeout) gtimeout 5 sh "${E2E_RUN}" ;;
+    *)        sh "${E2E_RUN}" ;;
+  esac
+) >"${E2E_LOG}" 2>&1 &
+E2E_PID=$!
 
 LABEL[1]='①'; NAME[1]='意图锚定'
 LABEL[2]='②'; NAME[2]='验证契约'
@@ -105,27 +177,99 @@ need_gates_lint() {
   return 1
 }
 
+# F4（14 号 §4.2）：不只判 scripts[key] truthy，还判「值是否指向目标脚本」——
+#   每个键对应一个目标脚本文件名子串；值须包含该子串，且子串命中的那个 token 指向的文件须存在。
+#   只判「包含子串」，不逐字比对整条命令（允许 --silent/--check 等参数）。CHECK_GOV_PKG 仅作变异注入点。
 need_pkg_script() {
-  local key="$1"
-  if node -e 'const p=require(process.argv[1]); process.exit(p.scripts&&p.scripts[process.argv[2]]?0:1)' \
-      "$TOP/package.json" "$key" >/dev/null 2>&1; then return 0; fi
-  fail "package.json 缺 script 键 $key" "在根 package.json 的 scripts 段补回 \"$key\""
-  return 1
+  local key="${1}" target="" line code detail val
+  case "${key}" in
+    check:specs)       target="audit-specs.mjs" ;;
+    specs:index:check) target="gen-specs-index.mjs" ;;
+    test:e2e:list)     target="playwright.config.ts" ;;
+    check:governance)  target="check-governance.sh" ;;
+    *)                 # G3：未知键若静默放过，target 为空会让 node 侧 `if (target && …)` 短路成 OK（假绿）
+                       fail "内部错误：受检键 ${key} 未配目标子串映射（need_pkg_script 的 case 缺分支）" \
+                            "在 need_pkg_script 的 case 里为该键补 target 映射"; return 1 ;;
+  esac
+  line="$(node -e '
+    const fs=require("fs"), path=require("path");
+    const pkg=process.argv[1], key=process.argv[2], top=process.argv[3], target=process.argv[4];
+    let v;
+    try { v=(JSON.parse(fs.readFileSync(pkg,"utf8")).scripts||{})[key]; }
+    catch(e){ process.stdout.write("BAD_JSON||"); process.exit(0); }
+    if (typeof v!=="string" || !v.trim()) { process.stdout.write("MISSING||"); process.exit(0); }
+    if (target && v.indexOf(target)<0) { process.stdout.write("NOT_TARGET|"+target+"|"+v); process.exit(0); }
+    const toks=v.trim().split(/\s+/);
+    const hit = target ? toks.find(t=>t.indexOf(target)>=0) : null;
+    if (hit && hit.charAt(0)!=="-" && !fs.existsSync(path.resolve(top,hit))) { process.stdout.write("MISS_FILE|"+hit+"|"+v); process.exit(0); }
+    process.stdout.write("OK||"+v);
+  ' "${PKG}" "${key}" "${TOP}" "${target}" 2>/dev/null)"
+  IFS='|' read -r code detail val <<< "${line}"
+  case "${code}" in
+    OK) return 0 ;;
+    BAD_JSON) fail "package.json 不可解析 → ${PKG}" "node -e 'JSON.parse(require(\"fs\").readFileSync(\"${PKG}\",\"utf8\"))' 定位 JSON 语法错误"; return 1 ;;
+    MISSING) fail "package.json 缺 script 键 ${key}（键不存在或值为空）" "在根 package.json（${PKG}）的 scripts 段补回 \"${key}\""; return 1 ;;
+    NOT_TARGET) fail "package.json 的 ${key} 未指向 ${detail}（现值: ${val}）" "在根 package.json 的 scripts 补回 \"${key}\": \"…${detail}…\""; return 1 ;;
+    MISS_FILE) fail "package.json 的 ${key} 指向的 ${detail} 文件不存在（现值: ${val}）" "恢复 ${detail} 对应文件，或修正根 package.json 的 scripts.${key}"; return 1 ;;
+    *) fail "package.json 的 ${key} 值校验异常（node 无输出）" "检查根 package.json 的 scripts.${key}"; return 1 ;;
+  esac
 }
 
 # 按 jobs: 块解析 job 名（不全文 grep，避免把 on: 下的事件名当成 job）
+#   WF_OK=0 时不调用 awk → 不泄漏 stderr、不把「不可读」误报成「N 个 job 全缺」（F11）
 ci_jobs() {
+  [ "${WF_OK}" -eq 1 ] || return 0
   awk '
     /^jobs:[[:space:]]*$/ { inj=1; next }
     inj && /^[^[:space:]#]/ { inj=0 }
     inj && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { line=$0; gsub(/[:[:space:]]/,"",line); print line }
-  ' "$WORKFLOW"
+  ' "${WORKFLOW}" 2>/dev/null
+}
+# F2：判 job 是否「真会执行」——输出每 job 一行 <job> <if恒假:0|1> <has_steps:0|1> <steps非空:0|1>
+#   只解析 jobs: 块（job 名 2 空格 / job 级键 4 空格 / step 列表项 6 空格，与 ci_jobs 同一约定）。
+#   恒假 if 用严格白名单匹配（false/0/-0/0.0/null/''/""，含 ${{ }} 包装），
+#   合法条件表达式（含 github./==/contains 等）一律不命中 → 不误阻断。
+ci_job_health() {
+  [ "${WF_OK}" -eq 1 ] || return 0
+  awk '
+    function trim(s){ gsub(/^[[:space:]]+/,"",s); gsub(/[[:space:]]+$/,"",s); return s }
+    function is_false(v,  t){
+      v=trim(v)
+      if (index(v,"#")>0) return 0
+      if (substr(v,1,3)=="${{" && substr(v,length(v)-1,2)=="}}") { t=substr(v,4,length(v)-5); v=trim(t) }
+      return (v=="false"||v=="FALSE"||v=="False"||v=="0"||v=="-0"||v=="0.0"||v=="null"||v=="NULL"||v=="Null"||v=="\047\047"||v=="\"\"")
+    }
+    function emit(){ if (cur!="") printf "%s %d %d %d\n", cur, iffalse, hassteps, stepsok }
+    /^jobs:[[:space:]]*$/ { inj=1; next }
+    inj && /^[^[:space:]#]/ { inj=0 }
+    inj {
+      line=$0
+      if (line ~ /^[[:space:]]*$/ || line ~ /^[[:space:]]*#/) next
+      ind=0; n=length(line)
+      for (k=1;k<=n;k++){ if (substr(line,k,1)==" ") ind++; else break }
+      if (ind==2 && line ~ /^  [A-Za-z0-9_-]+:[[:space:]]*$/) {
+        emit()
+        cur=line; sub(/^  /,"",cur); sub(/[[:space:]]*:[[:space:]]*$/,"",cur)
+        iffalse=0; hassteps=0; stepsok=0; in_steps=0
+        next
+      }
+      if (ind==4) {
+        in_steps=0
+        if (line ~ /^    if:/) { v=line; sub(/^    if:[[:space:]]*/,"",v); if (is_false(v)) iffalse=1 }
+        if (line ~ /^    steps:/) { hassteps=1; in_steps=1 }
+        next
+      }
+      if (ind>=6 && in_steps==1 && line ~ /^      -[[:space:]]/) stepsok=1
+    }
+    END { emit() }
+  ' "${WORKFLOW}" 2>/dev/null
 }
 need_job() {
-  local j="$1"
-  if ci_jobs | grep -qx "$j"; then return 0; fi
+  local j="${1}"
+  [ "${WF_OK}" -eq 1 ] || return 0
+  if ci_jobs | grep -qx "${j}"; then return 0; fi
   fail "CI job 缺失: ${j}（job 被改名或删掉是静默失效高发点）" \
-       "检查 .github/workflows/quality-gate.yml 的 jobs 段，补回 $j"
+       "检查 ${WORKFLOW} 的 jobs 段，补回 ${j}"
   return 1
 }
 
@@ -157,6 +301,40 @@ add "specs=$SPECS_N"
 L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
+# F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
+#   rc=0 → PASS；真超时 = 双信号一致（rc=250 且 perl 判定到点后写了标记）→ 等价降级不判 FAIL；
+#   其余 rc 一律 FAIL（含「命令自报 250／给 perl 投 SIGALRM」两种伪造：前者无标记、后者 perl 被 142 打死）。
+E2E_RC=0
+wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
+# G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN + detail，不静默、不阻断）
+if [ "${E2E_TIMEOUT_KIND}" = "none" ]; then
+  warn "test:e2e:list：无 perl/timeout，5s 闸门未生效（rc=${E2E_RC}，仅裸跑无超时保护）" \
+       "安装 perl 或 coreutils 的 timeout/gtimeout 以启用 F3 5s 超时闸门（当前非阻断）"
+  add "无超时工具，闸门未生效（无 perl/timeout/gtimeout）"
+fi
+if [ "${E2E_RC}" -eq 0 ]; then
+  add "test:e2e:list --list 实跑 exit 0"
+elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ] && [ -f "${E2E_TIMEOUT_FLAG}" ]; then
+  # 真超时：双信号一致（perl 退 250 + perl 在自己的时钟到点后写的标记）→ 等价降级（§4.1.1）
+  if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
+    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+  else
+    fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
+         "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
+  fi
+elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
+     && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ] && [ "${E2E_TIMEOUT_CODE}" -ne 250 ]; then
+  # timeout/gtimeout 支写不出标记，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
+  if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
+    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+  else
+    fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
+         "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
+  fi
+else
+  fail "关键门实跑 test:e2e:list --list 非零（rc=${E2E_RC}）" \
+       "npm run test:e2e:list --silent 查看错误；确认 tests/playwright.config.ts 可解析、playwright 依赖在位"
+fi
 need "$TOP/servers/ai-agent/e2e/contract-risk/README.md" "唯一 eval harness README" \
      "恢复 servers/ai-agent/e2e/contract-risk/README.md" file
 FIX_N=0
@@ -194,8 +372,16 @@ if [ -f "$BIN/hook-worktree-gate.py" ]; then
 else
   fail "守卫脚本 hook-worktree-gate.py 缺失" "恢复 scripts/redline/hook-worktree-gate.py"
 fi
-WT_N=$(git worktree list 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
-[ -n "$WT_N" ] || fail "git worktree list 不可用" "检查 git 仓库完整性（git worktree list）"
+# F1：判 `git worktree list` 的**退出码**——
+#   旧实现 `[ -n "$WT_N" ]` 判 wc -l 的输出字符串，空输入恒返回 "0"（非空）→ FAIL 分支永不触发。
+WT_OUT="$(git worktree list 2>/dev/null)"; WT_RC=$?
+if [ "${WT_RC}" -ne 0 ]; then
+  WT_N=0
+  fail "git worktree list 不可用（rc=${WT_RC}，会话自发现失效）" \
+       "检查 git 仓库完整性：git worktree list 查看报错；确认 .git 完整"
+else
+  WT_N=$(printf '%s\n' "${WT_OUT}" | tail -n +2 | wc -l | tr -d ' ')
+fi
 BRANCH="$(git branch --show-current 2>/dev/null)"
 if [ -z "$BRANCH" ]; then
   # CI checkout / 临时验收 worktree 默认就是 detached HEAD，属合法形态
@@ -235,9 +421,34 @@ need_gates_lint && add "gates-lint 实跑通过"
 need "$BIN/gate.ts" "gate.ts" "恢复 scripts/redline/gate.ts" file
 need "$BIN/gates-lint.ts" "gates-lint.ts" "恢复 scripts/redline/gates-lint.ts" file
 JOBS='redline-scan pipeline-lint changed-packages deliverables-check gate-cases proto-static-check specs-gate'
-JOB_N=0
-for j in $JOBS; do need_job "$j" && JOB_N=$((JOB_N+1)); done
-add "$JOB_N/7 CI job 齐"
+if [ "${WF_OK}" -ne 1 ]; then
+  # F11：不可读只报一条明确 FAIL（不再逐 job 误报 N 条），fix 带实际注入路径
+  fail "CI workflow 不可读: ${WORKFLOW}（job 生效判定无法进行，不再逐 job 误报）" \
+       "ls -l ${WORKFLOW}；确认注入文件存在且可读：${WORKFLOW}"
+  add "CI job 检查跳过（workflow 不可读）"
+else
+  JOB_N=0
+  for j in ${JOBS}; do need_job "${j}" && JOB_N=$((JOB_N+1)); done
+  # F2：白名单内逐个 job 判「真会执行」——恒假 if: / steps: 缺失或为空 → FAIL ④
+  JOB_HEALTH="${TMP}/job-health.tsv"
+  ci_job_health > "${JOB_HEALTH}" 2>/dev/null
+  while read -r _hbj _iffalse _hassteps _stepsok; do
+    [ -z "${_hbj}" ] && continue
+    case " ${JOBS} " in *" ${_hbj} "*) : ;; *) continue ;; esac
+    if [ "${_iffalse:-0}" = "1" ]; then
+      fail "CI job ${_hbj} 被 job 级恒假 if 禁用（CI 上永不执行，闸门被悄悄关掉）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后删除其 job 级 'if: false'，或改成合法条件如 if: github.event_name == 'push'"
+    fi
+    if [ "${_hassteps:-0}" = "1" ]; then
+      [ "${_stepsok:-0}" = "1" ] || fail "CI job ${_hbj} 的 steps: 为空（job 体被掏空）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后给 steps: 补回至少一个 '      - run: …' 或 '      - uses: …'"
+    else
+      fail "CI job ${_hbj} 缺 steps:（job 无可执行步骤）" \
+           "grep -n -A8 '^  ${_hbj}:' ${WORKFLOW} 定位后补回 '    steps:' 及至少一个步骤"
+    fi
+  done < "${JOB_HEALTH}"
+  add "$JOB_N/7 CI job 齐 / job 级 if:·steps: 已判生效"
+fi
 if need_json "$USER_SETTINGS" "用户级 hook settings" \
     "恢复 ~/.workbuddy/settings.json 顶层 hooks"; then
   if node -e '
