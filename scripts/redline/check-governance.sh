@@ -138,6 +138,7 @@ LABEL[4]='④'; NAME[4]='约束强制'
 LABEL[5]='⑤'; NAME[5]='人机协作'
 L=1
 DETAIL[1]=''; DETAIL[2]=''; DETAIL[3]=''; DETAIL[4]=''; DETAIL[5]=''
+L2_INC=0   # ② 层降级=未判定（INCONCLUSIVE）：超时把「命令没跑完」伪装成「验过了」时，禁止报 OK
 
 fail() { printf 'FAIL\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$REC"; return 0; }
 warn() { printf 'WARN\t%s\t%s\t%s\n' "$L" "$1" "${2:-}" >> "$WARNF"; return 0; }
@@ -302,7 +303,7 @@ L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
 # F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
-#   rc=0 → PASS；真超时 = **只有父级时钟到点**（perl 支 rc=250）→ 等价降级不判 FAIL；
+#   rc=0 → PASS；真超时 = **只有父级时钟到点**（perl 支 rc=250）→ 未判定（INCONCLUSIVE）不判 FAIL；
 #   其余 rc 一律 FAIL（含 `exit 250`：子进程自报 250 由 perl 改写成 251，落不进降级支；
 #   含给 perl 投 SIGALRM：没装 handler，perl 被打死 → 142）。
 E2E_RC=0
@@ -316,9 +317,12 @@ fi
 if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
 elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ]; then
-  # 真超时：父级时钟到点 → 等价降级（§4.1.1）。250 是父级独占码，命令自报已被改写成 251。
+  # 真超时：父级时钟到点 → 未判定（§4.1.1）。250 是父级独占码，命令自报已被改写成 251。
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
-    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+    L2_INC=1
+    warn "test:e2e:list 超时降级：未真跑完，判「未判定」" \
+         "高负载下 E2E 可能被 5s 闸门 TERM，真失败被掩盖；确认本轮 E2E 是否由 --full/CI 真跑兜底"
+    add "未判定（超时降级：E2E 未真跑完）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
@@ -327,7 +331,10 @@ elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
      && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ]; then
   # timeout/gtimeout 支没有父级时钟，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
-    add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
+    L2_INC=1
+    warn "test:e2e:list 超时降级：未真跑完，判「未判定」" \
+         "高负载下 E2E 可能被 5s 闸门 TERM，真失败被掩盖；确认本轮 E2E 是否由 --full/CI 真跑兜底"
+    add "未判定（超时降级：E2E 未真跑完）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
@@ -557,7 +564,7 @@ STAMP="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 if [ "$JSON" -eq 1 ]; then
   GOV_REC="$REC" GOV_WARN="$WARNF" GOV_EXIT="$EXIT_CODE" GOV_STAMP="$STAMP" \
   GOV_D1="${DETAIL[1]}" GOV_D2="${DETAIL[2]}" GOV_D3="${DETAIL[3]}" \
-  GOV_D4="${DETAIL[4]}" GOV_D5="${DETAIL[5]}" GOV_FULL="$FULL" \
+  GOV_D4="${DETAIL[4]}" GOV_D5="${DETAIL[5]}" GOV_FULL="$FULL" GOV_INC="$L2_INC" \
   python3 <<'PY'
 import os, json
 rec, warn = os.environ['GOV_REC'], os.environ['GOV_WARN']
@@ -572,12 +579,13 @@ def load(p):
                 out.append(dict(level=parts[0], layer=parts[1], item=parts[2], fix=parts[3]))
     return out
 fails, warns = load(rec), load(warn)
+inc = os.environ.get('GOV_INC','0') == '1'
 layers=[]
 for i in range(1,6):
     fs=[x for x in fails if x['layer']==str(i)]
     ws=[x for x in warns if x['layer']==str(i)]
     layers.append(dict(id=i, label=labels[i-1], name=names[i-1],
-                       status='FAIL' if fs else 'OK',
+                       status='FAIL' if fs else ('INCONCLUSIVE' if (i==2 and inc) else 'OK'),
                        detail=os.environ.get('GOV_D%d'%i,''),
                        fails=fs, warnings=ws))
 print(json.dumps(dict(
@@ -594,6 +602,7 @@ else
   for i in 1 2 3 4 5; do
     ST=OK
     awk -F'\t' -v l="$i" '$1=="FAIL" && $2==l {found=1} END{exit found?0:1}' "$REC" && ST=FAIL
+    [ "$L2_INC" -eq 1 ] && [ "$i" -eq 2 ] && [ "$ST" = "OK" ] && ST="未判定"
     WN=$(awk -F'\t' -v l="$i" '$1=="WARN" && $2==l' "$WARNF" | wc -l | tr -d ' ')
     printf '%s %-6s %-4s (%s)' "${LABEL[$i]}" "${NAME[$i]}" "$ST" "${DETAIL[$i]}"
     [ "$WN" -gt 0 ] && printf '  [WARN %s]' "$WN"
