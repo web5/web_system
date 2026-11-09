@@ -1,0 +1,25 @@
+<!-- 设置：4 段 5 项，全部真生效（无置灰、无占位） -->
+<view class="page {{radiusClass}}">
+  <view class="sec-t">外观</view>
+  <view class="list">
+    <view class="r" bindtap="pickRadius"><text>圆角风格</text><text class="v">{{radiusText}} ›</text></view>
+  </view>
+
+  <view class="sec-t">存储</view>
+  <view class="list">
+    <view class="r" bindtap="clearCache"><text>清除缓存</text><text class="v">{{cacheText}} ›</text></view>
+  </view>
+
+  <view class="sec-t">关于</view>
+  <view class="list">
+    <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
+    <view class="r" bindtap="goAbout"><text>关于与免责</text><text class="v">›</text></view>
+  </view>
+
+  <view class="sec-t">账号</view>
+  <view class="list">
+    <view class="r" bindtap="logout"><text>退出登录</text><text class="v">›</text></view>
+  </view>
+
+  <view class="foot">这里的设置影响整个小程序</view>
+</view>

@@ -1,0 +1,101 @@
+<view class="page {{radiusClass}}">
+  <!-- 转发缩略图离屏 canvas：白底译文，onShareAppMessage 取临时文件 -->
+  <canvas id="share-canvas" type="2d" class="share-canvas"></canvas>
+
+  <view class="srcbox" wx:if="{{!fromShare}}">
+    <text class="k">原文</text>
+    <text class="v">{{source}}</text>
+  </view>
+
+  <view class="res">
+    <view class="tags"><text class="tag">推荐</text><text class="meta">{{meta}}</text></view>
+
+    <!-- 失败态：明确原因 + 唯一恢复入口（重试）；原文不丢，仍显示在上方卡片 -->
+    <view wx:if="{{failed}}" class="failbox">
+      <view class="ft">翻译失败</view>
+      <view class="fr">{{failReason}}</view>
+      <view class="fa">
+        <text class="retry" bindtap="retry">重试</text>
+        <text bindtap="goBack">返回</text>
+      </view>
+    </view>
+
+    <!-- 中间态：首个流式分片到达前显示「翻译中」动点 -->
+    <view wx:elif="{{loading}}" class="typing">
+      <text>翻译中</text>
+      <view class="tdots"><view class="tdot"></view><view class="tdot"></view><view class="tdot"></view></view>
+    </view>
+
+    <block wx:else>
+      <view class="txt">{{natural}}</view>
+      <view class="ops">
+        <text bindtap="copy">复制</text>
+        <text class="{{speaking ? 'op-on' : ''}}" bindtap="speak">{{speakLoading ? '请稍候…' : (speaking ? '停止' : '朗读')}}</text>
+        <text bindtap="fav">收藏</text>
+        <!-- 转发：微信原生能力，button 才能拉起转发面板；流式/失败态由 wx:else 整体不渲染 -->
+        <button class="op-share" open-type="share" plain>转发</button>
+        <text bindtap="more">更多</text>
+      </view>
+    </block>
+  </view>
+
+  <!-- 继续追问（A-γ）：同一 conversationId 续聊，不另存会话/历史；
+       仅译文就绪后露出，翻译中 / 失败态 / 转发落地都不显示 -->
+  <view class="fu" wx:if="{{!fromShare && !loading && !failed && natural}}">
+    <view class="fu-hd">
+      <text class="fu-title">继续追问（同一会话）</text>
+    </view>
+
+    <view class="fu-list" wx:if="{{followUps.length > 0}}">
+      <view class="fu-item" wx:for="{{followUps}}" wx:key="id">
+        <view class="fu-q">{{item.q}}</view>
+        <view class="fu-a">
+          <view wx:if="{{item.loading && !item.a}}" class="fu-think">
+            <text>思考中</text>
+            <view class="fu-dots"><view class="fu-dot"></view><view class="fu-dot"></view><view class="fu-dot"></view></view>
+          </view>
+          <text wx:else>{{item.a}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="fu-in">
+      <input
+        class="fu-input"
+        value="{{followUpText}}"
+        placeholder="接着问点什么，比如“再正式一点”"
+        placeholder-class="fu-ph"
+        confirm-type="send"
+        maxlength="200"
+        bindinput="onFollowUpInput"
+        bindconfirm="sendFollowUp"
+      />
+      <view class="fu-send {{followUpText ? 'fu-send-on' : ''}}" bindtap="sendFollowUp">发送</view>
+    </view>
+    <view class="fu-tip">追问和这次翻译是同一条会话，不会另存一条记录</view>
+  </view>
+
+  <view class="fold" wx:if="{{!fromShare}}">
+    <view class="h" bindtap="toggleFold">
+      <text>直译对照 · 委婉版 · 语气要点</text>
+      <text class="act">{{open ? '收起' : '展开'}}</text>
+    </view>
+    <view class="c" wx:if="{{open}}">
+      <view class="m"><view class="k">直译对照</view><view class="v">{{literal}}</view></view>
+      <view class="m"><view class="k">委婉版</view><view class="v">{{polite}}</view></view>
+      <view class="m"><view class="k">语气要点</view><view class="v">{{notes}}</view></view>
+    </view>
+  </view>
+
+  <view class="vip" wx:if="{{!fromShare}}" bindtap="goVip"><text>深度润色（旗舰模型）</text><text>会员 ›</text></view>
+  <view class="rowbtn" wx:if="{{!fromShare}}">
+    <view bindtap="goBack">重新翻译</view>
+    <view bindtap="share">生成分享卡</view>
+  </view>
+  <view class="ai" wx:if="{{!fromShare}}">内容由 AI 生成，仅供参考</view>
+  <!-- 转发落地态：唯一主操作 = 我也要翻译（导流闭环） -->
+  <view class="rowbtn" wx:if="{{fromShare}}">
+    <view bindtap="goBack">我也要翻译</view>
+  </view>
+  <view class="ai" wx:if="{{fromShare}}">来自好友分享</view>
+</view>

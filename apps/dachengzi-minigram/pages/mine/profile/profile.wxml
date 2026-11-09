@@ -1,0 +1,27 @@
+<view class="page {{radiusClass}}">
+  <view class="profile">
+    <view class="avatar">橙</view>
+    <view class="info">
+      <view class="n">{{nickname || '未设置昵称'}}</view>
+      <view class="d" wx:if="{{uid}}">ID: {{uid}}</view>
+    </view>
+  </view>
+
+  <view class="list">
+    <!-- 手机号：微信手机号快速验证（原生组件，必须是 button） -->
+    <button
+      class="r phone-row"
+      open-type="getPhoneNumber"
+      bindgetphonenumber="onGetPhone"
+      hover-class="none"
+    >
+      <text>手机号</text>
+      <text class="v {{phone ? '' : 'bind'}}">{{phone || '未绑定'}} ›</text>
+    </button>
+
+    <!-- 邮箱：自绘绑定页（验证码需要输入框，原生弹窗无法承载） -->
+    <view class="r email-row" bindtap="onEmailTap"><text>邮箱</text><text class="v {{email ? '' : 'bind'}}">{{email || '未绑定'}} ›</text></view>
+  </view>
+
+  <view class="foot">昵称与手机号用于账号识别，可随时更换<text wx:if="{{busy}}"> · 处理中…</text></view>
+</view>

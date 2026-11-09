@@ -1,0 +1,87 @@
+/* ===== 自定义 tabBar =====
+ *
+ * 图标设计：与原型 docs/ui/prototypes/dachengzi-3tab-2026-11-09.html 的 tabBar **同源**
+ * —— 房子 / 罗盘 / 人像 三个线性图标（24 网格、圆头圆角、stroke-width 1.8），
+ * 不用汉字占位、不用彩色块。
+ * 小程序 wxss 不支持内联 svg，故转 base64 由 background-image 承载（源码见
+ * prototype 内的 symbol：#i-home / #i-compass / #i-user）。
+ * 两套配色：未选中 #8A90A0（中性灰，= app.json tabBar.color）。
+ * 选中态 stroke = #2563EB（= app.json tabBar.selectedColor），与文字色一致。
+ *   ⚠️ 2026-11-09 修正：此前选中态是科豆橙遗留色（#C241**，旧值已废弃，勿再用），造成「字蓝图橙」。
+ *   已把 4 个选中态 base64 里的 stroke 统一换成 #2563EB。
+ *   🔴 注意：颜色藏在 base64 内，**明文 grep 色值都查不到**（旧值已打码，完整值见 git 历史），
+ *   核色必须解码 base64 后看 stroke 值，不能只 grep 源码（这一点曾导致
+ *   蓝化改造漏判，务必按解码结果判定）。
+ * .tb-ic-chat 已无 list 项引用（对话页 2026-11-09 起退出 tabBar），保留待清理。
+ */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  background: var(--card, #ffffff);
+  border-top: 1rpx solid var(--line, rgba(60, 60, 67, .12));
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 900;
+}
+
+.tb {
+  flex: 1;
+  height: 100rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 6rpx;
+  box-sizing: content-box;
+}
+
+/* 图标位：44rpx 见方，与文字保持 4rpx 呼吸 */
+.tb-ic {
+  width: 44rpx;
+  height: 44rpx;
+  margin-bottom: 4rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 44rpx 44rpx;
+}
+
+.tb-t {
+  font-size: 20rpx;
+  line-height: 1.2;
+  color: #8a90a0;
+}
+
+.tb.on .tb-t {
+  color: var(--brand-txt, #1D4ED8);
+  font-weight: 600;
+}
+
+/* ---------- 未选中（#8A90A0） ---------- */
+.tb-ic-home {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMy4yIDEwLjYgMTIgMy40bDguOCA3LjIiLz48cGF0aCBkPSJNNS42IDkuNFYyMC4yaDEyLjhWOS40Ii8+PHBhdGggZD0iTTkuOCAyMC4ydi01LjRoNC40djUuNCIvPjwvc3ZnPg==");
+}
+.tb-ic-chat {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAuNSAxMS42YzAgNC4yLTMuOCA3LjYtOC41IDcuNi0xIDAtMi0uMTUtMi45LS40NEw0IDIwLjVsMS43LTQuM0M0LjMgMTUgMy41IDEzLjQgMy41IDExLjZjMC00LjIgMy44LTcuNiA4LjUtNy42czguNSAzLjQgOC41IDcuNnoiLz48L3N2Zz4=");
+}
+.tb-ic-discover {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI4LjYiLz48cGF0aCBkPSJNMTUuNiA4LjRsLTIuMSA1LjEtNS4xIDIuMSAyLjEtNS4xeiIvPjwvc3ZnPg==");
+}
+.tb-ic-mine {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOEE5MEEwIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjgiIHI9IjMuNiIvPjxwYXRoIGQ9Ik00LjUgMjBhNy41IDcuNSAwIDAxMTUgMCIvPjwvc3ZnPg==");
+}
+
+/* ---------- 选中（stroke = #2563EB，与 app.json selectedColor 及文字色一致；见文件头说明） ---------- */
+.tb.on .tb-ic-home {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjU2M0VCIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMy4yIDEwLjYgMTIgMy40bDguOCA3LjIiLz48cGF0aCBkPSJNNS42IDkuNFYyMC4yaDEyLjhWOS40Ii8+PHBhdGggZD0iTTkuOCAyMC4ydi01LjRoNC40djUuNCIvPjwvc3ZnPg==");
+}
+.tb.on .tb-ic-chat {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjU2M0VCIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjAuNSAxMS42YzAgNC4yLTMuOCA3LjYtOC41IDcuNi0xIDAtMi0uMTUtMi45LS40NEw0IDIwLjVsMS43LTQuM0M0LjMgMTUgMy41IDEzLjQgMy41IDExLjZjMC00LjIgMy44LTcuNiA4LjUtNy42czguNSAzLjQgOC41IDcuNnoiLz48L3N2Zz4=");
+}
+.tb.on .tb-ic-discover {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjU2M0VCIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI4LjYiLz48cGF0aCBkPSJNMTUuNiA4LjRsLTIuMSA1LjEtNS4xIDIuMSAyLjEtNS4xeiIvPjwvc3ZnPg==");
+}
+.tb.on .tb-ic-mine {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMjU2M0VCIiBzdHJva2Utd2lkdGg9IjEuOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjgiIHI9IjMuNiIvPjxwYXRoIGQ9Ik00LjUgMjBhNy41IDcuNSAwIDAxMTUgMCIvPjwvc3ZnPg==");
+}

@@ -1,0 +1,25 @@
+<view class="page {{radiusClass}}">
+  <view class="doc">邮箱与手机号一样用于<text class="b">多端账号打通</text>。验证码发送到该邮箱，仅服务端校验，不下发到小程序。</view>
+
+  <view class="sec-t">邮箱</view>
+  <view class="list">
+    <view class="row">
+      <input class="ipt" type="text" placeholder="you@example.com" value="{{email}}" bindinput="onEmailInput" />
+      <view class="sbtn {{countdown > 0 ? 'off' : ''}}" bindtap="onSendCode">
+        {{countdown > 0 ? countdown + 's 后重发' : '获取验证码'}}
+      </view>
+    </view>
+  </view>
+  <view class="err">{{err}}</view>
+
+  <view class="sec-t">验证码</view>
+  <view class="list">
+    <view class="row">
+      <input class="ipt" type="number" placeholder="6 位数字" maxlength="6" value="{{code}}" bindinput="onCodeInput" />
+    </view>
+  </view>
+
+  <view class="btn {{busy ? 'off' : ''}}" bindtap="onSubmit">{{title}}</view>
+
+  <view class="foot">60s 重发限频；验证码 5 分钟内有效，连续错误 5 次作废</view>
+</view>

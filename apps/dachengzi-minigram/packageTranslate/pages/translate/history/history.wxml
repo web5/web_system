@@ -1,0 +1,31 @@
+<view class="page {{radiusClass}}">
+  <!-- 有数据：列表 + 顶部「清空」入口 -->
+  <block wx:if="{{list.length > 0}}">
+    <view class="hd">
+      <text class="hd-t">翻译记录</text>
+      <text class="hd-c" bindtap="clearAll">清空</text>
+    </view>
+    <view class="list">
+      <view class="r" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="open">
+        <view class="rl">
+          <text class="r-title">{{item.title}}</text>
+          <text class="r-sub">{{item.sub}} · {{item.time}}</text>
+        </view>
+        <text class="r-arrow">›</text>
+      </view>
+    </view>
+    <view class="foot">仅本机保留，最多 50 条</view>
+  </block>
+
+  <!-- 空态：纯 CSS 插画位 + 文案 + 主按钮（与列表态互斥） -->
+  <view class="empty" wx:else>
+    <view class="ill">
+      <view class="ill-bubble ill-b1">文</view>
+      <view class="ill-bubble ill-b2">A</view>
+      <view class="ill-line"></view>
+    </view>
+    <view class="et">还没有翻译记录</view>
+    <view class="es">翻译一次就会出现在这里</view>
+    <view class="ebtn" bindtap="goTranslate">去翻译</view>
+  </view>
+</view>

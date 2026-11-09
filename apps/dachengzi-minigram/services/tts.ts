@@ -1,0 +1,671 @@
+/**
+ * 朗读（TTS）服务 — 复用后端已有能力，分句流式播放
+ *
+ * 链路：小程序 → gateway `POST /api/ai/tts/speak`（原生 http 转发，二进制原样透传）
+ *       → ai-service `TtsService`（腾讯云 TTS，英文发音人）→ mp3 二进制。
+ *
+ * 流式体验（用户不等待整段合成）：
+ *   文本切成「首句 + 剩余整段」两块（utils/translate-parse 的 splitSpeakParts）→
+ *   首块合成完立即开播，第二块在首块播放期间后台预取 —— 等待时间 ≈ 首句合成（约 2s）。
+ *   腾讯云单次上限实测「英文 ≥499 / 中文 ≥150」，剩余整段由服务端一次合成（语调连贯），
+ *   接缝最多 1 处且落在句末标点处（specs/tts-continuity/design.md）。
+ *   `speakText` 在首块开播后即返回（不等整段）。
+ *
+ * 反馈形态（不弹全屏 loading）：合成中 / 播放中通过 `onSpeakState` 推送，
+ * 调用方渲染按钮内联态（「请稍候…」「停止」）。
+ *
+ * 缓存：音频按「块文本 hash」落盘（USER_DATA_PATH），同一段文本第二次点直接秒播。
+ *
+ * 用法：speakText(text) —— 同一段文本再调一次 = 停止；页面卸载调 stopSpeak()。
+ */
+import { getApiBase } from './agent-stream';
+import { getToken, isLoggedOut } from '../utils/request';
+import { splitSpeakParts } from '../utils/translate-parse';
+
+const TTS_URL = '/api/ai/tts/speak';
+/** 流式合成（P1）：chunked 下发 pcm，端侧边收边播 */
+const TTS_STREAM_URL = '/api/ai/tts/stream';
+/** 流式 pcm 采样率（与服务端 SampleRate=16000 对齐） */
+const STREAM_SAMPLE_RATE = 16000;
+
+/** 整段朗读的文本上限（分块后每块 ≤110；总量限幅控制合成耗时与流量） */
+const MAX_TEXT_LEN = 600;
+
+/** 磁盘缓存上限：超过则淘汰最旧（单条 mp3 约几 KB~几十 KB，30 条远够复用） */
+const MAX_CACHE_FILES = 30;
+
+/** 播放流水线序号：stopSpeak 自增 → 在途流水线全部作废 */
+let runSeq = 0;
+/** 正在播放的实例（全局单例：新的朗读会顶掉上一个） */
+let audio: WechatMiniprogram.InnerAudioContext | null = null;
+/** 当前朗读的整段文本（用于「再点一次 = 停」） */
+let playingText = '';
+/** 正在合成 / 播放的状态（null = 空闲） */
+let speakState: SpeakState | null = null;
+
+/** WebAudio 上下文最小接口：官方类型未声明 createWebAudioContext 的返回结构，只补本文件用到的成员 */
+interface WebAudioContextLike {
+  state?: string;
+  resume?(): void;
+  close?(): void;
+  currentTime?: number;
+  destination: unknown;
+  createBuffer(channels: number, length: number, sampleRate: number): WebAudioBufferLike;
+  createBufferSource(): WebAudioSourceLike;
+}
+
+/** AudioBuffer 最小接口 */
+interface WebAudioBufferLike {
+  duration: number;
+  getChannelData(channel: number): Float32Array;
+}
+
+/** AudioBufferSourceNode 最小接口 */
+interface WebAudioSourceLike {
+  buffer: WebAudioBufferLike | null;
+  connect(destination: unknown): void;
+  start(when?: number): void;
+  stop?(): void;
+  onended?: (callback: () => void) => void;
+}
+
+let waCtx: WebAudioContextLike | null = null;
+/** 排队中的音源 */
+let waSources: WebAudioSourceLike[] = [];
+/** 下一个音源的起始时间：保证分片间精确到采样点衔接（零间隙） */
+let waNextTime = 0;
+/** 流式请求任务（停止时 abort） */
+let streamTask: WechatMiniprogram.RequestTask | null = null;
+/** 流式播完检测计时器 */
+let streamEndTimer: ReturnType<typeof setTimeout> | null = null;
+/** 播放中的等待者（stopSpeak 时统一唤醒，避免 destroy 后回调不触发卡死流水线） */
+const activeWaiters = new Set<() => void>();
+
+/** 朗读状态（页面据此渲染按钮内联态） */
+export interface SpeakState {
+  text: string;
+  phase: 'loading' | 'playing';
+}
+
+type SpeakStateListener = (s: SpeakState | null) => void;
+const listeners = new Set<SpeakStateListener>();
+
+/** 订阅朗读状态变化；返回退订函数（页面 onUnload 时调用） */
+export function onSpeakState(cb: SpeakStateListener): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+function emitState(next: SpeakState | null): void {
+  speakState = next;
+  listeners.forEach((cb) => cb(next));
+}
+
+/** 停止播放：作废在途流水线、唤醒等待者、释放播放实例、状态置回空闲 */
+export function stopSpeak(): void {
+  runSeq += 1;
+  activeWaiters.forEach((wake) => wake());
+  activeWaiters.clear();
+  stopWebAudio();
+  if (audio) {
+    try {
+      audio.stop();
+      audio.destroy();
+    } catch {
+      /* 已销毁 / 未初始化：忽略 */
+    }
+    audio = null;
+  }
+  playingText = '';
+  if (speakState) emitState(null);
+}
+
+/**
+ * 朗读一段文本（分句流式：首块开播即返回，整段在后台流水线里继续）。
+ * @returns true 已开始播放；false 未播放（空文本、超长、或本次是「停止」操作）。
+ * 播放结束 / 中断 / 失败通过 onSpeakState 推 null 通知页面复位按钮。
+ */
+export async function speakText(text: string): Promise<boolean> {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  // 登录墙兜底：本通道不走 request.ts，未登录（无 token 或主动退出）时不发起合成
+  if (!getToken() || isLoggedOut()) {
+    wx.showToast({ title: '请先登录', icon: 'none' });
+    return false;
+  }
+  // 同一段正在播 → 停止（不做重复合成）
+  if (playingText === t) {
+    stopSpeak();
+    return false;
+  }
+  if (t.length > MAX_TEXT_LEN) {
+    wx.showToast({ title: '文本太长，暂不支持朗读', icon: 'none' });
+    return false;
+  }
+
+  stopSpeak();
+
+  const chunks = splitSpeakParts(t);
+  if (!chunks.length) return false;
+
+  const myRun = runSeq;
+  playingText = t;
+  emitState({ text: t, phase: 'loading' });
+
+  // 优先流式（P1）：首包约 0.5s 出声，且是同一条连续音频流 —— 没有块间接缝。
+  // 不可用（未配 AppId / 基础库不支持 enableChunked / 被停止）时回退整段方案。
+  const streamed = await tryStreamSpeak(t, myRun);
+  if (runSeq !== myRun) return true;
+  if (streamed) {
+    emitState({ text: t, phase: 'playing' });
+    return true;
+  }
+  stopWebAudio(); // 流式未成立，清掉残留状态再走整段
+
+  // 所有块并发发起：剩余块的合成与首块同时进行，首块播完时剩余已就绪 —— 消除块间空档。
+  // （串行发请求的等待 = 剩余块合成时间 − 首块音频时长，实测会差出 0~3s 的静音。）
+  const pending = chunks.map((c) => ensureAudioFile(c).catch(() => null));
+
+  // 只等首块（缓存命中则瞬间）：成功开播后立即返回，余下交给后台流水线。
+  // ⚠️ 不能等整段播完再返回 —— 页面 await 后会重设播放态，把「播完置闲」的回调覆盖掉。
+  const firstPath = await pending[0];
+  if (runSeq !== myRun) return true; // 等待期间被停止 / 被新朗读顶掉
+  if (!firstPath) {
+    playingText = '';
+    emitState(null);
+    wx.showToast({ title: '朗读失败，请重试', icon: 'none' });
+    return false;
+  }
+  emitState({ text: t, phase: 'playing' });
+  void playThrough(pending, firstPath, myRun);
+  return true;
+}
+
+/**
+ * 后台播放流水线：从首块起逐块播放。
+ * 各块的合成请求已由调用方并发发起（pending），这里只按序接结果播放。
+ * 中途被停止（runSeq 变化）静默退出；自然结束 / 出错收尾时复位状态。
+ */
+async function playThrough(
+  pending: Array<Promise<string | null>>,
+  firstPath: string,
+  myRun: number,
+): Promise<void> {
+  let filePath: string | null = firstPath;
+
+  for (let i = 0; i < pending.length; i++) {
+    if (runSeq !== myRun) return;
+    if (filePath === null) {
+      // 首块由调用方处理过；这里必然是中途块失败（已在播，标中断即可）
+      wx.showToast({ title: '朗读已中断', icon: 'none' });
+      break;
+    }
+
+    const result = await playFileAndWait(filePath);
+    if (runSeq !== myRun || result === 'stopped') return;
+    if (result === 'error') {
+      wx.showToast({ title: '播放失败', icon: 'none' });
+      break;
+    }
+
+    // 接已并发发起的下一块（首块播放期间就在合成，通常已就绪）
+    filePath = i + 1 < pending.length ? await pending[i + 1] : null;
+  }
+
+  // 收尾：自然播完（或中断/出错）→ 复位播放态，页面按钮恢复「朗读」
+  if (runSeq === myRun) {
+    playingText = '';
+    if (audio) {
+      try {
+        audio.destroy();
+      } catch {
+        /* 忽略 */
+      }
+      audio = null;
+    }
+    emitState(null);
+  }
+}
+
+/** 播放一个音频文件，结束 / 出错 / 被停止时 resolve */
+function playFileAndWait(filePath: string): Promise<'ended' | 'error' | 'stopped'> {
+  return new Promise((resolve) => {
+    const ctx = wx.createInnerAudioContext();
+    audio = ctx;
+    // 停止唤醒：stopSpeak destroy 实例后 onEnded/onStop 不一定触发，靠 waiter 兜底
+    const wake = () => {
+      activeWaiters.delete(wake);
+      resolve('stopped');
+    };
+    activeWaiters.add(wake);
+    const settle = (r: 'ended' | 'error') => {
+      activeWaiters.delete(wake);
+      // 播完即释放：InnerAudioContext 实例数有上限，长期累积会让后续块播放失败
+      // 或 onEnded 不回调（表现为「读到一半停掉」）—— 每一块用完必须 destroy。
+      try {
+        ctx.destroy();
+      } catch {
+        /* 已销毁：忽略 */
+      }
+      if (audio === ctx) audio = null;
+      resolve(r);
+    };
+    ctx.src = filePath;
+    ctx.onEnded(() => settle('ended'));
+    ctx.onError(() => settle('error'));
+    ctx.play();
+  });
+}
+
+/** 取一块音频的本地文件：缓存命中直接返回，否则请求后端并落盘 */
+async function ensureAudioFile(chunk: string): Promise<string | null> {
+  let filePath = cachePath(chunk);
+  if (fileExists(filePath)) return filePath;
+
+  let buf: ArrayBuffer;
+  try {
+    buf = await requestTtsAudio(chunk);
+  } catch {
+    return null;
+  }
+  try {
+    await writeAudioFile(filePath, buf);
+    trimCache();
+    return filePath;
+  } catch {
+    // 落盘失败不阻断播放：退回一次性临时文件
+    const tmp = `${wx.env.USER_DATA_PATH}/tts_tmp_${Date.now()}.mp3`;
+    try {
+      await writeAudioFile(tmp, buf);
+      return tmp;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** 请求 TTS 二进制音频 */
+function requestTtsAudio(text: string): Promise<ArrayBuffer> {
+  const baseUrl = getApiBase();
+  const token = getToken();
+  if (!baseUrl) return Promise.reject(new Error('应用未初始化，请稍后重试'));
+
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `${baseUrl}${TTS_URL}`,
+      method: 'POST',
+      data: { text },
+      // 音频是二进制：必须声明 arraybuffer，否则 res.data 会被当文本解析
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      header: {
+        'Content-Type': 'application/json',
+        // 与 utils/request 一致：开发者工具对 gzip 响应解析失败，强制明文
+        'Accept-Encoding': 'identity',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      success(res) {
+        // ⚠️ gateway 的错误响应也是 HTTP 200（如 code 4010「Authorization header missing」），
+        // 只认状态码会把 JSON 错误体当 mp3 去播 —— 这里按「响应体是不是音频」判定。
+        if (res.statusCode === 200 && !isJsonResponse(res)) {
+          resolve(res.data as ArrayBuffer);
+          return;
+        }
+        reject(new Error(ttsErrorMessage(res.statusCode, res.data)));
+      },
+      fail() {
+        reject(new Error('网络请求失败'));
+      },
+    });
+  });
+}
+
+/**
+ * 判定响应体是不是 JSON 错误体（而不是音频）。
+ * 先看 Content-Type，再看首字节（mp3 以 ID3 或 0xFF 开头，JSON 以 { 或 [ 开头）。
+ */
+function isJsonResponse(res: WechatMiniprogram.RequestSuccessCallbackResult): boolean {
+  const header = (res.header || {}) as Record<string, any>;
+  const ct = String(header['Content-Type'] || header['content-type'] || '');
+  if (ct.indexOf('application/json') >= 0) return true;
+
+  const data = res.data;
+  if (typeof data === 'string') return /^\s*[{[]/.test(data);
+  if (data instanceof ArrayBuffer) {
+    const head = new Uint8Array(data.slice(0, 1));
+    if (!head.length) return false;
+    const c = String.fromCharCode(head[0]);
+    return c === '{' || c === '[';
+  }
+  return false;
+}
+
+function ttsErrorMessage(status: number, data: unknown): string {
+  const fromBody = tryReadMessage(data);
+  // 鉴权类错误技术原文不直接透给用户
+  if (fromBody && /Authorization|token|登录|未授权/i.test(fromBody)) return '登录已过期，请重试';
+  // 云厂商侧错误（密钥无效 / 欠费 / 限流等）：技术原文不透传
+  if (fromBody && /SecretId|SecretKey|Credential|AuthFailure|InvalidAccess|LimitExceeded|FailedOperation/i.test(fromBody)) {
+    return '朗读服务暂不可用，请稍后再试';
+  }
+  if (fromBody) return fromBody;
+  if (status === 401) return '登录已过期，请重试';
+  if (status === 503) return '朗读未配置';
+  return `朗读失败 (${status})`;
+}
+
+/** 错误响应体（ArrayBuffer 形式的 JSON）→ message；解析不出返回空串 */
+function tryReadMessage(data: unknown): string {
+  try {
+    if (typeof data === 'string') return JSON.parse(data)?.message || '';
+    if (data instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(data);
+      let s = '';
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      try {
+        s = decodeURIComponent(escape(s));
+      } catch {
+        /* 不是合法 UTF-8 序列：按原样解析 */
+      }
+      return JSON.parse(s)?.message || '';
+    }
+  } catch {
+    /* 非 JSON（例如截断的音频流）：交给状态码兜底 */
+  }
+  return '';
+}
+
+/** 写入音频文件（InnerAudioContext 只认本地路径，不认 Buffer） */
+function writeAudioFile(filePath: string, data: ArrayBuffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().writeFile({
+      filePath,
+      data,
+      encoding: 'binary',
+      success: () => resolve(),
+      fail: (err) => reject(new Error(err?.errMsg || '音频写入失败')),
+    });
+  });
+}
+
+/** 块文本 → 稳定缓存文件名（hash + 长度，规避低概率碰撞） */
+function cachePath(text: string): string {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) {
+    h = ((h << 5) + h + text.charCodeAt(i)) | 0;
+  }
+  return `${wx.env.USER_DATA_PATH}/tts_${(h >>> 0).toString(36)}_${text.length}.mp3`;
+}
+
+/** 文件是否已存在（缓存命中判定） */
+function fileExists(path: string): boolean {
+  try {
+    wx.getFileSystemManager().accessSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 流式朗读（P1）：`wx.request` 开启 `enableChunked` 分块接收 pcm，
+ * 每收到一片就用 WebAudio 排队播放 —— 首包到达即出声，分片间零间隙。
+ *
+ * @returns true 已开播；false 流式不可用（调用方应回退整段方案）
+ */
+async function tryStreamSpeak(text: string, myRun: number): Promise<boolean> {
+  const baseUrl = getApiBase();
+  const token = getToken();
+  if (!baseUrl) return false;
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    let firstChunkTimer: ReturnType<typeof setTimeout> | null = null;
+    const settle = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (firstChunkTimer) {
+        clearTimeout(firstChunkTimer);
+        firstChunkTimer = null;
+      }
+      resolve(ok);
+    };
+
+    // WebAudio 不可用（低版本基础库）：立即回退 —— 不能让 Promise 悬着，
+    // 否则页面的 await speakText 永远不返回，按钮卡在「请稍候…」
+    let ctx: WebAudioContextLike | null = null;
+    try {
+      ctx = ensureWebAudio();
+    } catch {
+      settle(false);
+      return;
+    }
+    const audioCtx = ctx as WebAudioContextLike;
+
+    let carry: Uint8Array | null = null; // pcm 双字节对齐，跨分片的单字节先攒着
+
+    const task = wx.request({
+      url: `${baseUrl}${TTS_STREAM_URL}`,
+      method: 'GET',
+      data: { text, codec: 'pcm' },
+      responseType: 'arraybuffer',
+      enableChunked: true,
+      // 分片传输总时长可能超过整段音频时长，给足超时
+      timeout: 60000,
+      header: {
+        // 与 requestTtsAudio 一致：开发者工具对 gzip 响应解析失败，强制明文
+        'Accept-Encoding': 'identity',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      success: (res) => {
+        if (res.statusCode !== 200) {
+          settle(false);
+          return;
+        }
+        // 流结束但一片未收（空响应）→ 视为不可用，回退整段；否则排队播完再复位
+        if (!settled) settle(false);
+        scheduleStreamEnd(myRun);
+      },
+      fail: () => settle(false),
+    });
+
+    streamTask = task;
+
+    // 首片超时兜底：基础库不支持 enableChunked 时 onChunkReceived 永不触发，
+    // Promise 会永远 pending（页面按钮卡「请稍候…」）—— 超时则中止并回退整段
+    firstChunkTimer = setTimeout(() => {
+      if (settled) return;
+      try {
+        task.abort();
+      } catch {
+        /* 忽略 */
+      }
+      settle(false);
+    }, 8000);
+
+    task.onChunkReceived((chunk: { data: ArrayBuffer }) => {
+      // 被停止 / 被新朗读顶掉：也要 settle，否则 Promise 悬起、页面按钮卡死
+      if (runSeq !== myRun) {
+        settle(false);
+        return;
+      }
+      const raw = chunk?.data;
+      if (!raw || !raw.byteLength) return;
+
+      // 首字节是 '{' → 是 JSON 错误体（如 4010 未授权），不是音频：中止并回退
+      if (new Uint8Array(raw.slice(0, 1))[0] === 0x7b) {
+        try {
+          task.abort();
+        } catch {
+          /* 忽略 */
+        }
+        settle(false);
+        return;
+      }
+
+      let bytes = new Uint8Array(raw);
+      if (carry && carry.length) {
+        const merged = new Uint8Array(carry.length + bytes.length);
+        merged.set(carry);
+        merged.set(bytes, carry.length);
+        bytes = merged;
+        carry = null;
+      }
+      const odd = bytes.length % 2;
+      if (odd) {
+        carry = bytes.subarray(bytes.length - odd);
+        bytes = bytes.subarray(0, bytes.length - odd);
+      }
+      if (!bytes.length) return;
+
+      // 复制一份，保证 Int16Array 的 byteOffset 为 0
+      const aligned = bytes.slice();
+      try {
+        playPcmChunk(audioCtx, new Int16Array(aligned.buffer));
+      } catch {
+        // WebAudio 能力缺失（创建 buffer / source 失败）：中止并回退整段，
+        // 避免 onChunkReceived 反复抛错且 Promise 悬起
+        try {
+          task.abort();
+        } catch {
+          /* 忽略 */
+        }
+        settle(false);
+        return;
+      }
+      settle(true); // 首个分片已开播
+    });
+  });
+}
+
+/** 取（或新建）WebAudio 上下文 */
+function ensureWebAudio(): WebAudioContextLike {
+  if (!waCtx) {
+    waCtx = wx.createWebAudioContext() as WebAudioContextLike;
+    waNextTime = 0;
+  }
+  if (waCtx.state === 'suspended' && waCtx.resume) {
+    waCtx.resume();
+  }
+  return waCtx;
+}
+
+/**
+ * 播一个 pcm 分片：接在上一分片结束的时间点上，分片间零间隙。
+ * AudioBuffer 自带 sampleRate（16k），WebAudio 播放时自动重采样到上下文采样率。
+ */
+function playPcmChunk(ctx: WebAudioContextLike, pcm: Int16Array): void {
+  const buffer = ctx.createBuffer(1, pcm.length, STREAM_SAMPLE_RATE);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 32768;
+
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+
+  const startAt = Math.max(waNextTime, ctx.currentTime || 0);
+  source.start(startAt);
+  waNextTime = startAt + buffer.duration;
+
+  waSources.push(source);
+
+  // 小程序 WebAudio 的 AudioBufferSourceNode 未实现 onended（实测 TypeError）：
+  // 有则用，没有则按「开播延迟 + 时长」定时移除 —— 否则 waSources 永不清空，
+  // scheduleStreamEnd 判定不了「播完」，按钮永远不复位。
+  const removeSelf = () => {
+    const i = waSources.indexOf(source);
+    if (i >= 0) waSources.splice(i, 1);
+  };
+  if (typeof source.onended === 'function') {
+    source.onended(removeSelf);
+  } else {
+    const delayMs = Math.max(0, (startAt - (ctx.currentTime || 0) + buffer.duration) * 1000) + 60;
+    setTimeout(removeSelf, delayMs);
+  }
+}
+
+/** 停止流式播放：abort 请求、停掉所有音源、释放上下文 */
+function stopWebAudio(): void {
+  if (streamEndTimer) {
+    clearTimeout(streamEndTimer);
+    streamEndTimer = null;
+  }
+  if (streamTask) {
+    try {
+      streamTask.abort();
+    } catch {
+      /* 忽略 */
+    }
+    streamTask = null;
+  }
+  waSources.forEach((s) => {
+    try {
+      if (typeof s.stop === 'function') s.stop();
+    } catch {
+      /* 已结束：忽略 */
+    }
+  });
+  waSources = [];
+  if (waCtx) {
+    try {
+      if (waCtx.close) waCtx.close();
+    } catch {
+      /* 忽略 */
+    }
+    waCtx = null;
+  }
+  waNextTime = 0;
+}
+
+/** 流式收完后：等排队的分片播完再复位按钮态 */
+function scheduleStreamEnd(myRun: number): void {
+  const check = () => {
+    if (runSeq !== myRun) return;
+    if (waSources.length === 0) {
+      playingText = '';
+      if (speakState) emitState(null);
+      streamEndTimer = null;
+      return;
+    }
+    streamEndTimer = setTimeout(check, 300);
+  };
+  streamEndTimer = setTimeout(check, 300);
+}
+
+/** 缓存淘汰：超过上限删最旧的（失败静默，不影响播放） */
+function trimCache(): void {
+  try {
+    const fsm = wx.getFileSystemManager();
+    const dir = wx.env.USER_DATA_PATH;
+    const files = fsm.readdirSync(dir).filter((f) => f.indexOf('tts_') === 0);
+    if (files.length <= MAX_CACHE_FILES) return;
+    const statted = files
+      .map((f) => {
+        const p = `${dir}/${f}`;
+        try {
+          // ⚠️ 微信小程序 Stats 只有 lastModifiedTime（秒级 UNIX 时间戳），没有 Node fs 的
+          // mtimeMs —— 写 mtimeMs 恒为 undefined，全部回退 || 0，排序等于没排，
+          // 淘汰掉的不是最旧的缓存文件（LRU 形同虚设）
+          // statSync 的类型是 `Stats | Stats[]`（传 recursive 时返回数组）；单路径调用只会
+          // 返回单个 Stats，收窄后再取字段
+          return { p, mtime: (fsm.statSync(p) as WechatMiniprogram.Stats).lastModifiedTime || 0 };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean) as Array<{ p: string; mtime: number }>;
+    statted.sort((a, b) => a.mtime - b.mtime);
+    const excess = statted.slice(0, statted.length - MAX_CACHE_FILES);
+    for (const { p } of excess) {
+      try {
+        fsm.unlinkSync(p);
+      } catch {
+        /* 删不掉就算了 */
+      }
+    }
+  } catch {
+    /* 目录读不出：跳过淘汰 */
+  }
+}
