@@ -87,9 +87,9 @@ export class NceLessonEntity {
   @Column({ type: 'datetime', precision: 3, nullable: true, comment: '抓取时间' })
   fetched_at: Date | null;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'datetime', precision: 3, comment: '更新时间' })
+  @Column({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', onUpdate: 'CURRENT_TIMESTAMP(3)', comment: '更新时间' })
   updated_at: Date;
 }

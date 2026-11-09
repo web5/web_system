@@ -73,7 +73,7 @@ export class LhbRecordEntity {
   @Column({ type: 'bigint', nullable: true, comment: '关联 content_items.id' })
   item_id: number | null;
 
-  @CreateDateColumn({ type: 'datetime', precision: 3, comment: '创建时间' })
+  @CreateDateColumn({ type: 'datetime', precision: 3, default: () => 'CURRENT_TIMESTAMP(3)', comment: '创建时间' })
   created_at: Date;
 }
 
