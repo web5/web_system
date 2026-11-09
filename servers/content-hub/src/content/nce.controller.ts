@@ -21,10 +21,10 @@ function ok<T>(data: T): { code: number; data: T; message: string } {
 export class NceController {
   constructor(private readonly nceLessons: NceLessonService) {}
 
-  /** 教材与入库进度 */
+  /** 教材与入库进度（?book=NCE2|NCE3|NCE4，缺省 NCE2） */
   @Get('meta')
-  async meta() {
-    return ok(await this.nceLessons.meta());
+  async meta(@Query('book') book?: string) {
+    return ok(await this.nceLessons.meta(book));
   }
 
   /** 课文目录（分页 + 课号/标题搜索） */
@@ -33,9 +33,9 @@ export class NceController {
     return ok(await this.nceLessons.list(query));
   }
 
-  /** 单课全文：字段与 lessons.json 单课对象一致 */
+  /** 单课全文（?book= 指定册别，缺省 NCE2） */
   @Get('lessons/:id(\\d+)')
-  async detail(@Param() params: NceLessonIdDto) {
-    return ok(await this.nceLessons.detail(params.id));
+  async detail(@Param() params: NceLessonIdDto, @Query('book') book?: string) {
+    return ok(await this.nceLessons.detail(params.id, book));
   }
 }

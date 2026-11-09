@@ -18,6 +18,14 @@ import {
   type NceWord,
 } from '@/api/nce';
 
+/** 册别切换：与后端 BOOKS 配置表一致（docs/development/reports/2026-11-09-NCE多册支持方案.md §2.1）。 */
+const BOOKS = [
+  { key: 'NCE2', label: '第二册' },
+  { key: 'NCE3', label: '第三册' },
+  { key: 'NCE4', label: '第四册' },
+];
+const activeBook = ref('NCE2');
+
 type Mode = 'immersion' | 'tap' | 'bilingual';
 interface Token { text: string; word?: NceWord }
 interface Group { label: string; items: NceLessonSummary[] }
@@ -61,7 +69,8 @@ const groups = computed<Group[]>(() => {
     (l.titleCn || '').includes(kw),
   );
   const out: Group[] = [];
-  for (let s = 1; s <= 96; s += 24) {
+  const max = meta.value?.total ?? 96;
+  for (let s = 1; s <= max; s += 24) {
     const items = list.filter((l) => l.id >= s && l.id < s + 24);
     if (items.length) out.push({ label: `Lesson ${s}–${s + 23}`, items });
   }
@@ -130,7 +139,7 @@ async function openLesson(id: number) {
   void router.replace({ path: '/nce', query: { id: String(id) } });
   loading.value = true;
   try {
-    detail.value = await getNceLesson(id);
+    detail.value = await getNceLesson(id, activeBook.value);
     if (!readIds.value.includes(id)) {
       readIds.value = [...readIds.value, id];
       localStorage.setItem('nce-read', JSON.stringify(readIds.value));
@@ -147,11 +156,28 @@ function choose(qi: number, oi: number) {
   answers.value = { ...answers.value, [qi]: oi };
 }
 
+async function onBookChange(k: string) {
+  activeBook.value = k;
+  errorMsg.value = '';
+  try {
+    const [m, list] = await Promise.all([
+      getNceMeta(k),
+      listNceLessons({ page: 1, pageSize: 100, book: k }),
+    ]);
+    meta.value = m;
+    lessons.value = list.items ?? [];
+  } catch {
+    errorMsg.value = '课文目录加载失败，请稍后重试';
+    return;
+  }
+  await openLesson(lessons.value[0]?.id ?? 1);
+}
+
 onMounted(async () => {
   try {
     const [m, list] = await Promise.all([
-      getNceMeta(),
-      listNceLessons({ page: 1, pageSize: 100 }),
+      getNceMeta(activeBook.value),
+      listNceLessons({ page: 1, pageSize: 100, book: activeBook.value }),
     ]);
     meta.value = m;
     lessons.value = list.items ?? [];
@@ -169,6 +195,10 @@ onMounted(async () => {
     <!-- 工具条：窄屏单行横滚，不占阅读高度 -->
     <div class="bar">
       <div class="brand">新概念英语 <span v-if="meta" class="sub">{{ meta.downloaded }}/{{ meta.total }} 课</span></div>
+      <div class="seg book">
+        <button v-for="b in BOOKS" :key="b.key" type="button"
+          :class="{ on: activeBook === b.key }" @click="onBookChange(b.key)">{{ b.label }}</button>
+      </div>
       <div class="spacer" />
       <div class="seg">
         <button v-for="m in modeLabels" :key="m.key" type="button"
