@@ -66,18 +66,16 @@ WARNF="$TMP/warns.tsv"    # WARN: level \t layer \t item \t fix
 
 # F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
 #   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
-#   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用；
-#   E2E_TIMEOUT_KIND 记录闸门种类，E2E_TIMEOUT_CODE 记录该种闸门的超时码
-#   （perl→142 SIGALRM / timeout|gtimeout→124）；kind=none 时超时码留空 → 任何 rc 都不当超时。
-# F3：② 层关键门实跑（npm run test:e2e:list --list）。实测 ~1.7s（≤5s）、rc=0 → 默认档补实跑；
-#   与其余检查并行，避免默认档耗时被抬高（守住秒级 / 不显著退化）。rc 在 ② 层统一收集。
 #   5s 超时闸门（14 号 §4.1）：perl→timeout→gtimeout→裸跑，首个可用即用。
-#   超时判据（第 4 轮定稿）= **双信号一致**，且两信号由不同主体产生：
-#     ① 退出码 250：由 perl 包装器退；② 标记文件：由 perl 的 ALRM 处理器写。
-#     命令只能伪造其中一个 —— 自己 `exit 250` → 无标记 → 判红；自己给前置进程发 ALRM
-#     → 处理器发现「alarm 还没到期」→ 不算本闸门触发 → 退 252 → 判红。
-#   对照废弃过的两版：① 单看 rc=142 → 命令 `exit 142` 即冒充满时；② 单看「命令自己写的完成标记」
-#     → `exit` 会吞掉标记行，与「被杀」同形。都只靠一个主体，故都能被一个动作洗白。
+#   超时判据 = **双信号一致**，且两信号由不同主体产生：
+#     ① 退出码 250 —— 由 perl 包装器退；② 标记文件 —— 由 perl 判定到点后写。
+#   且 perl 支**不装任何信号 handler**，超时只由父进程自己的时钟判定（waitpid WNOHANG 50ms 轮询）：
+#     · 命令自己 `exit 250` → 没有标记 → 判红（挡「自报哨兵码」）
+#     · 命令给 perl 投 SIGALRM → 没有 handler，perl 直接被 142 打死 → 142≠250 → 判红
+#       （挡「投信号冒充超时」；若装了 handler，外部 ALRM 与 alarm 到期在信号层不可区分，只能靠等候≥4s 区分）
+#   对照废弃过的三版：① 单看 rc=142 → 命令 `exit 142` 即冒充满时；② 单看「命令自己写的完成标记」
+#     → `exit` 会吞掉标记行，与「被杀」同形；③ 单 rc=250 哨兵 → 命令 `exit 250` 即满时。
+#     都只靠单一信号或单一主体，故都能被一个动作洗白。
 #   E2E_TIMEOUT_KIND / E2E_TIMEOUT_CODE 记录闸门种类与该种闸门的**主**超时码
 #     （perl→250 / timeout·gtimeout→124；kind=none 留空 → 任何 rc 都不当超时）。
 #   残余（记录不修）：timeout/gtimeout 支写不出标记，只能单看 rc=124 —— 命令自己 `exit 124`
@@ -103,23 +101,26 @@ printf '%s\n' "${E2E_CMD}" > "${E2E_RUN}"
     perl)
       perl -e '
         my $t = shift; my $flag = shift;
-        my $start = time; my $fired = 0; my $forged = 0;
+        my $t0 = time; my $timedout = 0;
         my $pid = fork;
         exit 127 unless defined $pid;
         if (!$pid) { exec @ARGV; exit 127 }
-        $SIG{ALRM} = sub {
-          my $el = time - $start;
-          # 早到的 ALRM 不是本闸门到点触发的（命令可 kill 前置进程伪造）→ 记账后按剩余时间续期
-          if ($el + 1 < $t) { $forged = 1; alarm($t - $el); return }
-          $fired = 1; kill "TERM", $pid;
-        };
-        alarm $t;
-        my $got;
-        do { $got = waitpid($pid, 0) } while ($got == -1 && $! == 4);   # 4=EINTR：被打断后重试，避免取到陈旧 $?
-        alarm 0;
+        # 不装任何信号 handler：超时只由**父进程自己的时钟**判定。
+        # 这样「外部投递 SIGALRM」既不能冒充超时（没有 handler，直接把 perl 打死 → 128+14=142 ≠ 250），
+        # 也不会像 handler 方案那样被迫等到 ≥4s 才能区分。
+        while (1) {
+          my $got = waitpid($pid, 1);            # 1 = WNOHANG
+          if ($got == $pid) { last }             # 子进程自己结束
+          if (time - $t0 >= $t) {                # 父级时钟说到点了
+            $timedout = 1;
+            kill "TERM", $pid;
+            waitpid($pid, 0);
+            last;
+          }
+          select(undef, undef, undef, 0.05);     # 50ms 轮询，CPU 开销可忽略
+        }
         my $r = $?;
-        if ($fired) { open(my $fh, ">", $flag) or exit 251; close($fh); exit 250 }
-        exit 252 if $forged;
+        if ($timedout) { open(my $fh, ">", $flag) or exit 251; close($fh); exit 250 }
         my $sig = $r & 127;
         exit($sig ? 128 + $sig : ($r >> 8));
       ' 5 "${E2E_TIMEOUT_FLAG}" sh "${E2E_RUN}" ;;
@@ -301,9 +302,8 @@ L=2
 need "$TOP/tests/playwright.config.ts" "统一 E2E 入口配置" "恢复 tests/playwright.config.ts" file
 need_pkg_script 'test:e2e:list'
 # F3：实跑 test:e2e:list --list（顶部已后台启动 + 5s 超时闸门；实测 ~1.7s，默认档补实跑）
-#   rc=0 → PASS；真超时 = 双信号一致（rc=250 且 perl 写了超时标记）→ 等价降级不判 FAIL；
-#   rc=252 = 命令给前置进程发了早到的 ALRM（伪造超时通道）→ FAIL；
-#   其余 rc 一律 FAIL。
+#   rc=0 → PASS；真超时 = 双信号一致（rc=250 且 perl 判定到点后写了标记）→ 等价降级不判 FAIL；
+#   其余 rc 一律 FAIL（含「命令自报 250／给 perl 投 SIGALRM」两种伪造：前者无标记、后者 perl 被 142 打死）。
 E2E_RC=0
 wait "${E2E_PID}" 2>/dev/null || E2E_RC=$?
 # G2：无闸门时任何 rc 都不作超时；但「闸门未生效」必须在 ② 层看得见（WARN + detail，不静默、不阻断）
@@ -315,17 +315,13 @@ fi
 if [ "${E2E_RC}" -eq 0 ]; then
   add "test:e2e:list --list 实跑 exit 0"
 elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 250 ] && [ -f "${E2E_TIMEOUT_FLAG}" ]; then
-  # 真超时：双信号一致（perl 退 250 + perl 的 ALRM 处理器写了标记）→ 等价降级（§4.1.1）
+  # 真超时：双信号一致（perl 退 250 + perl 在自己的时钟到点后写的标记）→ 等价降级（§4.1.1）
   if [ -f "${TOP}/tests/playwright.config.ts" ] && [ -e "${TOP}/node_modules/.bin/playwright" ]; then
     add "test:e2e:list 超时降级（config 在 + playwright CLI 在位）"
   else
     fail "test:e2e:list --list 超时且等价判定不满足（tests/playwright.config.ts 或 node_modules/.bin/playwright 缺失）" \
          "确认 tests/playwright.config.ts 存在、node_modules/.bin/playwright 可执行；npm run test:e2e:list --silent 复现"
   fi
-elif [ "${E2E_TIMEOUT_KIND}" = "perl" ] && [ "${E2E_RC}" -eq 252 ]; then
-  # 命令向前置进程发送了早到的 ALRM（伪造「超时」通道）→ 判红。注：命令自身 exit 252 同码，方向安全（红）
-  fail "关键门实跑 test:e2e:list --list 检测到伪造超时信号（rc=252：命令向前置进程发送 SIGALRM）" \
-       "该命令不应向前置进程发信号；npm run test:e2e:list --silent 单独复跑确认是命令自身问题"
 elif [ "${E2E_TIMEOUT_KIND}" != "none" ] && [ -n "${E2E_TIMEOUT_CODE}" ] \
      && [ "${E2E_RC}" -eq "${E2E_TIMEOUT_CODE}" ] && [ "${E2E_TIMEOUT_CODE}" -ne 250 ]; then
   # timeout/gtimeout 支写不出标记，只能单看 rc=124（残余：命令自报 124 可伪造，见顶部注释）
