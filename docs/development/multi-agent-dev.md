@@ -9,7 +9,7 @@
 
 ## 0. 为什么需要这份（一句话）
 
-多会话并行 vibe coding 最大的坑是**静默互覆**：两个会话共用或抢同一份工作目录，`git checkout` / `reset` / `stash` 会静默把对方的 HEAD 与改动带走，**当场不报错**，发现时对方改动已丢。web_system 当前有 **10+ 个 worktree** 在跑（实测 11，见 §1），纪律不挂闸门就会出事。这对应五层模型第 ③ 层「执行隔离」。
+多会话并行 vibe coding 最大的坑是**静默互覆**：两个会话共用或抢同一份工作目录，`git checkout` / `reset` / `stash` 会静默把对方的 HEAD 与改动带走，**当场不报错**，发现时对方改动已丢。web_system 当前有 **13 个 worktree** 在跑（实测 2026-11-09，见 §1），纪律不挂闸门就会出事。这对应五层模型第 ③ 层「执行隔离」。
 
 ---
 
@@ -33,7 +33,7 @@
 
 | 路径 | 当前分支 | 角色 |
 |---|---|---|
-| `~/workspace/web_system` | ⚠️ `feat/mf-browser-safety`（**非 master**） | 发布源，本应只留 master；当前被 checkout 到 feature 分支 = **抢 HEAD 风险源** |
+| `~/workspace/web_system` | ✅ `master`（2026-11-09 甲方案已切回） | 🔴 发布源，只留 master；不要在上面直接开发或切分支改代码 |
 | `~/workspace/web_system-sdd` | `feat/approval-lifecycle` | 🔴 **长期保留的开发 worktree**（用户 11-06 拍板）；不要当临时目录清掉 |
 | `~/workspace/web_system-b2a` | `feat/b2c-and-gate-fixes` | 隔离工作区 |
 | `~/workspace/web_system-fix-d1d2` | `fix/runtime-payload-deterministic` | 隔离工作区 |
@@ -43,7 +43,9 @@
 | `~/workspace/web_system-w3` | `feat/storage-temp-dir` | 隔离工作区 |
 | `~/workspace/web_system-wecom` | `feature/wecom-approval-identity` | 隔离工作区 |
 | `~/workspace/web_system-wecom-approval` | `fix/wecom-console-link-template` | 隔离工作区 |
-| `~/workspace/web_system-assetorigin` | `master` | 隔离工作区 |
+| `~/workspace/web_system-nce34` | `feat/nce-multibook` | 隔离工作区 |
+| `/private/tmp/web_system-redline-fix` | `fix/redline-gates-hint` | ⚠️ 在 `/tmp`，会被系统回收，勿长期依赖 |
+| `~/workspace/web_system-assetorigin` | `feat/assetorigin`（2026-11-09 从 master 移出，腾 master 给主仓） | 隔离工作区 |
 
 🔴 **铁律**：每个并行会话 / 任务认领**自己**的 worktree。主仓 `web_system` 当作发布源——**不要在上面直接开发或切分支改代码**（除非你就是在发布源发版）。从主仓抢 HEAD 是头号互覆现场（11-06 实测：commit 落到别人的 `feature/nce-lessons-calibration`）。
 
@@ -63,7 +65,7 @@
 ## 3. 构建源错位（头号静默坑）
 
 - **构建必须在你自己 worktree 的 cwd 里跑。** 流水线 / 脚本若默认在发布目录（常停在 master）构建，你的分支改动永远进不了产物——表现「发布成功但没变」且**无任何报错**。
-- 主仓 `web_system` 当前停在 `feature/nce-lessons`，在这里构建 = 用的不是你的分支代码。
+- 主仓 `web_system` 当前已回到 `master`（2026-11-09 甲方案修复）；**构建/发布只在 master 工作树做**，别在它上面切分支改业务代码。
 - 验版本（确认构建源没错）：`curl -s http://127.0.0.1:6000/__manifest__` 看网关实际会加载哪个 commit；`bash scripts/health-check.sh local` 做全量巡检。
 
 ---
@@ -111,7 +113,7 @@
 - [ ] **A**：开工前跑了 `git worktree list`，确认非主仓 worktree >1 → 进入多 agent 模式，本纪律全员适用
 - [ ] **C**：已在 `web_system/.agent-roster/<session-id>.json` 注册自己（只写自己的文件）
 - [ ] **B**：协作起始已往 `~/AiWorkspace/.workbuddy/memory/YYYY-MM-DD.md` 追加一行（worktrees + roster）
-- [ ] 我认领了自己的 worktree，没在主仓（当前停在非 master 分支）上改代码
+- [ ] 我认领了自己的 worktree，没在主仓（发布源，只留 master）直接开发或切分支改代码
 - [ ] 提交前 `git branch --show-current` + 逐路径 `git add`（禁 `-A`）
 - [ ] 构建在自己 worktree cwd（不是发布源）
 - [ ] 不 `kill -9` 6000/6200；要重启共享服务先打招呼
@@ -144,6 +146,16 @@ cd ~/workspace/web_system && git worktree list
 ### B · 总控上报（协作起始一次）
 往 `~/AiWorkspace/.workbuddy/memory/YYYY-MM-DD.md` 追加：
 > web_system 多 Agent 协作活跃 · worktrees: `<git worktree list 输出>` · roster: `~/workspace/web_system/.agent-roster/` · 任务: <简述>
+
+---
+
+## 9. 惨痛教训 · 2026-11-09 纪律曾失效（印证 §0 静默互覆）
+
+纪律文件（本文 + `AGENTS.md`）曾于 11-07 被提交到 `feat/mf-browser-safety` 分支，而主仓 `web_system` 被切到 `docs/nce-spec-copyright-fix`（feature 分支）。后果：**进主仓的 agent 完全读不到纪律，闸门在发布源失效**——正是 §0 警告的「静默互覆」现场（治理文件被分支漂移冲走，无报错）。
+
+修复（甲方案）：将纪律 commit 通过 `git cherry-pick` 引入 master，把 `web_system-assetorigin` 从 master 移出到 `feat/assetorigin` 腾出 master，主仓切回 master。闸门恢复。
+
+🔴 **纪律**：治理 / 纪律类文件（含 `AGENTS.md`、本文）**必须始终活在 master（发布源）**，禁止只留在某个 feature 分支。任何把主仓切到 feature 分支的动作，都等于主动撤掉闸门。
 
 ---
 
