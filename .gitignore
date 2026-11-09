@@ -123,6 +123,9 @@ servers/ai-service/.agent-cli.config.json
 # git worktree 隔离目录（多会话并行用）
 .worktrees/
 
+# 多 Agent 协作态注册表（每会话一个自有 json，运行时状态，绝不入仓；见 docs/development/multi-agent-dev.md §8）
+.agent-roster/
+
 # WorkBuddy 预览 app 清单（本地生成，appId + 预览目录绝对路径，换机即失效）
 .wbapp_*.genie
 
@@ -131,3 +134,9 @@ archive/db-backups/
 tests/.env.test
 # 本地原型预览发布目录（sites 发布的干净目录，非源码）
 .preview/
+
+# Playwright 端到端测试产物（tests/ 统一入口运行输出，含截图/报告，非源码）
+test-results/
+
+# 红线扫描脚本（scripts/redline Python）字节码缓存
+scripts/redline/__pycache__/

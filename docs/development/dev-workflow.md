@@ -1,3 +1,5 @@
+> ⚠️ **2026-11-09 勘误**：本文三处 `~/workspace/web_system_dev`（§1 开发区 / §3 步骤① / §5 初始化备忘）**均已废弃、该 worktree 不存在**。当前多 worktree 并行舰队以 [`docs/development/multi-agent-dev.md` §1](./multi-agent-dev.md) 的实时 `git worktree list` 为准。三区分离与分支命名规范正文仍有效。
+
 # 开发流程：三区分离（2026-09-17 建立）
 
 > 起因：用户指出此前改动是"在发布源目录里直接改、直接验"的 —— 分支流程有，
