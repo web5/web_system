@@ -33,7 +33,7 @@
 
 | 端 | 原型侧锚点数 | 实现侧已回填 | 缺口 | 原型文件 |
 |---|---|---|---|---|
-| `admin` | **32**（2026-11-06 B2a 后定稿） | 19（B2a 落码） | **13** | `admin-agent-def-detail.html`(31) / `admin-agents.html` 独有 1（`agent-def-list`）；hub 为生成物不计数 |
+| `admin` | **32**（2026-11-06 B2a 后定稿） | 25（B2a 19 + B2c 6） | **7** | `admin-agent-def-detail.html`(31) / `admin-agents.html` 独有 1（`agent-def-list`）；hub 为生成物不计数 |
 | `deploy-console` | 5 | 0 | **5** | `deploy-console-domain.html` |
 | `kedou-ai-minigram` | 7 | 0 | **7** | 小程序原型 |
 | `shell` | 1 | 0 | **1** | `shell/prototype` |
@@ -48,9 +48,11 @@
 |---|---|---|
 | ✅ 回填 | **17** | 实现中已有同语义同位置结构，只缺 `data-dr` |
 | 🔧 补实现后回填 | **2** | 规格强制要求但实现缺失（`role-fallback` 角色降级提示 · `error-cta` 加载失败重试），按规格补最小实现 |
-| ⏸ 阻塞 | **13** | 调试台分期 7（`bench-layout` / `run-bar` / `chat-send` / `chat-compare` / `chat-compare-card` / `cases-run` / `case-row`）+ 面板级 diff 2（`diff-bar` / `diff-table`）+ 字段级 badge 4（`gen-params-*-badge`） |
+| ⏸ 阻塞 | **7** | 调试台分期 7（`bench-layout` / `run-bar` / `chat-send` / `chat-compare` / `chat-compare-card` / `cases-run` / `case-row`）——原「面板级 diff 2 + 字段级 badge 4」已于 B2c 回填 |
 
-> 🔴 **13 个阻塞项不清，admin 到不了 0，`scoped`/`strict` 永远开不了**。排期别按「32 个锚点 = 32 份工」算。
+> 🔴 **7 个阻塞项（调试台分期）不清，admin 到不了 0，`scoped`/`strict` 永远开不了**。排期别按「32 个锚点 = 32 份工」算。
+
+**B2c（2026-11-07）已把「面板级 diff 2 + 字段级 badge 4」6 个阻塞项回填**：`diff-bar` / `diff-table` / 4×`gen-params-*-badge` 落码 + 参数对比三级交互，并修 3 项 P1（D1 hint 样式 / D2 role-fallback 权限 / D3 crumb-list 面包屑）。实现侧已回填 **19 → 25**，缺口 **13 → 7**（仅剩调试台分期）。凭证：`docs/development/reports/2026-11-06-admin锚点回填B2c-*.md`。
 
 ### 2.2 三个“实现里没有”的锚点已按定稿撤除（2026-11-06，逐个核过）
 

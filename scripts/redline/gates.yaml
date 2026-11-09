@@ -104,7 +104,7 @@ scopes:
     include: ["*/test/*", "*/tests/*", "*/__tests__/*", "*/spec/*", "*.spec.*", "*.test.*", "*/fixtures/*", "*/mocks/*", "*/mock/*"]
   test_surface:
     desc: 测试范围面（R23）。命中即「一处改动可能波及全体功能」——须交代跑全量还是抽样。与 contract_file 的区别：contract_file 管「要不要契约评审」，本面管「测试要铺多大」，面更宽（含共享 UI / 服务入口 / 测试与构建基建 / CI）；两门可同时命中，互不替代
-    include: ["packages/types/*", "packages/shared/*", "packages/ui/src/*", "packages/agent-core/src/interfaces/*", "servers/*/src/main.ts", "apps/*/src/main.ts", "archive/migrations/*", "jest.config.*", "*/jest.config.*", "*/*/jest.config.*", "tsconfig*.json", "*/tsconfig*.json", "*/*/tsconfig*.json", "scripts/ci/*", ".github/workflows/*"]
+    include: ["packages/types/*", "packages/shared/*", "packages/ui/src/*", "packages/agent-core/src/interfaces/*", "servers/*/src/main.ts", "apps/*/src/main.ts", "apps/*/src/layouts/*", "archive/migrations/*", "jest.config.*", "*/jest.config.*", "*/*/jest.config.*", "tsconfig*.json", "*/tsconfig*.json", "*/*/tsconfig*.json", "scripts/ci/*", ".github/workflows/*"]
   passport:
     desc: 通行证（原型/规格书）。除下列 glob 外还认 is_spec_doc —— specs/ 或 docs/ui/page-specs/ 下、文件名或目录名含 page-spec / prototype / 原型
     include: ["*/prototype/*", "docs/ui/prototypes/*", "*/page-spec*.md"]
@@ -383,7 +383,7 @@ gates:
     exempt_note: R9b 在 bash 里是内联循环（不走 exempt_for_gate），口径必须与其它门一致
     message: 既有 UI 改动无同行原型/豁免
     loc_template: '{ui_file_count} 个文件 / {lines} 行'
-    hint: '须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Micro-exempt: <理由>（§3.5.1）'
+    hint: '须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Proto: <已落库原型 sha>（三段式流程），或 Micro-exempt: <理由>（§3.5.1）'
     spec_ref: specs/kit-sop-enforcement/design.md
     owner: 研发部
     validity:

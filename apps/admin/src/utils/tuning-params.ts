@@ -167,21 +167,24 @@ export function validateTuning(p: {
   const tempSet = p.temperature !== null && p.temperature !== undefined;
   const topPSet = p.topP !== null && p.topP !== undefined;
 
+  // D6（2026-11-06 盲测）：这些串直接渲染成字段下的红字，属**产品文案** ——
+  // 一律用业务词（Temperature / Top P / 输出上限 / 最大步数），不出现内部字段名
+  // （topP / maxTokens / max_steps）与契约措辞「互斥校验」（page-spec §3.2 hint 禁止项）。
   if (tempSet && topPSet) {
-    errors.temperature = 'temperature 与 topP 只能填一个（互斥校验）';
-    errors.topP = 'temperature 与 topP 只能填一个（互斥校验）';
+    errors.temperature = 'Temperature 与 Top P 只能填一个';
+    errors.topP = 'Temperature 与 Top P 只能填一个';
   }
   if (tempSet && (p.temperature! < 0 || p.temperature! > 2)) {
-    errors.temperature = 'temperature 取值范围 0–2';
+    errors.temperature = 'Temperature 需在 0–2 之间';
   }
   if (topPSet && (p.topP! < 0 || p.topP! > 1)) {
-    errors.topP = 'topP 取值范围 0–1';
+    errors.topP = 'Top P 需在 0–1 之间';
   }
   if (p.maxTokens !== null && p.maxTokens !== undefined && p.maxTokens < 1) {
-    errors.maxTokens = 'maxTokens 需 ≥ 1';
+    errors.maxTokens = '输出上限需 ≥ 1';
   }
   if (!(p.maxSteps >= 1 && p.maxSteps <= 50)) {
-    errors.maxSteps = 'max_steps 取值范围 1–50';
+    errors.maxSteps = '最大步数需在 1–50 之间';
   }
 
   return { ok: Object.keys(errors).length === 0, errors };
@@ -424,3 +427,112 @@ export function buildTuningAuditEntry(opts: {
     }),
   };
 }
+
+// ===== 未保存变更对比（B2c · 字段级 badge / 面板级变更条） =====
+//
+// 真源：docs/ui/page-specs/agent-def-detail-v2.md §4「参数对比（三级，口径必须一致）」。
+// 与上面审计 diff 的分工：
+//   · 审计（S6）= **已保存**的历史留痕，字段名用技术名（temperature / max_steps），偏排障。
+//   · 本段 = **未保存**的草稿 vs 载入值，字段名用业务词、thinking 用业务词，
+//     因为它直接出现在 hint 行右侧和变更条里（page-spec §3.2 明禁内部字段名/实现枚举）。
+//   ⚠️ 两处口径差异是**有意的**，不是漏改：
+//     · 字段名：技术名（审计）↔ 业务词（这里）。
+//     · thinking 值：审计保留契约值（`enabled`/`disabled`，排障要看原值）↔ 这里用业务词
+//       （「跟随默认/开启/关闭」—— §3 控件 5 明确「契约值只在代码与契约文档里，不进 UI」）。
+//     · maxSteps：审计**含**（`buildTuningDiffs` 的 keys 有它，排障要全字段）↔ 这里**不含**
+//       （见下：不是模型 API 参数，page-spec §4 不计入）。两边不一致是对的，别「统一」掉。
+
+/**
+ * 参与「参数对比」的字段。
+ *
+ * 口径（page-spec v2 §4）：只统计**真正下发给模型、且用户可改**的参数。
+ * 逐项为什么在/不在：
+ * - `temperature` / `topP` / `maxTokens` / `thinking`：四控件，进保存 payload 也进模型 API。
+ * - `budget`：§4 表里列了它，但 v2.4 起 `budget_tokens` **不是 agent 级配置**（原型 :1346 同口径
+ *   「budget 不再是配置字段（只读预览）」、本仓库 `thinkingToApi()` 从不写它）。它是
+ *   `min(模型上限, maxTokens/2)` 的派生只读值 —— 计入会与 `maxTokens` **同一原因出两条变更**，
+ *   计数虚高一倍，故不计入。
+ * - `maxSteps`：Agent 引擎的工具编排轮数上限，不是模型 API 参数（面板 hint 同口径）。
+ * - 采样方式：已废弃（B3 定稿拆成 temp/topP 两个输入），且它本身是 UI 态。
+ *
+ * ⚠️ 与**原型**的两处已知偏离（照规格而非照原型，登记在此防后人当 bug 改回去）：
+ * ① 原型 `FIELDS`（:1347-1357）把 `maxSteps` 当 param 且**有** `badge-maxSteps`（:1021），
+ *    也就是原型把它计入计数；我们按 §4 不计入。
+ * ② 原型还把 4 个基础配置字段（用途说明 / 路由关键词 / 模型 / System Prompt）计入同一个计数
+ *    （机检 `verify-agent-def-detail.mjs` 5e/5f 锁死这一行为），我们按 §4「计数 = 上述字段
+ *    变化数」只算参数 —— 变更条自己的文案也是「N 项**参数**未保存」，只算参数才自洽。
+ *    （未保存改动不会因此被吞：`dirty` 走整表单快照，放弃/返回拦截照旧生效。）
+ * 锚点面不受影响：原型 5 个 badge 里只有 4 个带 `data-dr`（`badge-maxSteps` 没打），
+ * 所以原型侧 `data-dr` 是 4 个 badge + `diff-bar` + `diff-table` = 6，与本实现的 6 个一一对应。
+ *
+ * 🔴 要加字段必须同时改 page-spec §4 + 原型（含 `data-dr`），否则会出现「界面多一条 badge、
+ *    规格里查不到出处」，R11b 锚点比对也会报 EXTRA。
+ */
+export const TUNING_DIFF_FIELDS = ['temperature', 'maxTokens', 'topP', 'thinking'] as const;
+export type TuningDiffField = (typeof TUNING_DIFF_FIELDS)[number];
+
+/** 对比表的字段展示名（业务词，非内部字段名 —— page-spec §3.2） */
+export const TUNING_DIFF_LABELS: Record<TuningDiffField, string> = {
+  temperature: 'Temperature',
+  maxTokens: '输出上限',
+  topP: 'Top P',
+  thinking: '思考',
+};
+
+/** thinking 三态的业务词选项。抽到本文件做单一真源：面板 segmented 与 diff badge 共用，
+ *  避免两处各写一份「跟随默认/开启/关闭」后漂移。 */
+export const THINKING_FORM_OPTIONS: Array<{ label: string; value: ThinkingFormValue }> = [
+  { label: '跟随默认', value: 'null' },
+  { label: '开启', value: 'enabled' },
+  { label: '关闭', value: 'disabled' },
+];
+
+/** thinking 三态 → 业务词（禁把 enabled/disabled 这类契约值摆到用户面前） */
+export function thinkingFormLabel(v: ThinkingFormValue | null | undefined): string {
+  return THINKING_FORM_OPTIONS.find((o) => o.value === (v ?? 'null'))?.label ?? '跟随默认';
+}
+
+/** diff 展示值：thinking 走业务词，其余复用审计口径的格式化（空值显式「未配置」）。
+ *  与 formatTuningValue 的唯一差异就是 thinking —— 审计区保留契约值是刻意的（排障要看原值）。 */
+export function formatDiffValue(field: TuningDiffField, v: unknown): string {
+  if (field === 'thinking') return thinkingFormLabel(v as ThinkingFormValue);
+  return formatTuningValue(field, v);
+}
+
+export interface TuningFieldDiff {
+  field: TuningDiffField;
+  /** 业务词字段名（对比表左侧列用；badge 不显示字段名） */
+  label: string;
+  before: string;
+  after: string;
+}
+
+/**
+ * 未保存参数 vs 载入值的字段级 diff（只返回**真正变化**的字段）。
+ *
+ * 面板级变更条的计数与字段级 badge 都从这里取 —— page-spec §4 要求「口径必须一致」，
+ * 所以两边绝不能各算一套。返回空数组 = 无参数变更（变更条隐藏）。
+ */
+export function buildTuningFieldDiffs(before: TuningFields, after: TuningFields): TuningFieldDiff[] {
+  const diffs: TuningFieldDiff[] = [];
+  for (const k of TUNING_DIFF_FIELDS) {
+    const b = before[k];
+    const a = after[k];
+    // thinking 是字符串三态、其余是 number|null。
+    // 🔴 thinking 必须先归一化再比：旧形状（DB 里 thinking 缺失）漏到 undefined 时，
+    //    `String(undefined) !== 'null'` 会算成「有变更」，而两侧展示值都被
+    //    `formatDiffValue` 归成「跟随默认」—— 界面上就会出现一条「跟随默认 → 跟随默认」
+    //    的变更，用户完全无从理解。归一化口径与 `thinkingFormLabel` 保持一致（undefined ≡ 'null'）。
+    const changed =
+      k === 'thinking' ? (b ?? 'null') !== (a ?? 'null') : (b ?? null) !== (a ?? null);
+    if (!changed) continue;
+    diffs.push({
+      field: k,
+      label: TUNING_DIFF_LABELS[k],
+      before: formatDiffValue(k, b),
+      after: formatDiffValue(k, a),
+    });
+  }
+  return diffs;
+}
+
