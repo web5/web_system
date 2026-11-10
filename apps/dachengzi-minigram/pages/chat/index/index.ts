@@ -28,6 +28,7 @@ import {
 import {
   CHAT_SEED_KEY,
   TRANSLATE_HISTORY_KEY,
+  TRANSLATE_SETTINGS_KEY,
   TRANSLATE_TASK_KEY,
   type TrHistoryItem,
   type TranslateTask,
@@ -324,6 +325,17 @@ Page({
     const source = resolveSource(this._agentId);
     let acc = '';
 
+    // 逐字流式偏好：读 kd_tr_settings.stream，只有显式 false 才一次性出全文（缺省默认逐字）
+    let streamMode = true;
+    if (this._agentId === 'translate') {
+      try {
+        const prefs = (wx.getStorageSync(TRANSLATE_SETTINGS_KEY) || {}) as Record<string, unknown>;
+        streamMode = prefs.stream !== false;
+      } catch {
+        streamMode = true;
+      }
+    }
+
     api.stream(
       userText,
       {
@@ -339,6 +351,8 @@ Page({
         },
         onDelta: (delta) => {
           acc += delta;
+          // 关闭逐字流式：onDelta 不渲染中间态，等 onReply 一次性出全文
+          if (this._agentId === 'translate' && !streamMode) return;
           // 翻译会话流式期只出「主文」（去段落标题），完成后 finalize 再补注解
           this.patchAi(aiIndex, { text: this._agentId === 'translate' ? stripTitles(acc) : acc });
         },
