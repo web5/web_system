@@ -1,6 +1,9 @@
 <!-- 大橙子个人助理 · 主对话页（气泡对话）
      navigationStyle:custom 自绘导航：返回 / 标题(翻译会话徽标) / 历史 / 新对话，右侧留原生胶囊位 -->
 <view class="page {{radiusClass}}">
+  <!-- 分享卡离屏 canvas：白底译文，「生成分享卡」动作临时取用 -->
+  <canvas id="share-canvas" type="2d" class="share-canvas"></canvas>
+
   <!-- 自绘导航 -->
   <view class="navbar" style="padding-top: {{statusBarHeight}}px;">
     <view class="navbar-inner" style="height: {{navBarHeight}}px; padding-right: {{menuGap}}px;">
@@ -38,9 +41,33 @@
             <view class="tr-head">
               <text class="tr-tag">推荐译文</text>
               <text wx:if="{{item.meta}}" class="tr-meta">{{item.meta}}</text>
+              <text wx:if="{{speakText === item.enMain}}" class="tr-speak">{{speakPhase === 'loading' ? '合成中' : '播放中'}}</text>
+              <view class="tr-more" data-index="{{index}}" bindtap="moreCard">⋯</view>
             </view>
             <view class="tr-main">{{item.enMain}}</view>
-            <view wx:if="{{item.note}}" class="tr-note">{{item.note}}</view>
+            <!-- 有分段明细：卡内折叠三段（默认收起，缺段不显示标题） -->
+            <view wx:if="{{item.detail && (item.detail.literal || item.detail.polite || item.detail.notes)}}" class="tr-detail">
+              <view class="tr-detail-toggle" data-index="{{index}}" bindtap="toggleDetail">
+                <text>查看详解</text>
+                <text class="tr-detail-arrow">{{item.detailOpen ? '收起' : '展开'}}</text>
+              </view>
+              <block wx:if="{{item.detailOpen}}">
+                <view wx:if="{{item.detail.literal}}" class="tr-detail-sec">
+                  <view class="tr-detail-k">直译对照</view>
+                  <view class="tr-detail-v">{{item.detail.literal}}</view>
+                </view>
+                <view wx:if="{{item.detail.polite}}" class="tr-detail-sec">
+                  <view class="tr-detail-k">委婉版</view>
+                  <view class="tr-detail-v">{{item.detail.polite}}</view>
+                </view>
+                <view wx:if="{{item.detail.notes}}" class="tr-detail-sec">
+                  <view class="tr-detail-k">语气要点</view>
+                  <view class="tr-detail-v">{{item.detail.notes}}</view>
+                </view>
+              </block>
+            </view>
+            <!-- 无分段明细但有注解（启发式路径）：平铺注解 -->
+            <view wx:elif="{{item.note}}" class="tr-note">{{item.note}}</view>
           </view>
           <!-- 流式等待态：三点 -->
           <view wx:elif="{{item.loading && !item.text}}" class="bub typing-bubble">
@@ -51,6 +78,7 @@
             <text class="bub-text">{{item.text}}</text>
             <text wx:if="{{item.loading}}" class="caret"></text>
           </view>
+          <view wx:if="{{item.role == 'user' && item.meta}}" class="user-meta">{{item.meta}}</view>
           <view wx:if="{{item.error}}" class="retry" data-index="{{index}}" bindtap="retry">重试</view>
         </view>
       </view>

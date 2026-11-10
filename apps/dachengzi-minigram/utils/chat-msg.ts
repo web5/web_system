@@ -13,8 +13,9 @@ import {
   inferTranslateDirection,
   looksLikeTranslateReply,
   parseSections,
+  type TranslateDetail,
 } from './translate-parse';
-import type { ChatSeed } from './translate-keys';
+import type { ChatSeed, TranslateTask } from './translate-keys';
 
 /* ==================== 类型 ==================== */
 
@@ -44,6 +45,12 @@ export interface ChatMsg {
   note?: string;
   /** 翻译卡方向 meta（如「中文 → 英语」，推断不出为空） */
   meta?: string;
+  /** 该 user 气泡对应的真实请求文本（首问/重新翻译为结构化文本；普通追问为空=用 text） */
+  reqText?: string;
+  /** 翻译卡三段明细（直译对照/委婉版/语气要点；实时渲染优先用 detail） */
+  detail?: TranslateDetail;
+  /** 翻译卡详情是否展开（卡内「查看详解」折叠，UI 态） */
+  detailOpen?: boolean;
 }
 
 /** 会话级锁定 agentId：仅 translate / auto 两种 */
@@ -94,7 +101,7 @@ export function mergeConsecutiveAi(msgs: ChatMsg[]): ChatMsg[] {
 /* ==================== 种子解析与气泡化 ==================== */
 
 /**
- * 解析翻译追问种子（kd_chat_seed，写入方 = 翻译结果页 goFollowUpChat）。
+ * 解析翻译追问种子（kd_chat_seed，旧链路遗留，改造后新链路不再写入）。
  * 读取方在 onLoad 里 `wx.getStorageSync` 后把 raw 交到这里；异常 / 缺失一律降级为 null。
  */
 export function parseChatSeed(raw: unknown): ChatSeed | null {
@@ -107,10 +114,28 @@ export function parseChatSeed(raw: unknown): ChatSeed | null {
 }
 
 /**
+ * 解析翻译首问种子（kd_translate_task，写入方 = 翻译输入页 doTranslate）。
+ * 校验非空原文；异常 / 缺失 / 原文为空一律降级为 null。其余字段缺省回落输入页默认值。
+ */
+export function parseTranslateTask(raw: unknown): TranslateTask | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const text = String(o.text || '').trim();
+  if (!text) return null;
+  return {
+    srcLang: typeof o.srcLang === 'string' ? o.srcLang : '中文',
+    tgtLang: typeof o.tgtLang === 'string' ? o.tgtLang : '英语',
+    register: typeof o.register === 'string' ? o.register : '正式',
+    style: typeof o.style === 'string' ? o.style : '完整',
+    text,
+  };
+}
+
+/**
  * 把种子转成首两条气泡：原文（用户气泡）+ 译文（翻译卡气泡）。
  * 种子 reply 是结果页已切好的「推荐译文」（干净英文，无段落标题），这里强制套翻译卡。
  */
-export function buildSeedBubbles(seed: ChatSeed, nextId: () => string): ChatMsg[] {
+export function buildSeedBubbles(seed: ChatSeed, nextId: () => string, meta?: string): ChatMsg[] {
   const view = buildTranslateCardView(seed.reply);
   return [
     { id: nextId(), role: 'user', text: seed.user },
@@ -121,7 +146,8 @@ export function buildSeedBubbles(seed: ChatSeed, nextId: () => string): ChatMsg[
       card: true,
       enMain: view.main,
       note: view.note,
-      meta: inferTranslateDirection(seed.user),
+      detail: view.detail,
+      meta: meta !== undefined ? meta : inferTranslateDirection(seed.user),
     },
   ];
 }
@@ -143,7 +169,13 @@ export function isTranslateCardReply(raw: string): boolean {
  * 把一轮 AI 回复整理成最终气泡（实时态与历史态同一套字段）。
  * 翻译卡命中时返回 { card:true, enMain, note, meta }，否则返回普通文本气泡（去标题）。
  */
-export function buildAiReplyBubble(id: string, raw: string, userText: string, agentId: ChatAgentId): ChatMsg {
+export function buildAiReplyBubble(
+  id: string,
+  raw: string,
+  userText: string,
+  agentId: ChatAgentId,
+  meta?: string,
+): ChatMsg {
   const final = String(raw || '');
   if (agentId === 'translate' && isTranslateCardReply(final)) {
     const view = buildTranslateCardView(final);
@@ -154,7 +186,8 @@ export function buildAiReplyBubble(id: string, raw: string, userText: string, ag
       card: true,
       enMain: view.main,
       note: view.note,
-      meta: inferTranslateDirection(userText),
+      detail: view.detail,
+      meta: meta !== undefined ? meta : inferTranslateDirection(userText),
     };
   }
   // 普通回复：原样展示正文（翻译卡未命中说明没有段落标题，无需 stripTitles）

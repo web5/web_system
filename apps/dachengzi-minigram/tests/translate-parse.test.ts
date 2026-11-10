@@ -1,8 +1,12 @@
 import {
   buildTranslateCardView,
+  buildTranslateInput,
+  buildTranslateMeta,
   inferTranslateDirection,
   looksLikeTranslateReply,
   parseSections,
+  parseTranslateInput,
+  parseTranslateTaskText,
   splitSpeakParts,
 } from '../utils/translate-parse';
 
@@ -84,6 +88,74 @@ describe('splitSpeakParts（流式朗读切块）', () => {
 
   it('空文本 → 空数组', () => {
     expect(splitSpeakParts('  ')).toEqual([]);
+  });
+});
+
+describe('buildTranslateCardView · detail 三段明细', () => {
+  it('命中段落标题：detail 切出直译对照/委婉版/语气要点，缺段不返回该字段', () => {
+    const v = buildTranslateCardView(
+      '【推荐译文】Thank you.\n【直译对照】谢谢\n【语气要点】更正式',
+    );
+    expect(v.detail.literal).toBe('谢谢');
+    expect(v.detail.notes).toBe('更正式');
+    expect(v.detail.polite).toBeUndefined();
+  });
+
+  it('无段落标题：detail 为空对象（启发式路径不产明细）', () => {
+    const v = buildTranslateCardView('Thank you. 更正式用 Thank you。');
+    expect(v.detail).toEqual({});
+  });
+});
+
+describe('buildTranslateInput / buildTranslateMeta（首问入参构造）', () => {
+  it('结构化入参按契约拼接五段', () => {
+    const input = buildTranslateInput('中文', '英语', '正式', '完整', '这个报价再商量');
+    expect(input).toBe('【源语言】中文\n【目标语言】英语\n【语气】正式\n【风格】完整\n【原文】这个报价再商量');
+  });
+
+  it('meta 拼接方向 + 语气风格', () => {
+    expect(buildTranslateMeta('中文', '英语', '正式', '完整')).toBe('中文 → 英语 · 正式 · 完整');
+  });
+
+  it('缺段自动省略（缺目标语言时不硬拼箭头）', () => {
+    expect(buildTranslateMeta('中文', '', '正式', '')).toBe('中文 · 正式');
+  });
+});
+
+describe('parseTranslateInput / parseTranslateTaskText（历史 user 消息还原）', () => {
+  const structured = '【源语言】中文\n【目标语言】英语\n【语气】正式\n【风格】完整\n【原文】这个报价再商量';
+
+  it('结构化文本还原出原文 + meta', () => {
+    expect(parseTranslateTaskText(structured)).toEqual({
+      text: '这个报价再商量',
+      meta: '中文 → 英语 · 正式 · 完整',
+    });
+  });
+
+  it('parseTranslateInput 返回五个字段', () => {
+    expect(parseTranslateInput(structured)).toEqual({
+      srcLang: '中文',
+      tgtLang: '英语',
+      register: '正式',
+      style: '完整',
+      text: '这个报价再商量',
+    });
+  });
+
+  it('普通追问（无【原文】）→ 原样返回、meta 空', () => {
+    expect(parseTranslateTaskText('再把这句话翻得口语化一点')).toEqual({
+      text: '再把这句话翻得口语化一点',
+      meta: '',
+    });
+    expect(parseTranslateInput('再把这句话翻得口语化一点')).toBeNull();
+  });
+
+  it('【原文】为空 → null / 原样返回', () => {
+    expect(parseTranslateInput('【源语言】中文\n【原文】  ')).toBeNull();
+    expect(parseTranslateTaskText('【源语言】中文\n【原文】  ')).toEqual({
+      text: '【源语言】中文\n【原文】  ',
+      meta: '',
+    });
   });
 });
 

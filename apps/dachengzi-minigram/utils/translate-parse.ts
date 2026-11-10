@@ -37,6 +37,16 @@ export function stripTitles(text: string): string {
   return text.replace(/【[^】]*】/g, '').trim();
 }
 
+/** 翻译卡三段明细（直译对照 / 委婉版 / 语气要点；缺段不显示对应标题） */
+export interface TranslateDetail {
+  /** 直译对照 */
+  literal?: string;
+  /** 委婉版 */
+  polite?: string;
+  /** 语气要点 */
+  notes?: string;
+}
+
 export interface CardView {
   /** 英文主文 */
   main: string;
@@ -44,6 +54,8 @@ export interface CardView {
   note: string;
   /** 去掉标题后的整段正文（长按复制 / 失败态保留用） */
   text: string;
+  /** 三段明细（实时渲染优先用 detail；note 仅作降级/旧逻辑兼容） */
+  detail: TranslateDetail;
 }
 
 /**
@@ -60,11 +72,16 @@ export function buildTranslateCardView(raw: string): CardView {
       main: sections['推荐译文'] || stripTitles(raw),
       note: NOTE_KEYS.map((k) => sections[k]).filter(Boolean).join('\n'),
       text: stripTitles(raw),
+      detail: {
+        literal: sections['直译对照'] || undefined,
+        polite: sections['委婉版'] || undefined,
+        notes: sections['语气要点'] || undefined,
+      },
     };
   }
   const text = stripTitles(raw);
   const { main, note } = splitLeadingLatin(text);
-  return { main, note, text };
+  return { main, note, text, detail: {} };
 }
 
 /**
@@ -179,4 +196,88 @@ export function inferTranslateDirection(question: string): string {
     return `${src} → 中文`;
   }
   return `中文 → ${last.key}`;
+}
+
+/* ==================== 翻译首问入参构造与还原 ==================== */
+
+/** 入参段落标题（顺序即写入顺序，与 agent systemPrompt 契约对齐） */
+const INPUT_TITLES = ['源语言', '目标语言', '语气', '风格', '原文'];
+
+/**
+ * 把结构化入参文本切成字段（【源语言】/【目标语言】/【语气】/【风格】/【原文】）。
+ * 与 parseSections 同算法，但标题集是入参契约，不复用出参标题集。
+ */
+function parseInputSections(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const marks: Array<{ key: string; start: number }> = [];
+  for (const t of INPUT_TITLES) {
+    const idx = text.indexOf(`【${t}】`);
+    if (idx >= 0) marks.push({ key: t, start: idx });
+  }
+  marks.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < marks.length; i++) {
+    const from = marks[i].start + `【${marks[i].key}】`.length;
+    const to = i + 1 < marks.length ? marks[i + 1].start : text.length;
+    out[marks[i].key] = text.slice(from, to).trim();
+  }
+  return out;
+}
+
+/** 结构化入参字段（parseTranslateInput 的返回） */
+export interface TranslateInputFields {
+  srcLang: string;
+  tgtLang: string;
+  register: string;
+  style: string;
+  text: string;
+}
+
+/** 构造结构化入参文本（agent systemPrompt 契约，格式不可改） */
+export function buildTranslateInput(
+  srcLang: string,
+  tgtLang: string,
+  register: string,
+  style: string,
+  text: string,
+): string {
+  return [
+    `【源语言】${srcLang || '中文'}`,
+    `【目标语言】${tgtLang || '英语'}`,
+    `【语气】${register || '正式'}`,
+    `【风格】${style || '完整'}`,
+    `【原文】${text}`,
+  ].join('\n');
+}
+
+/** 方向/语气/风格 meta（如「中文 → 英语 · 正式 · 完整」；缺段自动省略） */
+export function buildTranslateMeta(srcLang: string, tgtLang: string, register: string, style: string): string {
+  const dir = srcLang && tgtLang ? `${srcLang} → ${tgtLang}` : srcLang || tgtLang || '';
+  const tone = [register, style].filter(Boolean).join(' · ');
+  return [dir, tone].filter(Boolean).join(' · ');
+}
+
+/** 解析结构化入参文本 → 字段；无【原文】或原文为空 → null（视为普通追问） */
+export function parseTranslateInput(text: string): TranslateInputFields | null {
+  const t = String(text || '');
+  const s = parseInputSections(t);
+  const original = (s['原文'] || '').trim();
+  if (!original) return null;
+  return {
+    srcLang: s['源语言'] || '',
+    tgtLang: s['目标语言'] || '',
+    register: s['语气'] || '',
+    style: s['风格'] || '',
+    text: original,
+  };
+}
+
+/**
+ * 历史 user 消息还原：结构化入参文本 → 原文 + meta。
+ * 解析不出（普通追问）→ { text: 原样, meta: '' }。
+ */
+export function parseTranslateTaskText(text: string): { text: string; meta: string } {
+  const t = String(text || '');
+  const p = parseTranslateInput(t);
+  if (!p) return { text: t, meta: '' };
+  return { text: p.text, meta: buildTranslateMeta(p.srcLang, p.tgtLang, p.register, p.style) };
 }
