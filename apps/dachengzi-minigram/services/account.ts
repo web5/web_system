@@ -6,7 +6,7 @@
  * - 冲突（409）时前端必须二次确认，再带 confirmMerge 重发 —— 绝不静默覆盖
  * - 合并成功后服务端重签凭证，前端须 setToken 后再刷新身份
  */
-import { get, post, patch, setToken } from '../utils/request';
+import { get, post, patch, setToken, getToken } from '../utils/request';
 
 export type BindSource = 'phone' | 'email';
 
@@ -77,6 +77,57 @@ export type UpdateProfilePayload = {
 /** 更新当前账号资料（昵称/头像）：PATCH /api/user/profile（auth-service UserController） */
 export function updateProfile(payload: UpdateProfilePayload): Promise<ProfileInfo> {
   return patch<unknown>('/api/user/profile', payload).then(unwrapProfile);
+}
+
+/** 取 apiBase：优先 storage，兜底 wx.getApp（与 utils/request.ts 同一口径）。
+ *  wx.uploadFile 不走 request 封装，需自行取 base。 */
+function getUploadBase(): string {
+  try {
+    const cached = wx.getStorageSync('api_base');
+    if (cached) return cached;
+  } catch {}
+  try {
+    const app = getApp<IAppOption>();
+    if (app && app.globalData && app.globalData.apiBase) return app.globalData.apiBase;
+  } catch {}
+  return '';
+}
+
+/**
+ * 上传头像到 upload-service：POST /api/upload/avatar（multipart，字段名 file，限 2MB）。
+ * 鉴权为用户态 JWT（与小程序登录同一 token）。
+ * @returns 后端可持久化的相对 URL（形如 /api/uploads/avatars/<filename>）
+ */
+export function uploadAvatar(filePath: string): Promise<string> {
+  const base = getUploadBase();
+  if (!base) return Promise.reject(new Error('应用未初始化，请稍后重试或重启小程序'));
+  const token = getToken();
+  return new Promise<string>((resolve, reject) => {
+    wx.uploadFile({
+      url: `${base.replace(/\/+$/, '')}/api/upload/avatar`,
+      filePath,
+      name: 'file',
+      header: { Authorization: `Bearer ${token}` },
+      success(res) {
+        if (res.statusCode === 200) {
+          try {
+            const parsed = JSON.parse(res.data) as { data?: { url?: unknown } };
+            const url = parsed?.data?.url;
+            if (typeof url === 'string' && url) {
+              resolve(url);
+              return;
+            }
+          } catch {
+            // 响应非 JSON（网关异常页/代理报错）按上传失败处理
+          }
+        }
+        reject(res);
+      },
+      fail(err) {
+        reject(err);
+      },
+    });
+  });
 }
 
 /** 绑定手机号：code 来自 button open-type="getPhoneNumber" 的回调 */
