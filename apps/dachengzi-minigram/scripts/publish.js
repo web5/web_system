@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 /**
- * 大橙子个人助理小程序 · 一键发布（出码 + 推企业微信 + 上传开发版本）
+ * 大橙子个人助理小程序 · 出码 / 推企业微信 / 上传开发版本 / 版本指引
  *
  * 子命令：
  *   node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]
  *       出预览码；默认生成后推企业微信（推给第一个群，如公司群；--to 指定会话名）。
  *       默认 cli 模式（微信开发者工具 CLI，走登录态，免 IP 白名单）。
  *   node scripts/publish.js upload [--to <会话名>] [--notify] [--mode cli|ci]
- *       上传开发版本（需公众平台手动设为体验版）；--notify 时推一条 markdown 通知。
+ *       上传开发版本（脚本到此为止）；--notify 时推一条 markdown 通知。
  *   node scripts/publish.js push <二维码png> [--to <会话名>]
  *       把已生成的二维码推送到企业微信。
+ *   node scripts/publish.js trial
+ *       打印「设为体验版」人工分步指引（纯打印，零副作用）。
+ *   node scripts/publish.js release
+ *       打印「提交审核 → 发布正式版」人工分步指引（纯打印，零副作用）。
+ *
+ * 🔴 边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须人工在
+ *    微信公众平台操作，微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。
  *
  * 前置：
  *   cli 模式（默认，免 IP 白名单）：
@@ -35,6 +42,80 @@ const CI_OUT = path.join(ROOT, '.ci-output');
 const PREVIEW_TTL_MIN = 25;
 // 默认直达页（app.json 注册的首页）。cli preview 出的是默认入口页二维码，不接收直达页参数。
 const DEFAULT_PAGE = 'pages/home/index/index';
+
+// ---------- 文案常量（§3 原文，单一真源；单测与文档据此对齐，不得自行改写） ----------
+
+/** §3.1 upload --notify 企业微信通知。version 取运行时 package.json.version */
+function NOTIFY_UPLOAD(version) {
+  return [
+    `**小程序已上传开发版本** v${version}`,
+    '> 脚本到此为止。设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，脚本不代做。',
+    '',
+    `**体验版**（可选，连 dev）：公众平台 → 管理 → 版本管理 → 开发版本 → 选 v${version} → 设为体验版；体验成员在「成员管理 → 体验成员」添加；体验版二维码请用系统标准码，勿手填 path。`,
+    '**正式版**（连 prod）：公众平台 → 管理 → 版本管理 → 开发版本 → 提交审核（填类目 / 测试账号 / 备注）→ 审核通过 → 点击发布（全量或分阶段）。',
+    '',
+    '分步指引：npm run publish -- trial ｜ npm run publish -- release',
+  ].join('\n');
+}
+
+/** §3.2 trial 子命令输出（纯打印，零副作用） */
+function GUIDE_TRIAL(version) {
+  return [
+    `[Publish] 体验版设置指引 · v${version}`,
+    '🔴 本脚本不操作微信公众平台，以下均为人工步骤。',
+    '',
+    '【前置检查】',
+    `  · package.json 版本已递增（当前 v${version}；微信要求递增，重复会被拒）`,
+    '  · 开发版本已上传：若未上传，先跑 npm run publish -- upload',
+    '  · 体验成员已添加：公众平台 → 管理 → 成员管理 → 体验成员',
+    '  · 体验版连 https://dev.kedouai.com（dev），请在 request 合法域名登记',
+    '',
+    '【人工步骤】',
+    '  1. 登录 https://mp.weixin.qq.com/ → 管理 → 版本管理 → 开发版本',
+    `  2. 选中 v${version} → 点击「设为体验版」`,
+    '  3. 用系统生成的标准二维码，勿手填 path（手填不存在/改名页面会扫码白屏）',
+    '  4. 体验版二维码有效期以微信侧为准（官方口径 7 天）',
+    '',
+    '【验收】体验成员扫码，验证气泡对话 / NCE 书籍列表 / 头像昵称同步',
+    '【下一步】正式版：npm run publish -- release',
+  ].join('\n');
+}
+
+/** §3.3 release 子命令输出（纯打印，零副作用） */
+function GUIDE_RELEASE(version) {
+  return [
+    `[Publish] 正式版发布指引 · v${version}`,
+    '🔴 本脚本不操作微信公众平台，以下均为人工步骤。',
+    '',
+    '【前置检查】',
+    '  · 体验版已真机验收通过',
+    '  · prod 后端已发布：https://kedouai.com',
+    '  · request 合法域名已登记 dev.kedouai.com 与 kedouai.com',
+    '  · AppSecret 已同步；隐私指引已声明并发布',
+    `  · package.json 版本已递增（当前 v${version}）`,
+    '',
+    '【人工步骤】',
+    '  1. 登录 https://mp.weixin.qq.com/ → 管理 → 版本管理 → 开发版本 → 提交审核',
+    '  2. 填写类目 / 测试账号 / 备注；审核时长以微信侧为准',
+    '  3. 若驳回：按驳回原因修改 → 重新上传开发版本 → 重新提审',
+    '  4. 审核通过 → 点击「发布」（全量或分阶段灰度）',
+    '  5. 发布后真机验证：正式版连 prod，不打到 dev',
+    '',
+    '【回滚】公众平台 → 管理 → 版本管理 → 线上版本 → 版本回退（回到上一线上版本）；',
+    '        审核中可在「审核版本」区撤回审核。',
+    '【环境】正式版连 https://kedouai.com（prod）；体验版/开发版连 dev。',
+  ].join('\n');
+}
+
+/** §3.4 cmdUpload 控制台指引（不带 --notify 时也打印；upload.js 复用） */
+function GUIDE_UPLOAD_CONSOLE(version) {
+  return [
+    `[Publish] ✅ 开发版本 v${version} 已上传到公众平台后台。`,
+    '🔴 脚本到此为止：设为体验版 / 提交审核 / 发布均为人工操作，脚本不代做。',
+    '   体验版指引：npm run publish -- trial',
+    '   正式版指引：npm run publish -- release',
+  ].join('\n');
+}
 
 // ---------- 基础工具 ----------
 
@@ -177,10 +258,10 @@ function pushQr(pngPath, toName) {
     path.dirname(pngPath),
     path.basename(pngPath, path.extname(pngPath)) + '.meta.json',
   );
-  let head = '小程序预览码（扫码体验）';
+  let head = '小程序开发版预览二维码（扫码体验）';
   try {
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    head = `小程序预览码 v${meta.version} · 有效期至 ${meta.expireAtText}`;
+    head = `小程序开发版预览二维码 v${meta.version} · 有效期至 ${meta.expireAtText}`;
   } catch { /* meta 不存在则用兜底文案 */ }
 
   sendMarkdown(target.chat_id, head);
@@ -256,7 +337,7 @@ function buildCliMeta(pagePath, opts = {}) {
     expireAtText: fmt(expireAt),
     expireAtMs,
     ttlMinutes,
-    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload + 公众平台「设为体验版」',
+    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload 上传开发版本，再人工在公众平台「设为体验版」（体验版连 dev、体验成员可扫、体验版二维码官方口径 7 天）',
   };
 }
 
@@ -343,12 +424,33 @@ function cmdUpload(opts) {
       process.exit(1);
     }
   }
+  // 无论是否 --notify，上传成功后都打印「开发版本已上传 → 后续人工步骤」指引（§3.4 原文）。
+  // 脚本到此为止：设为体验版 / 提交审核 / 发布均为公众平台人工操作，脚本不代做。
+  console.log(GUIDE_UPLOAD_CONSOLE(version));
   if (opts.notify) {
     const target = resolveTarget(opts.to);
-    sendMarkdown(target.chat_id,
-      `**小程序已上传开发版本** v${version}\n请到 公众平台 → 版本管理 设为体验版并提交审核。`);
+    sendMarkdown(target.chat_id, NOTIFY_UPLOAD(version));
     console.log('[Publish] ✅ 已上传并推送通知');
   }
+}
+
+/**
+ * trial / release：纯打印人工分步指引，零副作用。
+ * 🔴 只读 package.json.version 并打印；不调用微信 CLI、不调任何 HTTP/微信 API、
+ *    不写文件、不推企业微信、不改版本状态。本次不实现 --notify。
+ * 微信不向自建小程序开放「设为体验版 / 提交审核 / 发布」接口，故不存在「自动发布」路径。
+ */
+function readVersion() {
+  const pkg = require(path.join(ROOT, 'package.json'));
+  return pkg.version || '1.0.0';
+}
+
+function cmdTrial() {
+  console.log(GUIDE_TRIAL(readVersion()));
+}
+
+function cmdRelease() {
+  console.log(GUIDE_RELEASE(readVersion()));
 }
 
 function cmdPush(opts) {
@@ -371,15 +473,26 @@ function main(argv) {
     case 'push':
       cmdPush(opts);
       break;
+    case 'trial':
+      cmdTrial();
+      break;
+    case 'release':
+      cmdRelease();
+      break;
     default:
       console.log([
         '用法:',
         '  node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]',
         '  node scripts/publish.js upload [--notify] [--mode cli|ci]',
         '  node scripts/publish.js push <二维码png> [--to <会话名>]',
+        '  node scripts/publish.js trial                 打印「设为体验版」人工分步指引（零副作用）',
+        '  node scripts/publish.js release               打印「提交审核 → 发布正式版」人工分步指引（零副作用）',
         '',
         '  --mode cli  默认。微信开发者工具 CLI 出码，免 IP 白名单（需已登录）。',
         '  --mode ci   miniprogram-ci 出码，需固定出口 IP 白名单（执行机场景）。',
+        '',
+        '  边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，',
+        '        微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。',
       ].join('\n'));
       process.exit(0);
   }
@@ -407,6 +520,12 @@ module.exports = {
   sendImage,
   cmdPreview,
   cmdUpload,
+  cmdTrial,
+  cmdRelease,
   cmdPush,
   main,
+  NOTIFY_UPLOAD,
+  GUIDE_TRIAL,
+  GUIDE_RELEASE,
+  GUIDE_UPLOAD_CONSOLE,
 };

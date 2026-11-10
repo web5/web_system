@@ -48,7 +48,7 @@
 | 数据库迁移怎么跑 | `apply-migrations.sh` | `bash scripts/apply-migrations.sh dev\|prod\|local`（`DRY_RUN=1` 预演）；说明见 [`development-guide.md`](./development-guide.md) |
 | 本地起服务 / 验证 / 换机器从零启动 | 本地开发指南 | [`development/local-dev-guide.md`](./development/local-dev-guide.md)、[`development/local-dev-setup.md`](./development/local-dev-setup.md) |
 | 本地微前端产物手工更新（仅调试） | 工程总入口 | `README.md` §7.2 四步铁律（**不是线上发布入口**） |
-| 小程序出码 / 预览码 / 体验版 | 小程序发布手册 | [`miniprogram/release-runbook.md`](./miniprogram/release-runbook.md) |
+| 小程序出码 / 预览码 / 体验版 / 正式版 | 小程序发布手册（§九 版本管理指引：体验版设置 / 提交审核 → 发布，`publish.js trial` / `release` 分步指引） | [`miniprogram/release-runbook.md`](./miniprogram/release-runbook.md) |
 | **红线 / 动作门 / commit trailer** | 协作指令速查 | [`协作指令速查.md`](./协作指令速查.md) |
 | UI 门 / D2 设计评审 / 原型先行 | AI 常驻总入口 | `.codebuddy/CODEBUDDY.md` §2.5；判据 `ui/design-system.md` |
 | 发布评审清单（A 运行 / B 配置 / C 数据…） | 发布评审清单 | [`development/release-review-checklist.md`](./development/release-review-checklist.md) |

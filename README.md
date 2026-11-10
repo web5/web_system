@@ -255,7 +255,7 @@ Gateway（6000）→ /api/* 反代各微服务；兼微前端基座 + 版本分�
 | 后端服务 | 发布流水线 · 模式 A | 由 `publish.sh` 经 MCP 端点发起；动作链 `sync → restart → verify` |
 | `admin` / `portal` | MCP 工具面 · 模式 B | 流水线只投递版本目录，须再调生效接口并传完整 `versionTag` |
 | deploy-console 自身（6200） | **传统发布 · 手动** | `~/skills/web-system-deploy/scripts/release-deploy-console.sh`；⚠️ 勿走流水线 |
-| 微信小程序（kedou-ai-minigram） | **CI 出码** | 固定出口 IP 的执行机上跑 `scripts/preview.js`（预览码）/ `scripts/upload.js`（体验版）；完整前置与排错见 [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) |
+| 微信小程序（kedou-ai-minigram） | **CI 出码** | 固定出口 IP 的执行机上跑 `scripts/preview.js`（开发版预览码）/ `scripts/upload.js`（开发版本，脚本只到上传为止；设为体验版 / 提审 / 发布须人工在公众平台操作）；完整前置与排错见 [docs/miniprogram/release-runbook.md](./docs/miniprogram/release-runbook.md) §九 |
 
 > ⚠️ **§7.2 四步铁律仅用于本地调试**：它是手工更新本地微前端产物的旧做法，**不是线上发布入口**；线上生效一律走上面的 skill 路由。
 

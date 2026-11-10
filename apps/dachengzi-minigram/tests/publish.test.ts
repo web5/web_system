@@ -1,6 +1,6 @@
 /// <reference types="node" />
 /**
- * 一键发布脚本 scripts/publish.js 单元测试
+ * 发布脚本 scripts/publish.js 单元测试
  *
  * 覆盖：
  *   ① parseArgs：--to / --page / --mode / --no-push / --notify 各分支 + 位置参数 + 未知 flag。
@@ -13,6 +13,9 @@
  *   ⑧ writeCliMeta：写到 png 同名的 .meta.json。
  *   ⑨ pushQr 失败路径：png 不存在 → exit 1。
  *   ⑩ pushQr 成功路径：media upload 后发 markdown + image 两条；meta 缺失走兜底文案。
+ *   ⑪ cmdUpload --notify 分步通知文案（开发版本 ≠ 体验版，脚本不代做后台操作）。
+ *   ⑫ cmdUpload 不带 --notify 时也控制台打印「开发版本已上传 → 后续人工步骤」指引。
+ *   ⑬ cmdTrial / cmdRelease 纯打印输出 + 零副作用（execFileSync / wecom / 写文件均不被调用）。
  *
  * 隔离手段：`jest.mock('child_process')` 把 execFileSync 换成 jest.fn —— 它是 publish.js
  * 里所有 wecom-cli / git / which / cli 调用的唯一出口（publish.js 顶部以
@@ -80,12 +83,21 @@ interface PublishModule {
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
   cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean }) => void;
+  cmdTrial: () => void;
+  cmdRelease: () => void;
+  NOTIFY_UPLOAD: (version: string) => string;
+  GUIDE_TRIAL: (version: string) => string;
+  GUIDE_RELEASE: (version: string) => string;
+  GUIDE_UPLOAD_CONSOLE: (version: string) => string;
 }
 
 // 与 publish.js 内部的 require('child_process') 命中同一份 mock
 const mockChildProcess = jest.requireMock('child_process') as { execFileSync: jest.Mock };
 const publish = require('../scripts/publish') as PublishModule;
 const pkg = require('../package.json') as { version: string };
+// publish.js 里 `const fs = require('fs')` 拿到的就是这个对象；ES 命名空间（import * as fs）
+// 在 ts-jest 下属性不可重定义，故零副作用断言要 spy 这个原始 CommonJS 模块对象。
+const fsCore = require('fs') as typeof fs;
 
 /** 构造 wecom-cli「会话列表」返回体 */
 const sessionsJson = (sessions: unknown[]) => JSON.stringify({ sessions });
@@ -384,7 +396,7 @@ describe('pushQr', () => {
       const image = payloads.find((p) => p.msg_type === 'image');
       expect(markdown).toBeDefined();
       expect(image).toBeDefined();
-      expect(markdown.markdown.content).toBe('小程序预览码（扫码体验）');
+      expect(markdown.markdown.content).toBe('小程序开发版预览二维码（扫码体验）');
       expect(image.image.media_id).toBe('media_1');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -418,7 +430,7 @@ describe('pushQr', () => {
       const payloads = sendCalls.map((c) => JSON.parse(c[1][4]));
       const markdown = payloads.find((p) => p.msg_type === 'markdown');
       expect(markdown).toBeDefined();
-      expect(markdown.markdown.content).toBe('小程序预览码 v1.2.3 · 有效期至 2026-11-10 10:25:00');
+      expect(markdown.markdown.content).toBe('小程序开发版预览二维码 v1.2.3 · 有效期至 2026-11-10 10:25:00');
       expect(markdown.markdown.content).not.toContain('\n');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -559,7 +571,22 @@ describe('uploadMedia（type 透传 + media_id 校验）', () => {
   });
 });
 
-describe('cmdUpload --notify 通知文案（措辞：开发版本 ≠ 体验版）', () => {
+/** cmdUpload 的 cli 上传路径打桩：which/git 返回字符串，wecom 各调用返回业务成功体 */
+function mockUploadCliOk() {
+  mockChildProcess.execFileSync.mockImplementation((cmd: string, args: string[]) => {
+    if (cmd === 'git') return 'abc1234\n';
+    if (cmd === 'which') return '/usr/local/bin/cli\n';
+    if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'sessions') {
+      return sessionsJson([{ chat_id: 'g1', chat_name: '公司群', chat_type: 'group' }]);
+    }
+    if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'send') {
+      return JSON.stringify({ success: true });
+    }
+    return ''; // cli upload / node upload.js 的返回值未被消费
+  });
+}
+
+describe('cmdUpload --notify 通知文案（开发版本 ≠ 体验版；脚本不代做后台操作）', () => {
   let exitSpy: jest.SpyInstance;
   let errSpy: jest.SpyInstance;
   let logSpy: jest.SpyInstance;
@@ -579,18 +606,8 @@ describe('cmdUpload --notify 通知文案（措辞：开发版本 ≠ 体验版�
     logSpy.mockRestore();
   });
 
-  it('--notify 的 markdown 通知写「已上传开发版本」，不再误写「已上传体验版」', () => {
-    mockChildProcess.execFileSync.mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'git') return 'abc1234\n';
-      if (cmd === 'which') return '/usr/local/bin/cli\n';
-      if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'sessions') {
-        return sessionsJson([{ chat_id: 'g1', chat_name: '公司群', chat_type: 'group' }]);
-      }
-      if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'send') {
-        return JSON.stringify({ success: true });
-      }
-      return ''; // cli upload / node upload.js 的返回值未被消费
-    });
+  it('--notify 通知写「已上传开发版本」，并给出人工分步指引（不并列成一步、不自称已推进）', () => {
+    mockUploadCliOk();
 
     publish.cmdUpload({ notify: true });
 
@@ -599,8 +616,141 @@ describe('cmdUpload --notify 通知文案（措辞：开发版本 ≠ 体验版�
     );
     expect(sendCalls).toHaveLength(1);
     const payload = JSON.parse(sendCalls[0][1][4]);
-    expect(payload.markdown.content).toContain('已上传开发版本');
-    expect(payload.markdown.content).not.toContain('已上传体验版');
-    expect(payload.markdown.content).toContain('设为体验版'); // 第二行边界说明保留
+    const content = payload.markdown.content as string;
+    // §2.2 保留的三条
+    expect(content).toContain('已上传开发版本');
+    expect(content).not.toContain('已上传体验版');
+    expect(content).toContain('设为体验版');
+    // 新增正向断言：分步 / 人工 / 正式版 / 脚本不代做（锁住 §3.1 新文案）
+    expect(content).toContain('提交审核');
+    expect(content).toContain('版本管理');
+    expect(content).toContain('人工');
+    expect(content).toContain('正式版');
+    expect(content).toContain('脚本不代做');
+    expect(content).toContain('体验成员');
+    expect(content).toContain('连 dev');
+    expect(content).toContain('连 prod');
+    expect(content).toContain('分步指引：npm run publish -- trial ｜ npm run publish -- release');
+    // 「设为体验版 / 提交审核」并列成一步的旧误导不得回归
+    expect(content).not.toContain('设为体验版并提交审核');
+  });
+});
+
+describe('cmdUpload 不带 --notify：控制台仍打印「脚本到此为止」指引', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it('不带 --notify 也打印 §3.4 四行指引，且不发任何企业微信消息', () => {
+    mockUploadCliOk();
+
+    publish.cmdUpload({ notify: false });
+
+    const logs = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logs).toContain(`[Publish] ✅ 开发版本 v${pkg.version} 已上传到公众平台后台。`);
+    expect(logs).toContain('🔴 脚本到此为止：设为体验版 / 提交审核 / 发布均为人工操作，脚本不代做。');
+    expect(logs).toContain('   体验版指引：npm run publish -- trial');
+    expect(logs).toContain('   正式版指引：npm run publish -- release');
+
+    // 不带 --notify 时零推送
+    const sendCalls = mockChildProcess.execFileSync.mock.calls.filter(
+      (c) => c[0] === 'wecom-cli' && c[1][0] === 'message' && c[1][2] === 'send',
+    );
+    expect(sendCalls).toHaveLength(0);
+  });
+});
+
+describe('cmdTrial / cmdRelease：纯打印人工分步指引（零副作用）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let writeSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    writeSpy = jest.spyOn(fsCore, 'writeFileSync').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
+    writeSpy.mockRestore();
+  });
+
+  it('cmdTrial 输出体验版设置指引：本脚本不操作后台 / 人工步骤 / 前置检查 / 连 dev / 体验成员', () => {
+    publish.cmdTrial();
+
+    const out = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(out).toContain(`[Publish] 体验版设置指引 · v${pkg.version}`);
+    expect(out).toContain('🔴 本脚本不操作微信公众平台，以下均为人工步骤。');
+    expect(out).toContain('【前置检查】');
+    expect(out).toContain('【人工步骤】');
+    expect(out).toContain(`  · package.json 版本已递增（当前 v${pkg.version}；微信要求递增，重复会被拒）`);
+    expect(out).toContain('  · 体验成员已添加：公众平台 → 管理 → 成员管理 → 体验成员');
+    expect(out).toContain('  · 体验版连 https://dev.kedouai.com（dev），请在 request 合法域名登记');
+    expect(out).toContain(`  2. 选中 v${pkg.version} → 点击「设为体验版」`);
+    expect(out).toContain('勿手填 path');
+    expect(out).toContain('官方口径 7 天');
+    expect(out).toContain('【下一步】正式版：npm run publish -- release');
+  });
+
+  it('cmdRelease 输出正式版发布指引：前置检查 / 提审 / 驳回 / 发布 / 回滚 / 连 prod', () => {
+    publish.cmdRelease();
+
+    const out = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(out).toContain(`[Publish] 正式版发布指引 · v${pkg.version}`);
+    expect(out).toContain('🔴 本脚本不操作微信公众平台，以下均为人工步骤。');
+    expect(out).toContain('【前置检查】');
+    expect(out).toContain('  · prod 后端已发布：https://kedouai.com');
+    expect(out).toContain('  · AppSecret 已同步；隐私指引已声明并发布');
+    expect(out).toContain('  1. 登录 https://mp.weixin.qq.com/ → 管理 → 版本管理 → 开发版本 → 提交审核');
+    expect(out).toContain('审核时长以微信侧为准');
+    expect(out).toContain('  3. 若驳回：按驳回原因修改 → 重新上传开发版本 → 重新提审');
+    expect(out).toContain('  4. 审核通过 → 点击「发布」（全量或分阶段灰度）');
+    expect(out).toContain('  5. 发布后真机验证：正式版连 prod，不打到 dev');
+    expect(out).toContain('【回滚】');
+    expect(out).toContain('版本回退');
+    expect(out).toContain('撤回审核');
+    expect(out).toContain('【环境】正式版连 https://kedouai.com（prod）；体验版/开发版连 dev。');
+  });
+
+  it('零副作用：cmdTrial / cmdRelease 不调 execFileSync（含 wecom/media/git/which/cli）、不写文件、不 exit', () => {
+    publish.cmdTrial();
+    publish.cmdRelease();
+
+    expect(mockChildProcess.execFileSync).not.toHaveBeenCalled();
+    const wecomCalls = mockChildProcess.execFileSync.mock.calls.filter((c) => c[0] === 'wecom-cli');
+    expect(wecomCalls).toHaveLength(0);
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+
+  it('输出与 §3 文案常量同源（version 取 package.json.version）', () => {
+    publish.cmdTrial();
+    expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_TRIAL(pkg.version));
+    publish.cmdRelease();
+    expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_RELEASE(pkg.version));
   });
 });
