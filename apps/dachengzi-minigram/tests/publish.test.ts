@@ -3,15 +3,22 @@
  * 一键发布脚本 scripts/publish.js 单元测试
  *
  * 覆盖：
- *   ① parseArgs：--to / --page / --no-push / --notify 各分支 + 位置参数 + 未知 flag。
- *   ② resolveTarget：缺省取 single / --to 命中 / --to 未命中（列会话名）/ sessions 空。
- *   ③ pushQr 失败路径：png 不存在 → exit 1。
- *   ④ pushQr 成功路径：media upload 后发 markdown + image 两条；meta 缺失走兜底文案。
+ *   ① parseArgs：--to / --page / --mode / --no-push / --notify 各分支 + 位置参数 + 未知 flag。
+ *   ② resolveMode：缺省 cli / cli / ci / 未知值 exit 1（cli/ci 模式分支选择）。
+ *   ③ resolveTarget：缺省取 single / --to 命中 / --to 未命中（列会话名）/ sessions 空。
+ *   ④ resolveCliBinary：WECHAT_DEVTOOLS_CLI 优先 → which cli 回退 → 字面量 cli 兜底。
+ *   ⑤ cliPreviewArgs / cliUploadArgs：cli 命令参数拼装。
+ *   ⑥ gitShortSha：git rev-parse 结果 / 失败降级 unknown。
+ *   ⑦ buildCliMeta：版本 / git sha / 有效期 / 默认口径（版本取 package.json、25 分钟）。
+ *   ⑧ writeCliMeta：写到 png 同名的 .meta.json。
+ *   ⑨ pushQr 失败路径：png 不存在 → exit 1。
+ *   ⑩ pushQr 成功路径：media upload 后发 markdown + image 两条；meta 缺失走兜底文案。
  *
  * 隔离手段：`jest.mock('child_process')` 把 execFileSync 换成 jest.fn —— 它是 publish.js
- * 里所有 wecom-cli 调用的唯一出口（publish.js 顶部以 `const childProcess = require('child_process')`
- * 引用同一模块对象，因此 mock 能被内部 run/wecom 命中）。入口已用 `require.main === module`
- * 保护，被 require 时不会执行 main()。
+ * 里所有 wecom-cli / git / which / cli 调用的唯一出口（publish.js 顶部以
+ * `const childProcess = require('child_process')` 引用同一模块对象，因此 mock 能被内部
+ * run/wecom/resolveCliBinary/gitShortSha 命中）。入口已用 `require.main === module` 保护，
+ * 被 require 时不会执行 main()。
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -21,25 +28,54 @@ jest.mock('child_process', () => ({
   execFileSync: jest.fn(),
 }));
 
+interface CliMeta {
+  version: string;
+  gitSha: string;
+  pagePath: string;
+  createdAt: string;
+  createdAtText: string;
+  expireAt: string;
+  expireAtText: string;
+  expireAtMs: number;
+  ttlMinutes: number;
+  hint: string;
+}
+
+interface CliMetaOpts {
+  version?: string;
+  gitSha?: string;
+  ttlMinutes?: number;
+  now?: number;
+}
+
 interface PublishModule {
   parseArgs: (argv: string[]) => {
     _: string[];
     to?: string;
     page?: string;
+    mode?: string;
     noPush?: boolean;
     notify?: boolean;
   };
+  resolveMode: (mode?: string) => string;
   resolveTarget: (toName?: string) => {
     chat_id: string;
     chat_name?: string;
     chat_type?: string;
   };
+  resolveCliBinary: (env?: Record<string, string | undefined>) => string;
+  gitShortSha: () => string;
+  cliPreviewArgs: (appRoot: string, outPath: string) => string[];
+  cliUploadArgs: (appRoot: string, version: string, desc: string) => string[];
+  buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
+  writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
   pushQr: (pngPath: string, toName?: string) => void;
 }
 
 // 与 publish.js 内部的 require('child_process') 命中同一份 mock
 const mockChildProcess = jest.requireMock('child_process') as { execFileSync: jest.Mock };
 const publish = require('../scripts/publish') as PublishModule;
+const pkg = require('../package.json') as { version: string };
 
 /** 构造 wecom-cli「会话列表」返回体 */
 const sessionsJson = (sessions: unknown[]) => JSON.stringify({ sessions });
@@ -59,12 +95,44 @@ describe('parseArgs', () => {
     });
   });
 
-  it('空参数 → 空位置参数、无 flag', () => {
+  it('--mode cli / --mode ci 进入 mode 字段', () => {
+    expect(publish.parseArgs(['--mode', 'cli'])).toEqual({ _: [], mode: 'cli' });
+    expect(publish.parseArgs(['--mode', 'ci', '--no-push'])).toEqual({ _: [], mode: 'ci', noPush: true });
+  });
+
+  it('空参数 → 空位置参数、无 flag（无 mode 字段，由 resolveMode 兜底 cli）', () => {
     expect(publish.parseArgs([])).toEqual({ _: [] });
   });
 
   it('未知 flag 不进 flag 字段，按位置参数保留', () => {
     expect(publish.parseArgs(['--unknown', 'x'])).toEqual({ _: ['--unknown', 'x'] });
+  });
+});
+
+describe('resolveMode（cli/ci 模式分支选择）', () => {
+  it('缺省 / 空串 → cli', () => {
+    expect(publish.resolveMode(undefined)).toBe('cli');
+    expect(publish.resolveMode('')).toBe('cli');
+  });
+
+  it('cli / ci 原样返回', () => {
+    expect(publish.resolveMode('cli')).toBe('cli');
+    expect(publish.resolveMode('ci')).toBe('ci');
+  });
+
+  it('未知值 → exit 1 并提示支持范围', () => {
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => publish.resolveMode('bogus')).toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('bogus'));
+    } finally {
+      exitSpy.mockRestore();
+      errSpy.mockRestore();
+    }
   });
 });
 
@@ -119,6 +187,123 @@ describe('resolveTarget', () => {
     mockChildProcess.execFileSync.mockReturnValue(sessionsJson([]));
     expect(() => publish.resolveTarget()).toThrow('process.exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('resolveCliBinary（CLI 路径解析，不硬编码）', () => {
+  const OLD = process.env.WECHAT_DEVTOOLS_CLI;
+
+  afterEach(() => {
+    if (OLD === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = OLD;
+    mockChildProcess.execFileSync.mockReset();
+  });
+
+  it('环境变量 WECHAT_DEVTOOLS_CLI 优先', () => {
+    process.env.WECHAT_DEVTOOLS_CLI = '/opt/wechat-devtools/cli';
+    expect(publish.resolveCliBinary()).toBe('/opt/wechat-devtools/cli');
+  });
+
+  it('无环境变量 → 回退 which cli', () => {
+    delete process.env.WECHAT_DEVTOOLS_CLI;
+    mockChildProcess.execFileSync.mockReturnValue('/usr/local/bin/cli\n');
+    expect(publish.resolveCliBinary()).toBe('/usr/local/bin/cli');
+  });
+
+  it('which 失败 → 回退字面量 cli', () => {
+    delete process.env.WECHAT_DEVTOOLS_CLI;
+    mockChildProcess.execFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    expect(publish.resolveCliBinary()).toBe('cli');
+  });
+});
+
+describe('cli 命令参数拼装', () => {
+  it('cliPreviewArgs：--qr-output 用项目内绝对路径', () => {
+    expect(
+      publish.cliPreviewArgs('/repo/app', '/repo/app/.ci-output/cli-preview-qr.png'),
+    ).toEqual([
+      'preview',
+      '--project',
+      '/repo/app',
+      '--qr-format',
+      'image',
+      '--qr-output',
+      '/repo/app/.ci-output/cli-preview-qr.png',
+    ]);
+  });
+
+  it('cliUploadArgs：-v 版本 -d 描述', () => {
+    expect(publish.cliUploadArgs('/repo/app', '1.2.3', 'cli 上传 v1.2.3')).toEqual([
+      'upload',
+      '--project',
+      '/repo/app',
+      '-v',
+      '1.2.3',
+      '-d',
+      'cli 上传 v1.2.3',
+    ]);
+  });
+});
+
+describe('gitShortSha', () => {
+  beforeEach(() => mockChildProcess.execFileSync.mockReset());
+
+  it('返回 git rev-parse --short HEAD 结果（去首尾空白）', () => {
+    mockChildProcess.execFileSync.mockReturnValue('abc1234\n');
+    expect(publish.gitShortSha()).toBe('abc1234');
+  });
+
+  it('git 失败 → 降级 unknown', () => {
+    mockChildProcess.execFileSync.mockImplementation(() => {
+      throw new Error('not a git repo');
+    });
+    expect(publish.gitShortSha()).toBe('unknown');
+  });
+});
+
+describe('buildCliMeta（版本 / git sha / 有效期拼装）', () => {
+  beforeEach(() => mockChildProcess.execFileSync.mockReset());
+
+  it('注入 version/gitSha/ttl/now → 拼出版本与有效期', () => {
+    const now = Date.UTC(2026, 10, 10, 10, 0, 0);
+    const meta = publish.buildCliMeta('pages/home/index/index', {
+      version: '9.9.9',
+      gitSha: 'abc1234',
+      ttlMinutes: 30,
+      now,
+    });
+    expect(meta.version).toBe('9.9.9');
+    expect(meta.gitSha).toBe('abc1234');
+    expect(meta.pagePath).toBe('pages/home/index/index');
+    expect(meta.ttlMinutes).toBe(30);
+    expect(meta.expireAtMs).toBe(now + 30 * 60 * 1000);
+    expect(meta.expireAt).toBe(new Date(now + 30 * 60 * 1000).toISOString());
+    expect(meta.expireAtText).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('不注入 version → 取 package.json.version；ttl 默认 25 分钟', () => {
+    const now = Date.UTC(2026, 10, 10, 10, 0, 0);
+    const meta = publish.buildCliMeta('pages/chat/index/index', { gitSha: 'def5678', now });
+    expect(meta.version).toBe(pkg.version);
+    expect(meta.ttlMinutes).toBe(25);
+    expect(meta.expireAtMs).toBe(now + 25 * 60 * 1000);
+  });
+});
+
+describe('writeCliMeta', () => {
+  it('写到 png 同名的 .meta.json', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-meta-'));
+    const png = path.join(tmp, 'cli-preview-qr.png');
+    try {
+      const dest = publish.writeCliMeta(png, { version: '1.0.0' });
+      expect(dest).toBe(path.join(tmp, 'cli-preview-qr.meta.json'));
+      const parsed = JSON.parse(fs.readFileSync(dest, 'utf-8'));
+      expect(parsed.version).toBe('1.0.0');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

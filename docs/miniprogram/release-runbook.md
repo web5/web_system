@@ -10,12 +10,14 @@
 
 | 我要干什么 | 命令 |
 |---|---|
-| 出预览码（开发版，扫码即用） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
-| 上传体验版 | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
-| **出码 + 推企业微信（一键）** | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview` |
+| **出码 + 推企业微信（一键，默认 cli 免白名单）** | `npm run publish -- preview` |
+| 出预览码（开发版，扫码即用，cli） | `npm run publish -- preview --no-push` |
+| 上传体验版（cli） | `npm run publish -- upload` |
+| 出预览码（ci，需白名单） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
+| 上传体验版（ci） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
 
-两条都在**固定出口 IP 的执行机**上跑（原因见 §1.3）。跑完二维码落在
-`apps/kedou-ai-minigram/.ci-output/preview-qr.png`（该目录已 gitignore）。
+cli 模式走微信开发者工具登录态，**不需要 IP 白名单**；只有 ci 模式才需要在固定出口 IP 的执行机上跑
+（原因见 §1.3）。跑完二维码落在 `apps/<app>/.ci-output/`（该目录已 gitignore）。
 
 ---
 
@@ -45,16 +47,20 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 读 `project.config.json` 的 `appid`，脚本自动取，无需手工填。
 历史包袱：`scripts/*.js` 里曾硬编码占位 `your-appid`，现已改为读配置文件，不要再改回去。
 
-### 1.3 IP 白名单（最容易反复踩的一条）
+### 1.3 IP 白名单（只对 miniprogram-ci 模式生效）
 
 公众平台 → 开发管理 → 开发设置 → IP 白名单。
 
-**用固定出口 IP 的执行机出码，不要用本机。** 本机公网 IP 会变（家宽/办公网都是动态的），
-每次变都要改白名单，不可维护。执行机出口 IP 固定，加一次即可。
+**cli 模式（微信开发者工具 CLI，走登录态）不需要 IP 白名单** —— 本机/执行机公网 IP
+变了也不影响出码。日常开发、本机出码、免白名单，一律用 cli 模式（`publish.js` 默认）。
+
+**只有 miniprogram-ci 模式（`--mode ci` / 直接跑 `scripts/preview.js`、`scripts/upload.js`）
+才需要 IP 白名单**，且**用固定出口 IP 的执行机出码，不要用本机**：本机公网 IP 会变
+（家宽/办公网都是动态的），每次变都要改白名单，不可维护。执行机出口 IP 固定，加一次即可。
 
 实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
 21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
-本机出码只适合「改完立刻自验」这种临时场景；要给出可复现的码，走执行机。
+（这条只影响 ci 模式；cli 模式没有这个坑。）
 
 判定出口 IP 时**以微信侧报错为准**，不要信 `curl ifconfig.me`：
 
@@ -118,7 +124,11 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 
 ## 三、日常出码
 
-### 3.1 出预览码（开发版）
+> **默认走 cli 模式（免 IP 白名单）**：`npm run publish -- preview` / `npm run publish -- upload`。
+> 下面 §3.1 / §3.2 是 miniprogram-ci 路径（`--mode ci` / 直接跑 `scripts/*.js`），仅在
+> 「执行机固定出口 IP 已配白名单」时用。
+
+### 3.1 出预览码（开发版，ci 模式 / miniprogram-ci）
 
 ```bash
 # ① 执行机上先对齐代码（防止基于旧源码构建）
@@ -150,7 +160,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 
 版本号与描述自动取 `package.json` 的 `version` + git 短 sha，`desc` 里能看出是哪次提交出的码。
 
-### 3.2 上传体验版
+### 3.2 上传体验版（ci 模式 / miniprogram-ci）
 
 ```bash
 MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
@@ -343,6 +353,7 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 | 2026-10-11 | §5.4 隐私校验前置（全局生效 + 未声明即拦截 + 隐私接口↔声明类型对照）；§六 后端 prod 部署手法（备份优先、migration 需读注释、只构建改动服务、临时 token 验证法） |
 | 2026-10-11 | §5.5 「点一下也弹录音浮层」= 授权异步窗口期；按住说话修复为 `preparing` 状态机（PR #312） |
 | 2026-11-10 | §八 一键发布 `scripts/publish.js`（出码 + 推企业微信）；速查表补「出码 + 推企业微信」一行 |
+| 2026-11-10 | `publish.js` 新增 `--mode cli|ci`：默认 cli（微信开发者工具 CLI，免 IP 白名单），ci 降级为 `--mode ci`；§1.3 修正白名单口径 |
 
 ---
 
@@ -354,38 +365,49 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 ### 8.1 命令
 
 ```bash
-# 出预览码 → 推企业微信（默认发授权人本人）
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview
+# 出预览码 → 推企业微信（默认 cli 模式，免白名单，发授权人本人）
+npm run publish -- preview
 
-# 指定直达页 / 指定会话 / 只出码不推送
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --page pages/chat/index/index
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --to <会话名>
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --no-push
+# 指定会话 / 只出码不推送
+npm run publish -- preview --to <会话名>
+npm run publish -- preview --no-push
 
-# 上传体验版到微信后台；--notify 时推一条 markdown 通知
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --notify
+# 上传体验版（默认 cli 模式）；--notify 时推一条 markdown 通知
+npm run publish -- upload --notify
 
 # 把已生成的二维码单独推到企业微信（不重新出码）
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- push <二维码png> --to <会话名>
+npm run publish -- push <二维码png> --to <会话名>
+
+# ---- 走 miniprogram-ci（执行机固定出口 IP 已配白名单时）----
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
+# ci 模式才支持 --page 直达页
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci --page pages/chat/index/index
 ```
 
 ### 8.2 推送链路与前置
 
 ```
-preview.js 出码 → .ci-output/preview-qr.png
+出码（cli: cli preview → .ci-output/cli-preview-qr.png；ci: preview.js → .ci-output/preview-qr.png）
   → wecom-cli media upload（上传图片，拿 media_id）
   → wecom-cli message aibot send（先发 markdown 说明，再发图片）
 ```
 
 - **授权**：`wecom-cli auth show --status` 须为 `authorized`（一次性，掉授权时按 `wecomcli-shared` 走初始化）。
+- **cli 模式前置**：微信开发者工具已登录（`cli islogin` → `{"login":true}`），
+  CLI 路径通过环境变量 `WECHAT_DEVTOOLS_CLI` 或 PATH 中的 `cli` 解析（脚本不硬编码）。
+- **ci 模式前置**：`MINIPROGRAM_CI_PATH` + `private.key` + 出口 IP 白名单（见 §1.3）。
 - **目标会话**：`--to` 按会话名精确匹配（每次发送前现查 `sessions list`，不缓存）；缺省取第一个单聊（授权人本人）。
-- **说明文案**：版本 / git sha / 直达页 / 有效期自动取自 `preview.js` 产出的 `.ci-output/preview-qr.meta.json`。
+- **说明文案**：版本 / git sha / 直达页 / 有效期自动取自 png 同名的 `.meta.json`
+  （ci 模式由 `preview.js` 产出；cli 模式由 `publish.js` 自拼——版本取 `package.json.version`、
+  git sha 取 `git rev-parse --short HEAD`、有效期按 25 分钟口径）。
 
 ### 8.3 边界（务必知道）
 
-- **本机 vs 执行机**：出码仍受 §1.3 白名单约束。本机出口 IP 动态，建议在固定 IP 执行机出码；
-  「本机出 + 推企业微信」只适合改完立刻自验，IP 一变白名单就失效（实测报 `invalid ip`）。
+- **cli vs ci**：默认 cli 模式免白名单，本机即可出码并推送（无需固定 IP）；`--mode ci`
+  才受 §1.3 白名单约束，建议在固定 IP 执行机跑。cli 模式暂不支持 `--page` 直达页
+  （出的是默认入口页二维码），`--page` 仅对 `--mode ci` 生效。
 - **`media upload` 的类型对齐**：二维码图上传后自动识别为 `image`，发送时用 `msg_type=image`；
   不要拿 `file` 类型发二维码。
-- **上传到「提交审核」为止**：`upload.js` 只能把代码传到微信后台成为「开发版本」；
+- **上传到「提交审核」为止**：`upload`（cli/ci）只能把代码传到微信后台成为「开发版本」；
   「设为体验版 → 提交审核 → 发布」微信不开放 CI 接口，需在公众平台人工点（个人主体无 openapi）。
