@@ -126,14 +126,18 @@ function assertWecomOk(res, action) {
   process.exit(1);
 }
 
-function uploadMedia(filePath) {
-  const res = wecom(['media', 'upload', '--json', JSON.stringify({ file_path: filePath })]);
-  assertWecomOk(res, '上传媒体');
-  if (!res.media_id) {
-    console.error('[Publish] ❌ 上传媒体失败：未返回 media_id');
-    process.exit(1);
-  }
-  return res;
+function uploadMedia(filePath, type = 'image') {
+  // media upload 的返回体是 {type, media_id, created_at}，没有 success 字段，
+  // 不能套用 assertWecomOk（其 success 语义只适用于 message aibot send）。
+  // 这里以「media_id 存在且非空」作为成功判据；失败时打印 errmsg/errcode（有则带）并退出。
+  const res = wecom(['media', 'upload', '--json', JSON.stringify({ file_path: filePath, type })]);
+  if (res && res.media_id) return res;
+  const parts = [];
+  if (res && res.errmsg != null && res.errmsg !== '') parts.push(String(res.errmsg));
+  if (res && res.errcode != null) parts.push(`errcode=${res.errcode}`);
+  const reason = parts.length ? parts.join('，') : '未返回 media_id';
+  console.error(`[Publish] ❌ 上传媒体失败：${reason}`);
+  process.exit(1);
 }
 
 function sendMarkdown(chatId, content) {
@@ -164,7 +168,7 @@ function pushQr(pngPath, toName) {
   const label = target.chat_name || '(未命名会话)';
   console.log(`[Publish] 推送到企业微信 → ${label}`);
 
-  const media = uploadMedia(pngPath);
+  const media = uploadMedia(pngPath, 'image');
 
   // 说明文字一行：版本 + 有效期，从 png 同名的 meta 里取。
   // meta 文件名由 png 文件名派生：preview-qr.png → preview-qr.meta.json，

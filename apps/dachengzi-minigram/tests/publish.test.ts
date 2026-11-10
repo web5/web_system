@@ -70,7 +70,13 @@ interface PublishModule {
   buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
   writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
   pushQr: (pngPath: string, toName?: string) => void;
-  uploadMedia: (filePath: string) => { media_id?: string; success?: boolean };
+  uploadMedia: (filePath: string, type?: string) => {
+    media_id?: string;
+    type?: string;
+    created_at?: string;
+    errmsg?: string;
+    errcode?: number;
+  };
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
 }
@@ -478,19 +484,76 @@ describe('发送 / 上传结果校验（假绿修复）', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
-  it('uploadMedia 返回 success:true 但无 media_id → exit 1', () => {
-    mockChildProcess.execFileSync.mockReturnValue(JSON.stringify({ success: true }));
+  it('uploadMedia 返回体无 media_id（media 真实结构，无 success 字段）→ exit 1', () => {
+    mockChildProcess.execFileSync.mockReturnValue(JSON.stringify({ type: 'image' }));
     expect(() => publish.uploadMedia('/tmp/x.png')).toThrow('process.exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('media_id'));
   });
 
-  it('uploadMedia 返回 success:false → exit 1 且打印 errmsg', () => {
+  it('uploadMedia 返回体带 errmsg/errcode 但无 media_id → exit 1 且打印两者', () => {
     mockChildProcess.execFileSync.mockReturnValue(
-      JSON.stringify({ success: false, errmsg: 'upload fail' }),
+      JSON.stringify({ errcode: 40001, errmsg: 'upload fail' }),
     );
     expect(() => publish.uploadMedia('/tmp/x.png')).toThrow('process.exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('upload fail'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('40001'));
+  });
+});
+
+describe('uploadMedia（type 透传 + media_id 校验）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  const mediaUploadCall = () => mockChildProcess.execFileSync.mock.calls.find(
+    (c) => c[0] === 'wecom-cli' && c[1][0] === 'media' && c[1][1] === 'upload',
+  );
+
+  it('不传 type → 默认带 type:"image"，返回 media_id 算成功', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      JSON.stringify({ type: 'image', media_id: 'media_1', created_at: '2026-11-10T00:00:00Z' }),
+    );
+    const res = publish.uploadMedia('/tmp/qr.png');
+    expect(res.media_id).toBe('media_1');
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    const call = mediaUploadCall();
+    expect(call).toBeDefined();
+    const payload = JSON.parse(call![1][3]);
+    expect(payload.file_path).toBe('/tmp/qr.png');
+    expect(payload.type).toBe('image');
+  });
+
+  it('显式 type:"file" → 覆盖默认值透传', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      JSON.stringify({ type: 'file', media_id: 'media_2', created_at: '2026-11-10T00:00:00Z' }),
+    );
+    publish.uploadMedia('/tmp/f.txt', 'file');
+    const payload = JSON.parse(mediaUploadCall()![1][3]);
+    expect(payload.type).toBe('file');
+    expect(payload.file_path).toBe('/tmp/f.txt');
+  });
+
+  it('返回 media_id 为空串 → exit 1', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      JSON.stringify({ type: 'image', media_id: '' }),
+    );
+    expect(() => publish.uploadMedia('/tmp/qr.png')).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('media_id'));
   });
 });
