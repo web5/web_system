@@ -117,4 +117,4 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - 二维码落在 `.ci-output/`（已 gitignore），**有时效**（约 25 分钟），过期重跑。
 - cli 出码的 `--qr-output` 必须是**项目内**绝对路径；写 `/tmp/...` 会报「二维码输出路径无效或不存在 (code 17)」。
 - cli 出码产出的 `.png` 实际内容为 JPEG（470×470），后续推图不受影响（media upload 按内容识别）。
-- cli 出码不生成 meta 信息，说明文案由 `publish.js` 自拼为一行「小程序预览码 v<版本> · 有效期至 <时间>」（版本取 `package.json.version`、25 分钟有效期）。
+- cli 出码不生成 meta 信息，说明文案由 `publish.js` 自拼为一行「小程序开发版预览二维码 v<版本> · 有效期至 <时间>」（版本取 `package.json.version`、25 分钟有效期）。

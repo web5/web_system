@@ -98,7 +98,7 @@ function writeQrHtml(imgPath, meta) {
     const b64 = buf.toString('base64');
     const dest = path.join(path.dirname(imgPath), 'preview-qr.html');
     const html = `<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>小程序预览码 v${meta.version}</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>小程序开发版预览二维码 v${meta.version}</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;

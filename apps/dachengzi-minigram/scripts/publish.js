@@ -177,10 +177,10 @@ function pushQr(pngPath, toName) {
     path.dirname(pngPath),
     path.basename(pngPath, path.extname(pngPath)) + '.meta.json',
   );
-  let head = '小程序预览码（扫码体验）';
+  let head = '小程序开发版预览二维码（扫码体验）';
   try {
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    head = `小程序预览码 v${meta.version} · 有效期至 ${meta.expireAtText}`;
+    head = `小程序开发版预览二维码 v${meta.version} · 有效期至 ${meta.expireAtText}`;
   } catch { /* meta 不存在则用兜底文案 */ }
 
   sendMarkdown(target.chat_id, head);

@@ -384,7 +384,7 @@ describe('pushQr', () => {
       const image = payloads.find((p) => p.msg_type === 'image');
       expect(markdown).toBeDefined();
       expect(image).toBeDefined();
-      expect(markdown.markdown.content).toBe('小程序预览码（扫码体验）');
+      expect(markdown.markdown.content).toBe('小程序开发版预览二维码（扫码体验）');
       expect(image.image.media_id).toBe('media_1');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -418,7 +418,7 @@ describe('pushQr', () => {
       const payloads = sendCalls.map((c) => JSON.parse(c[1][4]));
       const markdown = payloads.find((p) => p.msg_type === 'markdown');
       expect(markdown).toBeDefined();
-      expect(markdown.markdown.content).toBe('小程序预览码 v1.2.3 · 有效期至 2026-11-10 10:25:00');
+      expect(markdown.markdown.content).toBe('小程序开发版预览二维码 v1.2.3 · 有效期至 2026-11-10 10:25:00');
       expect(markdown.markdown.content).not.toContain('\n');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
