@@ -70,6 +70,9 @@ interface PublishModule {
   buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
   writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
   pushQr: (pngPath: string, toName?: string) => void;
+  uploadMedia: (filePath: string) => { media_id?: string; success?: boolean };
+  sendMarkdown: (chatId: string, content: string) => unknown;
+  sendImage: (chatId: string, mediaId: string) => unknown;
 }
 
 // 与 publish.js 内部的 require('child_process') 命中同一份 mock
@@ -340,9 +343,9 @@ describe('pushQr', () => {
           return JSON.stringify({ sessions: [{ chat_id: 'c1', chat_name: '本人', chat_type: 'single' }] });
         }
         if (args[0] === 'media' && args[1] === 'upload') {
-          return JSON.stringify({ media_id: 'media_1' });
+          return JSON.stringify({ success: true, media_id: 'media_1' });
         }
-        return JSON.stringify({ errcode: 0 });
+        return JSON.stringify({ success: true });
       });
 
       publish.pushQr(png);
@@ -362,5 +365,81 @@ describe('pushQr', () => {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+describe('发送 / 上传结果校验（假绿修复）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it('sendMarkdown 返回 success:false → exit 1 且打印 errmsg/errcode', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      JSON.stringify({ success: false, errmsg: 'xxx', errcode: 40001 }),
+    );
+    expect(() => publish.sendMarkdown('c1', 'hello')).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('xxx'));
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('40001'));
+  });
+
+  it('pushQr：send 失败时不打印「已推送」', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-test-'));
+    const png = path.join(tmp, 'qr.png');
+    fs.writeFileSync(png, 'fake-png-bytes');
+    try {
+      mockChildProcess.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+        if (args[0] === 'message' && args[1] === 'aibot' && args[2] === 'sessions') {
+          return JSON.stringify({ sessions: [{ chat_id: 'c1', chat_name: '本人', chat_type: 'single' }] });
+        }
+        if (args[0] === 'media' && args[1] === 'upload') {
+          return JSON.stringify({ success: true, media_id: 'media_1' });
+        }
+        return JSON.stringify({ success: false, errmsg: 'xxx' });
+      });
+
+      expect(() => publish.pushQr(png)).toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('已推送'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('sendMarkdown 返回 success:true → 正常走完（不 exit）', () => {
+    mockChildProcess.execFileSync.mockReturnValue(JSON.stringify({ success: true }));
+    expect(() => publish.sendMarkdown('c1', 'hello')).not.toThrow();
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('uploadMedia 返回 success:true 但无 media_id → exit 1', () => {
+    mockChildProcess.execFileSync.mockReturnValue(JSON.stringify({ success: true }));
+    expect(() => publish.uploadMedia('/tmp/x.png')).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('media_id'));
+  });
+
+  it('uploadMedia 返回 success:false → exit 1 且打印 errmsg', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      JSON.stringify({ success: false, errmsg: 'upload fail' }),
+    );
+    expect(() => publish.uploadMedia('/tmp/x.png')).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('upload fail'));
   });
 });

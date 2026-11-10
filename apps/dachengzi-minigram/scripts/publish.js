@@ -111,24 +111,47 @@ function resolveTarget(toName) {
   return self;
 }
 
+/**
+ * 校验 wecom-cli send/upload 返回体：success 必须为 true，否则打印 errmsg/errcode 后退出。
+ * 返回体顶层可能带 security_notice / extra_identity_context 等字段，此处只取业务字段，
+ * 不误判。校验通过则原样返回 res 供调用方读取 media_id 等字段。
+ */
+function assertWecomOk(res, action) {
+  if (res && res.success === true) return res;
+  const parts = [];
+  if (res && res.errmsg != null && res.errmsg !== '') parts.push(String(res.errmsg));
+  if (res && res.errcode != null) parts.push(`errcode=${res.errcode}`);
+  const reason = parts.length ? parts.join('，') : '未返回 success=true';
+  console.error(`[Publish] ❌ ${action}失败：${reason}`);
+  process.exit(1);
+}
+
 function uploadMedia(filePath) {
-  return wecom(['media', 'upload', '--json', JSON.stringify({ file_path: filePath })]);
+  const res = wecom(['media', 'upload', '--json', JSON.stringify({ file_path: filePath })]);
+  assertWecomOk(res, '上传媒体');
+  if (!res.media_id) {
+    console.error('[Publish] ❌ 上传媒体失败：未返回 media_id');
+    process.exit(1);
+  }
+  return res;
 }
 
 function sendMarkdown(chatId, content) {
-  wecom(['message', 'aibot', 'send', '--json', JSON.stringify({
+  const res = wecom(['message', 'aibot', 'send', '--json', JSON.stringify({
     chat_id: chatId,
     msg_type: 'markdown',
     markdown: { content },
   })]);
+  return assertWecomOk(res, '发送 markdown');
 }
 
 function sendImage(chatId, mediaId) {
-  wecom(['message', 'aibot', 'send', '--json', JSON.stringify({
+  const res = wecom(['message', 'aibot', 'send', '--json', JSON.stringify({
     chat_id: chatId,
     msg_type: 'image',
     image: { media_id: mediaId },
   })]);
+  return assertWecomOk(res, '发送 image');
 }
 
 /** 把一张二维码图（+ meta 说明）推到企业微信 */
