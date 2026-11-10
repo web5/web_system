@@ -11,7 +11,7 @@
  */
 import { listGlossary } from '../../../services/glossary';
 import { isLoggedIn } from '../../../services/auth';
-import { fetchProfile } from '../../../services/account';
+import { fetchProfile, isNicknameUnset } from '../../../services/account';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { TRANSLATE_HISTORY_KEY } from '../../../utils/translate-keys';
 
@@ -31,8 +31,10 @@ Page({
     radiusClass: '',
     /** 登录态：false 时整页渲染登录引导卡（不拉任何业务数据） */
     loggedIn: true,
-    /** 昵称；空 = 尚未取到（渲染层兜底「未设置昵称」，不写死假昵称） */
+    /** 昵称；空/占位 = 未设置（渲染层显示引导「点击设置昵称」，不显示 wx_ 乱码） */
     nickname: '',
+    /** 头像 URL；空 = 未设置（渲染层兜底「橙」占位） */
+    avatar: '',
     /** 脱敏手机号；空 = 未绑定（禁止展示硬编码假数据） */
     phone: '',
     /** 本机翻译记录条数（空则不展示数字） */
@@ -84,12 +86,13 @@ Page({
     // 未登录：只渲染登录卡，不发起任何业务请求（判据第 8 条）
     if (!loggedIn) return;
 
-    // 账号信息：昵称 / 手机号（未绑定显示占位文案，不展示假数据）
+    // 账号信息：头像 / 昵称 / 手机号（未绑定显示占位文案，不展示假数据；wx_ 占位昵称按未设置兜底）
     void fetchProfile()
       .then((info) => {
         this.setData({
           phone: info.phone || '未绑定手机号',
-          nickname: info.nickname || '',
+          nickname: isNicknameUnset(info.nickname) ? '' : (info.nickname || ''),
+          avatar: info.avatar || '',
         });
       })
       .catch(() => undefined);

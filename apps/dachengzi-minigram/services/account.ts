@@ -6,7 +6,7 @@
  * - 冲突（409）时前端必须二次确认，再带 confirmMerge 重发 —— 绝不静默覆盖
  * - 合并成功后服务端重签凭证，前端须 setToken 后再刷新身份
  */
-import { get, post, patch, setToken, getToken } from '../utils/request';
+import { get, post, put, setToken, getToken } from '../utils/request';
 
 export type BindSource = 'phone' | 'email';
 
@@ -74,9 +74,19 @@ export type UpdateProfilePayload = {
   avatar?: string;
 };
 
-/** 更新当前账号资料（昵称/头像）：PATCH /api/user/profile（auth-service UserController） */
+/** 更新当前账号资料（昵称/头像）：PUT /api/users/me（user-service UserController，partial update） */
 export function updateProfile(payload: UpdateProfilePayload): Promise<ProfileInfo> {
-  return patch<unknown>('/api/user/profile', payload).then(unwrapProfile);
+  return put<unknown>('/api/users/me', payload).then(unwrapProfile);
+}
+
+/**
+ * 昵称是否「未设置」（前端展示层兜底，#8/#9）。
+ * 后端 createMpUser 缺省回落会把 nickname 写成 `wx_` + openid 前 10 位的占位；
+ * 空串或这类 `wx_` 前缀占位都按「未设置昵称」处理，避免展示乱码。
+ */
+export function isNicknameUnset(nickname?: string): boolean {
+  const n = (nickname || '').trim();
+  return !n || n.startsWith('wx_');
 }
 
 /** 取 apiBase：优先 storage，兜底 wx.getApp（与 utils/request.ts 同一口径）。

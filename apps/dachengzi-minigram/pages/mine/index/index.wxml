@@ -5,9 +5,10 @@
 
   <block wx:if="{{loggedIn}}">
   <view class="profile" bindtap="goProfile">
-    <view class="avatar">橙</view>
+    <image wx:if="{{avatar}}" class="avatar-img" src="{{avatar}}" mode="aspectFill" />
+    <view wx:else class="avatar">橙</view>
     <view class="info">
-      <view class="n">{{nickname || '未设置昵称'}}</view>
+      <view class="n">{{nickname || '点击设置昵称'}}</view>
       <view class="d">{{phone || '未绑定手机号'}}</view>
     </view>
     <text class="arw">›</text>

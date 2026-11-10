@@ -1,11 +1,11 @@
 // 个人信息：头像 + 昵称可编辑、邮箱可绑定、手机号置灰（暂不可用）
 //
-// 头像：微信原生 chooseAvatar 拿临时路径 → 上传 upload-service 拿 URL → 随「保存」PATCH 到后端 avatar（跨端同步）。
-//   上传成功持久化 URL 到 storage + globalData；上传失败降级本机临时路径展示，不污染后端。
-// 昵称：<input type="nickname"> 微信原生昵称输入，随「保存」PATCH 到后端持久化。
+// 头像：微信原生 chooseAvatar 拿临时路径 → 上传 upload-service 拿 URL → 成功后**立即** PUT 落库 avatar（去掉保存按钮后必须即时）。
+//   上传失败降级本机临时路径展示，不污染后端。
+// 昵称：<input type="nickname"> 微信原生昵称输入，bindblur/bindconfirm 自动 PUT 落库（trim 后非空才落库）。
 // 邮箱：自绘验证码页（bind-email），点击跳转即可，不在本页做绑定。
 // 手机号：暂不可用，置灰占位（去掉 getPhoneNumber 交互）。
-import { fetchProfile, updateProfile, readMessage, uploadAvatar } from '../../../services/account';
+import { fetchProfile, updateProfile, readMessage, uploadAvatar, isNicknameUnset } from '../../../services/account';
 import { isLoggedIn } from '../../../services/auth';
 
 /** 头像本地持久化 storage key */
@@ -49,23 +49,25 @@ Page({
     uid: '',
     /** 脱敏邮箱；空串 = 未绑定 */
     email: '',
-    /** 保存中锁：避免重复提交 */
-    saving: false,
   },
 
   /**
-   * 本次会话内「已上传成功的头像 URL」（onSave 据此决定是否带 avatar 字段）。
-   * 未上传成功过 = null，避免把本机临时路径传到后端污染多端字段。
+   * 最近一次落库成功的昵称（用于去重：失焦/确认若值未变则不重复 PUT）。
    * ⚠️ Page() 参数是对象字面量：运行时字段初始化只能写成 `null as <类型>`（见 mine/index/index.ts）。
    */
-  _syncedAvatarUrl: null as string | null,
+  _syncedNickname: null as string | null,
+
+  /** 昵称落库中锁：避免 blur 与 confirm 连发重复提交 */
+  _nickSaving: false as boolean,
 
   async loadProfile() {
     try {
       const info = await fetchProfile();
+      const nickname = isNicknameUnset(info.nickname) ? '' : (info.nickname || '');
+      this._syncedNickname = nickname;
       this.setData({
         email: info.email || '',
-        nickname: info.nickname || '',
+        nickname,
         avatarUrl: info.avatar || readLocalAvatar(),
         uid: info.id ? String(info.id) : '',
       });
@@ -74,7 +76,7 @@ Page({
     }
   },
 
-  /** 头像：chooseAvatar 回调 → 乐观展示临时路径 → 上传拿 URL → 成功持久化 URL，失败降级本机展示 */
+  /** 头像：chooseAvatar 回调 → 乐观展示临时路径 → 上传拿 URL → 上传成功即落库（去掉保存按钮后必须即时） */
   onChooseAvatar(e: ChooseAvatarEvent) {
     const tempPath = e?.detail?.avatarUrl;
     if (!tempPath) return;
@@ -82,13 +84,15 @@ Page({
     this.setData({ avatarUrl: tempPath });
     void uploadAvatar(tempPath)
       .then((url) => {
-        // 上传成功：记录已同步 URL（onSave 用），并持久化到 storage + globalData + 页面态
-        this._syncedAvatarUrl = url;
-        this.persistAvatar(url);
+        // 上传成功 → 立即 PUT 落库；落库成功才持久化 URL（storage + globalData + 页面态）
+        return updateProfile({ avatar: url }).then((updated) => {
+          this.persistAvatar(updated.avatar || url);
+          wx.showToast({ title: '头像已更新', icon: 'none' });
+        });
       })
-      .catch(() => {
-        // 上传失败：不阻断；本次会话仍展示临时路径（降级）。不落 storage，避免临时路径污染多端。
-        wx.showToast({ title: '头像上传失败，未同步', icon: 'none' });
+      .catch((err) => {
+        // 上传失败或落库失败：不阻断；本次会话仍展示临时路径（降级）。不落 storage，避免污染多端。
+        wx.showToast({ title: readMessage(err, '头像更新失败'), icon: 'none' });
       });
   },
 
@@ -97,31 +101,36 @@ Page({
     this.setData({ nickname: e.detail.value });
   },
 
-  /** 保存：昵称持久化到后端；头像若本次上传成功过则一并 PATCH（否则不传，避免临时路径污染多端） */
-  async onSave() {
-    if (this.data.saving) return;
+  /** 昵称失焦自动保存 */
+  onNickBlur() {
+    void this.saveNickname();
+  },
+
+  /** 昵称「完成」键自动保存 */
+  onNickConfirm() {
+    void this.saveNickname();
+  },
+
+  /** 昵称自动落库：trim 后非空且与上次落库值不同才 PUT（去掉保存按钮，#9） */
+  async saveNickname() {
     const nickname = (this.data.nickname || '').trim();
-    this.setData({ saving: true });
+    if (!nickname || nickname === this._syncedNickname || this._nickSaving) return;
+    this._nickSaving = true;
     try {
-      const updated = await updateProfile({
-        nickname,
-        avatar: this._syncedAvatarUrl || undefined,
-      });
+      const updated = await updateProfile({ nickname });
       // 成功后以服务端返回为准刷新本地 userInfo / globalData
       const app = getApp<IAppOption>();
       if (app && app.globalData.userInfo) {
         app.globalData.userInfo.nickname = updated.nickname;
-        if (updated.avatar) {
-          app.globalData.userInfo.avatar = updated.avatar;
-        }
       }
-      this.setData({ nickname: updated.nickname || '' });
-      if (updated.avatar) this.setData({ avatarUrl: updated.avatar });
-      wx.showToast({ title: '已保存', icon: 'none' });
+      const next = updated.nickname || '';
+      this._syncedNickname = next;
+      this.setData({ nickname: next });
+      wx.showToast({ title: '昵称已更新', icon: 'none' });
     } catch (err) {
-      wx.showToast({ title: readMessage(err, '保存失败，请稍后重试'), icon: 'none' });
+      wx.showToast({ title: readMessage(err, '昵称保存失败'), icon: 'none' });
     } finally {
-      this.setData({ saving: false });
+      this._nickSaving = false;
     }
   },
 
