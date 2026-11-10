@@ -5,7 +5,7 @@
  * 覆盖：
  *   ① parseArgs：--to / --page / --mode / --no-push / --notify 各分支 + 位置参数 + 未知 flag。
  *   ② resolveMode：缺省 cli / cli / ci / 未知值 exit 1（cli/ci 模式分支选择）。
- *   ③ resolveTarget：缺省取 single / --to 命中 / --to 未命中（列会话名）/ sessions 空。
+ *   ③ resolveTarget：缺省取 group / 无 group 回退 single / 无 group 也无 single 报错 / --to 命中 / --to 未命中（列会话名）/ sessions 空。
  *   ④ resolveCliBinary：WECHAT_DEVTOOLS_CLI 优先 → which cli 回退 → 字面量 cli 兜底。
  *   ⑤ cliPreviewArgs / cliUploadArgs：cli 命令参数拼装。
  *   ⑥ gitShortSha：git rev-parse 结果 / 失败降级 unknown。
@@ -156,14 +156,31 @@ describe('resolveTarget', () => {
     errSpy.mockRestore();
   });
 
-  it('缺省取第一个 single 会话（授权人本人）', () => {
+  it('缺省取第一个 group 会话（如公司群）', () => {
     mockChildProcess.execFileSync.mockReturnValue(
       sessionsJson([
         { chat_id: 'c1', chat_name: '本人', chat_type: 'single' },
         { chat_id: 'g1', chat_name: '项目群', chat_type: 'group' },
+        { chat_id: 'g2', chat_name: '公司群', chat_type: 'group' },
       ]),
     );
+    expect(publish.resolveTarget().chat_id).toBe('g1');
+  });
+
+  it('无 group → 回退取第一个 single 会话', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      sessionsJson([{ chat_id: 'c1', chat_name: '本人', chat_type: 'single' }]),
+    );
     expect(publish.resolveTarget().chat_id).toBe('c1');
+  });
+
+  it('无 group 也无 single → exit 1 并提示 --to', () => {
+    mockChildProcess.execFileSync.mockReturnValue(
+      sessionsJson([{ chat_id: 'x1', chat_name: '其他', chat_type: 'channel' }]),
+    );
+    expect(() => publish.resolveTarget()).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('--to'));
   });
 
   it('--to 按会话名精确匹配命中', () => {
@@ -360,8 +377,42 @@ describe('pushQr', () => {
       const image = payloads.find((p) => p.msg_type === 'image');
       expect(markdown).toBeDefined();
       expect(image).toBeDefined();
-      expect(markdown.markdown.content).toContain('小程序预览码');
+      expect(markdown.markdown.content).toBe('小程序预览码（扫码体验）');
       expect(image.image.media_id).toBe('media_1');
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('成功：有 meta 时发一行说明（版本 + 有效期）', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-test-'));
+    const png = path.join(tmp, 'qr.png');
+    fs.writeFileSync(png, 'fake-png-bytes');
+    fs.writeFileSync(
+      path.join(tmp, 'qr.meta.json'),
+      JSON.stringify({ version: '1.2.3', expireAtText: '2026-11-10 10:25:00' }),
+    );
+    try {
+      mockChildProcess.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+        if (args[0] === 'message' && args[1] === 'aibot' && args[2] === 'sessions') {
+          return JSON.stringify({ sessions: [{ chat_id: 'g1', chat_name: '公司群', chat_type: 'group' }] });
+        }
+        if (args[0] === 'media' && args[1] === 'upload') {
+          return JSON.stringify({ success: true, media_id: 'media_1' });
+        }
+        return JSON.stringify({ success: true });
+      });
+
+      publish.pushQr(png);
+
+      const sendCalls = mockChildProcess.execFileSync.mock.calls.filter(
+        (c) => c[0] === 'wecom-cli' && c[1][0] === 'message' && c[1][2] === 'send',
+      );
+      const payloads = sendCalls.map((c) => JSON.parse(c[1][4]));
+      const markdown = payloads.find((p) => p.msg_type === 'markdown');
+      expect(markdown).toBeDefined();
+      expect(markdown.markdown.content).toBe('小程序预览码 v1.2.3 · 有效期至 2026-11-10 10:25:00');
+      expect(markdown.markdown.content).not.toContain('\n');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

@@ -365,7 +365,7 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 ### 8.1 命令
 
 ```bash
-# 出预览码 → 推企业微信（默认 cli 模式，免白名单，发授权人本人）
+# 出预览码 → 推企业微信（默认 cli 模式，免白名单，发第一个群，如公司群）
 npm run publish -- preview
 
 # 指定会话 / 只出码不推送
@@ -397,10 +397,11 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 - **cli 模式前置**：微信开发者工具已登录（`cli islogin` → `{"login":true}`），
   CLI 路径通过环境变量 `WECHAT_DEVTOOLS_CLI` 或 PATH 中的 `cli` 解析（脚本不硬编码）。
 - **ci 模式前置**：`MINIPROGRAM_CI_PATH` + `private.key` + 出口 IP 白名单（见 §1.3）。
-- **目标会话**：`--to` 按会话名精确匹配（每次发送前现查 `sessions list`，不缓存）；缺省取第一个单聊（授权人本人）。
-- **说明文案**：版本 / git sha / 直达页 / 有效期自动取自 png 同名的 `.meta.json`
+- **目标会话**：`--to` 按会话名精确匹配（每次发送前现查 `sessions list`，不缓存）；缺省取第一个群（如公司群），
+  `--to <会话名>` 指定；无群时回退第一个单聊。
+- **说明文案**：一行「小程序预览码 v<版本> · 有效期至 <时间>」，取自 png 同名的 `.meta.json`
   （ci 模式由 `preview.js` 产出；cli 模式由 `publish.js` 自拼——版本取 `package.json.version`、
-  git sha 取 `git rev-parse --short HEAD`、有效期按 25 分钟口径）。
+  有效期按 25 分钟口径；meta 缺失时兜底为「小程序预览码（扫码体验）」）。
 
 ### 8.3 边界（务必知道）
 

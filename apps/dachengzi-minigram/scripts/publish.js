@@ -4,7 +4,7 @@
  *
  * 子命令：
  *   node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]
- *       出预览码；默认生成后推企业微信（推给授权人本人，--to 指定会话名）。
+ *       出预览码；默认生成后推企业微信（推给第一个群，如公司群；--to 指定会话名）。
  *       默认 cli 模式（微信开发者工具 CLI，走登录态，免 IP 白名单）。
  *   node scripts/publish.js upload [--to <会话名>] [--notify] [--mode cli|ci]
  *       上传体验版；--notify 时推一条 markdown 通知。
@@ -84,7 +84,7 @@ function resolveMode(mode) {
 
 // ---------- 企业微信推送 ----------
 
-/** 解析推送目标：--to 按会话名精确匹配；缺省取第一个单聊（授权人本人） */
+/** 解析推送目标：--to 按会话名精确匹配；缺省取第一个群（如公司群），无群回退第一个单聊 */
 function resolveTarget(toName) {
   const list = wecom(['message', 'aibot', 'sessions', 'list']);
   const sessions = (list && list.sessions) || [];
@@ -103,12 +103,12 @@ function resolveTarget(toName) {
     }
     return hit;
   }
+  const group = sessions.find((s) => s.chat_type === 'group');
+  if (group) return group;
   const self = sessions.find((s) => s.chat_type === 'single');
-  if (!self) {
-    console.error('[Publish] ❌ 没有单聊会话，请用 --to <会话名> 指定目标');
-    process.exit(1);
-  }
-  return self;
+  if (self) return self;
+  console.error('[Publish] ❌ 没有群或单聊会话，请用 --to <会话名> 指定目标');
+  process.exit(1);
 }
 
 /**
@@ -161,27 +161,22 @@ function pushQr(pngPath, toName) {
     process.exit(1);
   }
   const target = resolveTarget(toName);
-  const label = target.chat_name || '(本人)';
+  const label = target.chat_name || '(未命名会话)';
   console.log(`[Publish] 推送到企业微信 → ${label}`);
 
   const media = uploadMedia(pngPath);
 
-  // 说明文字尽量从 png 同名的 meta 里取（版本/有效期/直达页）。
+  // 说明文字一行：版本 + 有效期，从 png 同名的 meta 里取。
   // meta 文件名由 png 文件名派生：preview-qr.png → preview-qr.meta.json，
   // cli-preview-qr.png → cli-preview-qr.meta.json。
   const metaPath = path.join(
     path.dirname(pngPath),
     path.basename(pngPath, path.extname(pngPath)) + '.meta.json',
   );
-  let head = '小程序预览码（扫码真机体验）';
+  let head = '小程序预览码（扫码体验）';
   try {
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    head = [
-      `**小程序预览码** v${meta.version}（${meta.gitSha}）`,
-      `直达页：${meta.pagePath}`,
-      `有效期至 ${meta.expireAtText}（${meta.ttlMinutes} 分钟）`,
-      '扫下方二维码真机体验，过期重跑 `npm run publish -- preview`',
-    ].join('\n');
+    head = `小程序预览码 v${meta.version} · 有效期至 ${meta.expireAtText}`;
   } catch { /* meta 不存在则用兜底文案 */ }
 
   sendMarkdown(target.chat_id, head);

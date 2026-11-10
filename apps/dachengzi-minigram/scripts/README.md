@@ -66,7 +66,7 @@ cli 模式走登录态，**不需要** `private.key`。
 把「出码 + 推企业微信」串成一条命令：
 
 ```bash
-# 出预览码并推送到企业微信（默认 cli 模式，免白名单，推给授权人本人）
+# 出预览码并推送到企业微信（默认 cli 模式，免白名单，推给第一个群，如公司群）
 npm run publish -- preview
 
 # 指定会话 / 只出码不推送
@@ -82,7 +82,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 ```
 
 推送链路：`wecom-cli media upload`（上传二维码图）→ `wecom-cli message aibot send`（发说明 + 图片）。
-目标会话按名字匹配，缺省发第一个单聊（授权人本人）。
+目标会话按名字匹配，缺省发第一个群（如公司群），`--to <会话名>` 指定；无群时回退第一个单聊。
 
 ### 预览（仅出码，不推送）
 
@@ -117,4 +117,4 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - 二维码落在 `.ci-output/`（已 gitignore），**有时效**（约 25 分钟），过期重跑。
 - cli 出码的 `--qr-output` 必须是**项目内**绝对路径；写 `/tmp/...` 会报「二维码输出路径无效或不存在 (code 17)」。
 - cli 出码产出的 `.png` 实际内容为 JPEG（470×470），后续推图不受影响（media upload 按内容识别）。
-- cli 出码不生成 meta 信息，说明文案由 `publish.js` 自拼（版本取 `package.json.version`、git sha、25 分钟有效期）。
+- cli 出码不生成 meta 信息，说明文案由 `publish.js` 自拼为一行「小程序预览码 v<版本> · 有效期至 <时间>」（版本取 `package.json.version`、25 分钟有效期）。
