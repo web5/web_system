@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * 大橙子个人助理小程序 · 一键发布（出码 + 推企业微信 + 上传体验版）
+ * 大橙子个人助理小程序 · 一键发布（出码 + 推企业微信 + 上传开发版本）
  *
  * 子命令：
  *   node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]
  *       出预览码；默认生成后推企业微信（推给第一个群，如公司群；--to 指定会话名）。
  *       默认 cli 模式（微信开发者工具 CLI，走登录态，免 IP 白名单）。
  *   node scripts/publish.js upload [--to <会话名>] [--notify] [--mode cli|ci]
- *       上传体验版；--notify 时推一条 markdown 通知。
+ *       上传开发版本（需公众平台手动设为体验版）；--notify 时推一条 markdown 通知。
  *   node scripts/publish.js push <二维码png> [--to <会话名>]
  *       把已生成的二维码推送到企业微信。
  *
@@ -256,7 +256,7 @@ function buildCliMeta(pagePath, opts = {}) {
     expireAtText: fmt(expireAt),
     expireAtMs,
     ttlMinutes,
-    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload + 公众平台体验版',
+    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload + 公众平台「设为体验版」',
   };
 }
 
@@ -325,7 +325,7 @@ function cmdUpload(opts) {
   const pkg = require(path.join(ROOT, 'package.json'));
   const version = pkg.version || '1.0.0';
   if (mode === 'ci') {
-    console.log('[Publish] 上传体验版（miniprogram-ci 模式）…');
+    console.log('[Publish] 上传开发版本（miniprogram-ci 模式）…');
     try {
       run('node', ['scripts/upload.js'], { cwd: ROOT, stdio: 'inherit' });
     } catch (e) {
@@ -333,7 +333,7 @@ function cmdUpload(opts) {
       process.exit(1);
     }
   } else {
-    console.log('[Publish] 上传体验版（cli 模式，免 IP 白名单）…');
+    console.log('[Publish] 上传开发版本（cli 模式，免 IP 白名单）…');
     const cli = resolveCliBinary();
     const desc = `cli 上传 v${version} @ ${gitShortSha()}`;
     try {
@@ -346,7 +346,7 @@ function cmdUpload(opts) {
   if (opts.notify) {
     const target = resolveTarget(opts.to);
     sendMarkdown(target.chat_id,
-      `**小程序已上传体验版** v${version}\n请到 公众平台 → 版本管理 设为体验版并提交审核。`);
+      `**小程序已上传开发版本** v${version}\n请到 公众平台 → 版本管理 设为体验版并提交审核。`);
     console.log('[Publish] ✅ 已上传并推送通知');
   }
 }

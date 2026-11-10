@@ -12,9 +12,9 @@
 |---|---|
 | **出码 + 推企业微信（一键，默认 cli 免白名单）** | `npm run publish -- preview` |
 | 出预览码（开发版，扫码即用，cli） | `npm run publish -- preview --no-push` |
-| 上传体验版（cli） | `npm run publish -- upload` |
+| 上传开发版本（cli，需后台设为体验版） | `npm run publish -- upload` |
 | 出预览码（ci，需白名单） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
-| 上传体验版（ci） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
+| 上传开发版本（ci，需后台设为体验版） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
 
 cli 模式走微信开发者工具登录态，**不需要 IP 白名单**；只有 ci 模式才需要在固定出口 IP 的执行机上跑
 （原因见 §1.3）。跑完二维码落在 `apps/<app>/.ci-output/`（该目录已 gitignore）。
@@ -160,13 +160,14 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 
 版本号与描述自动取 `package.json` 的 `version` + git 短 sha，`desc` 里能看出是哪次提交出的码。
 
-### 3.2 上传体验版（ci 模式 / miniprogram-ci）
+### 3.2 上传开发版本（ci 模式 / miniprogram-ci）
 
 ```bash
 MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 ```
 
-上传后到公众平台 → 版本管理 → 把该版本设为**体验版**，二维码长期有效，可分给体验成员反复扫。
+上传产物是公众平台后台「**开发版本**」列表中的一条，**不是体验版**；
+体验版须人工到 公众平台 → 版本管理 → 把该版本设为**体验版**，二维码才长期有效、可分给体验成员反复扫。
 
 > 上传前记得更新 `package.json` 的 `version`——微信要求版本号递增，重复会被拒。
 
@@ -372,7 +373,7 @@ npm run publish -- preview
 npm run publish -- preview --to <会话名>
 npm run publish -- preview --no-push
 
-# 上传体验版（默认 cli 模式）；--notify 时推一条 markdown 通知
+# 上传开发版本（默认 cli 模式，需后台手动设为体验版）；--notify 时推一条 markdown 通知
 npm run publish -- upload --notify
 
 # 把已生成的二维码单独推到企业微信（不重新出码）

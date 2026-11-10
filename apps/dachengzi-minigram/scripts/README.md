@@ -73,7 +73,7 @@ npm run publish -- preview
 npm run publish -- preview --to <会话名>
 npm run publish -- preview --no-push
 
-# 上传体验版（默认 cli 模式）；--notify 时推一条通知
+# 上传开发版本（默认 cli 模式），需后台手动设为体验版；--notify 时推一条通知
 npm run publish -- upload --notify
 
 # 走 miniprogram-ci（执行机固定 IP 已配白名单时）

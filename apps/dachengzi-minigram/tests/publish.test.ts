@@ -79,6 +79,7 @@ interface PublishModule {
   };
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
+  cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean }) => void;
 }
 
 // 与 publish.js 内部的 require('child_process') 命中同一份 mock
@@ -555,5 +556,51 @@ describe('uploadMedia（type 透传 + media_id 校验）', () => {
     expect(() => publish.uploadMedia('/tmp/qr.png')).toThrow('process.exit');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('media_id'));
+  });
+});
+
+describe('cmdUpload --notify 通知文案（措辞：开发版本 ≠ 体验版）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
+  it('--notify 的 markdown 通知写「已上传开发版本」，不再误写「已上传体验版」', () => {
+    mockChildProcess.execFileSync.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'git') return 'abc1234\n';
+      if (cmd === 'which') return '/usr/local/bin/cli\n';
+      if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'sessions') {
+        return sessionsJson([{ chat_id: 'g1', chat_name: '公司群', chat_type: 'group' }]);
+      }
+      if (cmd === 'wecom-cli' && args[0] === 'message' && args[1] === 'aibot' && args[2] === 'send') {
+        return JSON.stringify({ success: true });
+      }
+      return ''; // cli upload / node upload.js 的返回值未被消费
+    });
+
+    publish.cmdUpload({ notify: true });
+
+    const sendCalls = mockChildProcess.execFileSync.mock.calls.filter(
+      (c) => c[0] === 'wecom-cli' && c[1][0] === 'message' && c[1][2] === 'send',
+    );
+    expect(sendCalls).toHaveLength(1);
+    const payload = JSON.parse(sendCalls[0][1][4]);
+    expect(payload.markdown.content).toContain('已上传开发版本');
+    expect(payload.markdown.content).not.toContain('已上传体验版');
+    expect(payload.markdown.content).toContain('设为体验版'); // 第二行边界说明保留
   });
 });
