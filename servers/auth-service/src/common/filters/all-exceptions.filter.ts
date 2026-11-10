@@ -43,7 +43,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? '服务器内部错误'
         : (exception as Error).message || 'Internal server error';
 
+    // 结构化 HttpException 响应体（如账号合并 409 的 { conflict, canMerge, maskedValue, hint }）
+    // 需透传为顶层字段：前端按 err.data.conflict 读取冲突结构以弹「已注册→合并」提示。
+    // statusCode/message/error 等仍按原口径输出，字符串异常体走 message 字段，行为不变。
+    const structuredBody =
+      typeof clientMessage === 'object' && clientMessage !== null && !Array.isArray(clientMessage)
+        ? clientMessage
+        : {};
+
     response.status(status).json({
+      ...structuredBody,
       statusCode: status,
       message: typeof clientMessage === 'string' ? clientMessage : (clientMessage as any).message || clientMessage,
       error: HttpStatus[status] || 'Error',
