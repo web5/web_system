@@ -12,16 +12,10 @@ npm install
 
 ## 配置
 
-### 1. 设置 AppID
+### 1. AppID
 
-在 `scripts/preview.js` 和 `scripts/upload.js` 中，将 `your-appid` 替换为你的小程序 AppID：
-
-```javascript
-const config = {
-  appid: 'wx1234567890abcdef', // 替换这里
-  ...
-};
-```
+脚本自动读 `project.config.json` 的 `appid`，**无需手工填**。
+（历史版本曾在脚本里硬编码 `your-appid` 占位，现已移除，不要再改回去。）
 
 ### 2. 获取私钥
 
@@ -38,18 +32,37 @@ const config = {
 
 ## 使用
 
-### 预览
+### 一键发布（推荐）
+
+把「出码 + 推企业微信」串成一条命令：
 
 ```bash
-npm run preview
+# 出预览码并推送到企业微信（默认推给授权人本人）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview
+
+# 指定直达页 / 指定会话 / 只出码不推送
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --page pages/chat/index/index --to <会话名>
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --no-push
+
+# 上传体验版到微信后台（--notify 时推一条通知）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --notify
 ```
 
-预览成功后会生成 `preview-qrcode.png` 二维码，用微信扫描即可预览。
+推送链路：`wecom-cli media upload`（上传二维码图）→ `wecom-cli message aibot send`（发说明 + 图片）。
+目标会话按名字匹配，缺省发第一个单聊（授权人本人）。
 
-### 上传
+### 预览（仅出码，不推送）
 
 ```bash
-npm run upload
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run preview
+```
+
+预览成功后生成 `.ci-output/preview-qr.png`（二维码原图）与 `.ci-output/preview-qr.html`（自包含可扫码卡片，带倒计时），用微信扫码即可预览。
+
+### 上传（仅上传，不推送）
+
+```bash
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run upload
 ```
 
 上传成功后会输出版本号，然后到微信公众平台提交审核。

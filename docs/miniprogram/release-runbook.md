@@ -12,6 +12,7 @@
 |---|---|
 | 出预览码（开发版，扫码即用） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
 | 上传体验版 | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
+| **出码 + 推企业微信（一键）** | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview` |
 
 两条都在**固定出口 IP 的执行机**上跑（原因见 §1.3）。跑完二维码落在
 `apps/kedou-ai-minigram/.ci-output/preview-qr.png`（该目录已 gitignore）。
@@ -341,3 +342,50 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 | 2026-10-11 | §5.1 登录失败判定三连（AppSecret 失效）；§5.2 扫码白屏 = 小程序码 path 指向不存在页面；§5.3 三环境 apiBase + prod 需同步改 AppSecret（PR #307） |
 | 2026-10-11 | §5.4 隐私校验前置（全局生效 + 未声明即拦截 + 隐私接口↔声明类型对照）；§六 后端 prod 部署手法（备份优先、migration 需读注释、只构建改动服务、临时 token 验证法） |
 | 2026-10-11 | §5.5 「点一下也弹录音浮层」= 授权异步窗口期；按住说话修复为 `preparing` 状态机（PR #312） |
+| 2026-11-10 | §八 一键发布 `scripts/publish.js`（出码 + 推企业微信）；速查表补「出码 + 推企业微信」一行 |
+
+---
+
+## 八、一键发布 + 推企业微信（`scripts/publish.js`）
+
+在 §三「日常出码」之上加一层编排：出完码自动把二维码 + 说明推到你自己的企业微信，
+不用再手工把 `.ci-output/preview-qr.png` 搬到 IM 里发。
+
+### 8.1 命令
+
+```bash
+# 出预览码 → 推企业微信（默认发授权人本人）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview
+
+# 指定直达页 / 指定会话 / 只出码不推送
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --page pages/chat/index/index
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --to <会话名>
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --no-push
+
+# 上传体验版到微信后台；--notify 时推一条 markdown 通知
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --notify
+
+# 把已生成的二维码单独推到企业微信（不重新出码）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- push <二维码png> --to <会话名>
+```
+
+### 8.2 推送链路与前置
+
+```
+preview.js 出码 → .ci-output/preview-qr.png
+  → wecom-cli media upload（上传图片，拿 media_id）
+  → wecom-cli message aibot send（先发 markdown 说明，再发图片）
+```
+
+- **授权**：`wecom-cli auth show --status` 须为 `authorized`（一次性，掉授权时按 `wecomcli-shared` 走初始化）。
+- **目标会话**：`--to` 按会话名精确匹配（每次发送前现查 `sessions list`，不缓存）；缺省取第一个单聊（授权人本人）。
+- **说明文案**：版本 / git sha / 直达页 / 有效期自动取自 `preview.js` 产出的 `.ci-output/preview-qr.meta.json`。
+
+### 8.3 边界（务必知道）
+
+- **本机 vs 执行机**：出码仍受 §1.3 白名单约束。本机出口 IP 动态，建议在固定 IP 执行机出码；
+  「本机出 + 推企业微信」只适合改完立刻自验，IP 一变白名单就失效（实测报 `invalid ip`）。
+- **`media upload` 的类型对齐**：二维码图上传后自动识别为 `image`，发送时用 `msg_type=image`；
+  不要拿 `file` 类型发二维码。
+- **上传到「提交审核」为止**：`upload.js` 只能把代码传到微信后台成为「开发版本」；
+  「设为体验版 → 提交审核 → 发布」微信不开放 CI 接口，需在公众平台人工点（个人主体无 openapi）。
