@@ -26,6 +26,10 @@
         <view class="lead-en" wx:if="{{detail.leadQuestionCn && detail.leadQuestion}}">{{detail.leadQuestion}}</view>
       </view>
       <view class="src {{detail.textSource}}">{{detail.textSource === 'xdf' ? '权威全文' : '字幕拼接版'}}</view>
+      <view wx:if="{{!readingActive}}" class="read-entry" bindtap="onReadTap">
+        <text wx:if="{{resumeLineIdx > 0}}">继续朗读 · 第 {{resumeLineIdx + 1}} 句</text>
+        <text wx:else>整体朗读</text>
+      </view>
     </view>
 
     <view class="sentences">
@@ -33,7 +37,9 @@
       <!-- 外层 si / 内层 ti 显式命名：避免嵌套 wx:for 的默认 index 相互遮蔽，
            否则生词上的 data-i 会拿到 token 下标，揭示错句译文。 -->
       <view wx:for="{{linesView}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
-        class="sent {{mode === 'tap' ? 'tappable' : ''}}" data-i="{{si}}" bindtap="toggleLine">
+        id="line-{{si}}"
+        class="sent {{mode === 'tap' ? 'tappable' : ''}} {{readingLineIdx === si ? 'reading' : ''}}"
+        data-i="{{si}}" bindtap="toggleLine">
         <view class="en">
           <block wx:for="{{line.tokens}}" wx:for-item="tk" wx:key="k">
             <text wx:if="{{tk.isWord}}" class="w" data-wi="{{tk.wi}}" data-i="{{si}}" catchtap="onWord">{{tk.text}}</text>
@@ -65,7 +71,22 @@
   </block>
 
   <!-- 习题：吸底按钮 + 半屏浮层，读完再展开 -->
-  <view class="fab" bindtap="openSheet">开始练习</view>
+  <view wx:if="{{!readingActive}}" class="fab" bindtap="openSheet">开始练习</view>
+
+  <!-- 整篇朗读控制条：与「开始练习」互斥，朗读态吸底占位 -->
+  <view wx:if="{{readingActive}}" class="read-bar">
+    <view wx:if="{{readingPhase === 'loading'}}" class="rb-loading">请稍候…</view>
+    <block wx:else>
+      <view class="rb-btn" bindtap="onPauseToggle">{{readingPhase === 'paused' ? '继续' : '暂停'}}</view>
+      <view class="rb-ticks">
+        <view wx:for="{{linesView}}" wx:key="idx" wx:for-index="si"
+          class="tick {{si < readingLineIdx ? 'done' : ''}} {{si === readingLineIdx ? 'cur' : ''}}"
+          data-i="{{si}}" bindtap="onTickTap"></view>
+      </view>
+      <view class="rb-label">{{readingLineIdx + 1}}/{{linesView.length}}</view>
+      <view class="rb-btn stop" bindtap="onStopRead">停止</view>
+    </block>
+  </view>
   <view wx:if="{{exSheet}}" class="scrim" bindtap="closeSheet" />
   <view wx:if="{{exSheet}}" class="sheet" catchtap="noop">
     <view class="sh-head">
