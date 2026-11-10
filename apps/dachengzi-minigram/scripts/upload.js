@@ -108,9 +108,17 @@ async function uploadApp() {
     console.log('[Upload] 上传成功!');
     console.log(`[Upload] 上传后版本: ${uploadResult.version}`);
     console.log(`[Upload] 后台入口页 = pages[0] = ${registered[0] || '(未知)'}`);
-    console.log('[Upload] ⚠️ 生成体验版二维码时请用系统标准码，勿手填 path ——');
-    console.log('[Upload]    手填不存在或已改名的页面会导致扫码「页面不存在」白屏（本次事故根因）');
-    console.log('[Upload] 请到微信公众平台提交审核');
+    // 脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须人工在公众平台操作，
+    // 微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。
+    console.log([
+      `[Publish] ✅ 开发版本 v${version} 已上传到公众平台后台。`,
+      '🔴 脚本到此为止：设为体验版 / 提交审核 / 发布均为人工操作，脚本不代做。',
+      '   体验版指引：npm run publish -- trial',
+      '   正式版指引：npm run publish -- release',
+    ].join('\n'));
+    // 体验版二维码警示并入体验版指引：用系统生成的标准码，勿手填 path
+    // （手填不存在或已改名的页面会导致扫码「页面不存在」白屏）。
+    console.log('[Upload] ⚠️ 体验版二维码请用系统标准码，勿手填 path（详见 trial 指引第 3 步）');
   } catch (error) {
     console.error('[Upload] 上传失败:', error.message);
     if (error.message.includes('private key')) {
