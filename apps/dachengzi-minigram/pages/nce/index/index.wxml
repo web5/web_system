@@ -5,6 +5,12 @@
     <view class="sub" wx:if="{{meta}}">{{meta.bookTitle}} · 已入库 {{meta.downloaded}}/{{meta.total}} 课</view>
   </view>
 
+  <!-- 书册切换：NCE2 / NCE3 / NCE4，切册重置搜索词并重拉该册目录 -->
+  <view class="books">
+    <view wx:for="{{books}}" wx:key="book" wx:for-item="b"
+      class="book {{book === b.book ? 'on' : ''}}" data-book="{{b.book}}" bindtap="switchBook">{{b.label}}</view>
+  </view>
+
   <view class="search-wrap">
     <input class="search" type="text" value="{{keyword}}" placeholder="搜课号 / 中英文标题"
       confirm-type="search" bindinput="onSearch" />

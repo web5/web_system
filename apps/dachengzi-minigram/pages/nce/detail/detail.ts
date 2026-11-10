@@ -7,6 +7,7 @@
  * 既避免 rich-text 的 XSS 面，也不用正则 lookbehind（旧版兼容）。
  */
 import { getNceLesson, type NceLessonDetail, type NceWord } from '../../../services/nce';
+import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
 import {
   speakLines,
   onLineProgress,
@@ -67,6 +68,8 @@ Page({
 
   data: {
     id: 0,
+    /** 当前书册（默认 NCE2）：详情跳转必须带 book，否则点 NCE3 第 1 课会打开 NCE2 Lesson 1 */
+    book: DEFAULT_NCE_BOOK,
     detail: null as NceLessonDetail | null,
     linesView: [] as LineView[],
     loading: true,
@@ -109,16 +112,18 @@ Page({
     this._stopAndSave();
   },
 
-  onLoad(options: { id?: string | number }) {
+  onLoad(options: { id?: string | number; book?: string }) {
     const id = Number(options && options.id);
+    const book = String((options && options.book) || DEFAULT_NCE_BOOK);
     const mode = wx.getStorageSync('nce-mode') || 'immersion';
     const fontStep = wx.getStorageSync('nce-font');
     const realId = id > 0 ? id : 1;
     this.setData({
       id: realId,
+      book,
       mode: String(mode),
       fontStep: typeof fontStep === 'number' ? fontStep : 1,
-      resumeLineIdx: this._readBreakpoint(realId),
+      resumeLineIdx: this._readBreakpoint(realId, book),
     });
     void this.load();
   },
@@ -126,7 +131,7 @@ Page({
   async load() {
     this.setData({ loading: true, error: '' });
     try {
-      const d = await getNceLesson(this.data.id);
+      const d = await getNceLesson(this.data.id, this.data.book);
       if (!d) {
         this.setData({ error: '未找到该课，可能尚未入库' });
         return;
@@ -224,7 +229,8 @@ Page({
   goLesson(e: NceTapEvent) {
     const delta = Number(e.currentTarget.dataset.delta || 0);
     const next = this.data.id + delta;
-    if (next < 1 || next > 96) {
+    const total = nceBookTotal(this.data.book);
+    if (next < 1 || next > total) {
       wx.showToast({ title: '已经是最后一课了', icon: 'none' });
       return;
     }
@@ -366,19 +372,20 @@ Page({
     stopSpeak();
   },
 
-  /** 写断点：>0 存当前句；<=0 清空 */
+  /** 写断点：>0 存当前句；<=0 清空（key 带 book，避免 NCE2/NCE3/NCE4 同课号串读） */
   _saveBreakpoint(idx: number) {
-    const key = `nce-read-${this.data.id}`;
+    const key = `nce-read-${this.data.book}-${this.data.id}`;
     if (idx > 0) wx.setStorageSync(key, idx);
     else wx.removeStorageSync(key);
   },
 
   _clearBreakpoint() {
-    wx.removeStorageSync(`nce-read-${this.data.id}`);
+    wx.removeStorageSync(`nce-read-${this.data.book}-${this.data.id}`);
   },
 
-  _readBreakpoint(id: number): number {
-    const v = wx.getStorageSync(`nce-read-${id}`);
+  _readBreakpoint(id: number, book?: string): number {
+    const b = book || this.data.book;
+    const v = wx.getStorageSync(`nce-read-${b}-${id}`);
     return typeof v === 'number' && v > 0 ? v : -1;
   },
 });
