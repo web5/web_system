@@ -452,15 +452,13 @@ Page({
     }
   },
 
-  /** 翻译卡「⋯」菜单：5 项 ActionSheet（复制/朗读/收藏/重新翻译/生成分享卡，无转发） */
+  /** 翻译卡「⋯」菜单：2 项 ActionSheet（重新翻译/生成分享卡；复制/朗读/收藏已内联可见，转发走右上角胶囊） */
   moreCard(e: TapEvent) {
-    const rawIdx = (e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.index) ?? '';
-    const idx = Number(rawIdx);
+    const idx = this.idxOf(e);
     const item = this.data.messages[idx];
     if (!item || !item.card || !item.enMain) return;
-    const speaking = this.data.speakText === item.enMain;
     wx.showActionSheet({
-      itemList: ['复制译文', speaking ? '停止朗读' : '朗读', '收藏', '重新翻译', '生成分享卡'],
+      itemList: ['重新翻译', '生成分享卡'],
       success: (res: WechatMiniprogram.ShowActionSheetSuccessCallbackResult) => {
         this.dispatchCardAction(idx, res.tapIndex);
       },
@@ -468,18 +466,40 @@ Page({
     });
   },
 
-  /** 按 tapIndex 分派菜单动作（顺序与 moreCard itemList 对齐） */
+  /** 按 tapIndex 分派「⋯」菜单动作（顺序与 moreCard itemList 对齐：重新翻译/生成分享卡） */
   dispatchCardAction(idx: number, tapIndex: number) {
     const item = this.data.messages[idx];
     if (!item) return;
     switch (tapIndex) {
-      case 0: this.copyCard(item); break;
-      case 1: void this.speakCard(item); break;
-      case 2: void this.favCard(idx, item); break;
-      case 3: this.retranslate(idx); break;
-      case 4: void this.genShareCard(item); break;
+      case 0: this.retranslate(idx); break;
+      case 1: void this.genShareCard(item); break;
       default: break;
     }
+  },
+
+  /** 卡内联「复制」 */
+  copyInline(e: TapEvent) {
+    const item = this.data.messages[this.idxOf(e)];
+    if (item) this.copyCard(item);
+  },
+
+  /** 卡内联「朗读/停止」 */
+  speakInline(e: TapEvent) {
+    const item = this.data.messages[this.idxOf(e)];
+    if (item) void this.speakCard(item);
+  },
+
+  /** 卡内联「收藏」 */
+  favInline(e: TapEvent) {
+    const idx = this.idxOf(e);
+    const item = this.data.messages[idx];
+    if (item) void this.favCard(idx, item);
+  },
+
+  /** 从点击事件取消息下标（dataset.index） */
+  idxOf(e: TapEvent): number {
+    const raw = (e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.index) ?? '';
+    return Number(raw);
   },
 
   /** 复制译文 */
