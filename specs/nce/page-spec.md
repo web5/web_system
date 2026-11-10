@@ -7,15 +7,15 @@
 
 | 页面 | 路径 | 文件 | 说明 |
 |---|---|---|---|
-| 发现入口卡 | `pages/discover/index/index` | `index.wxml` / `index.ts` / `index.wxss` | 新增 `.cap` 卡「新概念英语 / NCE2 逐句精读」，`openNce()` → `wx.navigateTo` |
-| 课文目录 | `pages/nce/index/index` | 四件套 | 教材名 + 已入库 N/96、24 课分组、搜索、来源标签 |
+| 发现入口卡 | `pages/discover/index/index` | `index.wxml` / `index.ts` / `index.wxss` | 新增 `.cap` 卡「新概念英语 / NCE 逐句精读」，`openNce()` → `wx.navigateTo` |
+| 课文目录 | `pages/nce/index/index` | 四件套 | 教材名 + 册别切换（NCE2/3/4）+ 已入库 N/total、24 课动态分组、搜索、来源标签 |
 | 课文详情 | `pages/nce/detail/detail` | 四件套 | 逐句精读 + 生词 + 习题浮层 |
 
 `app.json` 的 `pages` 追加上述两条（主包，不动 subpackages / preloadRule / tabBar）。`custom-tab-bar` 与 `setTabBarSelected(this, TAB_INDEX.discover)` 保持不变。
 
 ## 接口与字段
 
-`services/nce.ts` 封装 `getNceMeta()` / `listNceLessons()` / `getNceLesson(id)`，请求 `/api/content-admin/nce/*`；小程序 `utils/request.ts` 不拆包，故用 `Wrapped<T>` + `res?.data ?? 兜底`。
+`services/nce.ts` 封装 `getNceMeta(book?)` / `listNceLessons(page, pageSize, keyword, book?)` / `getNceLesson(id, book?)`，请求 `/api/content-admin/nce/*`；小程序 `utils/request.ts` 不拆包，故用 `Wrapped<T>` + `res?.data ?? 兜底`。
 
 | 字段 | 目录页 | 详情页 |
 |---|---|---|
@@ -70,7 +70,7 @@
 | R3 | 自动滚动 | `wx.pageScrollTo({selector:'#line-'+i})`；低版本基础库不支持时降级为只高亮 |
 | R4 | 点句 / 刻度条续读 | 朗读中/暂停点句或点句级刻度条 → `seekLine(i)` → 从第 i 句续读；朗读中点句不弹中文 |
 | R5 | 暂停 / 继续 / 停止 | `pauseSpeak`/`resumeSpeak`/`stopSpeak`；状态机 `idle|loading|playing|paused`；停止后高亮复位 |
-| R6 | 断点记忆 | `nce-read-<lessonId>` 存 lineIdx；onLoad 读，>0 显示「继续朗读 · 第 N 句」且**不自动播**；自然播完整课清断点 |
+| R6 | 断点记忆 | `nce-read-<book>-<lessonId>` 存 lineIdx；onLoad 读，>0 显示「继续朗读 · 第 N 句」且**不自动播**；自然播完整课清断点 |
 | R7 | 朗读与习题互斥 | 朗读态隐藏「开始练习」浮层，底部朗读控制条（暂停/继续 + 句级刻度条 + 第 i/N 句 + 停止）吸底占位 |
 | R8 | 生词不打断 | 朗读中点生词弹查词卡 + 该句译文，播放不中断 |
 
@@ -93,6 +93,33 @@
 | I1 | 沉浸 idle 禁点句揭示中文 | `toggleLine()` 区分 `immersion`/`tap`：`immersion` 点句不翻转 `showCn`，仅保留底部「查看参考译文」（`detail.translation`） |
 | I2 | tap / 对照不受影响 | `tap` 点句揭示中文、`bilingual` 全显、生词查词照常 |
 | I3 | 沉浸 idle 点生词只查词 | `onWord()` 沉浸 idle 只弹查词卡，不连带揭示该句译文；`tap` 及朗读中仍揭示该句译文 |
+
+## 多册支持（NCE2/3/4 · #8 · 2026-11-10 增补）
+
+> 唯一索引 `(book, lesson_no)`：三册 lesson_no 都从 1 起，详情跳转必须带 `book`，否则点 NCE3 第 1 课会打开 NCE2 Lesson 1。
+> 课数：NCE2=96 / NCE3=60 / NCE4=48。书册常量与分组区间集中在 `pages/nce/books.ts`。
+
+### 交互判据
+
+| # | 判据 | 实现 |
+|---|---|---|
+| B1 | 目录页册别切换 | `pages/nce/books.ts` 导出 `NCE_BOOKS`（NCE2/3/4）+ `DEFAULT_NCE_BOOK`；目录页 `.books` 分段控件 `switchBook()`，默认 NCE2 |
+| B2 | 切册重置搜索词 | `switchBook()` `setData({ book, keyword: '' })` 后重拉，避免跨册搜索结果串味 |
+| B3 | 列表/元信息带册 | `load()` 调 `getNceMeta(book)` + `listNceLessons(1, 100, '', book)` |
+| B4 | 目录动态分组 | `buildNceGroupRanges(total)`：每 24 课一组、末组按 `meta.total` 截断（NCE3 末组 49–60、NCE4 末组 25–48） |
+| B5 | 详情跳转带册 | `openDetail()` `navigateTo` URL 追加 `&book=<book>`；`detail.onLoad` 读 `options.book`（缺省 NCE2），`getNceLesson(id, book)` |
+| B6 | 上一/下一课边界按册 | `goLesson()` 用 `nceBookTotal(book)` 替换硬编码 96 |
+| B7 | 断点按册隔离 | 断点 key `nce-read-<book>-<lessonId>`，避免三册同课号串读 |
+
+### 验收判据
+
+| # | 判据 | 通过标准 |
+|---|---|---|
+| B-V1 | 切 NCE3/NCE4 列表正确 | 目录显示该册课数（60/48），`bookTitle` 随册变化，点第 1 课详情为该册 Lesson 1（不串 NCE2） |
+| B-V2 | 切册重置搜索 | 在 NCE2 搜索后切 NCE3，搜索框清空、列表为该册全量 |
+| B-V3 | 分组与边界 | NCE3 末组 49–60、NCE4 末组 25–48；最后一课「下一课」、第一课「上一课」越界 toast 且不串册 |
+| B-V4 | 断点隔离 | NCE2 Lesson 1 读到第 5 句退出，进 NCE3 Lesson 1 不显示「继续朗读」 |
+| B-V5 | 默认册 | 发现页进入不带 book，目录默认 NCE2（96 课，行为不变） |
 
 ## 工程门禁状态（2026-11-06 更新）
 
