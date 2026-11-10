@@ -15,6 +15,7 @@ interface IUserInfo {
   id: number;
   username: string;
   email?: string;
+  nickname?: string;
   avatar?: string;
   roles: string[];
 }

@@ -2,14 +2,15 @@
  * 大橙子个人助理 · 我的（tab 3）
  *
  * 范围收敛：头像卡 + 学习 3 项（翻译记录 / 课文学习进度 / 生词本）
- * + 通用 4 项（翻译设置 / 设置 / 用户协议与隐私政策 / 关于与免责）+ 退出登录。
+ * + 通用 4 项（翻译设置 / 设置 / 用户协议与隐私政策 / 关于与免责）。
+ * 退出登录已归入「设置」页，本页不再提供退出入口。
  * 专业版、AI 记忆（口味 / 记忆）、合同评估设置、我的合同、对话记录、消息通知、清除缓存
  * 已全部移除（能力不在本期范围内；清除缓存已挪进「设置」页）。
  *
  * 数字一律读真数据，读不到就显示空 / 未开始，绝不写死假数字。
  */
 import { listGlossary } from '../../../services/glossary';
-import { isLoggedIn, logout } from '../../../services/auth';
+import { isLoggedIn } from '../../../services/auth';
 import { fetchProfile } from '../../../services/account';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { TRANSLATE_HISTORY_KEY } from '../../../utils/translate-keys';
@@ -112,24 +113,6 @@ Page({
   goAppSettings() { wx.navigateTo({ url: '/pages/mine/settings/settings' }); },
   goAgreement() { wx.navigateTo({ url: '/pages/mine/agreement/agreement' }); },
   goAbout() { wx.navigateTo({ url: '/pages/mine/about/about' }); },
-
-  /** 退出登录：二次确认 → 服务端作废 + 本地清态 → 停在登录墙（不跳欢迎页） */
-  logout() {
-    wx.showModal({
-      title: '退出登录',
-      content: '退出后需要重新登录才能继续使用。服务端登录凭证会同时失效。',
-      confirmText: '退出',
-      cancelText: '取消',
-      success: (res: WechatMiniprogram.ShowModalSuccessCallbackResult) => {
-        if (!res.confirm) return;
-        void (async () => {
-          await logout();
-          this.setData({ loggedIn: false });
-          wx.showToast({ title: '已退出登录', icon: 'none' });
-        })();
-      },
-    });
-  },
 
   /** 登录卡登录成功后回调：刷新本页内容 */
   onLogged() {

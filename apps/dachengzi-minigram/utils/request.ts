@@ -99,7 +99,7 @@ export function setLoginEnsurer(fn: LoginEnsurer): void {
 
 interface RequestOptions {
   url: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   data?: Record<string, unknown>;
   header?: Record<string, string>;
   /** 是否静默处理 401（不触发重新登录） */
@@ -131,7 +131,9 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
   return new Promise((resolve, reject) => {
     wx.request({
       url: `${baseUrl}${options.url}`,
-      method: options.method || 'GET',
+      // wx.request 运行时支持 PATCH，但 @types/wechat-miniprogram 的 method 枚举未收录 PATCH，
+      // 此处按运行时能力放宽类型（保留 PATCH 透传）。
+      method: (options.method || 'GET') as WechatMiniprogram.RequestOption['method'],
       data: options.data,
       timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
       header: {
@@ -196,6 +198,11 @@ export function post<T = unknown>(url: string, data?: Record<string, unknown>): 
 /** PUT 快捷方法 */
 export function put<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
   return request<T>({ url, method: 'PUT', data });
+}
+
+/** PATCH 快捷方法 */
+export function patch<T = unknown>(url: string, data?: Record<string, unknown>): Promise<T> {
+  return request<T>({ url, method: 'PATCH', data });
 }
 
 /** DELETE 快捷方法 */

@@ -39,40 +39,16 @@
     </block>
   </view>
 
-  <!-- 继续追问（A-γ）：同一 conversationId 续聊，不另存会话/历史；
+  <!-- 继续追问（A-γ 改）：跳主对话页继续追问，同一 conversationId + 种子（kd_chat_seed）；
        仅译文就绪后露出，翻译中 / 失败态 / 转发落地都不显示 -->
   <view class="fu" wx:if="{{!fromShare && !loading && !failed && natural}}">
-    <view class="fu-hd">
-      <text class="fu-title">继续追问（同一会话）</text>
-    </view>
-
-    <view class="fu-list" wx:if="{{followUps.length > 0}}">
-      <view class="fu-item" wx:for="{{followUps}}" wx:key="id">
-        <view class="fu-q">{{item.q}}</view>
-        <view class="fu-a">
-          <view wx:if="{{item.loading && !item.a}}" class="fu-think">
-            <text>思考中</text>
-            <view class="fu-dots"><view class="fu-dot"></view><view class="fu-dot"></view><view class="fu-dot"></view></view>
-          </view>
-          <text wx:else>{{item.a}}</text>
-        </view>
+    <view class="fu-entry" bindtap="goFollowUpChat">
+      <view class="fu-entry-tx">
+        <view class="fu-entry-b">在对话里继续问</view>
+        <view class="fu-entry-e">原文和译文会一起带进对话，随时追问</view>
       </view>
+      <text class="fu-entry-go">›</text>
     </view>
-
-    <view class="fu-in">
-      <input
-        class="fu-input"
-        value="{{followUpText}}"
-        placeholder="接着问点什么，比如“再正式一点”"
-        placeholder-class="fu-ph"
-        confirm-type="send"
-        maxlength="200"
-        bindinput="onFollowUpInput"
-        bindconfirm="sendFollowUp"
-      />
-      <view class="fu-send {{followUpText ? 'fu-send-on' : ''}}" bindtap="sendFollowUp">发送</view>
-    </view>
-    <view class="fu-tip">追问和这次翻译是同一条会话，不会另存一条记录</view>
   </view>
 
   <view class="fold" wx:if="{{!fromShare}}">

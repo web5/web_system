@@ -10,7 +10,9 @@
     "pages/mine/about/about",
     "pages/mine/glossary/index",
     "pages/nce/index/index",
-    "pages/nce/detail/detail"
+    "pages/nce/detail/detail",
+    "pages/chat/index/index",
+    "pages/chat/history/history"
   ],
   "subpackages": [
     {

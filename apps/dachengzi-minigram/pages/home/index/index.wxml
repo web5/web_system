@@ -11,6 +11,16 @@
     </view>
   </view>
 
+  <!-- 新对话：hero 区快捷入口（独立于两条能力入口，不新增第三条能力） -->
+  <view class="newchat" hover-class="newchat-hover" bindtap="goChat">
+    <view class="n-ic">＋</view>
+    <view class="n-tx">
+      <view class="n-b">新对话</view>
+      <view class="n-e">直接和 AI 聊天 · 随时追问</view>
+    </view>
+    <text class="n-go">›</text>
+  </view>
+
   <!-- 能力入口 1：翻译 -->
   <view class="cap" hover-class="cap-hover" bindtap="goTranslate">
     <view class="ic">译</view>

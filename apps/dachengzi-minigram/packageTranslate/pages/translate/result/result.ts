@@ -10,15 +10,7 @@ import { createAgentApi } from '../../../../services/agent-stream';
 import { parseSections, stripTitles } from '../../../../utils/translate-parse';
 import { speakText, stopSpeak, onSpeakState } from '../../../../services/tts';
 import { collectGlossary } from '../../../../services/glossary';
-import { TRANSLATE_HISTORY_KEY, TRANSLATE_PARAMS_KEY, TRANSLATE_SETTINGS_KEY, TrHistoryItem } from '../../../../utils/translate-keys';
-
-/** 追问气泡：q=用户问的，a=AI 回答（流式累加） */
-interface FollowUpBubble {
-  id: number;
-  q: string;
-  a: string;
-  loading: boolean;
-}
+import { TRANSLATE_HISTORY_KEY, TRANSLATE_PARAMS_KEY, TRANSLATE_SETTINGS_KEY, CHAT_SEED_KEY, TrHistoryItem } from '../../../../utils/translate-keys';
 
 /** 历史上限：超出丢弃最旧的，防无限增长 */
 const HISTORY_MAX = 50;
@@ -50,10 +42,6 @@ Page({
     speaking: false,
     /** 转发卡片落地：只展示译文（隐藏原文卡 / 直译对照 / VIP / 重翻等区块） */
     fromShare: false,
-    /** A-γ 继续追问：气泡列表（复用本次翻译的 conversationId 追问） */
-    followUps: [] as FollowUpBubble[],
-    /** 追问输入框内容 */
-    followUpText: '',
   },
 
   /** 本轮参数（重试用） */
@@ -66,10 +54,6 @@ Page({
   _conversationId: '',
   /** 本次翻译在 kd_tr_history 里的记录 id：重试时覆盖同一条，不新增 */
   _historyId: '',
-  /** 追问串行锁：同一时刻只放行一条，避免回调按索引写错气泡 */
-  _followUpBusy: false,
-  /** 追问气泡自增 id（wx:key 用，避免同问题重复时 key 冲突） */
-  _followUpSeq: 0,
   /** 转发缩略图（canvas 白底译文，onShareAppMessage 用） */
   _shareImage: '',
   /** 朗读状态订阅的退订函数（onUnload 时调用） */
@@ -178,8 +162,6 @@ Page({
       literal: '',
       polite: '',
       notes: '',
-      followUps: [],
-      followUpText: '',
     });
 
     // source='tool'：翻译页产生的会话不进「对话记录」列表（本页有自己的翻译历史）
@@ -270,61 +252,25 @@ Page({
     }
   },
 
-  onFollowUpInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ followUpText: String((e.detail && e.detail.value) || '') });
-  },
-
   /**
-   * A-γ 继续追问：把问题追加到当前会话（conversationId 取自首轮 SSE 事件），
-   * 结果落成一条新气泡，不走四段解析（这是自由对话，不是结构化译文）。
+   * 继续追问入口：写种子（原文 + 译文）+ navigateTo 主对话页（agentId=translate + 复用本次 conversationId）。
+   * 主对话页读取 kd_chat_seed 后自行 removeStorageSync 清除，原文/译文作为首两条气泡。
+   * 结构化结果页与翻译历史保持不变。
    */
-  sendFollowUp() {
-    const q = String(this.data.followUpText || '').trim();
-    if (!q) return;
-    // 首轮还没回 conversationId：此刻发出去会另开一条会话，追问就断了
+  goFollowUpChat() {
+    const natural = String(this.data.natural || '').trim();
+    const source = String(this.data.source || '').trim();
     if (!this._conversationId) {
       wx.showToast({ title: '翻译还没完成，稍后再问', icon: 'none' });
       return;
     }
-    if (this._followUpBusy) {
-      wx.showToast({ title: '上一条还在回答，稍等一下', icon: 'none' });
-      return;
+    try {
+      wx.setStorageSync(CHAT_SEED_KEY, { user: source, reply: natural });
+    } catch {
+      /* 种子写失败不阻断跳转：对话页会以空种子进入 */
     }
-
-    this._followUpSeq += 1;
-    const idx = this.data.followUps.length;
-    const bubble: FollowUpBubble = { id: this._followUpSeq, q, a: '', loading: true };
-    this._followUpBusy = true;
-    this.setData({ followUps: this.data.followUps.concat([bubble]), followUpText: '' });
-
-    // 按索引写回（不用闭包里的旧对象），避免多条追问串行时相互覆盖
-    let acc = '';
-    const patch = (key: string, value: string | boolean) => {
-      const data: WechatMiniprogram.IAnyObject = {};
-      data[key] = value;
-      this.setData(data);
-    };
-
-    createAgentApi('translate').stream(q, { source: 'tool', conversationId: this._conversationId }, {
-      onEvent: (ev) => {
-        if (!this._conversationId && ev && ev.conversationId) {
-          this._conversationId = ev.conversationId;
-        }
-      },
-      onDelta: (delta) => {
-        acc += delta;
-        patch(`followUps[${idx}].a`, acc);
-      },
-      onReply: (content) => {
-        this._followUpBusy = false;
-        patch(`followUps[${idx}].a`, String(content || acc).trim() || '（没有拿到回答，可以再问一次）');
-        patch(`followUps[${idx}].loading`, false);
-      },
-      onError: (err) => {
-        this._followUpBusy = false;
-        patch(`followUps[${idx}].a`, (err && err.message) || '追问失败，请重试');
-        patch(`followUps[${idx}].loading`, false);
-      },
+    wx.navigateTo({
+      url: `/pages/chat/index/index?agentId=translate&conversationId=${encodeURIComponent(this._conversationId)}`,
     });
   },
 

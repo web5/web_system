@@ -6,7 +6,7 @@
  * - 冲突（409）时前端必须二次确认，再带 confirmMerge 重发 —— 绝不静默覆盖
  * - 合并成功后服务端重签凭证，前端须 setToken 后再刷新身份
  */
-import { get, post, setToken } from '../utils/request';
+import { get, post, patch, setToken } from '../utils/request';
 
 export type BindSource = 'phone' | 'email';
 
@@ -55,9 +55,28 @@ export interface ProfileInfo {
   avatar?: string;
 }
 
+/** 后端响应兼容两种形态：信封 { code, data } 或直接返回 user 对象，统一取 user 对象 */
+function unwrapProfile(res: unknown): ProfileInfo {
+  const obj = res as { data?: unknown } | null;
+  if (obj && typeof obj === 'object' && obj.data && typeof obj.data === 'object') {
+    return obj.data as ProfileInfo;
+  }
+  return res as ProfileInfo;
+}
+
 /** 当前账号信息（/api/auth/verify 已带黑名单校验） */
 export function fetchProfile(): Promise<ProfileInfo> {
-  return get<ProfileInfo>('/api/auth/verify');
+  return get<unknown>('/api/auth/verify').then(unwrapProfile);
+}
+
+export type UpdateProfilePayload = {
+  nickname?: string;
+  avatar?: string;
+};
+
+/** 更新当前账号资料（昵称/头像）：PATCH /api/user/profile（auth-service UserController） */
+export function updateProfile(payload: UpdateProfilePayload): Promise<ProfileInfo> {
+  return patch<unknown>('/api/user/profile', payload).then(unwrapProfile);
 }
 
 /** 绑定手机号：code 来自 button open-type="getPhoneNumber" 的回调 */

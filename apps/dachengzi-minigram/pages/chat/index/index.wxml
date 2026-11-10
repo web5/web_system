@@ -1,0 +1,78 @@
+<!-- 大橙子个人助理 · 主对话页（气泡对话）
+     navigationStyle:custom 自绘导航：返回 / 标题(翻译会话徽标) / 历史 / 新对话，右侧留原生胶囊位 -->
+<view class="page {{radiusClass}}">
+  <!-- 自绘导航 -->
+  <view class="navbar" style="padding-top: {{statusBarHeight}}px;">
+    <view class="navbar-inner" style="height: {{navBarHeight}}px; padding-right: {{menuGap}}px;">
+      <view class="nav-back" hover-class="nav-hover" bindtap="goBack">
+        <view class="back-chev"></view>
+      </view>
+      <view class="nav-title">
+        大橙子助理
+        <text wx:if="{{isTranslate}}" class="nav-badge">翻译会话</text>
+      </view>
+      <view class="nav-hist" hover-class="nav-hover" bindtap="goHistory">
+        <view class="hist-bars"><i></i><i></i><i></i></view>
+      </view>
+      <view class="nav-act" hover-class="nav-hover" bindtap="newChat">新对话</view>
+    </view>
+  </view>
+
+  <!-- 消息流 / 空态 -->
+  <scroll-view class="msgs" scroll-y scroll-into-view="{{scrollIntoView}}" scroll-with-animation>
+    <!-- 空态：仅引导语 + 建议提问，不发请求 / 不落库 -->
+    <view wx:if="{{messages.length == 0}}" class="empty">
+      <view class="greet">有什么想问的，直接说</view>
+      <view class="sugs">
+        <view class="sug" hover-class="sug-hover" data-text="帮我写一段英文邮件" bindtap="tapSuggest">帮我写一段英文邮件</view>
+        <view class="sug" hover-class="sug-hover" data-text="解释一下什么是复利" bindtap="tapSuggest">解释一下什么是复利</view>
+      </view>
+    </view>
+
+    <block wx:else>
+      <view class="msg {{item.role}}" wx:for="{{messages}}" wx:key="id" id="msg-{{item.id}}">
+        <view class="av">{{item.role == 'user' ? '我' : '橙'}}</view>
+        <view class="bd">
+          <!-- 翻译卡气泡 -->
+          <view wx:if="{{item.card}}" class="bub tr-bubble">
+            <view class="tr-head">
+              <text class="tr-tag">推荐译文</text>
+              <text wx:if="{{item.meta}}" class="tr-meta">{{item.meta}}</text>
+            </view>
+            <view class="tr-main">{{item.enMain}}</view>
+            <view wx:if="{{item.note}}" class="tr-note">{{item.note}}</view>
+          </view>
+          <!-- 流式等待态：三点 -->
+          <view wx:elif="{{item.loading && !item.text}}" class="bub typing-bubble">
+            <view class="tdots"><view class="tdot"></view><view class="tdot"></view><view class="tdot"></view></view>
+          </view>
+          <!-- 普通气泡（含流式逐字 + 光标 / 失败态） -->
+          <view wx:else class="bub {{item.error ? 'err' : ''}}">
+            <text class="bub-text">{{item.text}}</text>
+            <text wx:if="{{item.loading}}" class="caret"></text>
+          </view>
+          <view wx:if="{{item.error}}" class="retry" data-index="{{index}}" bindtap="retry">重试</view>
+        </view>
+      </view>
+    </block>
+    <view id="chat-bottom" class="chat-bottom"></view>
+  </scroll-view>
+
+  <!-- 输入栏 -->
+  <view class="input-bar">
+    <view class="composer">
+      <input
+        class="composer-input"
+        value="{{input}}"
+        placeholder="{{placeholder}}"
+        placeholder-class="composer-ph"
+        confirm-type="send"
+        maxlength="2000"
+        bindinput="onInput"
+        bindconfirm="send"
+      />
+      <view class="send-btn {{input ? 'send-on' : ''}} {{busy ? 'send-dis' : ''}}" bindtap="send">发送</view>
+    </view>
+    <view class="safe-bottom"></view>
+  </view>
+</view>

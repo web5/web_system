@@ -66,82 +66,25 @@
 .failbox .fa text { font-size: 27rpx; color: var(--t2); }
 .failbox .retry { color: var(--brand-txt); font-weight: 500; }
 
-/* ---------- 继续追问（A-γ）：同一 conversationId 续聊 ---------- */
+/* ---------- 继续追问（A-γ 改）：跳主对话页入口 ---------- */
 .fu {
   margin-top: 20rpx;
   background: var(--card);
   border: 1rpx solid rgba(37, 99, 235, .10);
   border-radius: var(--r-card);
-  padding: 26rpx 28rpx 22rpx;
+  padding: 8rpx;
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
 }
-.fu-hd { display: flex; align-items: center; margin-bottom: 18rpx; }
-.fu-title { font-size: 25rpx; font-weight: 600; color: var(--brand-txt); }
-
-/* 气泡区：用户右对齐（浅蓝底），AI 左对齐（白底 + 淡蓝描边） */
-.fu-list { display: flex; flex-direction: column; margin-bottom: 18rpx; }
-.fu-item { display: flex; flex-direction: column; margin-bottom: 16rpx; }
-.fu-item:last-child { margin-bottom: 0; }
-.fu-q {
-  align-self: flex-end;
-  max-width: 82%;
-  background: var(--brand-soft);
-  color: var(--t1);
-  font-size: 26rpx;
-  line-height: 1.6;
-  padding: 14rpx 20rpx;
-  border-radius: var(--r-card) var(--r-card) var(--r-chip) var(--r-card);
-}
-.fu-a {
-  align-self: flex-start;
-  max-width: 86%;
-  margin-top: 10rpx;
-  background: var(--card);
-  border: 1rpx solid rgba(37, 99, 235, .10);
-  color: var(--t1);
-  font-size: 26rpx;
-  line-height: 1.68;
-  padding: 14rpx 20rpx;
-  border-radius: var(--r-card) var(--r-card) var(--r-card) var(--r-chip);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-/* 气泡内「思考中」三点占位 */
-.fu-think { display: flex; align-items: center; font-size: 25rpx; color: var(--t3); }
-.fu-dots { display: inline-flex; margin-left: 10rpx; }
-.fu-dot {
-  width: 8rpx; height: 8rpx; margin-right: 6rpx; border-radius: 50%;
-  background: var(--brand-400); animation: blinkdot 1.2s infinite;
-}
-.fu-dot:nth-child(2) { animation-delay: .2s; }
-.fu-dot:nth-child(3) { animation-delay: .4s; margin-right: 0; }
-
-/* 输入行 */
-.fu-in { display: flex; align-items: center; }
-.fu-input {
-  flex: 1;
-  height: 72rpx;
-  min-height: 72rpx;
-  padding: 0 22rpx;
-  background: var(--brand-50);
-  border-radius: var(--r-pill);
-  font-size: 26rpx;
-  color: var(--t1);
-}
-.fu-ph { color: #98A0AE; font-size: 25rpx; }
-.fu-send {
-  flex: none;
-  margin-left: 16rpx;
-  height: 72rpx;
-  min-width: 128rpx;
-  padding: 0 24rpx;
-  border-radius: var(--r-pill);
-  background: var(--brand-100);
-  color: var(--brand-txt);
-  font-size: 26rpx;
+.fu-entry {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 20rpx;
+  padding: 18rpx 20rpx;
+  border-radius: var(--r-control);
+  background: var(--brand-50);
 }
-.fu-send-on { background: var(--brand-600); color: var(--on-brand); }
-.fu-tip { margin-top: 14rpx; font-size: 21rpx; line-height: 1.5; color: #98A0AE; }
+.fu-entry:active { opacity: .85; }
+.fu-entry-tx { flex: 1; min-width: 0; }
+.fu-entry-b { font-size: 27rpx; font-weight: 600; color: var(--brand-txt); }
+.fu-entry-e { margin-top: 6rpx; font-size: 22rpx; color: var(--t2); line-height: 1.5; }
+.fu-entry-go { flex: none; font-size: 36rpx; color: var(--brand-txt); }

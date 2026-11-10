@@ -25,8 +25,6 @@
     <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
     <view class="r" bindtap="goAbout"><text>关于与免责</text><text class="v">›</text></view>
   </view>
-
-  <view class="logout" bindtap="logout">退出登录</view>
   </block>
 
   <view class="foot">本服务使用生成式人工智能

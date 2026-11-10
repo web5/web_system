@@ -16,6 +16,19 @@ export const TRANSLATE_PARAMS_KEY = 'kd_translate_params';
 /** 翻译默认偏好 key（写入方 = 翻译设置页 savePrefs；读取方 = 翻译首页 onShow） */
 export const TRANSLATE_SETTINGS_KEY = 'kd_tr_settings';
 
+/**
+ * 翻译追问种子 key（写入方 = 翻译结果页 goFollowUpChat；读取方 = 主对话页 onLoad，
+ * 读取后立即 removeStorageSync 清除，避免残留）。
+ * 走 storage 而非 query：原文+译文可能很长，URL 有长度上限。
+ */
+export const CHAT_SEED_KEY = 'kd_chat_seed';
+
+/** 翻译追问种子结构：user=原文，reply=首轮译文（推荐译文，已切好） */
+export interface ChatSeed {
+  user: string;
+  reply: string;
+}
+
 /** 一条翻译历史（各页读写同一份 storage，字段结构固定，新增字段须各消费方同步） */
 export interface TrHistoryItem {
   id: string;

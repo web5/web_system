@@ -49,6 +49,11 @@ Page({
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
   },
 
+  /** 新对话：hero 区快捷入口，独立于两条能力入口（缺省 agentId=auto，无 conversationId） */
+  goChat() {
+    openEntry('/pages/chat/index/index');
+  },
+
   /** 能力入口 1：翻译（分包页） */
   goTranslate() {
     openEntry('/packageTranslate/pages/translate/index/index');
