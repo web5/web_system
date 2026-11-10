@@ -4,15 +4,35 @@ import * as tencentcloud from 'tencentcloud-sdk-nodejs';
 
 const TtsClient = tencentcloud.tts.v20190823.Client;
 
-/** 腾讯云 TTS 音色（603007 邻家女孩：超自然大模型音色，支持中英混读） */
-const EN_VOICES: Record<string, number> = {
-  female: 603007, // 邻家女孩（聊天女声 · 超自然大模型音色 · 中英混读）
-  male: 502007, // 智小虎（聊天童声 · 超自然大模型音色 · 中英混读）
-};
+/**
+ * 腾讯云 TTS 精品音色（免费额度 800 万字符/月）。
+ *
+ * 为什么换：原 603007/502007 是「超自然大模型音色」，免费额度仅 2 万字符，已耗尽
+ * （报 3022 resource pack allowance exhausted）；精品音色免费额度 800 万字符，根治。
+ *
+ * 精品音色不跨语言混读，必须按文本主语言分流（PrimaryLanguage：1=中文 2=英文）：
+ * 中文 → 智瑜 101001（女）/ 智聆 101002（男）；英文 → WeRose 101051（女）/ WeJack 101050（男）。
+ */
+const EN_VOICES = {
+  female: { zh: 101001, en: 101051 }, // 智瑜（精品中文女声）/ WeRose（精品英文女声）
+  male: { zh: 101002, en: 101050 }, // 智聆（精品中文男声）/ WeJack（精品英文男声）
+} as const;
+
+/** 文本主语言：含中文 → 中文(1)，否则 → 英文(2)（腾讯云 PrimaryLanguage 语义） */
+function primaryLanguageOf(text: string): 1 | 2 {
+  return /[\u4e00-\u9fff]/.test(text) ? 1 : 2;
+}
+
+/** 无显式 voiceType 时的默认音色：按主语言选对应语言的精品女声 */
+function defaultVoiceType(primaryLanguage: 1 | 2): number {
+  return EN_VOICES.female[primaryLanguage === 1 ? 'zh' : 'en'];
+}
 
 /**
  * 单次合成的文本上限（实测音色 603007：英文 499 成功 / 520 报 Text too long；
  * 中文 150 成功 / 300 报 Text too long → 中英必须分开设限，取实测安全值留余量）。
+ *
+ * ⚠️ 该上限在旧音色 603007 上实测得出；切换精品音色后未复测，暂沿用安全值。
  */
 const TTS_TEXT_LIMIT = { en: 480, zh: 150 } as const;
 
@@ -75,12 +95,13 @@ export class TtsService {
     }
 
     try {
-      // 603007 邻家女孩支持中英混读：PrimaryLanguage 按文本是否含中文选择主语言（1=中文 2=英文）
-      const primaryLanguage = /[\u4e00-\u9fff]/.test(text) ? 1 : 2;
+      // 精品音色不跨语言混读：PrimaryLanguage 按文本是否含中文选择主语言（1=中文 2=英文），
+      // 无显式 voiceType 时按主语言选对应语言的精品女声（显式传入的 voiceType 仍被尊重）。
+      const primaryLanguage = primaryLanguageOf(text);
       const response = await this.client.TextToVoice({
         Text: text,
         SessionId: '',
-        VoiceType: options?.voiceType ?? EN_VOICES.female,
+        VoiceType: options?.voiceType ?? defaultVoiceType(primaryLanguage),
         Codec: 'mp3',
         SampleRate: 16000,
         Speed: options?.speed ?? 0,
