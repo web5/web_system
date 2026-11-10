@@ -3,7 +3,7 @@
  * 使用方法: npm run preview
  *
  * 前提条件:
- * 1. private.key 已放在 apps/kedou-ai-minigram/private.key（已 gitignore，切勿入库）
+ * 1. private.key 已放在 apps/dachengzi-minigram/private.key（已 gitignore，切勿入库）
  * 2. 公众平台已把**执行机器**的公网 IP 加入白名单（本地跑加本机，dev 机器跑加 dev 机器）
  * 3. miniprogram-ci 依赖已装
  *
@@ -17,8 +17,10 @@
  *   PREVIEW_TTL_MIN 预览码有效期（分钟），默认 25
  *
  * 说明: miniprogram-ci 直连微信后台，**不需要**打开微信开发者工具。
- *       二维码有时效（官方口径 25 分钟）；长期可用请走 npm run upload + 公众平台设为体验版
- *       （体验版码官方口径 7 天）。
+ *       本脚本出的是「开发版」预览二维码，有时效（官方口径 25 分钟），连 dev。
+ *       长期可扫的码须人工在公众平台把「开发版本」设为体验版（体验版连 dev、体验成员可扫、
+ *       体验版二维码官方口径 7 天）；脚本只到「上传开发版本」为止，设为体验版 / 提交审核 /
+ *       发布均为人工操作，脚本不代做（详见 npm run publish -- trial / release）。
  *
  * 产物（qrcodeFormat=image 时）：
  *   preview-qr.png            二维码原图（固定名，便于脚本 scp）
@@ -52,7 +54,7 @@ const privateKeyPath = path.join(ROOT, 'private.key');
 
 if (!fs.existsSync(privateKeyPath)) {
   console.error('[Preview] 缺少私钥 private.key');
-  console.error('[Preview] 请从公众平台下载「小程序代码上传密钥」，保存为 apps/kedou-ai-minigram/private.key');
+  console.error('[Preview] 请从公众平台下载「小程序代码上传密钥」，保存为 apps/dachengzi-minigram/private.key');
   process.exit(1);
 }
 
@@ -224,7 +226,7 @@ async function previewApp() {
     expireAtText: fmt(expireAt),
     expireAtMs,
     ttlMinutes: TTL_MIN,
-    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload + 公众平台体验版（官方口径 7 天）',
+    hint: '预览码过期后必须重新生成；长期可扫的码须人工在公众平台把开发版本「设为体验版」（体验版连 dev、体验成员可扫、体验版二维码官方口径 7 天），脚本不代做',
   };
 
   try {
@@ -277,7 +279,8 @@ async function previewApp() {
       console.log(`[Preview] 过期信息(meta): ${metaPath}`);
       console.log(`[Preview] 可扫码卡片: ${htmlPath}`);
       console.log('[Preview]   → 打开它就能用手机扫（内嵌原图，不经聊天工具转码压缩，带剩余时间倒计时）');
-      console.log('[Preview] ⚠️ 过期重跑 npm run preview；需要长期码请走 upload + 体验版');
+      console.log('[Preview] ⚠️ 过期重跑 npm run preview；长期可扫的码须人工在公众平台把开发版本「设为体验版」（连 dev、体验成员可扫，官方口径 7 天），脚本不代做');
+      console.log('[Preview]    分步指引：npm run publish -- trial（体验版）/ npm run publish -- release（正式版）');
       console.log('[Preview] ⚠️ 真机需开「开发调试」，或已在公众平台配置 request 合法域名 https://dev.kedouai.com');
     } else {
       console.log(JSON.stringify({ ...result, expireAt: meta.expireAt, expireAtText: meta.expireAtText }));

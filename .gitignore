@@ -141,3 +141,6 @@ test-results/
 
 # 红线扫描脚本（scripts/redline Python）字节码缓存
 scripts/redline/__pycache__/
+
+# 端到端测试报告产物（contract-risk 评测 run 输出，001.md + raw final 原文，非源码）
+servers/ai-agent/e2e/contract-risk/reports/

@@ -19,7 +19,9 @@ import * as WebSocket from 'ws';
  */
 const STREAM_HOST = 'tts.cloud.tencent.com';
 const STREAM_PATH = '/stream_wsv2';
-const DEFAULT_VOICE = 603007; // 邻家女孩（超自然大模型音色 · 中英混读），实测支持流式
+// 精品中文女声（智瑜）。⚠️ 精品音色不跨语言混读：流式链路目前无语言分流，默认按中文女声；
+// 英文文本请走整段链路（textToSpeech 已按语言分流）。超自然大模型音色免费额度已耗尽（3022）。
+const DEFAULT_VOICE = 101001;
 
 /** 句末标点处断句（服务端 Node 支持 lookbehind，与小程序端不同） */
 const SENTENCE_SPLIT = /(?<=[.!?;。！？；…])\s+/;
@@ -50,7 +52,7 @@ export class TtsStreamService {
   /**
    * 流式合成：建立 WS 连接并逐块产出音频分片（拉取式，天然背压）。
    * @param text 待合成文本
-   * @param options codec 默认 pcm（端侧零解码）；voiceType 默认 603007
+   * @param options codec 默认 pcm（端侧零解码）；voiceType 默认 101001（精品中文女声）
    */
   async *streamSpeech(
     text: string,

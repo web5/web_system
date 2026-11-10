@@ -168,31 +168,31 @@ export class AccountService {
       if (target.status !== 'active') {
         throw new ConflictException({ canMerge: false, message: '该账号状态异常，请联系客服' });
       }
-      if (allowPending) await this.savePending(userId, source, value);
-      return {
-        conflict: true,
-        canMerge: true,
-        maskedValue: source === 'phone' ? maskPhone(value) : maskEmail(value),
-        hint: `该${source === 'phone' ? '手机号' : '邮箱'}已注册科豆账号，绑定后将把当前小程序的数据合并到该账号，合并不可撤销`,
-        source,
-      };
+      if (allowPending) {
+        // 首次绑定命中冲突：暂存待确认值，返回 conflict 让前端二次确认
+        await this.savePending(userId, source, value);
+        return {
+          conflict: true,
+          canMerge: true,
+          maskedValue: source === 'phone' ? maskPhone(value) : maskEmail(value),
+          hint: `该${source === 'phone' ? '手机号' : '邮箱'}已注册科豆账号，绑定后将把当前小程序的数据合并到该账号，合并不可撤销`,
+          source,
+        };
+      }
+      // 二次请求（confirmMerge=true，暂存的待确认值已命中冲突目标）：直接合并
+      return this.mergeInto(userId, source, value);
     }
 
-    const merged = allowPending ? false : true;
-    if (!merged) {
-      // 首次绑定（无冲突）
-      await this.dataSource.query(`UPDATE users SET ${column} = ? WHERE id = ?`, [value, userId]);
-      this.logger.log(`绑定${source}成功: userId=${userId}`);
-      return {
-        conflict: false,
-        bound: true,
-        [source]: source === 'phone' ? maskPhone(value) : maskEmail(value),
-        boundAt: new Date().toISOString(),
-        source,
-      } as BindResult;
-    }
-
-    return this.mergeInto(userId, source, value);
+    // 无冲突：直接绑定当前账号（含「确认合并时目标已释放该值」的兜底）
+    await this.dataSource.query(`UPDATE users SET ${column} = ? WHERE id = ?`, [value, userId]);
+    this.logger.log(`绑定${source}成功: userId=${userId}`);
+    return {
+      conflict: false,
+      bound: true,
+      [source]: source === 'phone' ? maskPhone(value) : maskEmail(value),
+      boundAt: new Date().toISOString(),
+      source,
+    } as BindResult;
   }
 
   /**
