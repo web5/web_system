@@ -11,7 +11,7 @@
  */
 import { listGlossary } from '../../../services/glossary';
 import { isLoggedIn } from '../../../services/auth';
-import { fetchProfile, isNicknameUnset } from '../../../services/account';
+import { fetchProfile, isNicknameUnset, resolveAvatarUrl } from '../../../services/account';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { TRANSLATE_HISTORY_KEY } from '../../../utils/translate-keys';
 
@@ -37,6 +37,8 @@ Page({
     avatar: '',
     /** 脱敏手机号；空 = 未绑定（禁止展示硬编码假数据） */
     phone: '',
+    /** 脱敏邮箱；空 = 未绑定（手机未绑时展示兜底，#1） */
+    email: '',
     /** 本机翻译记录条数（空则不展示数字） */
     trCount: '',
     /** 生词本条数摘要 */
@@ -90,9 +92,11 @@ Page({
     void fetchProfile()
       .then((info) => {
         this.setData({
-          phone: info.phone || '未绑定手机号',
+          // 手机未绑定时不写占位，交由渲染层按 phone → email → 占位兜底（#1）
+          phone: info.phone || '',
+          email: info.email || '',
           nickname: isNicknameUnset(info.nickname) ? '' : (info.nickname || ''),
-          avatar: info.avatar || '',
+          avatar: resolveAvatarUrl(info.avatar),
         });
       })
       .catch(() => undefined);

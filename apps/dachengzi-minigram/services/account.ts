@@ -104,6 +104,22 @@ function getUploadBase(): string {
 }
 
 /**
+ * 头像 URL 兜底：upload-service 返回相对路径（/api/uploads/avatars/<name>），
+ * <image src> 直接渲染会被小程序按包内路径解析导致加载失败，须拼上 apiBase。
+ * 兼容历史已落库的相对 URL；本机临时路径（wxfile://、http://tmp/…）与完整 URL 原样返回。
+ */
+export function resolveAvatarUrl(url?: string): string {
+  const u = (url || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u) || u.startsWith('wxfile://')) return u;
+  if (u.startsWith('/')) {
+    const base = getUploadBase();
+    return base ? `${base.replace(/\/+$/, '')}${u}` : u;
+  }
+  return u;
+}
+
+/**
  * 上传头像到 upload-service：POST /api/upload/avatar（multipart，字段名 file，限 2MB）。
  * 鉴权为用户态 JWT（与小程序登录同一 token）。
  * @returns 后端可持久化的相对 URL（形如 /api/uploads/avatars/<filename>）

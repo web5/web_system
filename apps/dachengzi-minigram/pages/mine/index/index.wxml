@@ -9,7 +9,7 @@
     <view wx:else class="avatar">橙</view>
     <view class="info">
       <view class="n">{{nickname || '点击设置昵称'}}</view>
-      <view class="d">{{phone || '未绑定手机号'}}</view>
+      <view class="d">{{phone || email || '未绑定手机号'}}</view>
     </view>
     <text class="arw">›</text>
   </view>

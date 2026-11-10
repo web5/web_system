@@ -5,7 +5,7 @@
 // 昵称：<input type="nickname"> 微信原生昵称输入，bindblur/bindconfirm 自动 PUT 落库（trim 后非空才落库）。
 // 邮箱：自绘验证码页（bind-email），点击跳转即可，不在本页做绑定。
 // 手机号：暂不可用，置灰占位（去掉 getPhoneNumber 交互）。
-import { fetchProfile, updateProfile, readMessage, uploadAvatar, isNicknameUnset } from '../../../services/account';
+import { fetchProfile, updateProfile, readMessage, uploadAvatar, isNicknameUnset, resolveAvatarUrl } from '../../../services/account';
 import { isLoggedIn } from '../../../services/auth';
 
 /** 头像本地持久化 storage key */
@@ -64,11 +64,13 @@ Page({
     try {
       const info = await fetchProfile();
       const nickname = isNicknameUnset(info.nickname) ? '' : (info.nickname || '');
+      const avatar = info.avatar || readLocalAvatar();
       this._syncedNickname = nickname;
       this.setData({
         email: info.email || '',
         nickname,
-        avatarUrl: info.avatar || readLocalAvatar(),
+        // 相对 URL 拼上 apiBase（兼容历史已落库的相对路径）
+        avatarUrl: resolveAvatarUrl(avatar),
         uid: info.id ? String(info.id) : '',
       });
     } catch {
@@ -101,19 +103,20 @@ Page({
     this.setData({ nickname: e.detail.value });
   },
 
-  /** 昵称失焦自动保存 */
-  onNickBlur() {
-    void this.saveNickname();
+  /** 昵称失焦自动保存：直接读事件值，不依赖 bindinput 先更新 data（部分机型 type="nickname" 一键填昵称不触发 bindinput） */
+  onNickBlur(e: WechatMiniprogram.InputBlur) {
+    void this.saveNickname(e?.detail?.value);
   },
 
-  /** 昵称「完成」键自动保存 */
-  onNickConfirm() {
-    void this.saveNickname();
+  /** 昵称「完成」键自动保存：同上，直接读事件值 */
+  onNickConfirm(e: WechatMiniprogram.InputConfirm) {
+    void this.saveNickname(e?.detail?.value);
   },
 
   /** 昵称自动落库：trim 后非空且与上次落库值不同才 PUT（去掉保存按钮，#9） */
-  async saveNickname() {
-    const nickname = (this.data.nickname || '').trim();
+  async saveNickname(value?: string) {
+    // 事件直传值优先；未传（理论上不出现）回退 data.nickname
+    const nickname = (value !== undefined ? value : (this.data.nickname || '')).trim();
     if (!nickname || nickname === this._syncedNickname || this._nickSaving) return;
     this._nickSaving = true;
     try {
@@ -164,6 +167,6 @@ Page({
     if (app && app.globalData.userInfo) {
       app.globalData.userInfo.avatar = path;
     }
-    this.setData({ avatarUrl: path });
+    this.setData({ avatarUrl: resolveAvatarUrl(path) });
   },
 });

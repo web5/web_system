@@ -7,6 +7,11 @@
 .avatar-btn {
   width: 96rpx;
   height: 96rpx;
+  /* button 默认 min-width/min-height 会把非正方的盒子撑成椭圆，50% 圆角不再是正圆；
+     min-width/min-height 归零 + border-box 锁定 96rpx 正方形，确保 50% 是正圆 */
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   margin: 0;
   border-radius: 50%;
