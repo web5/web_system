@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>科豆 AI · 欢迎页入口方案对比</title>
+<style>
+  :root {
+    --nav-bg:#FFFFFF; --nav-text:#000;
+    --page-bg:#F7F4F0; --card:#FFFFFF;
+    --line: rgba(60,60,67,.12);
+    --t1:#10131A; --t2: rgba(60,60,67,.62); --t3: rgba(60,60,67,.34);
+    --brand:#F97316; --brand-soft:#FFF2E6; --brand-deep:#E8620A; --brand-txt:#C2410C;
+    --accent:#0E9B8C; --accent-soft:#E4F6F2;
+    --shadow: 0 20px 56px rgba(20,30,60,.18);
+  }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html,body { margin:0; padding:0; }
+  body {
+    background:#EDEAE5; color:var(--t1); padding:28px 28px 40px;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+    line-height:1.6;
+  }
+  .head { text-align:center; margin-bottom:24px; }
+  .head h1 { font-size:19px; font-weight:700; margin:0 0 6px; letter-spacing:-.2px; }
+  .head p { margin:0; font-size:12.5px; color:var(--t2); }
+  .grid { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+
+  .col { width:390px; flex:none; }
+  .cap { text-align:center; margin-bottom:12px; }
+  .cap b { font-size:14px; font-weight:600; }
+  .cap span { display:block; font-size:11.5px; color:rgba(60,60,67,.55); margin-top:2px; }
+
+  /* ---------- 手机壳 ---------- */
+  .phone {
+    width:390px; height:812px; background:var(--page-bg); border-radius:46px;
+    position:relative; overflow:hidden; box-shadow:var(--shadow); border:1px solid var(--line);
+    display:flex; flex-direction:column;
+  }
+  .wxbar { height:44px; flex:none; display:flex; align-items:flex-end; justify-content:space-between; padding:0 18px 5px; font-size:13px; font-weight:600; }
+  .wxbar .sig { display:flex; gap:3px; align-items:flex-end; height:11px; }
+  .wxbar .sig i { width:3px; background:var(--t1); border-radius:1px; display:block; }
+  .wxbar .bat { width:25px; height:12px; border:1px solid var(--t1); border-radius:3.5px; position:relative; opacity:.9; }
+  .wxbar .bat::after { content:""; position:absolute; inset:1.5px; width:70%; background:var(--t1); border-radius:1.5px; }
+  .navbar { height:44px; flex:none; position:relative; display:flex; align-items:center; justify-content:center; background:var(--nav-bg); border-bottom:.5px solid var(--line); }
+  .navbar .title { font-size:17px; font-weight:600; }
+  .capsule { position:absolute; right:7px; width:87px; height:32px; border-radius:16px; background:rgba(255,255,255,.86); border:.5px solid rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-around; }
+  .capsule .dots { display:flex; gap:2.5px; }
+  .capsule .dots i { width:4px; height:4px; border-radius:50%; background:var(--nav-text); display:block; }
+  .capsule .circle { width:17px; height:17px; border:1.4px solid var(--nav-text); border-radius:50%; position:relative; }
+  .capsule .circle::after { content:""; position:absolute; left:50%; top:50%; width:2.2px; height:5.5px; border-radius:1px; background:var(--nav-text); transform:translate(-50%,-62%); }
+  .capsule .sep { width:.5px; height:18px; background:rgba(0,0,0,.08); }
+
+  .screen { flex:1; display:flex; flex-direction:column; padding:0 24px 24px; overflow:hidden; }
+  .w-group { flex:1; display:flex; flex-direction:column; justify-content:center; padding-bottom:18px; }
+  .w-top { padding-bottom:40px; }
+  .w-hello { font-size:54px; font-weight:600; line-height:1; letter-spacing:-1.8px; }
+  .w-hello i { font-style:normal; color:var(--brand); }
+  .w-sub { margin-top:15px; font-size:13.5px; color:var(--t3); letter-spacing:.3px; }
+  .w-recent { margin-top:20px; font-size:11.5px; color:var(--t3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .w-foot { padding-top:20px; }
+  .claim { font-size:10.5px; color:var(--t3); line-height:1.8; }
+
+  /* ============ 方案 A｜双色磁贴 ============ */
+  .A .w-entry { display:flex; flex-direction:column; gap:11px; }
+  .A .e { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:18px; position:relative; }
+  .A .e.a { background:var(--brand-soft); }
+  .A .e.b { background:var(--accent-soft); }
+  .A .e .ic { width:44px; height:44px; border-radius:14px; background:#fff; display:flex; align-items:center; justify-content:center; flex:none; box-shadow:0 2px 6px rgba(20,30,60,.07); }
+  .A .e .ic svg { width:22px; height:22px; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .A .e.a .ic svg { stroke:var(--brand); }
+  .A .e.b .ic svg { stroke:var(--accent); }
+  .A .e .tx { flex:1; min-width:0; }
+  .A .e .tx b { display:block; font-size:16.5px; font-weight:600; letter-spacing:.2px; }
+  .A .e .tx em { display:block; font-style:normal; font-size:11.5px; margin-top:2px; }
+  .A .e.a .tx em { color:rgba(194,65,12,.62); }
+  .A .e.b .tx em { color:rgba(14,155,140,.72); }
+  .A .e .go { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.75); display:flex; align-items:center; justify-content:center; flex:none; }
+  .A .e .go svg { width:12px; height:12px; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+  .A .e.a .go svg { stroke:var(--brand-txt); }
+  .A .e.b .go svg { stroke:var(--accent); }
+
+  /* ============ 方案 B｜Clay 立体 ============ */
+  .B .w-entry { display:flex; flex-direction:column; gap:12px; }
+  .B .e { display:flex; align-items:center; gap:15px; padding:15px 17px; border-radius:22px; background:#fff; position:relative;
+          box-shadow: 0 1px 2px rgba(20,30,60,.04), 0 10px 24px -10px rgba(20,30,60,.16), inset 0 1px 0 rgba(255,255,255,.9); }
+  .B .e .ic { width:52px; height:52px; border-radius:18px; display:flex; align-items:center; justify-content:center; flex:none; position:relative; }
+  .B .e.a .ic { background:linear-gradient(145deg,#FFA757,#F97316 60%,#EA6A0C); box-shadow:0 6px 14px -4px rgba(249,115,22,.5); }
+  .B .e.b .ic { background:linear-gradient(145deg,#3DBCAD,#0E9B8C 60%,#0A8477); box-shadow:0 6px 14px -4px rgba(14,155,140,.45); }
+  .B .e .ic::after { content:""; position:absolute; left:9px; top:6px; width:16px; height:8px; border-radius:50%; background:rgba(255,255,255,.42); filter:blur(2px); }
+  .B .e .ic svg { width:23px; height:23px; fill:none; stroke:#fff; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; position:relative; }
+  .B .e .tx { flex:1; min-width:0; }
+  .B .e .tx b { display:block; font-size:17px; font-weight:600; letter-spacing:.2px; }
+  .B .e .tx em { display:block; font-style:normal; font-size:11.5px; color:var(--t3); margin-top:3px; }
+  .B .e .go { width:28px; height:28px; border-radius:50%; background:#F5F3F0; display:flex; align-items:center; justify-content:center; flex:none; }
+  .B .e .go svg { width:12px; height:12px; fill:none; stroke:var(--t3); stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* ============ 方案 C｜主次 CTA ============ */
+  .C .w-entry { display:flex; flex-direction:column; gap:12px; }
+  .C .e.main { display:flex; align-items:center; gap:15px; padding:20px 18px; border-radius:22px; position:relative; overflow:hidden;
+               background:linear-gradient(135deg,#FB8C3A 0%,#F97316 45%,#E2570A 100%); box-shadow:0 12px 26px -10px rgba(249,115,22,.55); }
+  .C .e.main::after { content:""; position:absolute; right:-30px; top:-46px; width:130px; height:130px; border-radius:50%; background:rgba(255,255,255,.12); }
+  .C .e.main .ic { width:46px; height:46px; border-radius:15px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.3); display:flex; align-items:center; justify-content:center; flex:none; position:relative; }
+  .C .e.main .ic svg { width:23px; height:23px; fill:none; stroke:#fff; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+  .C .e.main .tx { flex:1; min-width:0; position:relative; }
+  .C .e.main .tx b { display:block; font-size:18px; font-weight:600; color:#fff; letter-spacing:.3px; }
+  .C .e.main .tx em { display:block; font-style:normal; font-size:11.5px; color:rgba(255,255,255,.86); margin-top:3px; }
+  .C .e.main .go { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,.24); display:flex; align-items:center; justify-content:center; flex:none; position:relative; }
+  .C .e.main .go svg { width:12px; height:12px; fill:none; stroke:#fff; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+  .C .e.sub { display:flex; align-items:center; gap:13px; padding:14px 16px; border-radius:18px; background:#fff; border:1px solid rgba(60,60,67,.10); }
+  .C .e.sub .ic { width:40px; height:40px; border-radius:13px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; flex:none; }
+  .C .e.sub .ic svg { width:20px; height:20px; fill:none; stroke:var(--accent); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .C .e.sub .tx { flex:1; min-width:0; }
+  .C .e.sub .tx b { display:block; font-size:15.5px; font-weight:600; }
+  .C .e.sub .tx em { display:block; font-style:normal; font-size:11.5px; color:var(--t3); margin-top:2px; }
+  .C .e.sub .go { color:var(--t3); font-size:16px; flex:none; line-height:1; }
+
+  /* ============ 方案 E｜双列磁贴 ============ */
+  .E .w-entry { display:flex; gap:12px; }
+  .E .e { flex:1; background:#fff; border-radius:20px; padding:17px 16px 16px; position:relative; overflow:hidden;
+          box-shadow:0 1px 2px rgba(20,30,60,.04), 0 10px 22px -12px rgba(20,30,60,.20); }
+  .E .e::before { content:""; position:absolute; left:0; top:0; width:100%; height:3px; }
+  .E .e.a::before { background:linear-gradient(90deg,#FFA757,#F97316); }
+  .E .e.b::before { background:linear-gradient(90deg,#3DBCAD,#0E9B8C); }
+  .E .e .ic { width:44px; height:44px; border-radius:15px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+  .E .e.a .ic { background:var(--brand-soft); }
+  .E .e.b .ic { background:var(--accent-soft); }
+  .E .e .ic svg { width:23px; height:23px; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .E .e.a .ic svg { stroke:var(--brand); }
+  .E .e.b .ic svg { stroke:var(--accent); }
+  .E .e b { display:block; font-size:16.5px; font-weight:600; letter-spacing:.2px; }
+  .E .e em { display:block; font-style:normal; font-size:11px; color:var(--t3); margin-top:3px; line-height:1.6; }
+  .E .w-again { display:flex; align-items:center; gap:11px; margin-top:12px; padding:13px 16px; border-radius:18px;
+                background:rgba(255,255,255,.6); border:1px solid rgba(60,60,67,.09); }
+  .E .w-again .ic { width:30px; height:30px; border-radius:10px; background:rgba(60,60,67,.06); display:flex; align-items:center; justify-content:center; flex:none; }
+  .E .w-again .ic svg { width:15px; height:15px; fill:none; stroke:var(--t3); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .E .w-again .tx { min-width:0; }
+  .E .w-again .tx b { display:block; font-size:12.5px; font-weight:500; }
+  .E .w-again .tx em { display:block; font-style:normal; font-size:11px; color:var(--t3); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ============ 方案 D｜极简线条 ============ */
+  .D .w-entry { }
+  .D .e { display:flex; align-items:center; gap:16px; padding:19px 2px; position:relative; }
+  .D .e + .e { border-top:1px solid rgba(60,60,67,.10); }
+  .D .e .ic { width:42px; height:42px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .D .e .ic svg { width:34px; height:34px; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+  .D .e.a .ic svg { stroke:var(--brand); }
+  .D .e.b .ic svg { stroke:var(--accent); }
+  .D .e .tx { flex:1; min-width:0; }
+  .D .e .tx b { display:block; font-size:21px; font-weight:600; letter-spacing:-.3px; }
+  .D .e .tx em { display:block; font-style:normal; font-size:11.5px; color:var(--t3); margin-top:2px; letter-spacing:.2px; }
+  .D .e .go { color:var(--t3); font-size:17px; flex:none; line-height:1; }
+  .D .hint { margin-top:22px; font-size:11px; color:var(--t3); letter-spacing:.5px; }
+
+  /* 窄屏（手机）单列堆叠 */
+  @media (max-width: 880px) {
+    body { padding: 16px 6px 30px; }
+    .head h1 { font-size:16px; }
+    .head p { font-size:11.5px; }
+    .grid { gap: 30px; }
+    .col { zoom: .85; }
+  }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>欢迎页入口 · 五个方案</h1>
+  <p>同一个 Hello 主视觉，只换入口区。<b>选一个，我落进原型。</b></p>
+</div>
+
+<div class="grid">
+
+  <!-- ============ A ============ -->
+  <div class="col">
+    <div class="cap"><b>方案 A｜双色磁贴</b><span>卡片自身着色，橙/青分区；圆形箭头做动作暗示</span></div>
+    <div class="phone A">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <span class="tx"><b>AI 翻译</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+              <span class="go"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+              <span class="go"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+          <div class="w-recent">继续上次 · 这个报价我们再商量商量…</div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ B ============ -->
+  <div class="col">
+    <div class="cap"><b>方案 B｜Clay 立体</b><span>白卡 + 柔和投影，图标做渐变色块与光晕，最贴近品牌调性</span></div>
+    <div class="phone B">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <span class="tx"><b>AI 翻译</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+              <span class="go"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+              <span class="go"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+          <div class="w-recent">继续上次 · 这个报价我们再商量商量…</div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ C ============ -->
+  <div class="col">
+    <div class="cap"><b>方案 C｜主次分明</b><span>翻译做主 CTA（橙色实心），评估降为次入口，节奏有轻重</span></div>
+    <div class="phone C">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e main">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <span class="tx"><b>AI 翻译</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+              <span class="go"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+            </div>
+            <div class="e sub">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+              <span class="go">›</span>
+            </div>
+          </div>
+          <div class="w-recent">继续上次 · 这个报价我们再商量商量…</div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ D ============ -->
+  <div class="col">
+    <div class="cap"><b>方案 D｜极简线条</b><span>去掉所有卡片，靠大字号与留白撑场，最克制</span></div>
+    <div class="phone D">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <span class="tx"><b>AI 翻译</b><em>中英日德 · 三版输出 + 语气点评</em></span>
+              <span class="go">›</span>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <span class="tx"><b>合同评估</b><em>风险识别 · 逐条修改建议</em></span>
+              <span class="go">›</span>
+            </div>
+          </div>
+          <div class="w-recent">继续上次 · 这个报价我们再商量商量…</div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ E ============ -->
+  <div class="col">
+    <div class="cap"><b>方案 E｜双列磁贴</b><span>入口做成两张磁贴，顶部色条分区；「继续上次」升成实卡补上底部留白</span></div>
+    <div class="phone E">
+      <div class="wxbar"><span>17:08</span><span class="sig"><i style="height:4px"></i><i style="height:6px"></i><i style="height:9px"></i><i style="height:11px"></i></span><span class="bat"></span></div>
+      <div class="navbar"><span class="title">科豆 AI</span><span class="capsule"><span class="dots"><i></i><i></i><i></i></span><span class="sep"></span><span class="circle"></span></span></div>
+      <div class="screen">
+        <div class="w-group">
+          <div class="w-top">
+            <div class="w-hello">Hello<i>.</i></div>
+            <div class="w-sub">科豆 AI · 体验不一样的 AI</div>
+          </div>
+          <div class="w-entry">
+            <div class="e a">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h8M6 5v2c0 4-1.5 7-3 8"/><path d="M7 12c1.5 2 3 3.5 5 4.5"/><path d="M13 19l3.5-9 3.5 9M14.4 16h4.2"/></svg></span>
+              <b>AI 翻译</b>
+              <em>中英日德<br>三版输出 + 语气点评</em>
+            </div>
+            <div class="e b">
+              <span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></span>
+              <b>合同评估</b>
+              <em>风险识别<br>逐条给出修改建议</em>
+            </div>
+          </div>
+          <div class="w-again">
+            <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+            <span class="tx"><b>继续上次</b><em>这个报价我们再商量商量…</em></span>
+          </div>
+        </div>
+        <div class="w-foot"><div class="claim">内容由 AI 生成，仅供参考，不构成法律意见 · 已依法完成备案</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

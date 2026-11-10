@@ -1,0 +1,100 @@
+/* ===== 大橙子助理 — 设计 Token 层（浅色，同源 prototype/index.html） =====
+ * 一期只做浅色（Q3 已拍板），原型暗色套为「未来态」，本期不声明 darkmode。
+ * 新增页面一律从这里取色，禁止硬编码色值。
+ */
+
+page {
+  /* ---- 品牌（蓝色系，与科豆 AI 橙色区分）---- */
+  --brand-50:  #EFF6FF;
+  --brand-100: #DBEAFE;
+  --brand-400: #60A5FA;
+  --brand-500: #3B82F6;
+  --brand-600: #2563EB;
+  --brand-700: #1D4ED8;
+
+  --brand:      #3B82F6;
+  --brand-deep: #1D4ED8;
+  --brand-soft: #EFF6FF;
+  /* 文本 / 选中态用深档：纯主色蓝 #3B82F6 白底对比度约 3.7:1，小字不达标；
+     #2563EB 白底 5.17:1 过 AA，故文本与选中态统一取 600 档 */
+  --brand-txt:  #2563EB;
+  /* 品牌底上的文字色：禁止在组件里写死白色，主题切换时品牌底变浅会直接失效 */
+  --on-brand: #FFFFFF;
+
+  /* ---- 强调色 ---- */
+  --accent:      #0E9B8C;
+  --accent-soft: #E4F6F2;
+
+  /* ---- 语义色 ---- */
+  --green: #12A150; --green-soft: #E7F7EE;
+  --amber: #D98200; --amber-soft: #FFF6E5;
+  --red:   #E5484D; --red-soft:   #FDECEC;
+
+  /* ---- 表面与文字 ---- */
+  --page-bg: #F5F8FF;
+  --card:    #FFFFFF;
+  --line:    rgba(60, 60, 67, .12);
+  --t1: #10131A;
+  --t2: rgba(60, 60, 67, .62);
+  --t3: rgba(60, 60, 67, .34);
+  --icon: #8A90A0; /* 图标常态色 = app.json tabBar 未选中色；导航栏 icon 跟随它，不参与品牌色 */
+
+  /* ---- 圆角语义档（业务层唯一引用入口） ---- */
+  /* 与 packages/ui 同口径，落地按 1px ≈ 2rpx：
+     柔和（默认）4/6/8px → 8/12/16rpx；清爽 2/2/4px → 4/4/8rpx；直角 0/0/2px → 0/0/4rpx。
+     切换靠各页根节点叠加 .radius-crisp / .radius-sharp（见文件末尾覆盖类）。 */
+  --r-chip: 8rpx;
+  --r-control: 12rpx;
+  --r-card: 16rpx;
+  --r-pill: 999rpx;
+  /* 派生内层（分段控件等）：control - 2px */
+  --r-control-inner: 8rpx;
+
+  /* ---- 其他 ---- */
+  --mask: rgba(0, 0, 0, .45);
+  --shadow: 0 20rpx 56rpx rgba(20, 30, 60, .18);
+
+  /* ---- 过渡映射（旧暗色名 → 浅色值，随批次 6 legacy 清理一并移除） ---- */
+  --surface-0: #F5F8FF;
+  --surface-1: #FFFFFF;
+  --surface-2: #F2F2F7;
+  --surface-3: #FFFFFF;
+  --text-primary:   #10131A;
+  --text-secondary: rgba(60, 60, 67, .62);
+  --text-tertiary:  rgba(60, 60, 67, .34);
+  --border-subtle:  rgba(60, 60, 67, .12);
+
+  background: var(--page-bg);
+  min-height: 100vh;
+  color: var(--t1);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 全局合规声明（各页底部文案保持一致） */
+.claim {
+  font-size: 21rpx;
+  color: var(--t3);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* ===== 圆角风格覆盖类（用户偏好：柔和 / 清爽 / 直角） =====
+ * 挂载点：各页根节点 `<view class="page {{radiusClass}}">`（小程序 `page` 元素无法绑 class）。
+ * 柔和 = 不叠加任何类（走 page 上的默认变量，零视觉变化）。
+ * radiusClass 由 utils/appearance.ts 计算、各页 onShow 经 getApp().radiusClassOf() 刷新。
+ * 口径：specs/radius-style-dual/page-spec.md §4.2
+ * ⚠️ 覆盖类必须同时给出语义档（--r-*）与派生值（--r-control-inner），保持与 tokens.css 同一约束。
+ */
+.radius-crisp {
+  --r-chip: 4rpx;
+  --r-control: 4rpx;
+  --r-card: 8rpx;
+  --r-control-inner: 0;
+}
+
+.radius-sharp {
+  --r-chip: 0;
+  --r-control: 0;
+  --r-card: 4rpx;
+  --r-control-inner: 0;
+}

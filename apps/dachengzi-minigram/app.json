@@ -1,0 +1,74 @@
+{
+  "pages": [
+    "pages/home/index/index",
+    "pages/discover/index/index",
+    "pages/mine/index/index",
+    "pages/mine/profile/profile",
+    "pages/mine/bind-email/bind-email",
+    "pages/mine/agreement/agreement",
+    "pages/mine/settings/settings",
+    "pages/mine/about/about",
+    "pages/mine/glossary/index",
+    "pages/nce/index/index",
+    "pages/nce/detail/detail",
+    "pages/chat/index/index",
+    "pages/chat/history/history"
+  ],
+  "subpackages": [
+    {
+      "root": "packageTranslate",
+      "pages": [
+        "pages/translate/index/index",
+        "pages/translate/result/result",
+        "pages/translate/settings/settings",
+        "pages/translate/history/history"
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/discover/index/index": {
+      "network": "all",
+      "packages": ["packageTranslate"]
+    },
+    "pages/mine/index/index": {
+      "network": "all",
+      "packages": ["packageTranslate"]
+    }
+  },
+  "window": {
+    "backgroundTextStyle": "light",
+    "backgroundColor": "#F5F8FF",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTitleText": "大橙子个人助理",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#8A90A0",
+    "selectedColor": "#2563EB",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/discover/index/index",
+        "text": "发现"
+      },
+      {
+        "pagePath": "pages/mine/index/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "permission": {
+    "scope.record": {
+      "desc": "用于语音输入，将你的语音转为文字"
+    }
+  },
+  "resizable": true,
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,61 @@
+/* 个人信息页
+ * 色值一律走 app.wxss 的设计 token。 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; }
+.profile { display: flex; align-items: center; background: var(--card); border-radius: var(--r-card); padding: 30rpx 28rpx; }
+
+/* 头像按钮：抹掉 button 默认样式，只留圆形头像区域（chooseAvatar 必须是 button） */
+.avatar-btn {
+  width: 96rpx;
+  height: 96rpx;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: transparent;
+  line-height: normal;
+  flex-shrink: 0;
+}
+.avatar-btn::after { border: none; }
+.avatar-img { width: 96rpx; height: 96rpx; border-radius: 50%; display: block; }
+.avatar-fallback {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-400), var(--brand-600));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.info { flex: 1; margin-left: 24rpx; min-width: 0; }
+.n-input { font-size: 32rpx; font-weight: 500; color: var(--t1); width: 100%; }
+.d { font-size: 24rpx; color: var(--t3); margin-top: 4rpx; }
+
+/* 保存按钮：主操作 */
+.save-btn {
+  margin-top: 20rpx;
+  width: 100%;
+  background: var(--brand-600);
+  color: #fff;
+  border-radius: var(--r-control);
+  font-size: 30rpx;
+  line-height: 2.6;
+}
+.save-btn::after { border: none; }
+.save-btn[disabled] { background: var(--brand-400); color: #fff; opacity: 0.85; }
+
+.list { background: var(--card); border-radius: var(--r-card); overflow: hidden; margin-top: 20rpx; }
+.r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }
+.r:last-child { border-bottom: none; }
+.v { color: var(--t3); font-size: 26rpx; }
+/* 未绑定：值用品牌深档强调可点（--brand-txt 白底 4.9:1，满足可读） */
+.v.bind { color: var(--brand-txt); font-weight: 500; }
+
+/* 手机号行：置灰、不可点、无箭头 */
+.phone-row.disabled { color: var(--t3); }
+.phone-row.disabled .v { color: var(--t3); }
+
+.foot { font-size: 22rpx; color: var(--t3); text-align: center; margin-top: 20rpx; }

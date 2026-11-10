@@ -1,0 +1,35 @@
+<!-- 新概念英语 · 课文目录 -->
+<view class="page {{radiusClass}}">
+  <view class="head">
+    <view class="h1">新概念英语</view>
+    <view class="sub" wx:if="{{meta}}">{{meta.bookTitle}} · 已入库 {{meta.downloaded}}/{{meta.total}} 课</view>
+  </view>
+
+  <view class="search-wrap">
+    <input class="search" type="text" value="{{keyword}}" placeholder="搜课号 / 中英文标题"
+      confirm-type="search" bindinput="onSearch" />
+  </view>
+
+  <view wx:if="{{loading}}" class="state">加载中…</view>
+  <view wx:elif="{{error}}" class="state err" bindtap="onRetry">{{error}}（点击重试）</view>
+  <view wx:elif="{{groups.length === 0}}" class="state">没有匹配的课文</view>
+
+  <block wx:else>
+    <block wx:for="{{groups}}" wx:key="label" wx:for-item="grp">
+      <view class="grp-t">{{grp.label}}</view>
+      <view wx:for="{{grp.items}}" wx:key="id" wx:for-item="l" class="card" data-id="{{l.id}}" bindtap="openDetail">
+        <view class="row1">
+          <text class="no">{{l.id}}</text>
+          <text class="title">{{l.title}}</text>
+          <text class="go">›</text>
+        </view>
+        <view class="row2">
+          <text class="cn" wx:if="{{l.titleCn}}">{{l.titleCn}}</text>
+          <text class="tag {{l.textSource}}" >{{l.textSource === 'xdf' ? '权威全文' : '字幕拼接'}}</text>
+        </view>
+        <view class="lead" wx:if="{{l.leadQuestionCn || l.leadQuestion}}">{{l.leadQuestionCn || l.leadQuestion}}</view>
+        <view class="meta">{{l.lineCount}} 句 · {{l.wordCount}} 词 · {{l.exerciseCount}} 题</view>
+      </view>
+    </block>
+  </block>
+</view>

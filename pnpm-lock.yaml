@@ -158,6 +158,39 @@ importers:
         specifier: ^2.2.0
         version: 2.2.12(typescript@5.6.3)
 
+  apps/dachengzi-minigram:
+    devDependencies:
+      '@types/jest':
+        specifier: ^30.0.0
+        version: 30.0.0
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.2
+      '@types/wechat-miniprogram':
+        specifier: ^3.4.10
+        version: 3.4.10
+      '@web-system/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      jest:
+        specifier: ^30.4.2
+        version: 30.4.2(@types/node@25.9.2)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@25.9.2)(typescript@5.9.3))
+      jest-environment-jsdom:
+        specifier: ^30.4.1
+        version: 30.4.1
+      miniprogram-automator:
+        specifier: ^0.12.1
+        version: 0.12.1
+      miniprogram-ci:
+        specifier: ^2.1.6
+        version: 2.1.31(eslint@9.39.4)
+      miniprogram-simulate:
+        specifier: ^1.6.1
+        version: 1.6.1
+      ts-jest:
+        specifier: ^29.4.11
+        version: 29.4.11(@babel/core@7.21.4)(@jest/transform@30.4.1)(@jest/types@30.4.1)(babel-jest@30.4.1(@babel/core@7.21.4))(jest-util@30.4.1)(jest@30.4.2(@types/node@25.9.2)(ts-node@10.9.2(@swc/core@1.15.43)(@types/node@25.9.2)(typescript@5.9.3)))(typescript@5.9.3)
+
   apps/kedou-ai-minigram:
     devDependencies:
       '@types/jest':

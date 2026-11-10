@@ -51,6 +51,18 @@ export class ProxyController {
     return this.proxyService.getAuthProxy()(req, res);
   }
 
+  // 精确匹配 /api/user（无尾斜杠）→ auth-service（UserController：getProfile / updateProfile）
+  @All('user')
+  proxyUserExact(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAuthProxy()(req, res);
+  }
+
+  // 通配 /api/user/:path(*) → auth-service（UserController）
+  @All('user/:path(*)')
+  proxyUserWildcard(@Req() req: Request, @Res() res: Response) {
+    return this.proxyService.getAuthProxy()(req, res);
+  }
+
   // 精确匹配 /api/users（无尾斜杠）
   @All('users')
   proxyUsersExact(@Req() req: Request, @Res() res: Response) {

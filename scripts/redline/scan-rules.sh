@@ -138,10 +138,17 @@ check_line_error() {
   #   靠 stdout 交付结果：`::error file=…::…` 是 GitHub Actions 注解格式，通过提示是给人看的结论。
   #   删掉就没有任何输出 —— 同 scripts/*.mjs，属产品行为。只豁免 skill 的 scripts/ 一级，
   #   skill 目录里其余 .mjs（若有）与业务代码不受影响。
+  # 同性质扩展（2026-11-09，实测误报）：
+  #   ① 测试路径（is_test_path，与 R4/R2b 同口径）—— tests/e2e/helper.js 等测试基建的
+  #      console.log 是 PASS/FAIL 报告（产品行为），不是调试残留；
+  #   ② apps/*/prototype/*.{mjs,cjs} 截图脚本（_shot-*.mjs）—— 进度输出与
+  #      apps/*/scripts/* 的 miniprogram-ci 同构（给开发者看的产品输出）。
   if ! is_comment_line "$s" \
+     && ! is_test_path "$file" \
      && ! [[ "$file" == scripts/*.mjs || "$file" == scripts/*.cjs \
           || "$file" == apps/*/scripts/*.js || "$file" == apps/*/scripts/*.mjs \
           || "$file" == apps/*/scripts/*.cjs \
+          || "$file" == apps/*/prototype/*.mjs || "$file" == apps/*/prototype/*.cjs \
           || "$file" == archive/migrations/*.mjs || "$file" == archive/migrations/*.cjs \
           || "$file" == .codebuddy/skills/*/scripts/*.js || "$file" == .codebuddy/skills/*/scripts/*.mjs \
           || "$file" == .codebuddy/skills/*/scripts/*.cjs \
