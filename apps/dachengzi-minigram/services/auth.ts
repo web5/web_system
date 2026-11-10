@@ -94,11 +94,12 @@ export async function login(): Promise<void> {
 
     if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
       // user 字段与后端 User 实体对齐（含 username / roles），此前只写了 id/nickname/avatarUrl，
-      // 与 globalData.userInfo: IUserInfo 对不上（IUserInfo 要求 username、roles）
+      // 与 globalData.userInfo: IUserInfo 对不上（IUserInfo 要求 username、roles）。
+      // 字段名对齐：后端 generateToken 返回的是 avatar（非 avatarUrl），此前取 avatarUrl 会拿不到值。
       const data = res.data as {
         accessToken: string;
         refreshToken: string;
-        user: { id: number; username: string; nickname?: string; avatarUrl?: string; roles: string[] };
+        user: { id: number; username: string; nickname?: string; avatar?: string; roles: string[] };
       };
       setToken(data.accessToken, data.refreshToken);
       // 登录成功即清除「主动退出」标志，恢复可用态

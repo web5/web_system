@@ -34,7 +34,7 @@
  * 行为与改动前完全一致，零回归。
  */
 
-import { buildTranslateCardView, inferTranslateDirection, looksLikeTranslateReply } from './translate-parse';
+import { buildTranslateCardView, inferTranslateDirection, looksLikeTranslateReply, type TranslateDetail } from './translate-parse';
 
 /** 意图判定流水一项（与 agent-stream 的 IntentHistoryItem 同构，此处独立声明避免跨层依赖） */
 export interface IntentHistoryItem {
@@ -56,6 +56,7 @@ export interface HistoryMsg {
   enMain?: string;
   note?: string;
   meta?: string;
+  detail?: TranslateDetail;
 }
 
 /**
@@ -131,6 +132,7 @@ function toCard<T extends HistoryMsg>(m: T, lastUserText: string): T {
     text: view.text,
     enMain: view.main,
     note: view.note,
+    detail: view.detail,
     // 方向由本轮提问推断；推断不出为空 → 只留 tag，不留空白
     meta: inferTranslateDirection(lastUserText),
   };

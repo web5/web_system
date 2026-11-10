@@ -82,14 +82,35 @@ page {
 .hist-bars { display: flex; flex-direction: column; gap: 6rpx; }
 .hist-bars i { width: 30rpx; height: 3rpx; border-radius: 2rpx; background: var(--icon); }
 
-.nav-act {
+.nav-new {
   flex: none;
-  margin-left: 4rpx;
-  padding: 8rpx 16rpx;
-  font-size: 24rpx;
-  font-weight: 600;
-  color: var(--brand-txt);
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+/* 新对话 icon：对话气泡 + 加号（线条风格，与返回/历史一致） */
+.new-ic {
+  position: relative;
+  width: 34rpx;
+  height: 30rpx;
+  border: 3rpx solid var(--icon);
+  border-radius: 8rpx;
+}
+.new-ic::before {
+  content: '';
+  position: absolute;
+  left: 5rpx;
+  top: 100%;
+  width: 0;
+  height: 0;
+  border-top: 8rpx solid var(--icon);
+  border-right: 10rpx solid transparent;
+}
+.new-ic i { position: absolute; left: 50%; top: 50%; background: var(--icon); border-radius: 1rpx; }
+.new-ic .nv { width: 3rpx; height: 14rpx; transform: translate(-50%, -50%); }
+.new-ic .nh { width: 14rpx; height: 3rpx; transform: translate(-50%, -50%); }
 
 /* ---------- 消息流 ---------- */
 .msgs {
@@ -197,6 +218,20 @@ page {
 .tr-head { display: flex; align-items: center; gap: 12rpx; padding: 18rpx 24rpx 0; }
 .tr-tag { font-size: 18rpx; color: #fff; background: var(--brand-600); border-radius: 8rpx; padding: 2rpx 12rpx; font-weight: 500; }
 .tr-meta { font-size: 20rpx; color: var(--t3); }
+.tr-speak { font-size: 18rpx; color: var(--brand-txt); background: var(--brand-50); border-radius: 8rpx; padding: 2rpx 10rpx; }
+.tr-more {
+  margin-left: auto;
+  flex: none;
+  width: 44rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  color: var(--t3);
+  line-height: 1;
+}
+.tr-more:active { opacity: .6; }
 .tr-main {
   padding: 16rpx 24rpx 20rpx;
   font-size: 30rpx;
@@ -206,6 +241,22 @@ page {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 卡内操作行：复制/朗读/收藏内联可见，⋯ 收重新翻译/生成分享卡 */
+.tr-actions {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 0 24rpx 20rpx;
+}
+.tr-act {
+  padding: 8rpx 18rpx;
+  font-size: 22rpx;
+  color: var(--brand-txt);
+  background: var(--brand-50);
+  border-radius: 999rpx;
+  line-height: 1;
+}
+.tr-act-hover { opacity: .6; }
 .tr-note {
   padding: 16rpx 24rpx;
   border-top: 1rpx solid var(--line);
@@ -214,6 +265,42 @@ page {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.tr-detail { border-top: 1rpx solid var(--line); }
+.tr-detail-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 24rpx;
+  font-size: 24rpx;
+  color: var(--brand-txt);
+}
+.tr-detail-arrow { font-size: 22rpx; color: var(--t3); }
+.tr-detail-sec { padding: 4rpx 24rpx 20rpx; }
+.tr-detail-k { font-size: 22rpx; color: var(--t3); margin-bottom: 6rpx; }
+.tr-detail-v {
+  font-size: 24rpx;
+  color: var(--t2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 用户气泡方向/语气/风格 meta（首问 / 历史回看） */
+.user-meta {
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: var(--t3);
+  text-align: right;
+}
+
+/* 分享卡离屏 canvas：不占布局（绘制用） */
+.share-canvas {
+  position: fixed;
+  left: -9999rpx;
+  top: 0;
+  width: 500px;
+  height: 400px;
 }
 
 /* ---------- 输入栏 ---------- */

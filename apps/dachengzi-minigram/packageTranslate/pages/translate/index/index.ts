@@ -1,8 +1,8 @@
 // 翻译主页（tab）
-// 链路：本页只负责拼装参数 → 结果页用 services/agent-stream 的 createAgentApi('translate')
-// 发起 SSE 流式请求；「翻译中」中间态与失败态都由结果页承载（与原型状态矩阵一致）。
+// 链路：本页只负责拼装参数 → 写「翻译首问种子」(kd_translate_task) → 跳主对话页
+// 由对话页自动发起首条翻译（对话式翻译）；原结构化结果页已废弃。
 // API Key 只在服务端，不会进小程序。
-import { TRANSLATE_SETTINGS_KEY, TRANSLATE_PARAMS_KEY } from '../../../../utils/translate-keys';
+import { TRANSLATE_SETTINGS_KEY, TRANSLATE_TASK_KEY } from '../../../../utils/translate-keys';
 
 Page({
   data: {
@@ -119,15 +119,15 @@ Page({
     if (this.data.srcLang === this.data.tgtLang) {
       return wx.showToast({ title: '源语言和目标语言不能相同', icon: 'none' });
     }
-    // 参数经 storage 交给结果页（原文较长，不适合放 URL 参数）；
-    // 结果页自己发起流式请求，中间态与失败态都落在那一页
-    wx.setStorageSync(TRANSLATE_PARAMS_KEY, {
+    // 写「翻译首问种子」+ 跳主对话页（agentId=translate），由对话页自动发起首条翻译。
+    // 不带 conversationId：首问是全新会话，conversationId 由对话页在首个 SSE 事件捕获。
+    wx.setStorageSync(TRANSLATE_TASK_KEY, {
       srcLang: this.data.srcLang,
       tgtLang: this.data.tgtLang,
       register: this.data.register,
       style: this.data.style,
       text,
     });
-    wx.navigateTo({ url: '/packageTranslate/pages/translate/result/result' });
+    wx.navigateTo({ url: '/pages/chat/index/index?agentId=translate' });
   },
 });

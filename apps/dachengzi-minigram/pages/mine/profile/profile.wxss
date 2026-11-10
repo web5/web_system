@@ -7,6 +7,11 @@
 .avatar-btn {
   width: 96rpx;
   height: 96rpx;
+  /* button 默认 min-width/min-height 会把非正方的盒子撑成椭圆，50% 圆角不再是正圆；
+     min-width/min-height 归零 + border-box 锁定 96rpx 正方形，确保 50% 是正圆 */
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
   padding: 0;
   margin: 0;
   border-radius: 50%;
@@ -33,19 +38,6 @@
 .info { flex: 1; margin-left: 24rpx; min-width: 0; }
 .n-input { font-size: 32rpx; font-weight: 500; color: var(--t1); width: 100%; }
 .d { font-size: 24rpx; color: var(--t3); margin-top: 4rpx; }
-
-/* 保存按钮：主操作 */
-.save-btn {
-  margin-top: 20rpx;
-  width: 100%;
-  background: var(--brand-600);
-  color: #fff;
-  border-radius: var(--r-control);
-  font-size: 30rpx;
-  line-height: 2.6;
-}
-.save-btn::after { border: none; }
-.save-btn[disabled] { background: var(--brand-400); color: #fff; opacity: 0.85; }
 
 .list { background: var(--card); border-radius: var(--r-card); overflow: hidden; margin-top: 20rpx; }
 .r { display: flex; justify-content: space-between; align-items: center; padding: 28rpx; border-bottom: 1rpx solid var(--line); font-size: 28rpx; color: var(--t1); }

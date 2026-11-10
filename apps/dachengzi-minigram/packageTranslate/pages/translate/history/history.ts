@@ -1,9 +1,9 @@
 // 翻译历史
 //
-// 数据源：kd_tr_history（写入方 = result 页 saveHistory，翻译成功后落一条；上限 50 条）。
-// 点击某条 → 把该记录写回 kd_translate_params，带 ?fromHistory=1 跳结果页回看（不重新请求）。
+// 数据源：kd_tr_history（写入方 = 主对话页翻译卡完成，翻译成功后落一条；上限 50 条）。
+// 点击某条 → 跳主对话页（agentId=translate + conversationId）由 loadHistory 恢复渲染（可继续追问）。
 // 存储 key 与 TrHistoryItem 结构统一从 utils/translate-keys 导入（单点真源，避免复制字面量）。
-import { TRANSLATE_HISTORY_KEY, TRANSLATE_PARAMS_KEY, TrHistoryItem } from '../../../../utils/translate-keys';
+import { TRANSLATE_HISTORY_KEY, TrHistoryItem } from '../../../../utils/translate-keys';
 
 /** 渲染用行（时间已格式化为相对时间） */
 interface HistoryRow {
@@ -81,7 +81,7 @@ Page({
     this.setData({ list: rows });
   },
 
-  /** 回看：把该条记录写回参数 storage（含 conversationId，回看后还能继续追问） */
+  /** 回看：跳主对话页（agentId=translate + conversationId），由 loadHistory 恢复渲染（可继续追问） */
   open(e: RowTapEvent) {
     const id = String((e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || '');
     if (!id) return;
@@ -91,17 +91,12 @@ Page({
       this.refresh();
       return;
     }
-    wx.setStorageSync(TRANSLATE_PARAMS_KEY, {
-      srcLang: hit.srcLang || '',
-      tgtLang: hit.tgtLang || '',
-      register: hit.register || '',
-      style: hit.style || '',
-      text: hit.text || '',
-      natural: hit.natural || '',
-      conversationId: hit.conversationId || '',
-      __historyId: String(hit.id),
-    });
-    wx.navigateTo({ url: '/packageTranslate/pages/translate/result/result?fromHistory=1' });
+    const conversationId = String(hit.conversationId || '').trim();
+    if (!conversationId) {
+      wx.showToast({ title: '这条记录没有会话，无法回看', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/chat/index/index?agentId=translate&conversationId=${encodeURIComponent(conversationId)}` });
   },
 
   /** 清空历史：二次确认后清 storage 并刷新 */

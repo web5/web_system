@@ -56,3 +56,20 @@
 .opt.wrong { border-color: #DC2626; background: #FEF2F2; }
 .exp { font-size: 23rpx; color: #B45309; margin-top: 8rpx; }
 .exp.ok { color: #0F766E; }
+
+/* ==================== 整篇朗读（#7） ==================== */
+/* 朗读高亮：浅蓝底 + 左蓝竖条，与中文揭示 .cn 的左青 #0EA5A4 竖条不同通道，可共存 */
+.sent.reading { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
+/* 朗读入口（idle 态） */
+.read-entry { display: inline-flex; align-items: center; margin-top: 18rpx; padding: 14rpx 32rpx; background: #3B82F6; color: #FFFFFF; font-size: 26rpx; border-radius: var(--r-pill); }
+.read-entry:active { opacity: .85; }
+/* 底部朗读控制条：朗读与习题互斥，吸底占位 */
+.read-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: flex; align-items: center; gap: 20rpx; padding: 18rpx 30rpx calc(18rpx + env(safe-area-inset-bottom)); background: #FFFFFF; box-shadow: 0 -6rpx 24rpx rgba(0,0,0,.10); }
+.rb-loading { flex: 1; text-align: center; color: #6B7280; font-size: 26rpx; padding: 12rpx 0; }
+.rb-btn { font-size: 26rpx; color: #3B82F6; padding: 12rpx 24rpx; border: 1rpx solid #3B82F6; border-radius: var(--r-pill); }
+.rb-btn.stop { color: #DC2626; border-color: #DC2626; }
+.rb-ticks { flex: 1; display: flex; align-items: center; gap: 6rpx; }
+.tick { flex: 1; height: 10rpx; border-radius: 6rpx; background: #E5E7EB; }
+.tick.done { background: #93C5FD; }
+.tick.cur { height: 16rpx; background: #3B82F6; }
+.rb-label { font-size: 22rpx; color: #6B7280; min-width: 80rpx; text-align: center; }

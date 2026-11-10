@@ -19,7 +19,6 @@
       "root": "packageTranslate",
       "pages": [
         "pages/translate/index/index",
-        "pages/translate/result/result",
         "pages/translate/settings/settings",
         "pages/translate/history/history"
       ]

@@ -13,6 +13,7 @@ import {
   isTranslateCardReply,
   mergeConsecutiveAi,
   parseChatSeed,
+  parseTranslateTask,
   resolveAgentId,
   resolveSource,
   type ChatMsg,
@@ -89,6 +90,37 @@ describe('parseChatSeed（kd_chat_seed）', () => {
   });
 });
 
+describe('parseTranslateTask（kd_translate_task）', () => {
+  it('正常：返回五项字段（trim 原文）', () => {
+    expect(parseTranslateTask({ srcLang: '中文', tgtLang: '英语', register: '正式', style: '完整', text: ' 你好 ' })).toEqual({
+      srcLang: '中文',
+      tgtLang: '英语',
+      register: '正式',
+      style: '完整',
+      text: '你好',
+    });
+  });
+
+  it('异常 / 缺失 / 原文为空 → null', () => {
+    expect(parseTranslateTask(undefined)).toBeNull();
+    expect(parseTranslateTask(null)).toBeNull();
+    expect(parseTranslateTask('')).toBeNull();
+    expect(parseTranslateTask(42)).toBeNull();
+    expect(parseTranslateTask({})).toBeNull();
+    expect(parseTranslateTask({ text: '   ' })).toBeNull();
+  });
+
+  it('缺字段回落输入页默认值', () => {
+    expect(parseTranslateTask({ text: '你好' })).toEqual({
+      srcLang: '中文',
+      tgtLang: '英语',
+      register: '正式',
+      style: '完整',
+      text: '你好',
+    });
+  });
+});
+
 describe('buildSeedBubbles（种子 → 首两条气泡）', () => {
   it('原文成用户气泡，译文强制套翻译卡', () => {
     const bubbles = buildSeedBubbles({ user: '感谢支持', reply: 'Thank you for your support.' }, () => 'seed');
@@ -131,5 +163,18 @@ describe('翻译卡判定与气泡化', () => {
     const bubble = buildAiReplyBubble('9', '【推荐译文】Thank you.', 'hi', 'auto');
     expect(bubble.card).toBeUndefined();
     expect(bubble.text).toBe('【推荐译文】Thank you.');
+  });
+
+  it('显式 meta 覆盖推断（首问/重新翻译场景），并产出 detail 三段', () => {
+    const bubble = buildAiReplyBubble(
+      '9',
+      '【推荐译文】Thank you.\n【直译对照】谢谢\n【委婉版】感谢您',
+      '【源语言】中文\n【目标语言】英语\n【原文】谢谢',
+      'translate',
+      '中文 → 英语 · 正式 · 完整',
+    );
+    expect(bubble.card).toBe(true);
+    expect(bubble.meta).toBe('中文 → 英语 · 正式 · 完整');
+    expect(bubble.detail).toEqual({ literal: '谢谢', polite: '感谢您' });
   });
 });

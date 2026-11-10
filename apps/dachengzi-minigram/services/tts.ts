@@ -87,8 +87,25 @@ export interface SpeakState {
   phase: 'loading' | 'playing';
 }
 
+/** 整篇朗读：句级进度回调载荷（句下标即高亮 / seek 坐标） */
+export interface LineProgress {
+  /** 当前句下标（0-based，即 lines 数组下标） */
+  index: number;
+  /** 总句数 */
+  total: number;
+}
+
+/** 整篇朗读选项 */
+export interface LineSpeakOptions {
+  /** 起始句下标（默认 0；越界自动收敛到 [0, total-1]） */
+  startIndex?: number;
+}
+
 type SpeakStateListener = (s: SpeakState | null) => void;
 const listeners = new Set<SpeakStateListener>();
+
+type LineProgressListener = (p: LineProgress) => void;
+const lineListeners = new Set<LineProgressListener>();
 
 /** 订阅朗读状态变化；返回退订函数（页面 onUnload 时调用） */
 export function onSpeakState(cb: SpeakStateListener): () => void {
@@ -101,6 +118,18 @@ export function onSpeakState(cb: SpeakStateListener): () => void {
 function emitState(next: SpeakState | null): void {
   speakState = next;
   listeners.forEach((cb) => cb(next));
+}
+
+/** 订阅整篇朗读的句级进度；返回退订函数（页面 onUnload 时调用） */
+export function onLineProgress(cb: LineProgressListener): () => void {
+  lineListeners.add(cb);
+  return () => {
+    lineListeners.delete(cb);
+  };
+}
+
+function emitLineProgress(p: LineProgress): void {
+  lineListeners.forEach((cb) => cb(p));
 }
 
 /** 停止播放：作废在途流水线、唤醒等待者、释放播放实例、状态置回空闲 */
@@ -120,6 +149,28 @@ export function stopSpeak(): void {
   }
   playingText = '';
   if (speakState) emitState(null);
+}
+
+/** 暂停当前句播放（不影响流水线，resume 后从暂停处继续） */
+export function pauseSpeak(): void {
+  if (audio) {
+    try {
+      audio.pause();
+    } catch {
+      /* 未初始化 / 已销毁：忽略 */
+    }
+  }
+}
+
+/** 继续当前句播放 */
+export function resumeSpeak(): void {
+  if (audio) {
+    try {
+      audio.play();
+    } catch {
+      /* 忽略 */
+    }
+  }
 }
 
 /**
@@ -181,6 +232,104 @@ export async function speakText(text: string): Promise<boolean> {
   emitState({ text: t, phase: 'playing' });
   void playThrough(pending, firstPath, myRun);
   return true;
+}
+
+/**
+ * 整篇朗读：把课文按「句」顺序连播，句下标即高亮 / seek 坐标。
+ *
+ * 粒度 = 句：每句独立走 mp3 合成（`ensureAudioFile` 缓存命中秒播），逐句连播并
+ * 「预取下一句」（窗口=1，最多当前 + 下一句两个在途合成请求，禁整课并发）。
+ * 进度通过 `onLineProgress({index})` 推送；loading / playing 复用 `onSpeakState`。
+ * 停止复用 `stopSpeak()`；暂停 / 继续用 `pauseSpeak()` / `resumeSpeak()`。
+ *
+ * @returns true 自然播完整课；false 中途被停止 / 失败 / 空文本 / 未登录。
+ */
+export async function speakLines(lines: string[], opts?: LineSpeakOptions): Promise<boolean> {
+  const list = (lines || [])
+    .map((l) => String(l || '').trim())
+    .filter(Boolean);
+  if (!list.length) return false;
+
+  // 登录墙兜底：与 speakText 一致，未登录（无 token 或主动退出）不发起合成
+  if (!getToken() || isLoggedOut()) {
+    wx.showToast({ title: '请先登录', icon: 'none' });
+    return false;
+  }
+
+  const total = list.length;
+  const req = Number(opts?.startIndex);
+  const startIndex = Number.isFinite(req) && req > 0 && req < total ? Math.floor(req) : 0;
+
+  // 作废在途朗读（单段 speakText / 上一次整篇），从当前句重新开始
+  stopSpeak();
+
+  const myRun = runSeq;
+  playingText = list.join('\n');
+  emitState({ text: list[startIndex], phase: 'loading' });
+
+  return await playLines(list, startIndex, total, myRun);
+}
+
+/** 句级播放流水线：按序取句 → 播 → 预取下一句；自然播完 true，停止 / 失败 false */
+async function playLines(
+  list: string[],
+  startIndex: number,
+  total: number,
+  myRun: number,
+): Promise<boolean> {
+  // 预取第一句（后续句在上一句播放期间预取）
+  let pending: Promise<string | null> = ensureAudioFile(list[startIndex]);
+
+  for (let i = startIndex; i < total; i++) {
+    if (runSeq !== myRun) return false;
+
+    const filePath = await pending;
+    if (runSeq !== myRun) return false;
+
+    if (!filePath) {
+      wx.showToast({ title: '朗读已中断', icon: 'none' });
+      finishLines(myRun);
+      return false;
+    }
+
+    // 当前句开播：状态 → playing，进度 → 高亮跟随
+    emitState({ text: list[i], phase: 'playing' });
+    emitLineProgress({ index: i, total });
+
+    // 预取下一句（窗口=1：最多当前 + 下一句两个在途合成，不整课并发）
+    if (i + 1 < total) pending = ensureAudioFile(list[i + 1]);
+
+    const result = await playFileAndWait(filePath);
+    if (runSeq !== myRun) return false;
+    if (result === 'error') {
+      wx.showToast({ title: '播放失败', icon: 'none' });
+      finishLines(myRun);
+      return false;
+    }
+    if (result === 'stopped') {
+      // stopSpeak 已复位状态（emitState(null)），这里静默退出
+      return false;
+    }
+  }
+
+  // 自然播完整课
+  finishLines(myRun);
+  return true;
+}
+
+/** 收尾：自然播完 / 失败时复位播放态（与 playThrough 收尾一致，复用 destroy 防实例泄漏） */
+function finishLines(myRun: number): void {
+  if (runSeq !== myRun) return;
+  playingText = '';
+  if (audio) {
+    try {
+      audio.destroy();
+    } catch {
+      /* 已销毁：忽略 */
+    }
+    audio = null;
+  }
+  emitState(null);
 }
 
 /**

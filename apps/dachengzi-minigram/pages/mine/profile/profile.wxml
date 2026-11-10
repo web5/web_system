@@ -6,12 +6,10 @@
       <view wx:else class="avatar-fallback">橙</view>
     </button>
     <view class="info">
-      <input class="n-input" type="nickname" value="{{nickname}}" placeholder="未设置昵称" bindinput="onNickInput" />
+      <input class="n-input" type="nickname" value="{{nickname}}" placeholder="未设置昵称" bindinput="onNickInput" bindblur="onNickBlur" bindconfirm="onNickConfirm" />
       <view class="d" wx:if="{{uid}}">ID: {{uid}}</view>
     </view>
   </view>
-
-  <button class="save-btn" bindtap="onSave" disabled="{{saving}}" hover-class="none">{{saving ? '保存中…' : '保存'}}</button>
 
   <view class="list">
     <!-- 手机号：暂不可用，置灰占位（去掉 getPhoneNumber 交互，无 tap、无箭头） -->
