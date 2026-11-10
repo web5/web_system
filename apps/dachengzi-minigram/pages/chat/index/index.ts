@@ -18,6 +18,7 @@ import { collectGlossary } from '../../../services/glossary';
 import { onSpeakState, speakText, stopSpeak } from '../../../services/tts';
 import { decorateHistoryCards } from '../../../utils/history-cards';
 import { buildShareImage } from '../../../utils/share-image';
+import { mdToNodes } from '../../../utils/markdown';
 import {
   buildTranslateInput,
   buildTranslateMeta,
@@ -59,6 +60,22 @@ interface InputEvent {
 /** 点击事件（重试 / 建议提问）最小结构 */
 interface TapEvent {
   currentTarget?: { dataset?: { index?: string | number; text?: string } };
+}
+
+/**
+ * 给消息列表补 rich-text nodes（正文走 markdown 渲染，见 utils/markdown.ts）。
+ * `_mdSrc` 命中缓存的条目不重解析 —— 流式期每条 delta 只重算当前条，
+ * 历史消息 nodes 一次生成、后续复用。
+ *
+ * 放在页面层而非 chat-msg.ts 纯函数里：markdown.ts 顶部有 wx.getSystemInfoSync()，
+ * chat-msg.ts 需保持「不 import wx / services」的裸跑约束（jest 可直接 import 它）。
+ */
+function withMdNodes(msgs: ChatMsg[]): ChatMsg[] {
+  return msgs.map((m) => {
+    if (!m.text) return m;
+    if (m._mdSrc === m.text && m._nodes) return m;
+    return { ...m, _nodes: mdToNodes(m.text), _mdSrc: m.text };
+  });
 }
 
 Page({
@@ -146,7 +163,7 @@ Page({
     if (seed) {
       wx.removeStorageSync(CHAT_SEED_KEY);
       if (conversationId) this._conversationId = conversationId;
-      const bubbles = buildSeedBubbles(seed, () => this.nextId());
+      const bubbles = withMdNodes(buildSeedBubbles(seed, () => this.nextId()));
       this.setData({
         messages: bubbles,
         scrollIntoView: bubbles.length ? `msg-${bubbles[bubbles.length - 1].id}` : '',
@@ -229,11 +246,28 @@ Page({
     return String(this._nextSeq);
   },
 
-  /** 按索引回写某条气泡（合并补丁），供 onDelta / finalize / error 使用 */
+  /**
+   * 按索引回写某条气泡（合并补丁），供 onDelta / finalize / error 使用。
+   * 路径级 setData：只更新 patch 到的键，不全量序列化整条消息（流式期省去反复
+   * 序列化 _nodes 树）。正文变化时顺带重算该条的 markdown nodes。
+   */
   patchAi(idx: number, patch: Partial<ChatMsg>) {
     const cur = this.data.messages[idx];
     if (!cur) return;
-    this.setData({ [`messages[${idx}]`]: { ...cur, ...patch } });
+    const merged: ChatMsg = { ...cur, ...patch };
+    if (patch.text !== undefined) {
+      merged._nodes = mdToNodes(merged.text || '');
+      merged._mdSrc = merged.text || '';
+    }
+    const payload: Record<string, any> = {};
+    (Object.keys(patch) as Array<keyof ChatMsg>).forEach((k) => {
+      payload[`messages[${idx}].${String(k)}`] = merged[k];
+    });
+    if (patch.text !== undefined) {
+      payload[`messages[${idx}]._nodes`] = merged._nodes;
+      payload[`messages[${idx}]._mdSrc`] = merged._mdSrc;
+    }
+    this.setData(payload);
   },
 
   /* ==================== 历史恢复 ==================== */
@@ -267,9 +301,10 @@ Page({
             return { ...m, text: parsed.text, reqText: m.text, meta: parsed.meta };
           })
         : decorated;
+      const msgs = withMdNodes(restored);
       this.setData({
-        messages: restored,
-        scrollIntoView: restored.length ? `msg-${restored[restored.length - 1].id}` : '',
+        messages: msgs,
+        scrollIntoView: msgs.length ? `msg-${msgs[msgs.length - 1].id}` : '',
       });
     } catch {
       wx.showToast({ title: '历史加载失败，请重试', icon: 'none' });
@@ -307,7 +342,7 @@ Page({
 
     const userMsg: ChatMsg = { id: this.nextId(), role: 'user', text };
     const aiMsg: ChatMsg = { id: this.nextId(), role: 'ai', text: '', loading: true };
-    const messages = this.data.messages.concat([userMsg, aiMsg]);
+    const messages = this.data.messages.concat(withMdNodes([userMsg, aiMsg]));
     const aiIndex = messages.length - 1;
 
     this._busy = true;
@@ -360,7 +395,9 @@ Page({
           this._busy = false;
           this.setData({ busy: false });
           const final = content || acc;
-          const bubble = buildAiReplyBubble(this.data.messages[aiIndex]?.id || this.nextId(), final, userText, this._agentId, meta);
+          const bubble = withMdNodes([
+            buildAiReplyBubble(this.data.messages[aiIndex]?.id || this.nextId(), final, userText, this._agentId, meta),
+          ])[0];
           this.setData({ [`messages[${aiIndex}]`]: { ...bubble, loading: false } });
           // 翻译卡完成 → 写 kd_tr_history（仅结构化首问/重新翻译；失败重试不在此路径）
           if (this._agentId === 'translate' && bubble.card) {
@@ -411,7 +448,7 @@ Page({
     const reqText = buildTranslateInput(task.srcLang, task.tgtLang, task.register, task.style, task.text);
     const userMsg: ChatMsg = { id: this.nextId(), role: 'user', text: task.text, reqText, meta };
     const aiMsg: ChatMsg = { id: this.nextId(), role: 'ai', text: '', loading: true };
-    const messages: ChatMsg[] = [userMsg, aiMsg];
+    const messages: ChatMsg[] = withMdNodes([userMsg, aiMsg]);
     this._busy = true;
     this.setData({ messages, busy: true, scrollIntoView: `msg-${aiMsg.id}` });
     this.runStream(messages.length - 1, reqText, meta);
@@ -559,7 +596,7 @@ Page({
     const meta = user.meta;
     const userMsg: ChatMsg = { id: this.nextId(), role: 'user', text: user.text, reqText: user.reqText, meta };
     const aiMsg: ChatMsg = { id: this.nextId(), role: 'ai', text: '', loading: true };
-    const messages = this.data.messages.concat([userMsg, aiMsg]);
+    const messages = this.data.messages.concat(withMdNodes([userMsg, aiMsg]));
     const aiIndex = messages.length - 1;
     this._busy = true;
     this.setData({ messages, busy: true, scrollIntoView: `msg-${aiMsg.id}` });

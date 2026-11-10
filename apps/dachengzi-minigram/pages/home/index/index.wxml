@@ -11,6 +11,13 @@
     </view>
   </view>
 
+  <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换（本轮不加「换一句」） -->
+  <view class="daily">
+    <view class="daily-k">今日一句</view>
+    <view class="daily-cn">{{quote.cn}}</view>
+    <view class="daily-en">{{quote.en}}</view>
+  </view>
+
   <!-- 新对话：hero 区快捷入口（独立于两条能力入口，不新增第三条能力） -->
   <view class="newchat" hover-class="newchat-hover" bindtap="goChat">
     <view class="n-ic">＋</view>
@@ -41,9 +48,32 @@
     <text class="go">›</text>
   </view>
 
-  <!-- 最近使用（空态；有记录的态待「最近使用」数据接入后渲染） -->
-  <view class="sec-t">最近使用<text class="em">暂无记录</text></view>
-  <view class="empty">还没有记录。翻译一次或学一课后会出现在这里；登录后换设备也能接着看。</view>
+  <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态；点卡片恢复该会话） -->
+  <view class="sec-t">最近对话<text wx:if="{{!recentLoading && !recent}}" class="em">暂无记录</text></view>
+
+  <!-- 加载骨架：尺寸对齐真实卡片，切换不跳变 -->
+  <view wx:if="{{recentLoading}}" class="w-recent">
+    <view class="wr-item">
+      <view class="sk sk-t"></view>
+      <view class="sk sk-c1"></view>
+      <view class="sk sk-c2"></view>
+      <view class="sk sk-m"></view>
+    </view>
+  </view>
+
+  <!-- 有会话：最近一次会话卡片（标题 + 预览 + 时间） -->
+  <view wx:elif="{{recent}}" class="w-recent">
+    <view class="wr-item" data-id="{{recent.id}}" bindtap="openConv">
+      <view class="wr-q">{{recent.title}}</view>
+      <view wx:if="{{recent.preview}}" class="wr-c">{{recent.preview}}</view>
+      <view class="wr-m">{{recent.timeText}}</view>
+    </view>
+  </view>
+
+  <!-- 空态：保留原空态文案 -->
+  <view wx:else class="w-recent">
+    <view class="empty">还没有记录。翻译一次或学一课后会出现在这里；登录后换设备也能接着看。</view>
+  </view>
 
   <view class="hint">两个能力，进来就能用完 —— 不需要先学会怎么用。</view>
 
