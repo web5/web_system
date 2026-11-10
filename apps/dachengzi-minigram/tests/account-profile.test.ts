@@ -1,7 +1,14 @@
-import { isNicknameUnset, resolveAvatarUrl } from '../services/account';
+import {
+  isNicknameUnset,
+  resolveAvatarUrl,
+  readLocalAvatar,
+  readLocalNickname,
+  writeLocalAvatar,
+  writeLocalNickname,
+} from '../services/account';
 
 /** resolveAvatarUrl 内部经 wx.getStorageSync('api_base') 取 base，这里用最小 mock */
-const wxMock = { getStorageSync: jest.fn() };
+const wxMock = { getStorageSync: jest.fn(), setStorageSync: jest.fn() };
 (globalThis as { wx?: unknown }).wx = wxMock;
 
 describe('isNicknameUnset（昵称「未设置」判定，前端兜底 #8/#9）', () => {
@@ -45,6 +52,11 @@ describe('resolveAvatarUrl（头像相对 URL 拼接 apiBase，#2）', () => {
     expect(resolveAvatarUrl('http://tmp/abc')).toBe('http://tmp/abc');
   });
 
+  it('wxfile 大小写不敏感（WXFILE:// 也原样返回，iOS 真机临时路径大小写不定）', () => {
+    expect(resolveAvatarUrl('WXFILE://tmp_ABC')).toBe('WXFILE://tmp_ABC');
+    expect(resolveAvatarUrl('WxFiLe://tmp_xyz')).toBe('WxFiLe://tmp_xyz');
+  });
+
   it('相对路径拼上 apiBase（去掉 base 尾斜杠）', () => {
     expect(resolveAvatarUrl('/api/uploads/avatars/x.png')).toBe(
       'https://dev.kedouai.com/api/uploads/avatars/x.png',
@@ -61,5 +73,39 @@ describe('resolveAvatarUrl（头像相对 URL 拼接 apiBase，#2）', () => {
   it('相对路径但无 apiBase → 原样返回（不破坏展示兜底）', () => {
     wxMock.getStorageSync.mockReturnValue('');
     expect(resolveAvatarUrl('/api/uploads/avatars/x.png')).toBe('/api/uploads/avatars/x.png');
+  });
+});
+
+describe('本地头像/昵称缓存（readLocalAvatar / readLocalNickname 兜底）', () => {
+  beforeEach(() => {
+    wxMock.getStorageSync.mockReset();
+    wxMock.setStorageSync.mockReset();
+  });
+
+  it('readLocalAvatar：有缓存返回缓存值', () => {
+    wxMock.getStorageSync.mockImplementation((k: string) => (k === 'kd_profile_avatar' ? '/tmp/a.png' : ''));
+    expect(readLocalAvatar()).toBe('/tmp/a.png');
+  });
+
+  it('readLocalAvatar：无缓存返回空串', () => {
+    wxMock.getStorageSync.mockReturnValue('');
+    expect(readLocalAvatar()).toBe('');
+  });
+
+  it('readLocalNickname：有缓存返回昵称', () => {
+    wxMock.getStorageSync.mockImplementation((k: string) => (k === 'kd_profile_nickname' ? '大橙子' : ''));
+    expect(readLocalNickname()).toBe('大橙子');
+  });
+
+  it('readLocalNickname：无缓存返回空串', () => {
+    wxMock.getStorageSync.mockReturnValue('');
+    expect(readLocalNickname()).toBe('');
+  });
+
+  it('writeLocalAvatar / writeLocalNickname：写入对应 storage key', () => {
+    writeLocalAvatar('/tmp/b.png');
+    writeLocalNickname('大橙子');
+    expect(wxMock.setStorageSync).toHaveBeenCalledWith('kd_profile_avatar', '/tmp/b.png');
+    expect(wxMock.setStorageSync).toHaveBeenCalledWith('kd_profile_nickname', '大橙子');
   });
 });

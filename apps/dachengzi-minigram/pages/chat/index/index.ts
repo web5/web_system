@@ -119,6 +119,8 @@ Page({
   _blocked: false,
   /** 登录态过期广播退订函数 */
   _offAuthExpired: null as null | (() => void),
+  /** 登录成功广播退订函数 */
+  _offAuthLogged: null as null | (() => void),
   /** 朗读状态订阅退订函数（onUnload 时调用） */
   _offSpeakState: null as null | (() => void),
 
@@ -192,9 +194,15 @@ Page({
       this._offSpeakState = null;
     }
     const bus = (getApp() as unknown as { eventBus?: { off?: (e: string, h: () => void) => void } })?.eventBus;
-    if (bus?.off && this._offAuthExpired) {
-      bus.off('auth:expired', this._offAuthExpired);
-      this._offAuthExpired = null;
+    if (bus?.off) {
+      if (this._offAuthExpired) {
+        bus.off('auth:expired', this._offAuthExpired);
+        this._offAuthExpired = null;
+      }
+      if (this._offAuthLogged) {
+        bus.off('auth:logged', this._offAuthLogged);
+        this._offAuthLogged = null;
+      }
     }
   },
 
@@ -238,6 +246,14 @@ Page({
       wx.switchTab({ url: MINE_PATH });
     };
     bus.on('auth:expired', this._offAuthExpired);
+    // 登录成功广播：首启静默登录成功后解除拦截；若已锁定会话则重拉历史
+    this._offAuthLogged = () => {
+      this._blocked = false;
+      if (this._conversationId) {
+        void this.loadHistory(this._conversationId);
+      }
+    };
+    bus.on('auth:logged', this._offAuthLogged);
   },
 
   /** 生成下一个气泡 id */

@@ -17,8 +17,8 @@
     <view class="foot">仅本机保留，最多 50 条</view>
   </block>
 
-  <!-- 空态：纯 CSS 插画位 + 文案 + 主按钮（与列表态互斥） -->
   <view class="empty" wx:else>
+    <!-- 空态：纯 CSS 插画位 + 文案 + 主按钮（与列表态互斥） -->
     <view class="ill">
       <view class="ill-bubble ill-b1">文</view>
       <view class="ill-bubble ill-b2">A</view>

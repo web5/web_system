@@ -106,6 +106,13 @@ export async function login(): Promise<void> {
       setLoggedOut(false);
       const app = getApp<IAppOption>();
       app.globalData.userInfo = data.user;
+      // 登录成功广播：与 request 层 401 的 auth:expired 完全对称，收口「首启静默登录竞态」——
+      // autoLogin/ensureLogin 成功后各页收到即刷新登录态并重拉数据（不再依赖 onShow 同步判态）。
+      try {
+        app.eventBus?.emit('auth:logged');
+      } catch {
+        // getApp 不可用（极早期）：页面 onShow 仍会兜底刷新登录态
+      }
     } else {
       throw new Error(`登录接口返回异常: ${res.statusCode} ${JSON.stringify(res.data)}`);
     }

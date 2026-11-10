@@ -74,16 +74,15 @@
                 </view>
               </block>
             </view>
-            <!-- 无分段明细但有注解（启发式路径）：平铺注解 -->
-            <view wx:elif="{{item.note}}" class="tr-note">{{item.note}}</view>
+            <view wx:elif="{{item.note}}" class="tr-note"><!-- 无分段明细但有注解（启发式路径）：平铺注解 -->{{item.note}}</view>
           </view>
-          <!-- 流式等待态：三点 -->
           <view wx:elif="{{item.loading && !item.text}}" class="bub typing-bubble">
+            <!-- 流式等待态：三点 -->
             <view class="tdots"><view class="tdot"></view><view class="tdot"></view><view class="tdot"></view></view>
           </view>
-          <!-- 普通气泡（含流式逐字 + 光标 / 失败态）：
-               用户消息 = 白字蓝底纯文本（保持可读）；AI 回复 = markdown → rich-text -->
           <view wx:else class="bub {{item.error ? 'err' : ''}}">
+            <!-- 普通气泡（含流式逐字 + 光标 / 失败态）：
+                 用户消息 = 白字蓝底纯文本（保持可读）；AI 回复 = markdown → rich-text -->
             <text wx:if="{{item.role == 'user' || item.error}}" class="bub-text">{{item.text}}</text>
             <rich-text wx:else nodes="{{item._nodes}}"></rich-text>
             <text wx:if="{{item.loading}}" class="caret"></text>

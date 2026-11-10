@@ -89,6 +89,43 @@ export function isNicknameUnset(nickname?: string): boolean {
   return !n || n.startsWith('wx_');
 }
 
+/** 头像本地缓存 storage key（保存成功后落库，供「我的」页秒显/兜底） */
+const AVATAR_STORAGE_KEY = 'kd_profile_avatar';
+/** 昵称本地缓存 storage key（保存成功后落库，供「我的」页秒显/兜底） */
+const NICKNAME_STORAGE_KEY = 'kd_profile_nickname';
+
+/** 读本地持久化头像路径（读不到返回空串，交由渲染层兜底「橙」占位） */
+export function readLocalAvatar(): string {
+  try {
+    return wx.getStorageSync(AVATAR_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 读本地持久化昵称（读不到返回空串） */
+export function readLocalNickname(): string {
+  try {
+    return wx.getStorageSync(NICKNAME_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 写本地头像缓存（写失败不影响展示，吞掉） */
+export function writeLocalAvatar(path: string): void {
+  try {
+    wx.setStorageSync(AVATAR_STORAGE_KEY, path);
+  } catch {}
+}
+
+/** 写本地昵称缓存（写失败不影响展示，吞掉） */
+export function writeLocalNickname(nickname: string): void {
+  try {
+    wx.setStorageSync(NICKNAME_STORAGE_KEY, nickname);
+  } catch {}
+}
+
 /** 取 apiBase：优先 storage，兜底 wx.getApp（与 utils/request.ts 同一口径）。
  *  wx.uploadFile 不走 request 封装，需自行取 base。 */
 function getUploadBase(): string {
@@ -111,7 +148,7 @@ function getUploadBase(): string {
 export function resolveAvatarUrl(url?: string): string {
   const u = (url || '').trim();
   if (!u) return '';
-  if (/^https?:\/\//i.test(u) || u.startsWith('wxfile://')) return u;
+  if (/^https?:\/\//i.test(u) || /^wxfile:\/\//i.test(u)) return u;
   if (u.startsWith('/')) {
     const base = getUploadBase();
     return base ? `${base.replace(/\/+$/, '')}${u}` : u;

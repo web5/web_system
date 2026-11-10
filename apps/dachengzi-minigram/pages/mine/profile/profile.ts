@@ -5,24 +5,22 @@
 // 昵称：<input type="nickname"> 微信原生昵称输入，bindblur/bindconfirm 自动 PUT 落库（trim 后非空才落库）。
 // 邮箱：自绘验证码页（bind-email），点击跳转即可，不在本页做绑定。
 // 手机号：暂不可用，置灰占位（去掉 getPhoneNumber 交互）。
-import { fetchProfile, updateProfile, readMessage, uploadAvatar, isNicknameUnset, resolveAvatarUrl } from '../../../services/account';
+import {
+  fetchProfile,
+  updateProfile,
+  readMessage,
+  uploadAvatar,
+  isNicknameUnset,
+  resolveAvatarUrl,
+  readLocalAvatar,
+  writeLocalAvatar,
+  writeLocalNickname,
+} from '../../../services/account';
 import { isLoggedIn } from '../../../services/auth';
-
-/** 头像本地持久化 storage key */
-const AVATAR_STORAGE_KEY = 'kd_profile_avatar';
 
 /** 微信 chooseAvatar 回调事件的 detail（只取用到的字段） */
 interface ChooseAvatarEvent {
   detail: { avatarUrl?: string };
-}
-
-/** 读本地持久化头像路径（读不到返回空串，交由渲染层兜底「橙」占位） */
-function readLocalAvatar(): string {
-  try {
-    return wx.getStorageSync(AVATAR_STORAGE_KEY) || '';
-  } catch {
-    return '';
-  }
 }
 
 Page({
@@ -115,8 +113,9 @@ Page({
 
   /** 昵称自动落库：trim 后非空且与上次落库值不同才 PUT（去掉保存按钮，#9） */
   async saveNickname(value?: string) {
-    // 事件直传值优先；未传（理论上不出现）回退 data.nickname
-    const nickname = (value !== undefined ? value : (this.data.nickname || '')).trim();
+    // 事件直传值优先；空串回退 data.nickname（仅非空），避免 blur/confirm 给出空串时昵称静默丢失
+    const raw = (value !== undefined && value !== '') ? value : (this.data.nickname || '');
+    const nickname = raw.trim();
     if (!nickname || nickname === this._syncedNickname || this._nickSaving) return;
     this._nickSaving = true;
     try {
@@ -129,6 +128,8 @@ Page({
       const next = updated.nickname || '';
       this._syncedNickname = next;
       this.setData({ nickname: next });
+      // 写本地缓存：供「我的」页秒显/兜底（与头像同口径）
+      writeLocalNickname(next);
       wx.showToast({ title: '昵称已更新', icon: 'none' });
     } catch (err) {
       wx.showToast({ title: readMessage(err, '昵称保存失败'), icon: 'none' });
@@ -158,11 +159,7 @@ Page({
 
   /** 头像持久化到 storage + globalData，并刷新页面态 */
   persistAvatar(path: string) {
-    try {
-      wx.setStorageSync(AVATAR_STORAGE_KEY, path);
-    } catch {
-      // 写 storage 失败不阻断展示
-    }
+    writeLocalAvatar(path);
     const app = getApp<IAppOption>();
     if (app && app.globalData.userInfo) {
       app.globalData.userInfo.avatar = path;

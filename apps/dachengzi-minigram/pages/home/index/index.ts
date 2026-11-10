@@ -85,6 +85,33 @@ Page({
     recentLoading: true,
   },
 
+  /**
+   * 登录成功广播退订函数（onUnload 调用）。
+   * ⚠️ Page() 参数是对象字面量：运行时字段初始化只能写成 `null as <类型>`。
+   */
+  _offAuthLogged: null as (() => void) | null,
+
+  onLoad() {
+    // 登录成功广播：首启静默登录成功后重拉最近对话（loadRecent 内部按登录态收敛），
+    // 替代「仅 onShow 同步判 isLoggedIn」导致的首启不刷新竞态。
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus) {
+      this._offAuthLogged = () => this.loadRecent();
+      __bus.on('auth:logged', this._offAuthLogged);
+    }
+  },
+
+  onUnload() {
+    // 退订登录成功广播，避免回调打到已销毁实例
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus && this._offAuthLogged) {
+      __bus.off('auth:logged', this._offAuthLogged);
+      this._offAuthLogged = null;
+    }
+  },
+
   onShow() {
     // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
     setTabBarSelected(this, TAB_INDEX.home);

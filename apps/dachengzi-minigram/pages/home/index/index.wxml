@@ -61,8 +61,8 @@
     </view>
   </view>
 
-  <!-- 有会话：最近一次会话卡片（标题 + 预览 + 时间） -->
   <view wx:elif="{{recent}}" class="w-recent">
+    <!-- 有会话：最近一次会话卡片（标题 + 预览 + 时间） -->
     <view class="wr-item" data-id="{{recent.id}}" bindtap="openConv">
       <view class="wr-q">{{recent.title}}</view>
       <view wx:if="{{recent.preview}}" class="wr-c">{{recent.preview}}</view>
@@ -70,8 +70,8 @@
     </view>
   </view>
 
-  <!-- 空态：保留原空态文案 -->
   <view wx:else class="w-recent">
+    <!-- 空态：保留原空态文案 -->
     <view class="empty">还没有记录。翻译一次或学一课后会出现在这里；登录后换设备也能接着看。</view>
   </view>
 
