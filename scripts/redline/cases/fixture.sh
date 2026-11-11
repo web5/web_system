@@ -398,6 +398,31 @@ Test: pass
 Micro-exempt: R9b: 卡片重排为纯视觉微调，交互与数据流未变（夹具验证 R9b 豁免通路）" $t; t=$((t + 60))
   echo "C_R9B_EXEMPT $(git rev-parse HEAD)"
 
+  # ---- R9 app.json IA 阳性：pages 段加页、无 passport ----
+  # 先落 app.json 基线（prep commit 无场景引用），再改 pages 段触发 IA 判定。
+  # Proto/Design trailer 齐：app.json 属 ui_file，隔开 R10/R11，只留 R9。
+  _fx_write apps/admin/app.json '{"pages":["pages/index/index"]}'
+  git add -A
+  _fx_commit "chore(admin): 落 app.json 基线
+Proto: $BASE
+Design: pass" $t; t=$((t + 60))
+
+  _fx_write apps/admin/app.json '{"pages":["pages/index/index","pages/r9ia/index"]}'
+  git add -A
+  _fx_commit "feat(admin): app.json 加 r9ia 页（无原型）
+Proto: $BASE
+Design: pass" $t; t=$((t + 60))
+  echo "C_R9_IA $(git rev-parse HEAD)"
+
+  # ---- R9 app.json IA 阴性：pages 段加页 + 同 commit 带原型 ----
+  _fx_write apps/admin/app.json '{"pages":["pages/index/index","pages/r9ia/index","pages/r9ia2/index"]}'
+  _fx_write docs/ui/prototypes/r9ia2.md '# r9ia2 原型'
+  git add -A
+  _fx_commit "feat(admin): app.json 加 r9ia2 页（带原型）
+Proto: $BASE
+Design: pass" $t; t=$((t + 60))
+  echo "C_R9_IA_PASSPORT $(git rev-parse HEAD)"
+
   # ---- 八仙豁免：一个 commit 同时命中 8 门 + 一条 scoped 豁免全列 ----
   # 这是「exempt 字段活化」（2026-11-11 #8722，引擎此前从不读 exempt）的主干断言：
   # 豁免后输出为零；任何一门 exempt 被改成 false，对应门立刻翻红 → 变异必捕获。

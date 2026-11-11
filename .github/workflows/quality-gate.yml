@@ -227,6 +227,17 @@ jobs:
       - name: 判据变异测试（生成式：改坏 YAML 判据，黄金集必须红）
         run: node scripts/redline/mutation-gen.ts
 
+      # 异构门的专用验收测试（gates.yaml evidence_external 指向的脚本必须真的跑）：
+      #   R11b 档位矩阵（scenarios.tsv 无环境变量列，表达不了）；
+      #   R16 SSE 契约（python 委派，临时仓须复制脚本才驱动得了，否则静默跳过 = 假绿）；
+      #   R6 改动包选择（实现在 scripts/ci/changed-packages.sh，门禁扫描碰不到，pnpm 全桩）。
+      # 不接 CI 的测试等于没有测试 —— test-r11b-anchors.sh 曾长期只在本地存在（2026-11-12 查明）。
+      - name: 专用验收测试（R11b 档位 / R16 SSE 契约 / R6 改动包选择）
+        run: |
+          bash scripts/redline/test-r11b-anchors.sh
+          bash scripts/redline/test-r16-sse.sh
+          bash scripts/ci/test-changed-packages.sh
+
       # S5（2026-11-11）：影子比对（bash ↔ gate.ts）随 legacy bash 一起删除。
       # 为什么删：留在 CI 里也是拿 gate.ts 跟自己比 —— 恒等、恒绿，等于没这一步。
       # 丢掉什么：bash 曾是**独立实现**，能发现「gate.ts 被改坏」。现在这层没有了，

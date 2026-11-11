@@ -9,7 +9,8 @@
  * 五类检查：
  *   ① 结构   —— 解析 + 必填字段 + 枚举 + 引用完整性（scope 名、gate 号）
  *   ② 自洽   —— scope 双向引用闭合、豁免清单与门声明对齐、档位被 gate.ts 读
- *   ③ 用例   —— 每道门要么有黄金用例，要么进 uncovered（承认没覆盖，不许含糊）
+ *   ③ 用例   —— 每道门要么有黄金用例（evidence → scenarios.tsv），要么有专用测试脚本
+ *             （evidence_external → 脚本必须存在），要么进 uncovered（承认没覆盖，不许含糊）
  *   ④ 接线   —— 主链路四个入口 + commit-msg 钩子都真的跑 gate.ts
  *   ⑤ 生成物 —— 文档门表 / PR 模板 / 观察日志表头都与 YAML 同步
  *
@@ -657,10 +658,27 @@ function main(): number {
       referenced.add(e);
       real++;
     }
-    if (real > 0) {
+    // evidence_external：覆盖在专用测试脚本里的门（如 R6 的 changed-packages.sh、
+    // R11b/R16 的 python 委派门 —— scenarios.tsv 没有环境变量列 / 临时仓缺 python 脚本，
+    // 驱动不了它们，只能走 test-*.sh）。脚本必须真实存在且可执行，不许空挂。
+    const ext =
+      gm.evidence_external === undefined
+        ? []
+        : asList(gm.evidence_external, `${key}.evidence_external`).map((s) => asStr(s, "evidence_external"));
+    for (const p of ext) {
+      if (!existsSync(join(TOP, p))) {
+        bad("用例", `${key}: evidence_external「${p}」不存在 —— 挂一个不存在的脚本等于没覆盖`);
+      }
+    }
+    if (real > 0 || ext.length > 0) {
       gateWithEvidence++;
+      // 既有用例又挂 uncovered = 条目已过时（曾真实发生：#636 探针恢复误回滚，
+      // 4 条已覆盖门在 uncovered 里又躺了一天）。不拦，后来人会把「已覆盖」读成「没覆盖」。
+      if (uncoveredKeys.has(key)) {
+        bad("用例", `${key}: 已有用例却仍在 uncovered 清单里 —— 删掉那条过时登记`);
+      }
     } else if (!uncoveredKeys.has(key)) {
-      bad("用例", `${key}: 既没有黄金用例，也不在 uncovered 清单里 —— 空着的门等于没被验证过`);
+      bad("用例", `${key}: 既没有黄金用例，也没有 evidence_external，也不在 uncovered 清单里 —— 空着的门等于没被验证过`);
     }
     void gm;
   }
