@@ -203,7 +203,7 @@ async function bootstrap() {
     // 解析不到（老部署无指针 / 文件缺失）→ 回落 ServeStatic，行为与改造前一致。
     if (path.startsWith('/shell/')) {
       try {
-        const file = await indexHtmlService.resolveShellAssetPath(path);
+        const file = await indexHtmlService.resolveShellAssetPath(path, req);
         if (file) {
           // 带 content hash 的 assets 强缓存（与根级 /assets/ 同策略）；
           // version.json 等非 hash 文件不设，避免部署后读到旧值
