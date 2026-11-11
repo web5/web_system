@@ -14,6 +14,34 @@ import { getToken, setToken, clearToken, setLoginEnsurer, isLoggedOut, setLogged
 const AUTH_API = '/api/auth/miniprogram-login';
 const LOGOUT_API = '/api/auth/logout';
 
+/**
+ * wx.login 的等待上限（毫秒）。
+ *
+ * wx.login 是回调式 API，没有 timeout 参数：真机偶发不回调时 Promise 永不 settle，
+ * 而 loginPromise 是全局单例（见 ensureLogin）—— 一次悬挂会让该次及此后所有
+ * 无 token 请求永久 pending，页面表现为「永停 loading」（台账 #8687）。
+ *
+ * 为什么是 8s：正常 wx.login 在弱网下也能 1–3s 内回调，8s 足够宽松；
+ * 同时要小于请求侧的整体等待容忍（列表请求 10s），避免登录链路比业务请求还慢。
+ */
+const WX_LOGIN_TIMEOUT = 8_000;
+
+/**
+ * 给 Promise 加硬超时：超时即 reject（调用方按普通失败处理，走原有 catch 路径）。
+ *
+ * 只用于「回调式 API 无超时参数」这类必然有悬挂风险的封装（如 wx.login）。
+ * 计时器在 settle 后一律清掉，避免留下悬挂 handle / 迟到的未捕获 rejection。
+ */
+function withTimeout<T>(task: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} 超时（${ms}ms 未回调）`)), ms);
+  });
+  return Promise.race([task, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 /** 检查是否已登录（主动退出态视为未登录） */
 export function isLoggedIn(): boolean {
   return !!getToken() && !isLoggedOut();
@@ -61,13 +89,16 @@ function clearLocalAccountState(): void {
 export async function login(): Promise<void> {
   try {
     // wx.login 显式 Promise 封装（不依赖基础库 Promise 风格）
-    const loginRes = await new Promise<WechatMiniprogram.LoginSuccessCallbackResult>(
-      (resolve, reject) => {
+    // ⚠️ 必须包超时：真机偶发不回调会让 loginPromise（全局单例）永久悬挂（台账 #8687）
+    const loginRes = await withTimeout(
+      new Promise<WechatMiniprogram.LoginSuccessCallbackResult>((resolve, reject) => {
         wx.login({
           success: (r) => resolve(r),
           fail: (err) => reject(err),
         });
-      },
+      }),
+      WX_LOGIN_TIMEOUT,
+      'wx.login',
     );
     const { code } = loginRes;
     if (!code) {
@@ -137,8 +168,11 @@ export function ensureLogin(): Promise<boolean> {
   if (!loginPromise) {
     loginPromise = login()
       .then(() => true)
+      // 失败/超时都收敛为 false：login() 内部 wx.login 已带 8s 超时，必 reject 到此处
       .catch(() => false)
       .finally(() => {
+        // 无论成功、失败还是超时都在这里重置，保证下一次调用会重新发起登录
+        // （否则一次悬挂会让单例永久死锁，所有无 token 请求一起永挂 —— 台账 #8687）
         loginPromise = null;
       });
   }
@@ -151,15 +185,22 @@ export function ensureLogin(): Promise<boolean> {
  */
 export async function loginFromGate(): Promise<boolean> {
   wx.showLoading({ title: '登录中…', mask: true });
+  let ok = false;
   try {
     await login();
-    wx.hideLoading();
-    return true;
+    ok = true;
   } catch {
+    /* 失败统一在 finally 之后提示（hideLoading 会连带收起同层 toast，顺序不能反） */
+  } finally {
+    // 遮罩必须在**所有**路径收起：原先只在 success/catch 里 hideLoading，
+    // login() 悬挂时全屏 loading 就永久驻留（台账 #8687 §3.3）。
+    // 悬挂的兜底由 login() 内部的 wx.login 超时（WX_LOGIN_TIMEOUT）保证 —— 它必 settle。
     wx.hideLoading();
-    wx.showToast({ title: '登录失败，请重试', icon: 'none' });
-    return false;
   }
+  if (!ok) {
+    wx.showToast({ title: '登录失败，请重试', icon: 'none' });
+  }
+  return ok;
 }
 
 // 注入到 request 层：request.ts 不直接 import 本文件（会形成 request↔auth 循环依赖），

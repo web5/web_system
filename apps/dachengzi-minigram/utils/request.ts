@@ -10,6 +10,19 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 /** 用户主动退出的标志位：与「token 过期」区分 —— 此状态下不得自动重新登录 */
 const LOGGED_OUT_KEY = 'account_logged_out';
 
+/**
+ * 「先确保登录」这一步的等待上限（毫秒）。
+ *
+ * 为什么需要：loginEnsurer → ensureLogin → login() 这条链上的 wx.login 没有超时，
+ * 且 loginPromise 是全局单例 —— 一次悬挂会让**本次及此后所有**无 token 请求永久
+ * pending（不发请求、不报错、页面永久骨架屏，台账 #8687）。这里包一层硬超时，
+ * 超时后按「未登录」处理，让请求走 reject 而非无限挂起。
+ *
+ * 为什么是 5s：登录链路本身已有 8s（wx.login）+ 10s（登录 POST）两段上限，
+ * 请求侧不该等满两段；5s 足够覆盖正常首启登录，超过即视为异常并让上层转异常态。
+ */
+const LOGIN_ENSURE_TIMEOUT = 5_000;
+
 /** 取 wx 全局 app 实例 — 优先 storage 兜底，避开异步栈里 wx.getApp 抛 "not a function" */
 function getAppInstance(): IAppOption | null {
   // 1) 优先从 storage 拿（app.ts onLaunch 时写入）
@@ -166,7 +179,29 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
   // 无 token 时先「确保登录」再发请求，避免发出无 token 请求 → 401 → 误触发掉线。
   // ⚠️ 用户已主动退出时不自动重登，否则「退出登录」点了等于没点。
   if (!getToken() && !isLoggedOut() && loginEnsurer) {
-    await loginEnsurer();
+    // ⚠️ 自动登录必须包硬超时：底层 wx.login 无超时且 loginPromise 是全局单例，
+    // 一次悬挂就拖死所有无 token 请求（永停 loading 的根因之一，台账 #8687）。
+    // 超时/失败**不在这里抛**，统一落到下面的 `!token` 分支抛 NOT_LOGGED_IN ——
+    // 与「本来就没有 token」同口径，上层 `.catch(() => null)` 能正常接住，
+    // 页面转异常态而不是变成未捕获 rejection。
+    let ensureTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        loginEnsurer(),
+        new Promise<never>((_resolve, reject) => {
+          ensureTimer = setTimeout(
+            () => reject(new Error('NOT_LOGGED_IN')),
+            LOGIN_ENSURE_TIMEOUT,
+          );
+        }),
+      ]);
+    } catch {
+      // 登录失败 / 超时：不再重试，交由下面的 `!token` 分支统一按未登录处理
+    } finally {
+      // 正常登录成功时也要收掉计时器：否则它会在 5s 后 reject 一个没人 await 的
+      // Promise（未捕获 rejection），且留下悬挂 handle。
+      if (ensureTimer !== undefined) clearTimeout(ensureTimer);
+    }
   }
   const token = getToken();
   if (!token) {

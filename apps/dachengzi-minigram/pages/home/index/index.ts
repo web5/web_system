@@ -25,6 +25,20 @@ const MINE_PATH = '/pages/mine/index/index';
 /** 最近对话的本地缓存键：先显缓存，再后台刷新（stale-while-revalidate） */
 const RECENT_CACHE_KEY = 'welcome_recent_cache';
 
+/**
+ * 最近对话的硬超时兜底（毫秒）—— 骨架屏最迟在这个时限内退出（台账 #8687）。
+ *
+ * 为什么必须有它：本区块 loading 的关闭原本 100% 依赖 `await` 返回，
+ * 一旦某个 await 永不 settle（如 request 层 `await loginEnsurer()` 悬挂），
+ * 骨架屏就永久驻留 —— 既不报错、也无 toast，连「加载失败」都等不到。
+ *
+ * 为什么是 12s（不是 API_TIMEOUT.DEFAULT 的 10s）：
+ * 单个请求 10s 超时已由 wx.request 保证；本兜底要盖住「列表 + 详情」两段串行，
+ * 取 12s = 10s 请求超时 + 余量，避免与正常超时路径抢答（弱网下先让 wx.request
+ * 自己报错，走原有异常态出口，语义更准确）。
+ */
+const RECENT_LOAD_TIMEOUT = 12_000;
+
 /** 最近一次会话（会话维度，最多展示一条） */
 interface Recent {
   id: string;
@@ -96,6 +110,15 @@ Page({
   _offAuthLogged: null as (() => void) | null,
   _offAuthExpired: null as (() => void) | null,
 
+  /**
+   * loadRecent 的轮次序号：每轮进入 +1。
+   * 异步回来（含超时计时器、await 之后的迟到返回）先比对序号，不匹配即为过期轮次，
+   * 直接丢弃 —— 否则上一轮的超时会关掉本轮的骨架屏、旧数据会覆盖新数据。
+   */
+  _recentSeq: 0,
+  /** loadRecent 的硬超时计时器 id（null = 当前没有在跑的计时器） */
+  _recentTimer: null as ReturnType<typeof setTimeout> | null,
+
   onLoad() {
     // 登录成功广播：首启静默登录成功后刷新登录态并重拉最近对话（loadRecent 内部按登录态收敛），
     // 替代「仅 onShow 同步判 isLoggedIn」导致的首启不刷新竞态。
@@ -114,6 +137,11 @@ Page({
   },
 
   onUnload() {
+    // 页面销毁：收掉可能在跑的硬超时计时器，避免对已销毁实例 setData
+    if (this._recentTimer != null) {
+      clearTimeout(this._recentTimer);
+      this._recentTimer = null;
+    }
     // 退订登录态广播，避免回调打到已销毁实例
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
@@ -164,6 +192,35 @@ Page({
    *  2. 再后台请求刷新，成功则写回缓存。
    */
   async loadRecent() {
+    // ── 轮次（seq）登记：并发/重入保护 ────────────────────────────────────
+    // 每轮 +1；此后所有「异步回来的写入」（超时计时器、await 之后的迟到返回）
+    // 都要先比对自己是否仍是当前轮次，不匹配即丢弃，避免互相覆盖。
+    const seq = (this._recentSeq || 0) + 1;
+    this._recentSeq = seq;
+
+    /** 收掉本轮/上轮的硬超时计时器（幂等：无计时器时什么都不做） */
+    const clearTimer = () => {
+      if (this._recentTimer != null) {
+        clearTimeout(this._recentTimer);
+        this._recentTimer = null;
+      }
+    };
+    /** 本轮是否已被新一轮取代 */
+    const isStale = () => this._recentSeq !== seq;
+    /**
+     * 本轮写结果：先收计时器，再判轮次 —— 两条都在所有出口上必经，
+     * 保证既不留悬挂计时器，也不会用过期轮次的状态覆盖新一轮。
+     */
+    const settle = (patch: Record<string, unknown>): boolean => {
+      clearTimer();
+      if (isStale()) return false;
+      this.setData(patch);
+      return true;
+    };
+
+    // 上一轮的计时器先收掉：它是过期轮次，留着只会在错误的时点关掉本轮的 loading
+    clearTimer();
+
     // 未登录：不发请求，直接空态（退出登录已由 auth 层清缓存）
     if (!isLoggedIn()) {
       this.setData({ recent: null, recentLoading: false });
@@ -185,6 +242,21 @@ Page({
     // 每次发起请求前重置异常态，避免上一次的「加载失败」残留到本轮
     this.setData({ recentError: false });
 
+    // ── 硬超时兜底 ──────────────────────────────────────────────────────
+    // 见 RECENT_LOAD_TIMEOUT 注释：无论任何原因不返回，骨架屏必须在此时限内退出。
+    // 计时器回调里 self._recentTimer 先置 null（已触发，无需再 clear）。
+    this._recentTimer = setTimeout(() => {
+      this._recentTimer = null;
+      // ⚠️ 有已显示内容（缓存秒显 / 上一轮成功结果）时只关 loading：
+      // 把用户已经看到的卡片拿掉、改显示「加载失败」，比不兜底更差。
+      // 只有实在没内容可显示时，才落「加载失败，点此重试」（区别于空态文案）。
+      if (this.data.recent != null) {
+        settle({ recentLoading: false });
+      } else {
+        settle({ recent: null, recentLoading: false, recentError: true });
+      }
+    }, RECENT_LOAD_TIMEOUT);
+
     try {
       const api = createAgentApi('auto');
       // 列表接口按 source 过滤（默认只查 chat），翻译会话 source='tool' 会被漏掉。
@@ -202,16 +274,17 @@ Page({
 
       if (chatRes === null && toolRes === null) {
         // 两路都异常（都 reject）：按「接口异常」处理，不显示「暂无记录」空态
-        this.setData({ recent: null, recentLoading: false, recentError: true });
+        settle({ recent: null, recentLoading: false, recentError: true });
         return;
       }
       if (!first) {
         // 真·空态：确实还没有会话
-        this.setData({ recent: null, recentLoading: false, recentError: false });
-        try {
-          wx.removeStorageSync(RECENT_CACHE_KEY);
-        } catch {
-          /* 清不掉不影响显示 */
+        if (settle({ recent: null, recentLoading: false, recentError: false })) {
+          try {
+            wx.removeStorageSync(RECENT_CACHE_KEY);
+          } catch {
+            /* 清不掉不影响显示 */
+          }
         }
         return;
       }
@@ -232,15 +305,17 @@ Page({
         preview,
         timeText: formatTime(first.updatedAt),
       };
-      this.setData({ recent: next, recentLoading: false, recentError: false });
-      try {
-        wx.setStorageSync(RECENT_CACHE_KEY, next);
-      } catch {
-        /* 缓存写失败不影响本次显示 */
+      // 过期轮次的迟到返回：不写屏、也不写缓存（否则旧数据会盖掉新一轮）
+      if (settle({ recent: next, recentLoading: false, recentError: false })) {
+        try {
+          wx.setStorageSync(RECENT_CACHE_KEY, next);
+        } catch {
+          /* 缓存写失败不影响本次显示 */
+        }
       }
     } catch {
       // 加载失败：按「接口异常」处理（区别于真·空态），不误读成「还没有会话」
-      this.setData({ recent: null, recentLoading: false, recentError: true });
+      settle({ recent: null, recentLoading: false, recentError: true });
     }
   },
 
