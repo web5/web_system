@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { OperationLogClient } from '../permission/operation-log.client';
-import { PermissionGuard, RequirePermission, getUploadDir } from '@web-system/shared';
+import { PermissionGuard, RequirePermission, getUploadDir, resolvePublicUrl, PublicBaseUrlService } from '@web-system/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangeOwnPasswordDto, ResetPasswordDto } from './dto/change-password.dto';
@@ -38,7 +38,18 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly operationLogClient: OperationLogClient,
+    private readonly publicBaseUrl: PublicBaseUrlService,
   ) {}
+
+  /**
+   * 头像相对路径 → 公网绝对 URL（返回前端前拼接；DB 仍存相对路径）。
+   * 公网根地址主源为 system-service `system_configs` 表（key=public_base_url），
+   * env `PUBLIC_BASE_URL` 降级为兜底；留空/非法时保持相对路径，与历史行为一致。
+   */
+  private async resolveAvatarUrl(avatar?: string | null): Promise<string> {
+    const base = await this.publicBaseUrl.resolve();
+    return resolvePublicUrl(avatar, base);
+  }
 
   @Get()
   @UseGuards(AuthGuard, PermissionGuard)
@@ -60,7 +71,7 @@ export class UserController {
   @ApiOperation({ summary: '获取当前登录用户信息' })
   async getMe(@Req() req: AuthedRequest) {
     const user = await this.userService.findById(String(req.user?.id));
-    return { code: 0, data: user };
+    return { code: 0, data: user ? { ...user, avatar: await this.resolveAvatarUrl(user.avatar) } : user };
   }
 
   @Put('me')
@@ -69,7 +80,7 @@ export class UserController {
   @ApiOperation({ summary: '更新当前用户资料' })
   async updateMe(@Req() req: AuthedRequest, @Body() userData: UpdateUserDto) {
     const user = await this.userService.update(String(req.user?.id), userData);
-    return { code: 0, data: user };
+    return { code: 0, data: user ? { ...user, avatar: await this.resolveAvatarUrl(user.avatar) } : user };
   }
 
   @Put('me/password')
@@ -121,7 +132,7 @@ export class UserController {
     const avatarUrl = `/api/uploads/avatars/${file.filename}`;
     await this.userService.update(String(req.user?.id), { avatar: avatarUrl });
 
-    return { code: 0, data: { avatarUrl } };
+    return { code: 0, data: { avatarUrl: await this.resolveAvatarUrl(avatarUrl) } };
   }
 
   @Get('profile')

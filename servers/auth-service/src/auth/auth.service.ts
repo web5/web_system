@@ -9,6 +9,8 @@ import {
   resolveUserSystems,
   normalizeAppSystem,
   SYSTEM_LABELS,
+  resolvePublicUrl,
+  PublicBaseUrlService,
   type AppSystem,
 } from '@web-system/shared';
 import { JwtService } from '@nestjs/jwt';
@@ -40,6 +42,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly publicBaseUrl: PublicBaseUrlService,
   ) {}
 
   /** 便捷获取默认 Redis 客户端 */
@@ -241,7 +244,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        avatar: user.avatar,
+        avatar: await this.resolveAvatarUrl(user.avatar),
         nickname: user.nickname,
         phone: user.phone,
         gender: user.gender,
@@ -341,6 +344,16 @@ export class AuthService {
   }
 
   /**
+   * 头像相对路径 → 公网绝对 URL（返回前端前拼接；DB 仍存相对路径）。
+   * 公网根地址主源为 system-service `system_configs` 表（key=public_base_url），
+   * env `PUBLIC_BASE_URL` 降级为兜底；留空/非法时保持相对路径，与历史行为一致。
+   */
+  private async resolveAvatarUrl(avatar?: string | null): Promise<string> {
+    const base = await this.publicBaseUrl.resolve();
+    return resolvePublicUrl(avatar, base);
+  }
+
+  /**
    * 生成 Token，access 和 refresh 通过 type 字段区分
    */
   private async generateToken(user: User, systems?: AppSystem[]): Promise<LoginResponse> {
@@ -377,7 +390,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        avatar: user.avatar,
+        avatar: await this.resolveAvatarUrl(user.avatar),
         nickname: user.nickname,
         phone: user.phone,
         gender: user.gender,

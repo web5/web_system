@@ -151,6 +151,17 @@ export { Public, IS_PUBLIC_KEY } from './auth/public.decorator';
  */
 export { formatDateTime, randomString, sleep, debounce, throttle } from './utils';
 
+// 公网访问基座（拼完整 URL：头像等相对路径在返回前端前拼域名，唯一实现）
+export {
+  PUBLIC_BASE_URL_ENV,
+  normalizePublicBaseUrl,
+  resolvePublicUrl,
+  stripPublicBaseUrl,
+} from './public-url';
+
+// 公网根地址读取客户端（服务间调用 system-service，带缓存 + env 兜底，唯一实现）
+export { PublicBaseUrlService } from './public-base-url.service';
+
 /**
  * 环境变量获取
  */

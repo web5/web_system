@@ -21,6 +21,7 @@ Page({
    * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
    */
   _offAuthExpired: null as any,
+  _offAuthLogged: null as (() => void) | null,
 
   onShow() {
     // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
@@ -41,15 +42,24 @@ Page({
     if (__bus?.on) {
       this._offAuthExpired = () => this.setData({ loggedIn: false });
       __bus.on('auth:expired', this._offAuthExpired);
+      // 登录成功广播：首启静默登录成功后刷新登录态（本页无业务数据，只需收口登录态）
+      this._offAuthLogged = () => this.setData({ loggedIn: isLoggedIn() });
+      __bus.on('auth:logged', this._offAuthLogged);
     }
   },
 
   onUnload() {
     // 退订登录态广播，避免回调打到已销毁实例
     const __bus = (getApp() as any)?.eventBus;
-    if (__bus?.off && this._offAuthExpired) {
-      __bus.off('auth:expired', this._offAuthExpired);
-      this._offAuthExpired = null;
+    if (__bus?.off) {
+      if (this._offAuthExpired) {
+        __bus.off('auth:expired', this._offAuthExpired);
+        this._offAuthExpired = null;
+      }
+      if (this._offAuthLogged) {
+        __bus.off('auth:logged', this._offAuthLogged);
+        this._offAuthLogged = null;
+      }
     }
   },
 

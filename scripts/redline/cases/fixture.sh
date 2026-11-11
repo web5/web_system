@@ -133,6 +133,23 @@ build_fixture() {
   _fx_commit "feat(db): 批量加列并建索引" $t; t=$((t + 60))
   echo "C_MIGRATION $(git rev-parse HEAD)"
 
+  # R13 的「报告路径」分支：凭证指向一个不存在的文件 → 必须报 error。
+  # 🔴 为什么必须单独造一个：上面两个迁移场景都**不带**契约凭证，走的是「缺凭证」分支，
+  #    把 accept 或 path_exists_in_commit_tree 改坏对它们毫无影响 —— 变异测试会因此
+  #    报「变异未被捕获」，看起来像判据没生效，其实是覆盖缺口（2026-11-11 切主实测）。
+  _fx_write archive/migrations/20260103-fixture-fake.sql \
+    'ALTER TABLE fixture ADD COLUMN f INT;' \
+    'ALTER TABLE fixture ADD COLUMN g INT;' \
+    'ALTER TABLE fixture ADD COLUMN h INT;' \
+    'ALTER TABLE fixture ADD COLUMN i INT;' \
+    'ALTER TABLE fixture ADD COLUMN j INT;' \
+    'CREATE INDEX idx_fixture_f ON fixture (f);'
+  git add -A
+  _fx_commit "feat(db): 加列（凭证指向不存在的报告）
+Contract: docs/development/reviews/does-not-exist.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R13_FAKE $(git rev-parse HEAD)"
+
   # ---- R14：发布面（CI workflow）----
   _fx_write .github/workflows/fixture.yml \
     'name: fixture' \

@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import axios from 'axios';
+import { PublicBaseUrlService } from '@web-system/shared';
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { User } from '../user/user.entity';
@@ -97,6 +98,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
         { provide: RedisService, useValue: redisService },
+        { provide: PublicBaseUrlService, useValue: { resolve: jest.fn().mockResolvedValue('') } },
       ],
     }).compile();
 

@@ -31,6 +31,11 @@ function serviceStub(recordUpload: jest.Mock) {
   } as never;
 }
 
+/** 公网根地址客户端替身：resolve 返回空串 → 保持相对路径（本测试不关心域名拼接） */
+function publicBaseUrlStub() {
+  return { resolve: jest.fn().mockResolvedValue('') } as never;
+}
+
 type Respondable = { respond: (...args: unknown[]) => Promise<{ code: number }> };
 
 describe('UploadController 日志合规化（recordUpload 失败只告警，不让上传失败）', () => {
@@ -50,7 +55,7 @@ describe('UploadController 日志合规化（recordUpload 失败只告警，不�
     const recordUpload = jest.fn(async () => {
       throw new Error('db connection lost');
     });
-    const controller = new UploadController(serviceStub(recordUpload));
+    const controller = new UploadController(serviceStub(recordUpload), publicBaseUrlStub());
 
     const res = await (controller as never as Respondable).respond(
       fileStub(),
@@ -71,7 +76,7 @@ describe('UploadController 日志合规化（recordUpload 失败只告警，不�
 
   it('recordUpload 成功 → 不产生任何 warn（成功路径静默）', async () => {
     const recordUpload = jest.fn(async (v: Record<string, unknown>) => v);
-    const controller = new UploadController(serviceStub(recordUpload));
+    const controller = new UploadController(serviceStub(recordUpload), publicBaseUrlStub());
 
     await (controller as never as Respondable).respond(fileStub(), 'drawing', 'drawing', reqStub());
 

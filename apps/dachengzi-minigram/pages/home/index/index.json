@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "大橙子个人助理",
-  "usingComponents": {}
+  "usingComponents": {
+    "login-gate": "/components/login-gate/index"
+  }
 }

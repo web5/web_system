@@ -1,5 +1,6 @@
 import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PublicBaseUrlService } from '@web-system/shared';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UploadController } from './upload.controller';
 import { InternalUploadsController } from './internal-uploads.controller';
@@ -74,6 +75,7 @@ import {
       },
     },
     UploadService,
+    PublicBaseUrlService,
   ],
   exports: [UploadService],
 })

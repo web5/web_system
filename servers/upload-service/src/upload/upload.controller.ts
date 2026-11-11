@@ -14,6 +14,7 @@ import { Request } from 'express';
 import { UploadService } from './upload.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { createUploadInterceptor } from './upload-multer';
+import { resolvePublicUrl, PublicBaseUrlService } from '@web-system/shared';
 
 /**
  * 用户上传入口。
@@ -29,7 +30,10 @@ export class UploadController {
   /** 日志统一走 NestJS Logger（横切铁律：不走进程 stdout 裸写，保证级别可控） */
   private readonly logger = new Logger(UploadController.name);
 
-  constructor(private readonly uploadService: UploadService) {}
+  constructor(
+    private readonly uploadService: UploadService,
+    private readonly publicBaseUrl: PublicBaseUrlService,
+  ) {}
 
   /** 获取支持的上传分类信息（无需鉴权，供前端参考） */
   @Get('categories')
@@ -117,8 +121,9 @@ export class UploadController {
     category: string,
     req: Request,
   ) {
+    const base = await this.publicBaseUrl.resolve();
     const data = {
-      url: this.uploadService.buildUrl(file.filename, dir),
+      url: resolvePublicUrl(this.uploadService.buildUrl(file.filename, dir), base),
       filename: file.filename,
       size: file.size,
       mimetype: file.mimetype,

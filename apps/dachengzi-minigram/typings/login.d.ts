@@ -26,6 +26,10 @@ interface IAppOption {
     token: string;
     refreshToken: string;
     apiBase: string;
+    /** 当前选中的 tabBar 索引（0/1/2）：自定义 tabBar 组件每页独立实例，切 tab 后新实例
+     *  selected 回到 0，需跨实例共享该值以在 attached 时立即高亮（见 utils/tabbar.ts 与
+     *  custom-tab-bar/index.ts）。undefined = 尚未登记（首启由 syncFromRoute 兜底）。 */
+    tabIndex?: number;
   };
   /** 圆角风格：当前页面根节点应叠加的 class（各页 onShow 调用；口径 specs/radius-style-dual §4.2） */
   radiusClassOf(): string;
