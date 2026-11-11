@@ -9,6 +9,9 @@ import {
   resolveUserSystems,
   normalizeAppSystem,
   SYSTEM_LABELS,
+  resolvePublicUrl,
+  normalizePublicBaseUrl,
+  PUBLIC_BASE_URL_ENV,
   type AppSystem,
 } from '@web-system/shared';
 import { JwtService } from '@nestjs/jwt';
@@ -241,7 +244,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        avatar: user.avatar,
+        avatar: this.resolveAvatarUrl(user.avatar),
         nickname: user.nickname,
         phone: user.phone,
         gender: user.gender,
@@ -341,6 +344,14 @@ export class AuthService {
   }
 
   /**
+   * 头像相对路径 → 公网绝对 URL（返回前端前拼接；DB 仍存相对路径）。
+   * PUBLIC_BASE_URL 留空/非法时保持相对路径，与历史行为一致。
+   */
+  private resolveAvatarUrl(avatar?: string | null): string {
+    return resolvePublicUrl(avatar, normalizePublicBaseUrl(this.configService.get(PUBLIC_BASE_URL_ENV)));
+  }
+
+  /**
    * 生成 Token，access 和 refresh 通过 type 字段区分
    */
   private async generateToken(user: User, systems?: AppSystem[]): Promise<LoginResponse> {
@@ -377,7 +388,7 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        avatar: user.avatar,
+        avatar: this.resolveAvatarUrl(user.avatar),
         nickname: user.nickname,
         phone: user.phone,
         gender: user.gender,
