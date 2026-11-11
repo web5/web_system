@@ -156,6 +156,7 @@ export {
   PUBLIC_BASE_URL_ENV,
   normalizePublicBaseUrl,
   resolvePublicUrl,
+  stripPublicBaseUrl,
 } from './public-url';
 
 // 公网根地址读取客户端（服务间调用 system-service，带缓存 + env 兜底，唯一实现）

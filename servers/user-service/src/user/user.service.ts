@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { hasSystem, isAppSystem } from '@web-system/shared';
+import { hasSystem, isAppSystem, stripPublicBaseUrl, PublicBaseUrlService } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike, QueryFailedError } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -48,7 +48,18 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly publicBaseUrl: PublicBaseUrlService,
   ) {}
+
+  /**
+   * 写侧净化（2026-11-11 写侧污染修复）：avatar 在 DB 恒定存相对路径，
+   * 但小程序会把 upload-service 返回的完整 URL 原样 PUT 回来。落库前统一剥掉
+   * 公网 origin；第三方 URL（微信头像等）与已是相对路径的值原样保留。
+   */
+  private async sanitizeAvatar<T extends { avatar?: string | null }>(data: T): Promise<T> {
+    if (data.avatar === undefined || data.avatar === null) return data;
+    return { ...data, avatar: stripPublicBaseUrl(data.avatar, await this.publicBaseUrl.resolve()) };
+  }
 
   /**
    * 用户列表。
@@ -113,7 +124,7 @@ export class UserService {
   }
 
   async create(userData: Partial<User>): Promise<User> {
-    const data = { ...userData };
+    const data = { ...(await this.sanitizeAvatar(userData)) };
     // 统一哈希：admin 用户管理「新增用户」若带密码，落库前必须 bcrypt 哈希，
     // 否则登录端 bcrypt.compare 永远失败（历史隐患：此处曾直接存明文）。
     if (data.password) {
@@ -138,7 +149,7 @@ export class UserService {
     ) {
       throw new BadRequestException('不允许移除用户的 super_admin 角色：请先由其他超级管理员在数据库层面操作');
     }
-    const { preferences, password, ...rest } = userData;
+    const { preferences, password, ...rest } = await this.sanitizeAvatar(userData);
     Object.assign(user, rest);
     if (password) {
       // 改密：哈希 + 令牌版本 +1，作废该用户所有旧会话（token_version 机制）
