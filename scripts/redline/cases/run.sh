@@ -7,6 +7,7 @@
 #   bash scripts/redline/cases/run.sh --update         # 重新生成 expected/（改动规则后必须人工 review diff）
 #   bash scripts/redline/cases/run.sh --filter r17     # 只跑 id 含 r17 的场景
 #   bash scripts/redline/cases/run.sh --keep           # 保留临时夹具仓库（排查用）
+#   bash scripts/redline/cases/run.sh --work /tmp/fx   # 指定夹具目录；已有则复用（生成式变异用）
 #
 # 返回码：0 = 全部一致；1 = 有差异或场景本身报错；2 = 用法错误
 #
@@ -32,11 +33,16 @@ EXPECTED_DIR="$CASES_DIR/expected"
 UPDATE=0
 KEEP=0
 FILTER=""
+# --work DIR：用固定目录当夹具仓库。目录里已有 .aliases 就复用，不重建。
+# 为什么需要：夹具构造约 14s，而生成式变异测试要对同一份夹具跑几十次判据变异，
+# 每次都重建的话 28 个变异要 6 分钟以上，慢到没人愿意跑。
+WORK_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --update) UPDATE=1 ;;
     --keep)   KEEP=1 ;;
     --filter) FILTER="${2:-}"; shift ;;
+    --work)   WORK_ARG="${2:-}"; shift ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -47,16 +53,26 @@ done
 command -v node >/dev/null 2>&1 || { echo "需要 node（gate.ts 用 Node 22 原生跑 TS）" >&2; exit 2; }
 mkdir -p "$EXPECTED_DIR"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-cases.XXXXXX")"
+if [ -n "$WORK_ARG" ]; then
+  WORK="$WORK_ARG"
+  KEEP=1
+  mkdir -p "$WORK"
+else
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-cases.XXXXXX")"
+fi
 cleanup() { [ "$KEEP" = "1" ] || rm -rf "$WORK"; }
 trap cleanup EXIT
 
 # shellcheck source=/dev/null
 source "$CASES_DIR/fixture.sh"
 
-echo "构造夹具仓库: $WORK" >&2
 MAP="$WORK/.aliases"
-build_fixture "$WORK" > "$MAP" || { echo "夹具构造失败" >&2; exit 2; }
+if [ -f "$MAP" ] && [ -s "$MAP" ]; then
+  echo "复用夹具仓库: $WORK" >&2
+else
+  echo "构造夹具仓库: $WORK" >&2
+  build_fixture "$WORK" > "$MAP" || { echo "夹具构造失败" >&2; exit 2; }
+fi
 # 别名导出为环境变量：场景表里写 ${C_R17_FAKE} 就能在 run_one 的 eval 中展开成真实 sha
 while read -r _n _s; do
   [ -n "${_n:-}" ] && [ -n "${_s:-}" ] && export "$_n=$_s"

@@ -45,11 +45,11 @@ mutate_expect_fail() {
   # 🔴 2026-11-11 切主（S3）后，针对 legacy bash 的变异全部失效：
   #    gate.ts 读 gates.yaml，改 scan-rules.sh / gate-shared.sh 的源码**不会改变任何行为**，
   #    于是这些变异会让测试保持全绿，被报成「判据形同虚设」—— 其实是用错了目标。
-  #    同等效力的「改坏判据看会不会红」已迁到 scripts/redline/cases/mutation-yaml.sh（8 项，
-  #    变异的是 gates.yaml 的字段）。这里保留调用点只为留下历史线索，默认不执行。
+  #    同等效力的「改坏判据看会不会红」已迁到 scripts/redline/mutation-gen.ts（生成式，
+  #    遍历门表 × 字段类型，不再手写清单）。这里保留调用点只为留下历史线索，默认不执行。
   #    真要对 legacy bash 做变异（比如将来要复活它），把下面这个开关设成 1。
   if [ "${LEGACY_MUTATIONS:-0}" != "1" ] && { [ "$file" = "${SCAN:-}" ] || [ "$file" = "${LIB:-}" ]; }; then
-    printf '  \033[2m· %s（legacy bash 变异，已迁移到 cases/mutation-yaml.sh）\033[0m\n' "$name"
+    printf '  \033[2m· %s（legacy bash 变异，已迁移到 mutation-gen.ts）\033[0m\n' "$name"
     return
   fi
 

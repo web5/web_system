@@ -16,6 +16,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -272,6 +273,109 @@ function safeRead(p: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * ⑤-a 文档生成区块必须最新。
+ *
+ * 为什么用子进程调 `gen-docs.ts --check` 而不是 import 它的函数：
+ *   gen-docs.ts 是脚本（末尾 process.exit），import 会直接把 lint 进程带走。
+ *   子进程的退出码正好就是要的信号，也不必把渲染逻辑搬进来复制一份。
+ *
+ * 为什么这条要卡在 CI：手抄的门号清单不会「报错」，只会慢慢和实际不符。
+ *   读者按文档判断「这提交会不会被拦」——文档说三道门、实际五道，是最难查的那种错。
+ */
+function checkGeneratedDocs(): void {
+  const r = spawnSync("node", [join(HERE, "gen-docs.ts"), "--check"], { encoding: "utf8", cwd: TOP });
+  if (r.status === 0) {
+    ok("文档生成区块最新", "3 处（03 门表 / 质量门禁总纲 / PR 模板）");
+    return;
+  }
+  if (r.status === 2) {
+    bad("生成物", `gen-docs.ts 无法运行：${(r.stderr || "").trim().split("\n").slice(0, 3).join(" / ")}`);
+    return;
+  }
+  // 过期：stderr 里每行 `    <file>  [<id>]` 是被判定过期的目标
+  const stale = (r.stderr || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.includes("[") && l.includes("]") && l.includes(".md"));
+  bad("生成物", "文档里的门号清单与 gates.yaml 不一致，跑 `node scripts/redline/gen-docs.ts` 重新生成");
+  for (const s of stale) bad("生成物", `过期区块：${s}`);
+}
+
+/**
+ * ⑤-b 观察期口径：观测清单在 YAML 一处，日志表头必须与它同序。
+ *
+ * 这条要防的是「列错位」——不是文件不存在那种明显故障，而是：
+ *   加了一个观察指标却没改日志表头 → 新数据插到旧列下，每列的数字都还是数字，
+ *   看起来完全正常，但那一列的含义变了。观察期数据是用来判断「该不该升 error」的，
+ *   列错位等于用错的数据做决定。
+ *
+ * 2026-11-04 还发生过另一种失效：日志被归档到 archive/，而采集脚本仍写活跃区路径，
+ * 于是 `--append` 打印「跳过追加」并 exit 0 —— 7 天一行数据没落，没人发现。
+ * 所以这里也检查文件存在性。
+ */
+function checkObservations(doc: YamlMap, ids: Set<string>): void {
+  let o: YamlMap;
+  try {
+    o = asMap(doc.observations, "observations");
+  } catch {
+    bad("观察口径", "缺 observations 段 —— 采集脚本拒绝在无声明的情况下采数据");
+    return;
+  }
+
+  const docPath = asStr(o.doc, "observations.doc");
+  if (docPath === "") {
+    bad("观察口径", "observations.doc 为空，采集无处落盘");
+    return;
+  }
+  const full = join(TOP, docPath);
+  if (!existsSync(full)) {
+    bad("观察口径", `observations.doc 指向的文件不存在：${docPath}（采集 --append 会失败）`);
+    return;
+  }
+
+  const metricKeys = (v: YamlValue | undefined, ctx: string): string[] => {
+    if (v === undefined) return [];
+    return asList(v, ctx).map((item) => {
+      const m = asMap(item, ctx);
+      const key = asStr(m.key, `${ctx}[].key`);
+      if (!ids.has(key)) bad("观察口径", `${ctx} 引用了不存在的门 ${key}`);
+      return key;
+    });
+  };
+  const upg = metricKeys(o.upgrade_candidates, "observations.upgrade_candidates");
+  const ref = metricKeys(o.reference, "observations.reference");
+  if (upg.length === 0) bad("观察口径", "upgrade_candidates 为空 —— 没有观察对象的采集没有意义");
+
+  // 表头比对：定位 `## 2 采集记录` 段里的第一行表格
+  const text = readFileSync(full, "utf8");
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => /^## 2 /.test(l));
+  if (start < 0) {
+    bad("观察口径", `${docPath} 里找不到「## 2 采集记录」段（采集行无处插入）`);
+    return;
+  }
+  const header = lines.slice(start).find((l) => l.startsWith("|"));
+  if (header === undefined) {
+    bad("观察口径", `${docPath} 的「## 2 采集记录」段里没有表格`);
+    return;
+  }
+  const cols = header
+    .split("|")
+    .slice(1, -1)
+    .map((c) => c.trim().replace(/\*$/, "")); // `R16*` 的星号是脚注标记，不参与比较
+
+  const expected = ["采集时间", "范围", "commits", ...upg, ...ref, "Micro-exempt", "UI_GATE=off"];
+  if (cols.join("\u0000") === expected.join("\u0000")) {
+    ok("观察日志表头对齐", `${cols.length} 列，与 observations 声明同序`);
+    return;
+  }
+  bad(
+    "观察口径",
+    `日志表头与 observations 声明不一致 —— 实得 [${cols.join(" | ")}]，应为 [${expected.join(" | ")}]`,
+  );
 }
 
 function main(): number {
@@ -624,9 +728,12 @@ function main(): number {
   }
   ok("已知分歧登记", `${divergenceOk} 条，均带台账号`);
 
+  // ---------- ⑤ 生成物与观察口径（S4）----------
+  checkGeneratedDocs();
+  checkObservations(doc, ids);
+
   // ---------- 汇报 ----------
-  const out: string[] = [];
-  for (const p of passes) out.push(`  ✓ ${p}`);
+  const out: string[] = [];  for (const p of passes) out.push(`  ✓ ${p}`);
   if (notes.length > 0) {
     out.push("");
     for (const n of notes) out.push(`  · ${n}`);

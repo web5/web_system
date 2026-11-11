@@ -60,14 +60,31 @@ interface Finding {
   desc: string;
   loc: string;
   content: string;
+  /**
+   * 该条命中属于哪个门条目（`sub ?? id`）。
+   *
+   * 为什么不能直接用 `rule` 统计：`rule` 是**展示用的门号**，一号两义的门会撞在一起
+   * —— R2.secret-file 与 R2.cred 都打印 `[R2]`，按 rule 计数会把两门合成一个数。
+   * 采集口径（collect-gate-observations.sh）要回答「哪一道门命中几次」，必须按条目算。
+   */
+  key: string;
 }
 
 const errors: Finding[] = [];
 const warnings: Finding[] = [];
 const notices: Finding[] = [];
 
+/**
+ * 当前正在执行的门条目 key，由各门入口设置，emitRule 自动读取。
+ *
+ * 为什么用上下文变量而不是给 emitRule 加参数：29 个调用点分散在 23 个门函数里，
+ * 逐个补参数既容易漏（漏的那个门在采集口径里被算到上一道门头上），也把 diff 摊得到处都是。
+ * 门是**串行**执行的（一次只跑一道），所以上下文变量不会串味。
+ */
+let CUR_KEY = "";
+
 function emitRule(level: Level, rule: string, desc: string, loc: string, content: string): void {
-  const f: Finding = { level, rule, desc, loc, content };
+  const f: Finding = { level, rule, desc, loc, content, key: CUR_KEY === "" ? rule : CUR_KEY };
   if (level === "error") errors.push(f);
   else if (level === "warning") warnings.push(f);
   else notices.push(f);
@@ -116,9 +133,7 @@ function render(): number {
     }
   }
 
-  let code = 0;
-  if (errors.length > 0) code = 1;
-  else if (warnings.length > 0 && strict) code = 1;
+  const code = exitCode();
 
   out.push(
     code === 0
@@ -127,6 +142,68 @@ function render(): number {
   );
   process.stdout.write(out.join("\n") + "\n");
   return code;
+}
+
+/** 退出码契约：0=通过，1=有 error（或 --strict 下有 warning）。与 legacy bash 完全一致。 */
+function exitCode(): number {
+  if (errors.length > 0) return 1;
+  if (warnings.length > 0 && strict) return 1;
+  return 0;
+}
+
+/**
+ * 结构化观察输出（`--obs-json`），供 collect-gate-observations.sh 消费。
+ *
+ * 🔴 为什么必须由引擎直接给结构化数据，而不是让采集端 grep 输出文本：
+ *   文本是给人看的，措辞为可读性随时会改（2026-11-11 切主时就改过一次）。
+ *   采集端如果靠 `grep -cE "^[[:space:]]+\[R13\]"` 反解，改一次文案就静默数错 ——
+ *   不报错、不崩溃，只是数字慢慢偏离真相，而观察期数据正是用来判断「该不该升 error」的。
+ *
+ * 键用「门条目」（`sub ?? id`）而不是展示门号：R2.secret-file 与 R2.cred 都打印 `[R2]`，
+ * 按门号统计会把两门合成一个数，采集口径就不是「每道门命中几次」了。
+ *
+ * 全部条目都出现在结果里（没命中记 0），采集端不需要自己补零；
+ * 也能直接看出「哪道门一次都没报」，这是「该不该退场」的信号之一。
+ */
+/**
+ * 解析 `observations` 段。缺失时返回 null（采集脚本会据此报错，而不是偷偷采一批空数据）。
+ *
+ * 这里刻意不设默认值：观察指标是「升 error 的判断依据」，配错了应当立刻发现，
+ * 而不是回落到某个内置清单 —— 那样日志列序会静默错位，数据看起来正常但列是错的。
+ */
+function parseObservations(raw: YamlValue | undefined): ObsSpec | null {
+  const m = asMapOrNull(raw);
+  if (m === null) return null;
+  const pick = (v: YamlValue | undefined): ObsMetric[] => {
+    if (!Array.isArray(v)) return [];
+    return v.map((item) => {
+      const im = asMap(item, "observations[]");
+      return { key: asStr(im.key, "observations[].key"), title: asStr(im.title, "observations[].title") };
+    });
+  };
+  return {
+    doc: asStr(m.doc, "observations.doc"),
+    upgradeCandidates: pick(m.upgrade_candidates),
+    reference: pick(m.reference),
+  };
+}
+
+function buildObs(range: string): string {
+  const gates: Record<string, number> = {};
+  for (const g of SPEC.gates) gates[g.key] = 0;
+  for (const f of [...errors, ...warnings, ...notices]) {
+    gates[f.key] = (gates[f.key] ?? 0) + 1;
+  }
+  return JSON.stringify(
+    {
+      range,
+      totals: { error: errors.length, warning: warnings.length, notice: notices.length },
+      gates,
+      observations: SPEC.observations,
+    },
+    null,
+    2,
+  );
 }
 
 // ============================================================
@@ -232,10 +309,27 @@ interface GateSpec {
   raw: YamlMap;
 }
 
+interface ObsMetric {
+  key: string;
+  title: string;
+}
+
+/**
+ * 观察期指标声明（gates.yaml 的 `observations` 段）。
+ * 采集脚本 grep 输出去反解门号的时代结束了：要采哪些门、按什么顺序、落在哪个文件，
+ * 全在这一份声明里，`--obs-json` 直接把它连同计数一起输出。
+ */
+interface ObsSpec {
+  doc: string;
+  upgradeCandidates: ObsMetric[];
+  reference: ObsMetric[];
+}
+
 interface Spec {
   gates: GateSpec[];
   byKey: Map<string, GateSpec>;
   scopes: Map<string, string[]>;
+  observations: ObsSpec | null;
 }
 
 function asMap(v: YamlValue, ctx: string): YamlMap {
@@ -306,7 +400,7 @@ function loadSpec(): void {
     scopes.set(name, strList(asMap(v, `scopes.${name}`).include));
   }
 
-  SPEC = { gates, byKey, scopes };
+  SPEC = { gates, byKey, scopes, observations: parseObservations(doc.observations) };
 
   const ex = asMap(doc.exemption, "exemption");
   const q = asMap(ex.quality, "exemption.quality");
@@ -669,8 +763,35 @@ function lineGatesFor(file: string, line: string, lineNo: string): void {
       if (seenR5.has(g.message)) continue;
       seenR5.add(g.message);
     }
+    CUR_KEY = g.key;
     emitRule(g.level, g.id, g.message, `${file}:${lineNo}`, line);
   }
+}
+
+// 路径判据命中：`match_re` 走正则、`match_path` 走 glob。
+//
+// 🔴 这两个字段为什么必须分开（2026-11-11 切主后发现的真实漏报）：
+//   bash 里 R2.secret-file 用的是 `[[ "$file" =~ (^|/)[^/]*\.(pem|key|crt|cert)$ ]]` —— **正则**；
+//   其余门（R5/R8/R9b/R13…）用的是 `case` 的 glob 分支 —— **glob**。
+//   S1 把它们统一写成 `match_path` 后，引擎一律按 glob 解释：`(^|/)` 中的括号被转义成字面量，
+//   于是 `.env` 和证书文件**一条都不报**。
+//
+//   为什么影子比对没抓到：R2.secret-file 当时零用例（台账 #8256）。两个引擎在没人测过的
+//   分支上一样地错，逐字节比对自然全绿 —— 这是「影子比对只能证明两者相同、不能证明两者都对」
+//   的实例。补用例才是唯一能发现它的手段。
+//
+// ⚠️ 本注释不要写成块注释：下面提到的 glob 里含「星号+斜杠」，会提前终止块注释。
+function triggerPathHit(t: YamlMap, file: string): boolean {
+  const re = typeof t.match_re === "string" ? t.match_re : "";
+  if (re !== "") return cachedRe(re, "").test(file);
+  const glob = typeof t.match_path === "string" ? t.match_path : "";
+  if (glob !== "") return matchGlob(glob, file);
+  return false;
+}
+
+/** 该 trigger 是否声明了路径判据（两个字段都没有 = 不按路径过滤） */
+function hasPathCondition(t: YamlMap): boolean {
+  return typeof t.match_re === "string" || typeof t.match_path === "string";
 }
 
 /** 文件级门：R2.secret-file / R5.main-cors / R8。bash 里 main.ts 只判一次（_MAINTS_SEEN） */
@@ -680,13 +801,15 @@ function fileGatesFor(file: string): void {
   const r2 = SPEC.byKey.get("R2.secret-file");
   if (r2 !== undefined) {
     const t = r2.trigger;
-    if (typeof t.match_path === "string" && matchGlob(t.match_path, file)) {
+    if (hasPathCondition(t) && triggerPathHit(t, file)) {
+      CUR_KEY = r2.key;
       emitRule(r2.level, r2.id, r2.message, file, "证书/私钥文件不应提交");
     }
     const alt = asMapOrNull(t.alt);
-    if (alt !== null && typeof alt.match_path === "string" && matchGlob(alt.match_path, file)) {
+    if (alt !== null && hasPathCondition(alt) && triggerPathHit(alt, file)) {
       const ex = strList(alt.exclude_paths);
       if (!(ex.length > 0 && matchAnyGlob(ex, file))) {
+        CUR_KEY = r2.key;
         emitRule(r2.level, r2.id, r2.message, file, ".env* 不应提交（.gitignore 已兜底）");
       }
     }
@@ -707,6 +830,7 @@ function fileGatesFor(file: string): void {
   if (mainGate !== undefined) {
     const m = strOr(mainGate.trigger.file_contains, "");
     if (m !== "" && cachedRe(m, "").test(text)) {
+      CUR_KEY = mainGate.key;
       emitRule(mainGate.level, mainGate.id, mainGate.message, file, strOr(mainGate.raw.hint, ""));
     }
   }
@@ -714,6 +838,7 @@ function fileGatesFor(file: string): void {
     const has = strOr(r8.trigger.file_contains, "");
     const not = strOr(r8.trigger.file_not_contains, "");
     if (has !== "" && text.includes(has) && !(not !== "" && text.includes(not))) {
+      CUR_KEY = r8.key;
       emitRule(r8.level, r8.id, r8.message, file, strOr(r8.raw.hint, ""));
     }
   }
@@ -813,7 +938,7 @@ function pathExistsAnywhere(sha: string, p: string, base: string): boolean {
  * 🔴 2026-11-11 切主时又发现第二层问题：只摊平成「名字列表」还不够 ——
  * 那份实现丢了 value，于是 `- path_exists_anywhere: false` 也照样生效（只看键在不在）。
  * 切主后 gates.yaml 是唯一判据来源，**写 false 必须真的是关掉**，否则声明就是假的
- * （变异测试 cases/mutation-yaml.sh 会把它抓成「变异未被捕获」）。
+ * （变异测试 mutation-gen.ts 的 `credential.checks` 变异器会把它抓成「未被捕获」）。
  * 这里保留 value 原样：布尔型按 true 判，字符串型（如 must_be_ancestor_of: commit^）按非空判。
  */
 function checkMap(cred: YamlMap): Map<string, YamlValue> {
@@ -921,6 +1046,7 @@ let SNAP: Snapshot;
 
 function runR9(): void {
   const g = gate("R9");
+  CUR_KEY = g.key;
   const newPages: string[] = [];
   let passport = 0;
   for (const f of SNAP.rangeFiles) {
@@ -955,6 +1081,7 @@ function runR9(): void {
 
 function runR9b(): void {
   const g = gate("R9b");
+  CUR_KEY = g.key;
   let passport = 0;
   const uiFiles: string[] = [];
   for (const f of SNAP.rangeFiles) {
@@ -1012,6 +1139,7 @@ function runR9b(): void {
 /** R10：UI commit 的 Proto 必须是祖先（sha 语义，与其它凭证门的「路径存在」不同） */
 function runR10(): void {
   const g = gate("R10");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     if (!c.files.some((f) => isUiFile(f.path))) continue;
     if (exemptForGate(c, "R10", "")) continue;
@@ -1048,6 +1176,7 @@ function runR10(): void {
 /** R11：两个分支（UI commit 只认 pass；spec commit 校验报告内容），只有 UI 分支可豁免 */
 function runR11(): void {
   const g = gate("R11");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     const isui = c.files.some((f) => isUiFile(f.path));
     const dval = trailerValue(c.body, "Design");
@@ -1100,6 +1229,7 @@ function runCredentialGates(keys: string[]): void {
   for (const c of SNAP.commits) {
     if (c.isMerge) continue; // bash: --no-merges
     for (const g of specs) {
+      CUR_KEY = g.key;
       if (!commitTriggerHit(g, c, SNAP.range)) continue;
       if (exemptForGate(c, g.id, "，请按 §3.7 补可审计理由")) continue;
       credentialCheck(g, c);
@@ -1109,6 +1239,7 @@ function runCredentialGates(keys: string[]): void {
 
 function runR19(): void {
   const g = gate("R19");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     if (c.isMerge) continue;
     if (c.files.length !== 0) continue;
@@ -1119,6 +1250,7 @@ function runR19(): void {
 /** R12：两处应同源的路径比对 */
 function runR12(): void {
   const g = gate("R12");
+  CUR_KEY = g.key;
   const pair = asMapOrNull(g.trigger.compare_pair);
   if (pair === null) return;
   const src = strOr(pair.src, "");
@@ -1224,6 +1356,7 @@ function readSwitch(g: GateSpec): { mode: string; skipScanModes: string[] } {
 /** R11b / R16：判定在 python 辅助脚本里，引擎只按同一口径翻译结果 */
 function runDelegated(key: string, args: string[], levels: string[], scanMode: string): void {
   const g = gate(key);
+  CUR_KEY = g.key;
   // 档位是"整道门"级别的：skip → 连 python 都不用跑（bash 同样先 return，保持一致）
   let mode = "";
   if (g.raw.level_switch !== undefined && g.raw.level_switch !== null) {
@@ -1379,14 +1512,24 @@ function main(argv: string[]): number {
   let mode = "";
   const modeArgs: string[] = [];
   let maxCommits = process.env.SCAN_MAX_COMMITS ?? "300";
+  let obsJson = false;
+  /** 供 --obs-json 标注数据口径；非 diff/cached 模式留空 */
+  let scannedRange = "";
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--strict") strict = true;
     else if (a === "--no-color") color = false;
+    else if (a === "--obs-json") obsJson = true;
     else if (a === "--max-commits") maxCommits = argv[++i] ?? "";
     else if (a === "-h" || a === "--help") {
-      process.stdout.write("用法: gate.ts [--strict] [--no-color] [--max-commits N] <cached|diff <range>|files <path...>|tree [dir]>\n");
+      process.stdout.write(
+        [
+          "用法: gate.ts [--strict] [--no-color] [--max-commits N] [--obs-json] <cached|diff <range>|files <path...>|tree [dir]>",
+          "  --obs-json  按门条目输出 JSON 计数（供采集脚本消费），不打印人类可读报告",
+          "",
+        ].join("\n"),
+      );
       return 0;
     } else if (a.startsWith("--")) {
       process.stderr.write(`未知选项: ${a}\n`);
@@ -1414,6 +1557,7 @@ function main(argv: string[]): number {
 
   switch (mode) {
     case "cached":
+      scannedRange = "--cached";
       scanDiffRange("--cached");
       break;
     case "diff": {
@@ -1422,6 +1566,7 @@ function main(argv: string[]): number {
         return 2;
       }
       const range = modeArgs[0];
+      scannedRange = range;
       const left = range.includes("..") ? range.slice(0, range.indexOf("..")) : range;
       if (spawnSync("git", ["rev-parse", "--verify", "--quiet", left], { encoding: "utf8" }).status !== 0) {
         process.stderr.write(
@@ -1474,6 +1619,13 @@ function main(argv: string[]): number {
     default:
       process.stderr.write("用法: gate.ts <cached|diff <range>|files <path...>|tree [dir]>\n");
       return 2;
+  }
+
+  // --obs-json：只出结构化计数，不打印人类可读报告。
+  // 仍然走完整引擎（判定逻辑一分不减），否则采集到的数就不是「门禁真会报几条」。
+  if (obsJson) {
+    process.stdout.write(buildObs(scannedRange) + "\n");
+    return exitCode();
   }
 
   const code = render();

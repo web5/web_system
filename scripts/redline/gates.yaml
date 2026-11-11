@@ -53,6 +53,15 @@ conventions:
     separator: ":"
   # merge commit 一律不进 commit 级判定（合并语义不等于改动）
   skip_merges: true
+  # 🔴 路径匹配的两个字段，语义不同，不要混用：
+  #   match_path   = glob（`*` **跨 `/`**，与 bash `case` 同义，不是 gitignore/minimatch 语义）
+  #   match_re     = 正则（POSIX ERE → JS，不认识的字符类直接报错，不静默不匹配）
+  # 2026-11-11 切主后发现：R2.secret-file 的两条路径判据在 bash 里是 `[[ =~ ]]` 正则，
+  #   但 YAML 写成 match_path 后引擎按 glob 处理 → `(^|/)` 变成字面量 → **.env 与证书文件
+  #   完全不报**。R2.secret-file 恰好零用例，影子比对因此一直是绿的（两个引擎一样地错）。
+  path_match:
+    glob: match_path
+    regex: match_re
 
 # ---------------- 豁免机制（横跨 8 道门） ----------------
 # 语义全部来自 gate-shared.sh §1；R9b 自己内联了一份同口径循环（历史包袱）
@@ -149,9 +158,10 @@ gates:
     stage: file
     batch: 3
     trigger:
-      match_path: '(^|/)[^/]*\.(pem|key|crt|cert)$'
+      # 正则而非 glob：bash 原文是 `[[ "$file" =~ (^|/)[^/]*\.(pem|key|crt|cert)$ ]]`
+      match_re: '(^|/)[^/]*\.(pem|key|crt|cert)$'
       alt:
-        match_path: '(^|/)\.env($|\.)'
+        match_re: '(^|/)\.env($|\.)'
         exclude_paths: ["*.example*"]
     credential: null
     exempt: false
@@ -161,7 +171,8 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["line-r2-secret-env", "line-r2-secret-pem", "line-r2-secret-example"]
+    evidence_note: 2026-11-11 切主后补。此前零用例，而 gate.ts 把 match_path 当 glob 处理导致 .env/证书文件完全不报，影子比对因无用例覆盖而一直绿
 
   - id: R2
     sub: R2.cred
@@ -790,6 +801,34 @@ gates:
     evidence: []
 
 # ============================================================
+# 观察期指标（collect-gate-observations.sh 的唯一配置来源）
+#
+# 为什么放这里：这些门号的清单以前硬编码在采集脚本里，加一道凭证门要改脚本；
+#   日志表头的列序又写在 markdown 里，两者对不上就静默错位（数据看起来正常，实际列错了）。
+#   现在清单在 YAML 一处，采集脚本读它、gates-lint 校验日志表头与它一致。
+#
+# upgrade_candidates = 升 error 前必须有真实数据的门（观察对象）
+# reference          = 不参与升级判断、只看趋势的参考指标
+# 列序即 YAML 顺序 —— 日志表头的列必须按这个次序排。
+# ============================================================
+observations:
+  doc: docs/development/gate-observation-log.md
+  upgrade_candidates:
+    - key: R13
+      title: 契约面
+    - key: R14
+      title: 发布面
+    - key: R15
+      title: 独立代码评审
+    - key: R17
+      title: 测试用例
+    - key: R18
+      title: 研发方案清单
+  reference:
+    - key: R16
+      title: SSE 契约一致
+
+# ============================================================
 # 已知分歧（记录现状，不是"应该是这样"）
 # 每条必须带台账号 —— 没有台账号的分歧等于没人管
 # ============================================================
@@ -823,10 +862,6 @@ known_divergences:
 # 每条：哪个门 / 缺什么 / 补齐顺序理由
 # ============================================================
 uncovered:
-  - gate: R2
-    sub: R2.secret-file
-    missing: .env 入库的阳性用例
-    reason: 夹具里提交 .env 需要绕过 .gitignore，成本高于价值
   - gate: R3
     sub: R3.weak
     missing: TEMP/TBD 弱占位阳性

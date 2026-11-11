@@ -1,0 +1,43 @@
+# 判据变异已知缺口基线（生成式变异测试的存量债）
+#
+# 每行 = 一个「判据改坏了但用例没发现」的组合：<门条目>	<变异器名>
+# 这不是许可清单：补了用例就从这里删掉，mutation-gen 会提示哪些行已经可移除。
+# 重新生成：node scripts/redline/mutation-gen.ts --write-baseline
+R1	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R1	trigger.skip_comment_line 反转
+R10	credential.trailer 改名（凭证读不到）
+R10	exempt: true → false
+R10	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R10	trigger.status 换成不存在的状态字母
+R11	credential.accept 去掉 path 分支
+R11	credential.checks 路径存在性改 false
+R11	credential.checks 阻塞归零改 false
+R11	credential.trailer 改名（凭证读不到）
+R11	exempt: true → false
+R11	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R13	credential.checks 阻塞归零改 false
+R13	exempt: true → false
+R14	credential.accept 去掉 path 分支
+R14	credential.checks 路径存在性改 false
+R14	credential.checks 阻塞归零改 false
+R14	credential.trailer 改名（凭证读不到）
+R14	exempt: true → false
+R15	credential.accept 去掉 path 分支
+R15	credential.checks 路径存在性改 false
+R15	credential.checks 阻塞归零改 false
+R15	credential.trailer 改名（凭证读不到）
+R15	exempt: true → false
+R17	exempt: true → false
+R18	credential.accept 去掉 path 分支
+R18	credential.checks 路径存在性改 false
+R18	credential.checks 阻塞归零改 false
+R18	credential.trailer 改名（凭证读不到）
+R18	exempt: true → false
+R2.cred	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R2.cred	trigger.skip_comment_line 反转
+R23	credential.checks 阻塞归零改 false
+R23	exempt: true → false
+R3.placeholder	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R4.any	trigger.scope 换成另一个合法 scope（匹配面变窄）
+R4.any	trigger.skip_comment_line 反转
+R5.enable-cors	trigger.skip_comment_line 反转
