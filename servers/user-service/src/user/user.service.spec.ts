@@ -319,3 +319,51 @@ describe('UserService avatar 写侧净化', () => {
     expect(saved.nickname).toBe('新昵称');
   });
 });
+
+/**
+ * 2026-11-12：P1 安全修复 —— create/update 返回值不含 password 哈希。
+ *
+ * 背景：POST /users、PUT /users/:id、PUT /users/me 把 save() 后的完整实体
+ * 原样当响应体，bcrypt 哈希随响应泄出。修复后 service 返回值恒定剥 password
+ * （与 findAll/findOne 同口径），本块钉住该契约。
+ */
+describe('UserService 响应脱敏（返回值不含 password）', () => {
+  function makeRepo(user: unknown) {
+    return {
+      findOne: jest.fn(async () => user),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async (x: unknown) => x),
+      findAndCount: jest.fn(),
+      remove: jest.fn(),
+    };
+  }
+
+  it('create：返回值不含 password 字段', async () => {
+    const repo = makeRepo(null);
+    const svc = new UserService(repo as never, passthroughBaseUrl as never);
+
+    const created = await svc.create({ username: 'newbie', password: 'plain123' } as never);
+
+    expect(created).not.toHaveProperty('password');
+    expect(created).toMatchObject({ username: 'newbie' });
+  });
+
+  it('update：返回值不含 password 字段', async () => {
+    const repo = makeRepo({ id: 3, username: 'wx_user', roles: ['user'], password: 'hashed', tokenVersion: 0 });
+    const svc = new UserService(repo as never, passthroughBaseUrl as never);
+
+    const updated = await svc.update('3', { nickname: '新昵称' } as never);
+
+    expect(updated).not.toHaveProperty('password');
+    expect(updated).toMatchObject({ id: 3, nickname: '新昵称' });
+  });
+
+  it('update：改密场景返回值同样不含 password', async () => {
+    const repo = makeRepo({ id: 3, username: 'wx_user', roles: ['user'], password: 'oldhash', tokenVersion: 0 });
+    const svc = new UserService(repo as never, passthroughBaseUrl as never);
+
+    const updated = await svc.update('3', { password: 'newpass456' } as never);
+
+    expect(updated).not.toHaveProperty('password');
+  });
+});

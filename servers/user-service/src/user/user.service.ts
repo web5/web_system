@@ -123,7 +123,16 @@ export class UserService {
     return this.userRepository.findOne({ where: { username } });
   }
 
-  async create(userData: Partial<User>): Promise<User> {
+  /**
+   * 响应脱敏：任何流出本 service、最终进入 HTTP 响应体的用户对象都不含 password。
+   * 与 findAll/findOne 同一写法（JSON 往返剥键），2026-11-12 P1 安全修复。
+   */
+  private stripPassword(user: User): Omit<User, 'password'> {
+    const { password: _pwd, ...safeUser } = JSON.parse(JSON.stringify(user));
+    return safeUser;
+  }
+
+  async create(userData: Partial<User>): Promise<Omit<User, 'password'>> {
     const data = { ...(await this.sanitizeAvatar(userData)) };
     // 统一哈希：admin 用户管理「新增用户」若带密码，落库前必须 bcrypt 哈希，
     // 否则登录端 bcrypt.compare 永远失败（历史隐患：此处曾直接存明文）。
@@ -132,13 +141,13 @@ export class UserService {
     }
     const user = this.userRepository.create(data);
     try {
-      return await this.userRepository.save(user);
+      return this.stripPassword(await this.userRepository.save(user));
     } catch (e) {
       throw toDupError(e);
     }
   }
 
-  async update(id: string, userData: Partial<User>): Promise<User> {
+  async update(id: string, userData: Partial<User>): Promise<Omit<User, 'password'>> {
     const user = await this.findById(id);
     // 防剥权（2026-10-29）：前端下拉曾不认识 super_admin，编辑保存会把超管静默降级。
     // 这里是最后一道门：超管角色只能保留；真要摘除由其他超管在数据库层面操作。
@@ -162,7 +171,7 @@ export class UserService {
       user.preferences = { ...(user.preferences ?? {}), ...preferences };
     }
     try {
-      return await this.userRepository.save(user);
+      return this.stripPassword(await this.userRepository.save(user));
     } catch (e) {
       throw toDupError(e);
     }

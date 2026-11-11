@@ -32,14 +32,7 @@ import { AccountModule } from './account/account.module';
           // ⚠️ 不能写 `{ url: REDIS_URL }` —— ioredis 不解析 options.url，host/port 会
           // 静默回落到 localhost:6379（线上因此 594+ 次 ECONNREFUSED）。必须拆成连接参数，
           // 见 ./config/redis-options.ts 的说明。
-          config: {
-            ...redisOptionsFromUrl(
-              configService.get('REDIS_URL') || 'redis://localhost:6379',
-            ),
-            retryStrategy(times: number) {
-              return Math.min(times * 100, 3000);
-            },
-          },
+          config: redisOptionsFromUrl(configService.get<string>('REDIS_URL')),
         };
       },
     }),

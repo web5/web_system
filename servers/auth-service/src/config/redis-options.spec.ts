@@ -1,61 +1,101 @@
 import { redisOptionsFromUrl } from './redis-options';
 
-describe('redisOptionsFromUrl', () => {
-  it('拆出 host/port/password（线上真实形状，密码含百分号编码）', () => {
-    // 线上 .env 里的值：密码 gn%!CTvZNP0e4%Lc，其中 % 编码成 %25
-    const opts = redisOptionsFromUrl('redis://:gn%25!CTvZNP0e4%25Lc@172.16.0.8:6379');
+const VALID_URL = 'redis://:test-password@cache.test.invalid:6379';
 
-    expect(opts.host).toBe('172.16.0.8');
+describe('redisOptionsFromUrl', () => {
+  it('拆出 host/port/password，并解码百分号', () => {
+    const opts = redisOptionsFromUrl('redis://:pw%25-test@cache.test.invalid:6379');
+
+    expect(opts.host).toBe('cache.test.invalid');
     expect(opts.port).toBe(6379);
-    // ⚠️ new URL() 不对 redis: 这种非特殊 scheme 解码，需本函数自己解（与 ioredis parseURL 同口径）
-    expect(opts.password).toBe('gn%!CTvZNP0e4%Lc');
+    expect(opts.password).toBe('pw%-test');
   });
 
   it('密码含裸百分号（非法转义）时不抛错、原样透传', () => {
-    expect(() => redisOptionsFromUrl('redis://:pw%zz@10.0.0.1:6379')).not.toThrow();
-    expect(redisOptionsFromUrl('redis://:pw%zz@10.0.0.1:6379').password).toBe('pw%zz');
+    expect(redisOptionsFromUrl('redis://:pw%zz@cache.test.invalid:6379').password).toBe('pw%zz');
   });
 
   it('pathname 带 db 时解析出 db', () => {
-    expect(redisOptionsFromUrl('redis://:pw@10.0.0.1:6380/2')).toMatchObject({
-      host: '10.0.0.1',
+    expect(redisOptionsFromUrl('redis://:test-password@cache.test.invalid:6380/2')).toMatchObject({
+      host: 'cache.test.invalid',
       port: 6380,
-      password: 'pw',
+      password: 'test-password',
       db: 2,
     });
   });
 
   it('没有 db / 用户名的 URL 不写这些字段', () => {
-    const opts = redisOptionsFromUrl('redis://10.0.0.1:6379');
+    const opts = redisOptionsFromUrl('redis://cache.test.invalid:6379');
 
-    expect(opts.host).toBe('10.0.0.1');
+    expect(opts.host).toBe('cache.test.invalid');
     expect(opts.db).toBeUndefined();
     expect(opts.username).toBeUndefined();
     expect(opts.password).toBeUndefined();
   });
 
-  it('省略端口时用 6379', () => {
-    expect(redisOptionsFromUrl('redis://cache.internal')).toMatchObject({
-      host: 'cache.internal',
+  it('省略端口时用 Redis 协议默认端口，而不是 localhost 缺省', () => {
+    expect(redisOptionsFromUrl('redis://cache.test.invalid')).toMatchObject({
+      host: 'cache.test.invalid',
       port: 6379,
     });
   });
 
   it('rediss:// 带 tls', () => {
-    const opts = redisOptionsFromUrl('rediss://:pw@secure.internal:6380');
+    const opts = redisOptionsFromUrl('rediss://:test-password@secure.test.invalid:6380');
 
-    expect(opts.host).toBe('secure.internal');
+    expect(opts.host).toBe('secure.test.invalid');
     expect(opts.tls).toEqual({});
   });
 
-  it('非法 URL 回落到 localhost:6379（不抛错，启动不该被配置写坏打断）', () => {
-    expect(redisOptionsFromUrl('不是URL')).toEqual({ host: 'localhost', port: 6379 });
+  it.each([undefined, ''])('V2：缺失配置 %s 必须 fail-fast', (rawUrl) => {
+    expect(() => redisOptionsFromUrl(rawUrl as string)).toThrow('Redis 配置缺失');
   });
 
-  it('⭐ 回归：绝不能产出 url 字段 —— ioredis 不解析它，会静默连本机', () => {
-    const opts = redisOptionsFromUrl('redis://:pw@172.16.0.8:6379') as Record<string, unknown>;
+  it.each([
+    'not-a-url',
+    'https://cache.test.invalid:6379',
+    'redis:///0',
+    'redis://cache.test.invalid:6379/not-a-db',
+    'redis://cache.test.invalid:6379/-1',
+    'redis://cache.test.invalid:6379/0/extra',
+  ])('V2：非法配置必须 fail-fast，且错误不回显配置值：%s', (rawUrl) => {
+    let thrown: unknown;
+    try {
+      redisOptionsFromUrl(rawUrl);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('Redis 配置非法');
+    expect((thrown as Error).message).not.toContain(rawUrl);
+  });
+
+  it('V3：连接、命令与离线队列都有明确上界', () => {
+    const opts = redisOptionsFromUrl(VALID_URL);
+
+    expect(opts).toMatchObject({
+      connectTimeout: 1000,
+      commandTimeout: 800,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    expect(opts.retryStrategy).toEqual(expect.any(Function));
+  });
+
+  it('V3：保留后台重连，退避上限 1000ms', () => {
+    const retryStrategy = redisOptionsFromUrl(VALID_URL).retryStrategy!;
+
+    expect(retryStrategy(1)).toBe(100);
+    expect(retryStrategy(2)).toBe(200);
+    expect(retryStrategy(10)).toBe(1000);
+    expect(retryStrategy(100)).toBe(1000);
+  });
+
+  it('回归：绝不能产出 url 字段——ioredis 不解析它，会静默连本机', () => {
+    const opts = redisOptionsFromUrl(VALID_URL) as Record<string, unknown>;
 
     expect(opts.url).toBeUndefined();
-    expect(opts.host).toBe('172.16.0.8');
+    expect(opts.host).toBe('cache.test.invalid');
   });
 });

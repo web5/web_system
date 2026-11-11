@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   resolveUserSystems,
@@ -32,6 +33,7 @@ import type {
 
 /** refresh token 有效期（与 generateToken 里 30d 保持一致）：登出黑名单 TTL 需覆盖它 */
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+const AUTH_UNAVAILABLE_MESSAGE = '认证状态暂不可用，请稍后重试';
 
 @Injectable()
 export class AuthService {
@@ -206,6 +208,7 @@ export class AuthService {
 
       return this.generateToken(user);
     } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
       this.logger.warn(
         `Refresh token 验证失败: ${(error as Error)?.message || error}`,
       );
@@ -254,7 +257,9 @@ export class AuthService {
         preferences: user.preferences,
       };
     } catch (error) {
-      if (error instanceof UnauthorizedException) throw error;
+      if (error instanceof UnauthorizedException || error instanceof ServiceUnavailableException) {
+        throw error;
+      }
       throw new UnauthorizedException('令牌无效或已过期');
     }
   }
@@ -280,13 +285,14 @@ export class AuthService {
         await this.redis.set(`bl:sid:${payload.sid}`, '1', 'EX', ttl);
       }
       this.logger.debug(`Token 已加入黑名单，TTL=${ttl}s${payload.sid ? ' (含 sid)' : ''}`);
-    } catch (err: any) {
-      this.logger.warn(`登出黑名单写入失败: ${err.message}`);
+    } catch {
+      this.logger.warn('登出黑名单写入失败：Redis 暂不可用');
+      throw new ServiceUnavailableException(AUTH_UNAVAILABLE_MESSAGE);
     }
   }
 
   /**
-   * 检查 token 是否在黑名单中（Redis 不可用时放行）
+   * 检查 token 是否在黑名单中；查询失败时必须保留故障语义，不得按有效放行。
    */
   async isTokenBlacklisted(token: string): Promise<boolean> {
     try {
@@ -302,9 +308,9 @@ export class AuthService {
       }
       const exists = await this.redis.exists(`bl:${hash}`);
       return exists === 1;
-    } catch (err: any) {
-      this.logger.warn(`黑名单查询失败: ${err.message}`);
-      return false;
+    } catch {
+      this.logger.warn('黑名单查询失败：Redis 暂不可用');
+      throw new ServiceUnavailableException(AUTH_UNAVAILABLE_MESSAGE);
     }
   }
 
