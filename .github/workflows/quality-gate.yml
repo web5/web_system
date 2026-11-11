@@ -1,6 +1,7 @@
 # quality-gate — PR 代码质量门禁（红线扫描 + 改动包 build/test）
 #
-#   redline-scan     : scripts/redline/scan-rules.sh 全量规则（R9–R14）扫 PR 范围
+#   redline-scan     : scripts/redline/gate.ts 按 gates.yaml 判据扫 PR 范围（R9–R14）
+#                      🔴 2026-11-11 切主：原 bash 版 scan-rules.sh 已退场
 #   pipeline-lint    : scripts/pipeline-lint.mjs --scripts scripts（仓库内 .sh 静态体检）
 #   changed-packages : 改动波及子包跑 build(=类型检查)+test（jest --runInBand）
 #
@@ -50,6 +51,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gate.ts 是 TypeScript，用 Node 原生类型剥离执行（无构建产物、无依赖安装）。
+      # 固定 22：类型剥离在 Node 22.6 才稳定可跑，20 会直接语法报错。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: 扫描 PR 范围
         run: |
           # 用 merge-base 取分叉点：pull_request.base.sha 是 base 分支的**当前** HEAD，
@@ -62,7 +69,9 @@ jobs:
             BASE="$(git merge-base origin/master HEAD)"
           fi
           echo "扫描范围: ${BASE}..HEAD（$(git rev-list --count "${BASE}..HEAD") 个 commit）"
-          bash scripts/redline/scan-rules.sh diff "${BASE}..HEAD"
+          # 🔴 切主（S3）：判据来源是 gates.yaml，执行者是 gate.ts。
+          #    退出码 0=通过 1=门禁未过 2=配置/用法错误，三者都视为失败（2 不能当通过）。
+          node scripts/redline/gate.ts diff "${BASE}..HEAD"
 
   pipeline-lint:
     name: 流水线脚本体检（L1/L5/L6/L9）
@@ -187,23 +196,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 显式钉 node 版本：gate.ts 靠 Node 22 原生类型剥离，不能赌 runner 默认。
+      # 切主后 gate.ts 是主执行者，镜像一升级（默认 node 变 20）这套门禁会整体挂掉。
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: 造夹具并逐字节比对
         run: bash scripts/redline/cases/run.sh
 
-      # 声明与实现的漂移检查：gates.yaml 里的触发面必须与 bash 的 case 分支逐个相等。
+      # 声明与实现的漂移检查：gates.yaml 里的触发面与 legacy bash 的 case 分支比对。
       # 为什么放这条 job 而不是别处：它和黄金用例是同一件事的两面 ——
       #   用例证明「行为没变」，lint 证明「声明没撒谎」。少一半都只是半个基线。
-      - name: 校验 gates.yaml 与 bash 一致（声明/实现漂移）
+      # 🔴 切主后语义变了：YAML 是权威、bash 停更，分叉只提示不阻断（见 diffSets 注释）。
+      - name: 校验 gates.yaml（结构 / 漂移 / 用例 / 接线 / 防假切主）
         run: node scripts/redline/gates-lint.ts
 
-      # 影子比对：新引擎（gate.ts）与 bash 在同一组输入上必须输出逐字节一致。
+      # 判据变异测试：故意改坏 gates.yaml 的判据，确认黄金集会红。
       #
-      # 为什么这条不能省：run.sh 只证明「bash 的行为没变」，它完全无法发现
-      #   「新引擎少判了一道门」——重写引入的偏差正是要靠这一步抓。
-      # 实测价值：第一次跑就抓到 gate.ts 把 credential.checks 当字符串读，
-      #   导致所有「报告路径是否存在」的校验被静默跳过（R17 假路径用例假绿）。
-      #   这种bug不会报错、不会崩，只会让门禁变哑。
-      - name: 双引擎影子比对（bash ↔ gate.ts）
+      # 🔴 它测的是「断言有没有真的管着判据」，这是黄金集自己做不到的 ——
+      #   判据写错、expected 也照着错的一起更新时，run.sh 永远绿。
+      # 切主（S3）后判据全在 gates.yaml，所以变异目标换成 YAML 字段；
+      # 旧 mutation-test.sh（变异 bash 源码）的 14 项已随之失效，见该脚本头部说明。
+      - name: 判据变异测试（改坏 YAML 判据，黄金集必须红）
+        run: bash scripts/redline/cases/mutation-yaml.sh
+
+      # 影子比对：gate.ts 与 legacy bash 在同一组输入上逐字节一致。
+      #
+      # 🔴 切主（S3）后这一步从「守门」降为「哨兵」，故 continue-on-error：
+      #   切主前 bash 是权威，两者必须一致 → 不一致就是新引擎走样，必须阻断。
+      #   切主后 YAML 是权威、bash 停更 → 合法改判据必然让两者分叉，阻断它就等于
+      #   要求「改 YAML 同时改 bash」，S3 的「只改 1 处」直接失效。
+      #   留着它是因为：只要没人动 bash，它仍然能抓到「gate.ts 被改坏」。
+      #   gate.ts 的正确性主保仍是上面的黄金用例 + 变异测试（直接测执行结果）。
+      - name: 双引擎影子比对（bash ↔ gate.ts，切主后仅告警）
+        continue-on-error: true
         run: bash scripts/redline/cases/shadow.sh
 
       - name: 失败时给出差异摘要
@@ -212,7 +239,7 @@ jobs:
           echo "期望值在 scripts/redline/cases/expected/，实际差异见上一步输出"
           echo "本地复现：bash scripts/redline/cases/run.sh --keep（保留夹具仓库路径）"
           echo "影子比对失败：bash scripts/redline/cases/shadow.sh --filter <场景id> 定位"
-          echo "若 gates-lint 报漂移：以 bash 为准改 gates.yaml，不要反过来改 bash 去迁就声明"
+          echo "若 gates-lint 报漂移：切主后以 gates.yaml 为准（bash 已退场，不再反向迁就）"
 
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」
   #

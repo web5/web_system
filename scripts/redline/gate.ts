@@ -765,6 +765,23 @@ function trailerValue(body: string, name: string): string {
   return "";
 }
 
+/** 逐门耗时记录（仅 SCAN_PROFILE=1 时填充），单位毫秒 */
+const profTimings: Array<{ label: string; ms: number }> = [];
+
+/**
+ * 跑一道门并计时。SCAN_PROFILE 未开时直接执行，不引入 hrtime 开销
+ * （门禁在 pre-commit 里跑，多几百次 hrtime 也是成本）。
+ */
+function prof(label: string, fn: () => void): void {
+  if (process.env.SCAN_PROFILE !== "1") {
+    fn();
+    return;
+  }
+  const t0 = process.hrtime.bigint();
+  fn();
+  profTimings.push({ label, ms: Number(process.hrtime.bigint() - t0) / 1e6 });
+}
+
 function reportBlocking(sha: string, path: string): number {
   const r = git(["show", `${sha}:${path}`]);
   if (r.status !== 0) return 0;
@@ -791,19 +808,32 @@ function pathExistsAnywhere(sha: string, p: string, base: string): boolean {
 /**
  * credential.checks 在 YAML 里写成「键值对列表」（`- path_exists_in_commit_tree: true`），
  * 不是字符串列表。第一版按字符串读 → 全是 undefined → 所有路径校验被**静默跳过**，
- * R17 假路径用例因此假绿（影子比对抓到）。这里统一摊平成名字列表。
+ * R17 假路径用例因此假绿（影子比对抓到）。
+ *
+ * 🔴 2026-11-11 切主时又发现第二层问题：只摊平成「名字列表」还不够 ——
+ * 那份实现丢了 value，于是 `- path_exists_anywhere: false` 也照样生效（只看键在不在）。
+ * 切主后 gates.yaml 是唯一判据来源，**写 false 必须真的是关掉**，否则声明就是假的
+ * （变异测试 cases/mutation-yaml.sh 会把它抓成「变异未被捕获」）。
+ * 这里保留 value 原样：布尔型按 true 判，字符串型（如 must_be_ancestor_of: commit^）按非空判。
  */
-function checkNames(cred: YamlMap): string[] {
-  const out: string[] = [];
+function checkMap(cred: YamlMap): Map<string, YamlValue> {
+  const out = new Map<string, YamlValue>();
   for (const item of strOrList(cred.checks)) {
     if (typeof item === "string") {
-      out.push(item);
+      out.set(item, true);
       continue;
     }
     const m = asMapOrNull(item as YamlValue);
-    if (m !== null) for (const k of Object.keys(m)) out.push(k);
+    if (m !== null) for (const k of Object.keys(m)) out.set(k, m[k]);
   }
   return out;
+}
+
+/** checks 里的某项是否启用：true 或非空字符串算启用，false / null / 缺省算不启用 */
+function checkOn(checks: Map<string, YamlValue>, name: string): boolean {
+  const v = checks.get(name);
+  if (v === true) return true;
+  return typeof v === "string" && v !== "";
 }
 
 function strOrList(v: YamlValue | undefined): YamlValue[] {
@@ -823,11 +853,28 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     emitRule(g.level, g.id, `${bare} commit 缺评审凭证`, c.subject, strOr(g.raw.hint, ""));
     return;
   }
-  if (tval === "pass") return;
 
-  const checks = checkNames(cred);
+  // 🔴 accept 必须真读。2026-11-11 变异测试实测发现原先是硬编码 `if (tval === "pass") return;`，
+  //    YAML 里 accept 写成什么都不影响行为 —— 那是「声明冒充判据」。切主后 YAML 是权威，
+  //    这类字段必须真的控制判定，否则改 YAML 不生效、查问题会白查半天。
+  const accepts = strList(cred.accept);
+  if (accepts.includes(tval)) return; // 字面量型凭证（pass 等）
 
-  if (checks.includes("path_exists_anywhere")) {
+  // 剩下的取值必须被「路径型」凭证接收，否则属于不受支持的取值
+  if (!accepts.includes("path")) {
+    emitRule(
+      g.level,
+      g.id,
+      strOr(g.raw.message_report_missing, `${trailer} 凭证取值不被接受`),
+      tval,
+      `${trailer}: 只接受 ${accepts.join(" / ")}`,
+    );
+    return;
+  }
+
+  const checks = checkMap(cred);
+
+  if (checkOn(checks, "path_exists_anywhere")) {
     if (!pathExistsAnywhere(c.sha, tval, TOP)) {
       emitRule(
         g.level,
@@ -840,7 +887,7 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     return;
   }
 
-  if (!checks.includes("path_exists_in_commit_tree")) return;
+  if (!checkOn(checks, "path_exists_in_commit_tree")) return;
 
   if (!blobAtPath(c.sha, tval)) {
     emitRule(
@@ -852,7 +899,7 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     );
     return;
   }
-  if (checks.includes("report_header_blocking_zero")) {
+  if (checkOn(checks, "report_header_blocking_zero")) {
     const n = reportBlocking(c.sha, tval);
     if (n > 0) {
       emitRule(
@@ -982,7 +1029,11 @@ function runR10(): void {
       emitRule(g.level, g.id, g.message, c.subject, strOr(g.raw.hint, ""));
       continue;
     }
-    if (git(["merge-base", "--is-ancestor", sha, `${c.sha}^`]).status !== 0) {
+    // `must_be_ancestor_of: commit^` 里的 `commit` 是占位符，换成当前 commit 的 sha。
+    // 2026-11-11 切主前这里是硬编码 `${c.sha}^`，YAML 的 must_be_ancestor_of 只是摆设。
+    const ancSpec = g.credential === null ? "commit^" : strOr(checkMap(g.credential).get("must_be_ancestor_of") as YamlValue, "commit^");
+    const ancRef = ancSpec.replace("commit", c.sha);
+    if (git(["merge-base", "--is-ancestor", sha, ancRef]).status !== 0) {
       emitRule(
         g.level,
         g.id,
@@ -1233,22 +1284,26 @@ function scanOneFile(file: string): void {
 function scanDiffRange(range: string): void {
   SNAP = buildSnapshot(range);
 
-  runR9();
-  runR9b();
-  runR10();
-  runR11();
+  // 逐门计时（SCAN_PROFILE=1 时才有开销）。
+  // 为什么要有「本段」而不只给总耗时：只有累计值时要人做减法才知道哪道门贵 ——
+  // 2026-10-30 bash 版实测靠相邻两行相减才发现 R11 单门吃掉 248s（占 commit 门 35%）。
+  // gate.ts 比 bash 快一个数量级，整数秒会全是 0，故精度取 0.001s。
+  prof("R9", () => runR9());
+  prof("R9b", () => runR9b());
+  prof("R10", () => runR10());
+  prof("R11", () => runR11());
   const scanMode = range === "--cached" ? "cached" : "diff";
   // R11b 档位/是否在 cached 下跳过，全部由 gates.yaml 的 level_switch 决定，这里不再写死
-  runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"], scanMode);
-  runCredentialGates(["R13", "R14"]);
-  runCredentialGates(["R15"]);
-  runCredentialGates(["R17"]);
-  runCredentialGates(["R18"]);
+  prof("R11b", () => runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"], scanMode));
+  prof("R13+R14", () => runCredentialGates(["R13", "R14"]));
+  prof("R15", () => runCredentialGates(["R15"]));
+  prof("R17", () => runCredentialGates(["R17"]));
+  prof("R18", () => runCredentialGates(["R18"]));
   // R23 测试范围决策：命中共享面须交代全量/抽样（判据源 研发流程SOP.md §7）
-  runCredentialGates(["R23"]);
-  runR19();
-  runR12();
-  runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"], scanMode);
+  prof("R23", () => runCredentialGates(["R23"]));
+  prof("R19", () => runR19());
+  prof("R12", () => runR12());
+  prof("R16", () => runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"], scanMode));
 
   if (legacyCount > 0) {
     const g = gate("R21");
@@ -1422,9 +1477,19 @@ function main(argv: string[]): number {
   }
 
   const code = render();
-  // SCAN_PROFILE=1 时把「实际调了多少次 git」打到 stderr —— 这是本次重构的核心指标：
-  // bash 的成本 = 门数 × commit 数 × 每门 2~6 次子进程；这里应该只与「范围大小」弱相关。
+  // SCAN_PROFILE=1 时把耗时打到 stderr（stdout 是判定契约，不能被诊断信息污染）。
+  // 两列：`本段` 定位成本、`累计` 看整体 —— 与 legacy bash 的格式同义，
+  // 唯一差别是精度到 0.001s（gate.ts 太快，整数秒全为 0，看不出东西）。
   if (process.env.SCAN_PROFILE === "1") {
+    let cum = 0;
+    for (const p of profTimings) {
+      cum += p.ms;
+      process.stderr.write(
+        `[prof] ${p.label.padEnd(10)} 本段 +${(p.ms / 1000).toFixed(3)}s / 累计 ${(cum / 1000).toFixed(3)}s\n`,
+      );
+    }
+    // git 子进程数是本次重构的核心指标：bash 的成本 = 门数 × commit 数 × 每门 2~6 次，
+    // gate.ts 应该只与「范围大小」弱相关。这条留着用来防止后续改动把快照退回逐门遍历。
     process.stderr.write(`[prof] git 子进程 ${gitCalls} 次（范围内 commit 数见上一行）\n`);
   }
   return code;

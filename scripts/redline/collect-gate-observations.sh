@@ -34,7 +34,10 @@ cd "$TOP" || exit 1
 SCAN_OUT="$(mktemp)"
 trap 'rm -f "$SCAN_OUT"' EXIT
 
-bash scripts/redline/scan-rules.sh diff "$RANGE" --no-color >"$SCAN_OUT" 2>&1 || true
+# 🔴 2026-11-11 切主（S3）：改跑 gate.ts。采集口径必须与门禁实际执行者同源，
+#    否则「观察期统计的命中数」与「真正会拦的条数」是两个东西。
+#    `|| true` 保留：采集是统计用途，引擎报错不应该让采集脚本整体失败（会丢整批数据）。
+node scripts/redline/gate.ts diff "$RANGE" --no-color >"$SCAN_OUT" 2>&1 || true
 
 # 卡 2.5：只数**规则标签行**（形如 "  [R13] ..."），不做全文子串匹配。
 #   旧写法 `grep -oE "R13"` 数的是输出里所有 "R13" 子串 —— 只要某条 commit subject

@@ -7,9 +7,9 @@
 #      不承担「保证 master 干净」的职责。
 #
 # 为什么用 cached 而不是 diff：pre-commit 阶段 commit 还没产生，
-#      只有暂存区。`scan-rules.sh cached` 扫的就是 git diff --cached。
+#      只有暂存区。`gate.ts cached` 扫的就是 git diff --cached。
 #
-# 实际生效的规则（scan_cached → check_file + scan_diff_range --cached）：
+# 实际生效的规则（cached → 行级门 + 文件级门）：
 #   R1 调试残留 · R2 敏感文件 · R2b 硬编码凭据 · R3 占位 · R4 TS 铁律
 #   R5 CORS · R8 main.ts 异常过滤器 · R9 新增页面须同行原型 · R9b 既有 UI 改动
 # 另外：暂存区含 specs/ 时追加跑 scripts/audit-specs.mjs（SDD 规格门禁，
@@ -31,7 +31,10 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || exit 0
 
-SCANNER="scripts/redline/scan-rules.sh"
+# 🔴 2026-11-11 切主（S3）：扫描器从 bash 换成 gate.ts，gates.yaml 成为唯一判据来源。
+#    bash 版 scan-rules.sh 已退场，仅留作影子比对/变异测试的参考实现。
+#    契约没变：cached 模式、退出码 0/1/2 语义都与 bash 版一致（黄金用例逐字节证明）。
+SCANNER="scripts/redline/gate.ts"
 SPECS_AUDIT="scripts/audit-specs.mjs"
 
 # ── specs 门禁（仅在暂存区动了 specs/ 时跑）──────────────────────────
@@ -63,4 +66,14 @@ if [ ! -f "$SCANNER" ]; then
   exit 0
 fi
 
-exec bash "$SCANNER" cached
+# gate.ts 是 TypeScript，靠 Node 22+ 原生类型剥离执行（仓库无构建产物）。
+# 缺 node 时**不静默放行**：切主后 gate.ts 是唯一执行者，跳过它就等于门禁不存在。
+# 这里 exit 1 而不是 exit 0 —— 与「扫描器文件缺失」区别对待：文件缺失是环境残缺，
+# node 缺失是执行条件不满足，后者会让人误以为「扫过了、没问题」。
+if ! command -v node >/dev/null 2>&1; then
+  echo "🔴 pre-commit: 找不到 node（gate.ts 需要 Node 22+ 原生跑 TS），无法执行红线扫描" >&2
+  echo "   装好 node 后重试，或临时绕过：git commit --no-verify（CI 会重跑同一套规则）" >&2
+  exit 1
+fi
+
+exec node "$SCANNER" cached
