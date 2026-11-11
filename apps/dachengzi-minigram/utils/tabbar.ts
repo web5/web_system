@@ -32,7 +32,16 @@ export function setTabBarSelected(
 ) {
   const getTabBar = page.getTabBar;
   if (typeof getTabBar !== 'function') return;
-  const bar = getTabBar();
+  let bar: WechatMiniprogram.Component.TrivialInstance | null | undefined;
+  try {
+    // 保留 this 绑定（原脱离实例调用在严格模式下 this=undefined，正是内部读取
+    // __treeManager__ 崩溃的直接机制）；且组件未实例化的时序窗口 getTabBar 内部会抛错——
+    // 此处崩溃曾穿透 onShow 致 fetchProfile 不执行（我的页头像/昵称全空，2026-11-11 实测）。
+    // 拿不到实例 = 本帧不登记，下次 onShow 重试，绝不允许中断页面 onShow。
+    bar = getTabBar.call(page);
+  } catch {
+    return;
+  }
   if (!bar) return;
   // 同步到 globalData：自定义 tabBar 组件是每页独立实例，切 tab 后新实例的 selected
   // 会回到初始值 0，只能靠 onShow 登记恢复 —— 中间会闪「高亮停在上一项」。

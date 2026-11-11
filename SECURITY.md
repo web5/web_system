@@ -17,6 +17,6 @@
 - 请通过**私有渠道**联系维护者（Chase Wen）。**不要**在公开 Issue 里贴复现细节、IP、凭证、内网拓扑或日志片段。
 - 报告请附：影响面、复现步骤、是否已实测、建议修复方向；确认后随下一次发布修复。
 - 历史泄露排查（只读）：`node scripts/history-secret-scan.mjs`；红线扫描：
-  `bash scripts/redline/scan-rules.sh diff <range>`（本地约 11min，须后台跑，优先看 CI 结果）。
+  `node scripts/redline/gate.ts diff <range>`（本地秒级；范围过大时加 `--max-commits 0`，或优先看 CI 结果）。
 
 > 本文 2026-11-04 由 GitHub 未填写的默认模板补齐（原模板含虚构版本号 5.1.x / 4.0.x）。

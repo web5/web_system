@@ -317,6 +317,21 @@ TestScope: docs/test-scope/scope.md" $t; t=$((t + 60))
 Micro-exempt: R17: yes" "$off_weak"
   echo "C_EXEMPT_WEAK $(git rev-parse HEAD)"
 
+  # ---- R2.secret-file：路径判据是**正则**不是 glob ----
+  #
+  # 🔴 为什么单独造、且**故意不提交**：
+  #   2026-11-11 切主后发现 gate.ts 把 R2 的 `(^|/)[^/]*\.(pem|key|crt|cert)$` 当 glob 处理，
+  #   `(^|/)` 被转义成字面量 → .env 与证书文件一条都不报。当时 R2.secret-file **零用例**，
+  #   影子比对因此一直绿（两个引擎在没人测过的分支上一样地错）。
+  #
+  #   为什么不能 git add：这几个文件一旦进 BASE commit，30 个 diff 场景的输出全都会多出 R2 条目，
+  #   所有期望文件都得跟着改 —— 那是为了测一条判据把整个基线搅一遍。
+  #   files 模式只看工作区文件、不看 commit，所以「写而不提交」正好够用。
+  mkdir -p r2fx
+  printf 'SECRET=1\n' > r2fx/.env
+  printf -- '-----BEGIN KEY-----\n' > r2fx/server.pem
+  printf 'SECRET=<placeholder>\n' > r2fx/.env.example
+
   return 0
 }
 

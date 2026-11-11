@@ -23,8 +23,11 @@ Closes #
 
 | 类别 | 含义 | 本次 |
 |---|---|---|
-| **门禁**（会阻断） | R1–R4 调试·凭据·占位·TS 铁律 · R11 设计评审 · 原型三件套 · L1/L5/L9 流水线 · build/test/lint | CI 全绿即通过 |
-| **体检项**（只提示） | R5 R8 R9 R9b R10 R13 R14 R15 R16 R17 R18 · L6 | 有输出请贴摘要 + 一句「为何可接受」 |
+<!-- gen:pr-gates BEGIN -->
+| **门禁**（会阻断） | `R1` `R2.cred` `R2.secret-file` `R3.placeholder` `R4.any` `R4.ts-ignore` `R11` `R19` · 原型三件套 · L1/L5/L9 流水线 · build/test/lint | CI 全绿即通过 |
+| **体检项**（只提示） | `R3.weak` `R5.enable-cors` `R5.main-cors` `R5.wildcard-origin` `R6` `R8` `R9` `R9b` `R10` `R12` `R13` `R14` `R15` `R16` `R17` `R18` `R20` `R21` `R23` · L6 | 有输出请贴摘要 + 一句「为何可接受」 |
+| 默认关闭（不参与判定） | `R11b` | 需显式设 `DESIGN_ANCHOR_MODE` 才生效 |
+<!-- gen:pr-gates END -->
 
 > 别把两者混称「全部检查通过」——体检项恒绿不代表没问题。
 
