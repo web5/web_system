@@ -3,8 +3,8 @@ import { IndexHtmlService } from './index-html.service';
 
 /**
  * TestScope: B（用户拍板抽样：gateway 全包 test/build/lint:ci + shell build；admin/portal smoke 由独立 tester 后续执行）
- * 核心回归：prod shell HTML、render、/shell/*、shell/admin __version__、dev/无站点/无 req、legacy、回落与站点查询失败。
- * 未覆盖：admin/portal 浏览器 smoke 与独立黑盒验证；不声称全仓测试或 prod 已修复。
+ * 核心回归：C-33 版本注入（prod shell/render/__version__）；C-32 静态根与资源 URL；C-31 代理与路由；C-04/C-05 网关守卫。
+ * 未覆盖：其它包、admin/portal 浏览器 smoke 与独立黑盒验证；admin/portal smoke 由 rd-tester 后续执行，不声称全仓测试或 prod 已修复。
  */
 
 /**
