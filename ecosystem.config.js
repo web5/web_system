@@ -21,7 +21,6 @@ const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_DATABASE = process.env.DB_DATABASE || 'web_system';
 /** knowledge-service 独立库（RAG：集合/文档/分块），与主库同实例不同库名 */
 const KNOWLEDGE_DB_DATABASE = process.env.DB_DATABASE_KNOWLEDGE || 'web_system_knowledge';
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 /**
  * 服务间调用：auth-service 地址（各服务 AuthGuard 转发 /auth/verify 用）。
  * dev/prod 约定 6001；本地若该端口被占用，请在对应服务 .env 里显式覆盖（例如 6101）。
@@ -79,7 +78,6 @@ const baseDbConfig = {
   DB_USERNAME,
   DB_PASSWORD,
   DB_DATABASE,
-  REDIS_URL,
 };
 
 const logBase = process.env.LOG_BASE || `${WEB_SYSTEM_DIR}/logs`;

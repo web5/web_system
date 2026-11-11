@@ -12,10 +12,9 @@ import type { RedisOptions } from 'ioredis';
  * 于是 `{ url }` 被当成一个普通字段塞进 options，**host / port 回落到默认 `localhost:6379`** ——
  * 配置里的 `REDIS_URL` 看起来生效了，实际连的是本机不存在的 Redis。
  *
- * 线上实证（2026-10-09）：prod auth-service 的 error log 里 594+ 次
- * `Error: connect ECONNREFUSED 127.0.0.1:6379`，而 `.env` 里 `REDIS_URL` 分明指向云 Redis
- * `172.16.0.8:6379`（实测 PING 通）。受影响的真实功能：
- * - **登出**：token 黑名单 `redis.set()` 无 catch → 命令一直 pending / 抛错；
+ * 历史故障实证：prod auth-service 持续连接回环 Redis 失败，而 `.env` 中的
+ * `REDIS_URL` 实际指向内网 Redis。受影响的真实功能：
+ * - **登出**：token 黑名单 `redis.set()` 等待或失败会破坏退出语义；
  * - 账号 pending 状态、微信 access_token 缓存（有 catch 降级，静默失效）。
  *
  * ## 用法
@@ -33,7 +32,7 @@ import type { RedisOptions } from 'ioredis';
  *
  * ⚠️ 必须自己做百分号解码：`new URL()` 只对 http/https/ws/ftp/file 等「特殊 scheme」解码，
  * `redis:` 不在其列，userinfo 会**原样保留** `%25`。而 ioredis 的 `parseURL` 是解码的
- * （实测 `new Redis('redis://:gn%25!...@172.16.0.8:6379')` PING 通），故这里要保持同口径，
+ * （可用 `redis://:pw%25-test@cache.test.invalid:6379` 这类脱敏值验证），故这里要保持同口径，
  * 否则密码里的 `%` 会被当成字面百分号发给服务端 → 认证失败。
  */
 function safeDecode(value: string): string {
@@ -45,30 +44,43 @@ function safeDecode(value: string): string {
   }
 }
 
-export function redisOptionsFromUrl(rawUrl: string): RedisOptions {
-  const fallback: RedisOptions = { host: 'localhost', port: 6379 };
+export function redisOptionsFromUrl(rawUrl: string | undefined): RedisOptions {
+  if (!rawUrl?.trim()) throw new Error('Redis 配置缺失');
 
   let u: URL;
   try {
     u = new URL(rawUrl);
   } catch {
-    // URL 不合法：显式回落并保留原值，便于排障时看出「配置长什么样」
-    return { ...fallback };
+    throw new Error('Redis 配置非法');
+  }
+
+  if ((u.protocol !== 'redis:' && u.protocol !== 'rediss:') || !u.hostname) {
+    throw new Error('Redis 配置非法');
   }
 
   const options: RedisOptions = {
-    host: u.hostname || 'localhost',
+    host: u.hostname,
     port: u.port ? Number(u.port) : 6379,
+    connectTimeout: 1000,
+    commandTimeout: 800,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    // 请求命令关闭离线排队；后台仍按有界退避重连。
+    retryStrategy: (times: number) => Math.min(times * 100, 1000),
   };
 
   // Redis 6 ACL 用户名（无则省略，避免给老版本发多余命令）
   if (u.username) options.username = safeDecode(u.username);
   if (u.password) options.password = safeDecode(u.password);
 
-  // pathname 形如 "/0" → db；"/" 或空则不动（用 ioredis 默认 db 0）
-  const dbSegment = u.pathname ? u.pathname.replace(/^\//, '') : '';
-  const db = dbSegment ? Number(dbSegment) : Number.NaN;
-  if (Number.isFinite(db)) options.db = db;
+  // pathname 仅接受 "/<非负整数 db>"；"/" 或空沿用 db 0。
+  if (u.pathname && u.pathname !== '/') {
+    const dbSegment = u.pathname.slice(1);
+    if (!/^\d+$/.test(dbSegment)) throw new Error('Redis 配置非法');
+    const db = Number(dbSegment);
+    if (!Number.isSafeInteger(db)) throw new Error('Redis 配置非法');
+    options.db = db;
+  }
 
   if (u.protocol === 'rediss:') options.tls = {};
 
