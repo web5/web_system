@@ -1,0 +1,4 @@
+# 单测 fixture 里的模拟 node_modules（miniprogram-automator stub）需要入仓，
+# 抵消根 .gitignore 的 node_modules 全局忽略
+!tests/unit/fixtures/caller-app/node_modules
+!tests/unit/fixtures/caller-app/node_modules/**

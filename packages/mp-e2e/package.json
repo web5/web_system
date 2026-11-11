@@ -1,0 +1,22 @@
+{
+  "name": "@web-system/mp-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "web_system 小程序真机 E2E 基建：统一 launch/导航/断言/KEYS 守卫/runner（调用方提供 miniprogram-automator）",
+  "main": "./src/index.js",
+  "bin": {
+    "mp-e2e": "./bin/mp-e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "miniprogram-automator": "^0.12.1"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
+  }
+}
