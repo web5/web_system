@@ -107,6 +107,13 @@ exemption:
 #   「哪些门能在 commit 前判」本身就是一条判据。写死它，等于又把它藏回代码里。
 #   放这里之后，加门的人必须先回答这个问题；gate.ts 对清单里未接线/不存在的门
 #   **报错退出（exit 2）**，不静默跳过 —— 声明了却没接线是最不该安静的那类事。
+#
+# 🔴 R10 在这里是 warning，本地不阻断 —— 这是 2026-11-11 拍板结论，不要「修回去」：
+#   旧 check-commit-msg.sh 对缺 Proto 硬编码 exit 1，比 gates.yaml 声明的 warning 更严，
+#   属实现比自己的声明严，S5 删 bash 后统一按声明走（R11 仍 error 级拦截，
+#   实测缺 Proto 的 UI commit 通常同时缺 Design，被 R11 兜住）。
+#   若将来判定要升回阻断：改 R10 的 level 为 error，并同步改
+#   test-gate-hardening.sh 的 L2 断言（现断言「点名 [R10]」，非「exit 非 0」）。
 local_commit_msg:
   gates: [R10, R11]
 
