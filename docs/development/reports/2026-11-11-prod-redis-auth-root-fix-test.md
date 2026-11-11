@@ -169,3 +169,18 @@ npm --prefix servers/gateway test -- --runInBand src/auth/token-blacklist.guard.
 | 文件面 | 仅批准的 ecosystem/auth/gateway 文件与两份方案文档；无 portal、packages、其他服务、migration 或真实配置改动 |
 
 本地测试通过只覆盖上述明确列出的单元/契约范围；V8/V9 的真实环境部分必须在发布阶段另行验收。
+
+## 7. merge origin/master 后复跑证据（2026-11-11，用户已授权 merge 同步）
+
+合并前 `origin/master` = `23c9521afa4e06b58e4c58f1c8480f0dfeec0555`（fetch 现查，ahead 1 / behind 23）。`git merge origin/master` 由 ort 策略自动完成，**零冲突**；merge 带入的 45 个文件与本方案文件面（ecosystem、auth-service、gateway Guard、两份文档）**交集为空**（脚本比对确认），未做 reset/rebase，本地备份分支 `backup/redis-auth-fix-69e7a237` 指向原 HEAD `69e7a237`。
+
+| 证据 | 实测结果 |
+|---|---|
+| ecosystem | `node --test ecosystem.config.spec.js`：2/2 通过，退出 0 |
+| auth 定向+抽样 | `pnpm -C servers/auth-service exec jest src/config/redis-options.spec.ts src/auth/auth.service.spec.ts src/auth/refresh-cookie.spec.ts --runInBand`：3 套件 73/73 通过，退出 0 |
+| gateway Guard | `pnpm -C servers/gateway exec jest src/auth/token-blacklist.guard.spec.ts --runInBand`：26/26 通过（含真实 AbortSignal 约 3003ms 后 503），退出 0 |
+| build | auth、gateway `nest build` 均退出 0 |
+| lint:ci | auth 退出 0、0 error / 30 warning；gateway 退出 0、0 error / 92 warning（warning 含 master 新带入文件，未用 --fix，未扩大文件面） |
+| 工作区 | merge 及复跑后 `git status` 干净，`git diff --check` 无输出 |
+
+结论：merge 后最终代码上授权抽样全部通过，结果与 merge 前独立盲测一致，可交发布角色合入 master；V8/V9 真实环境验收仍待发布阶段。
