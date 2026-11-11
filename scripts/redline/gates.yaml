@@ -9,26 +9,31 @@
 #   gates 文档表格 / PR 模板 / 变异测试 case。6 份手抄 = 6 个漂移面。
 #   加一道门要同步 13 个文件（R17 反查实证）。本文件把「门的语义」收成一份。
 #
-# 🔴 现状：status=declared —— 执行权威仍是 bash，本文件是**声明**
-#   与 bash 不一致时以 bash 为准，并立刻改本文件（gates-lint 会拦）。
-#   S2 引擎落地后 status 改 enforcing，S3 切主后 bash 退场。
+# 🔴 现状：status=enforcing —— 执行权威是 gate.ts，本文件是**唯一判据来源**
+#   2026-11-11 切主（S3）。legacy bash（scan-rules.sh / gate-shared.sh）已退场，
+#   不再演进、不再作为对齐基准，只留作影子比对与变异测试的参考实现。
 #
-# 改判据的正确顺序（S1 阶段）
-#   1) 先改 bash + 黄金用例（行为先成立）
-#   2) 再改本文件对齐
-#   3) bash scripts/redline/gates-lint.ts 必须绿
+# 切主前的路径：S1 声明化（declared，bash 为权威）→ S2 引擎 + 影子比对（12 天 / ~100 次 CI）
+#   → S3 本文件转 enforcing，三个执行入口（pre-commit / CI / 采集）换成 gate.ts。
+#
+# 改判据的正确顺序（切主后）
+#   1) 改本文件
+#   2) 改/加黄金用例（scripts/redline/cases/），bash scripts/redline/cases/run.sh 全绿
+#   3) node scripts/redline/gates-lint.ts 必须绿（含「防假切主」接线检查）
+#   ⚠️ 不需要再同步 bash —— 它已停更。若要顺手同步也可以，影子比对会继续是绿的。
 # ============================================================
 
 version: 1
 schema: gate-spec/v1
-status: declared
-updated: 2026-10-30
+status: enforcing
+updated: 2026-11-11
 owner: 研发部
 
 meta:
-  authority: bash
-  authority_files: ["scripts/redline/scan-rules.sh", "scripts/redline/gate-shared.sh", "scripts/redline/check-commit-msg.sh"]
-  invariant: 本文件与 bash 判定不一致时，以 bash 为准；lint 负责发现不一致并阻断
+  authority: gate.ts
+  authority_files: ["scripts/redline/gates.yaml", "scripts/redline/gate.ts"]
+  invariant: 本文件是唯一判据来源，gate.ts 读它执行；legacy bash 已退场，其判定与本文件分叉时以本文件为准
+  legacy: ["scripts/redline/scan-rules.sh", "scripts/redline/gate-shared.sh"]
   history_note: 编号是长出来的，不是设计的 —— 无 R7，R6 不在 scan-rules.sh，R3/R4 曾一号两义；本文件用 sub 把一号两义拆开
 
 # ---------------- 约定 ----------------
@@ -520,7 +525,8 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-r13-migration", "commit-r13-migration-small", "commit-r13-controller-shallow"]
+    evidence: ["commit-r13-migration", "commit-r13-migration-small", "commit-r13-controller-shallow", "commit-r13-fake-path"]
+    evidence_note: commit-r13-fake-path 覆盖「有凭证但路径不存在」分支 —— 前两条走的是「缺凭证」分支，改 accept / path_exists 判据对它们毫无影响（2026-11-11 变异测试反推出的覆盖缺口）
 
   - id: R14
     sub: null
