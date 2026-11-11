@@ -15,6 +15,9 @@
  *   会回到初始值，且 attached/show 与页面入栈的时序不保证 —— 纯自推导会在首次
  *   进入某页时读到旧栈顶，表现为「页面切过去了、高亮还停在上一项」（10-13 实测）。
  *   登记后写 _registered=true，组件不再覆盖。
+ * 一级半（跨实例缓存）：setTabBarSelected / onSwitch 把当前 tab 同步到
+ *   globalData.tabIndex，新实例在 attached / pageLifetimes.show 时先读它立即恢复，
+ *   消除「等 onShow 登记」之间的半拍（详见 restoreFromGlobalData）。
  * 二级（兜底）：页面未登记时（设置/翻译/对话记录等二级页），syncFromRoute 从页面栈
  *   回溯推导归属（settings→「我的」；其余二级页归属栈中最近的 tab 页）。
  * ======================================================================
@@ -40,25 +43,42 @@ Component({
       // 若只等 onShow 登记，会出现「页面切过去了、高亮还停在上一项」的半拍闪跳。
       // 先读 globalData 缓存的当前 tab（onSwitch / setTabBarSelected 都会写），
       // 命中即立即恢复；读不到（首启未登记）再走 syncFromRoute 兜底。
-      try {
-        const app = getApp<IAppOption>();
-        if (app && typeof app.globalData.tabIndex === 'number') {
-          this.setData({ selected: app.globalData.tabIndex });
-        }
-      } catch {
-        // getApp 不可用（极早期）：交给 syncFromRoute
-      }
-      if (!this.data._registered) this.syncFromRoute();
+      if (!this.restoreFromGlobalData() && !this.data._registered) this.syncFromRoute();
     },
   },
 
   pageLifetimes: {
     show() {
-      if (!this.data._registered) this.syncFromRoute();
+      // 已登记（_registered）：onShow 已显式指定过高亮，不再覆盖。
+      // 未登记时同样优先读 globalData：官方「页面创建生命周期」里 pageLifetimes.show
+      // 在 Page.onShow **之前**触发，此刻 getCurrentPages() 仍可能是旧栈顶，直接
+      // syncFromRoute 会把正确高亮覆盖回旧值 —— 先 restoreFromGlobalData 命中即停。
+      if (this.data._registered) return;
+      if (!this.restoreFromGlobalData()) this.syncFromRoute();
     },
   },
 
   methods: {
+    /**
+     * 从 globalData.tabIndex 恢复高亮（跨实例共享的权威值，onSwitch / setTabBarSelected 都写）。
+     * 命中返回 true；getApp 不可用 / tabIndex 未登记返回 false，交由 syncFromRoute 兜底。
+     * 用「命中即跳过 syncFromRoute」的理由：syncFromRoute 靠 getCurrentPages() 自推导，
+     * 而 attached / pageLifetimes.show 时页面栈顶可能仍是旧页（10-13 实测「首次进入某页
+     * 读到旧栈顶」），若命中后仍走 syncFromRoute 会把刚恢复的正确高亮覆盖回旧值。
+     */
+    restoreFromGlobalData(): boolean {
+      try {
+        const app = getApp<IAppOption>();
+        if (app && typeof app.globalData.tabIndex === 'number') {
+          this.setData({ selected: app.globalData.tabIndex });
+          return true;
+        }
+      } catch {
+        // getApp 不可用（极早期）：交给 syncFromRoute
+      }
+      return false;
+    },
+
     /**
      * 兜底推导：从栈顶往前找第一个匹配 list 的页面。
      * 二级页（设置/翻译/对话记录）不匹配任何项时归属栈中最近的 tab 相关页，
