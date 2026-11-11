@@ -86,3 +86,7 @@ commit-r9b-exempt	diff	${C_R9B_EXEMPT}^..${C_R9B_EXEMPT}	R9b 豁免通路：修�
 line-r3-weak-js	files	servers/api/src/weak2.js	R3.weak scope 边界（.js）+ 整行注释 skip 观测
 line-r4-tsignore-js	files	servers/api/src/tsignore2.js	R4.ts-ignore scope 边界（.js）+ 整行注释 skip 观测
 line-r5-wildcard-comment	files	servers/api/src/corscomment.ts	R5.wildcard skip 观测：整行注释形态，基线零输出
+
+# ---------------- 2026-11-12 #8256：R9 app.json IA 分支 ----------------
+commit-r9-ia	diff	${C_R9_IA}^..${C_R9_IA}	R9 阳性：app.json pages 段加页无原型须报（IA 分支首用例）
+commit-r9-ia-passport	diff	${C_R9_IA_PASSPORT}^..${C_R9_IA_PASSPORT}	R9 阴性：IA 变化 + 同 commit 带原型 → 不报

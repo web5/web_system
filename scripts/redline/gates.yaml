@@ -401,7 +401,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-r9-page", "commit-r9-passport"]
+    evidence: ["commit-r9-page", "commit-r9-passport", "commit-r9-ia", "commit-r9-ia-passport"]
 
   - id: R9b
     sub: null
@@ -529,6 +529,9 @@ gates:
     message: 原型锚点漂移
     spec_ref: specs/design-reviewer/design.md
     owner: 研发部
+    # 覆盖在专用测试（scenarios.tsv 无环境变量列，档位矩阵表达不了；临时仓需复制 python 脚本）：
+    # test-r11b-anchors.sh A-E 六节含变异用例，已接入 CI gate-cases job。
+    evidence_external: ["scripts/redline/test-r11b-anchors.sh"]
     validity:
       status: unmeasured
       note: 未回填不等于已漂移 —— 原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规。档位由 level_switch 求值（两个引擎同读），非法取值 exit 2；双引擎一致性由 test-r11b-anchors.sh E 节守（不在 scenarios.tsv，因该表没有环境变量列）
@@ -787,6 +790,7 @@ gates:
     validity:
       status: unmeasured
     evidence: ["commit-r12-clean"]
+    evidence_note: 阳性（双源漂移）夹具会污染 fixture 仓库全局状态、带翻全部场景基线 —— 该判据分支的缺口登记在 cases/mutation-baseline.tsv（2 条），不在 uncovered（2026-11-12 起 uncovered 只收「连阴性都没有」的门）
 
   - id: R16
     sub: null
@@ -803,6 +807,9 @@ gates:
     hint: 契约真相源：packages/agent-core 的 StreamEventType（docs/api/contracts.md C2）
     spec_ref: docs/api/contracts.md
     owner: 研发部
+    # 覆盖在专用测试（临时仓需复制 python 脚本 + 造四份契约文件，cases 夹具驱动不了）：
+    # test-r16-sse.sh 7 例（接线自证 / MISSING / EXTRA / LOOSE / 死 case / fail-open / 定位）。
+    evidence_external: ["scripts/redline/test-r16-sse.sh"]
     validity:
       status: unmeasured
     evidence: []
@@ -825,6 +832,9 @@ gates:
     validity:
       status: unmeasured
     evidence: []
+    # 覆盖在专用测试（stage=external，门禁扫描碰不到它，反过来它才是真实现）：
+    # 选择映射 / docs-only 短路 / 依赖预构建过滤器 / 失败传播 / --lint 选路，pnpm 全桩。
+    evidence_external: ["scripts/ci/test-changed-packages.sh"]
 
 # ============================================================
 # 观察期指标（collect-gate-observations.sh 的唯一配置来源）
@@ -887,37 +897,7 @@ known_divergences:
 # 覆盖缺口（如实列，不写"基本覆盖"）
 # 每条：哪个门 / 缺什么 / 补齐顺序理由
 # ============================================================
-uncovered:
-  - gate: R3
-    sub: R3.weak
-    missing: TEMP/TBD 弱占位阳性
-    reason: 与 R3.placeholder 同一路径，优先级低
-  - gate: R4
-    sub: R4.ts-ignore
-    missing: @ts-ignore 阳性
-    reason: 优先级低（判据与 R4.any 同为字符串匹配）
-  - gate: R5
-    sub: R5.wildcard-origin
-    missing: origin:'*' 阳性
-    reason: 与 R5.enable-cors 同场景触发，单独隔离需再造夹具
-  - gate: R9b
-    missing: 全部（这是 batch 1 里唯一没有用例的门，也是最容易被误报的门）
-    reason: 需造「修改既有 UI 文件 ≥5 行且同 range 无 passport」的夹具；补齐优先级最高
-  - gate: R6
-    missing: 全部
-    reason: 实现不在门禁引擎里（在 scripts/ci/changed-packages.sh），门禁扫描碰不到
-  - gate: R9
-    missing: 新增页面 / app.json IA 变化
-    reason: 需构造 app.json 的 pages 段 diff
-  - gate: R11b
-    missing: 全部
-    reason: 依赖 python 扫描器 + 原型 data-dr 属性
-  - gate: R12
-    missing: 全部
-    reason: 需造 .codebuddy 双源漂移夹具，体积大
-  - gate: R16
-    missing: 全部
-    reason: 依赖 python 辅助脚本与真实 StreamEventType
+uncovered: []
 
 # 夹具级（不属于任何一道门的校验，防止 scan 本身回归）
 harness_evidence:
