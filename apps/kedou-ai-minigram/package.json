@@ -10,18 +10,19 @@
     "upload": "node scripts/upload.js",
     "test": "jest tests --config tests/jest.config.js",
     "test:watch": "jest tests --config tests/jest.config.js --watch",
+    "test:e2e": "mp-e2e",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.2",
     "@types/wechat-miniprogram": "^3.4.10",
+    "@web-system/mp-e2e": "workspace:*",
     "@web-system/shared": "workspace:*",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "miniprogram-automator": "^0.12.1",
     "miniprogram-ci": "^2.1.6",
-    "miniprogram-simulate": "^1.6.1",
     "ts-jest": "^29.4.11"
   }
 }
