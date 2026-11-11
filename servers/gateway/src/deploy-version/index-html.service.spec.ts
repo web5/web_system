@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { IndexHtmlService } from './index-html.service';
 
 /**
@@ -312,11 +312,18 @@ describe('IndexHtmlService.resolveShellAssetPath（/shell/* 与 html 同源）',
 });
 
 describe('IndexHtmlService 站点 defaultEnv（shell / 静态资源 / __version__）', () => {
+  const manifestOf = (html: string) => {
+    const serialized = html.match(/window\.__MODULES_MANIFEST__=(.*?);<\/script>/)?.[1];
+    return JSON.parse(serialized || '{}');
+  };
+
   beforeEach(() => {
     (existsSync as jest.Mock).mockReset();
     (existsSync as jest.Mock).mockReturnValue(true);
     (readFileSync as jest.Mock).mockReset();
     (readFileSync as jest.Mock).mockReturnValue('<html><head></head><body></body></html>');
+    (statSync as jest.Mock).mockReset();
+    (statSync as jest.Mock).mockReturnValue({ mtimeMs: 1 });
   });
 
   it('prod Host + 无 DEPLOY_ENV_ID：shell HTML 读 prod 版本目录，指针查询不得落到 dev', async () => {
@@ -349,6 +356,81 @@ describe('IndexHtmlService 站点 defaultEnv（shell / 静态资源 / __version_
     expect(manifest.byEnv).toEqual(expected.byEnv);
     expect(manifest.modules).toEqual(expected.modules);
     expect(manifest.env).toBe('dev');
+  });
+
+  it.each(['prod→dev', 'dev→prod'])('同 mtime 的不同 Host HTML 不得串缓存（%s）', async (order) => {
+    (readFileSync as jest.Mock).mockImplementation((file: string) => {
+      const marker = file.includes('/shell/prod/') ? 'PROD_SHELL_HTML' : 'DEV_SHELL_HTML';
+      return `<html><head></head><body>${marker}</body></html>`;
+    });
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+    const requests = order === 'prod→dev' ? [prodReq, req] : [req, prodReq];
+    const expectedEnvs = order === 'prod→dev' ? ['prod', 'dev'] : ['dev', 'prod'];
+
+    const first = await svc.render('shell', requests[0]);
+    const second = await svc.render('shell', requests[1]);
+
+    expect(first).toContain(`${expectedEnvs[0].toUpperCase()}_SHELL_HTML`);
+    expect(second).toContain(`${expectedEnvs[1].toUpperCase()}_SHELL_HTML`);
+    expect(second).not.toContain(`${expectedEnvs[0].toUpperCase()}_SHELL_HTML`);
+    expect(manifestOf(first).defaultEnv).toBe(expectedEnvs[0]);
+    expect(manifestOf(second).defaultEnv).toBe(expectedEnvs[1]);
+    expect(readFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('同一实际 HTML 路径且 mtime 不变时重复请求仍命中缓存', async () => {
+    (readFileSync as jest.Mock).mockReturnValue('<html><head></head><body>DEV_SHELL_HTML</body></html>');
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+
+    const first = await svc.render('shell', req);
+    const second = await svc.render('shell', req);
+
+    expect(first).toContain('DEV_SHELL_HTML');
+    expect(second).toContain('DEV_SHELL_HTML');
+    expect(readFileSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('同一实际 HTML 路径的 mtime 变化仍使缓存失效', async () => {
+    let mtimeMs = 1;
+    let marker = 'BEFORE_MTIME_CHANGE';
+    (statSync as jest.Mock).mockImplementation(() => ({ mtimeMs }));
+    (readFileSync as jest.Mock).mockImplementation(
+      () => `<html><head></head><body>${marker}</body></html>`,
+    );
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+
+    await svc.render('shell', req);
+    mtimeMs = 2;
+    marker = 'AFTER_MTIME_CHANGE';
+    const html = await svc.render('shell', req);
+
+    expect(html).toContain('AFTER_MTIME_CHANGE');
+    expect(html).not.toContain('BEFORE_MTIME_CHANGE');
+    expect(readFileSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('shell 指针切版后实际 HTML 路径变化时不得复用旧版本内容', async () => {
+    let shellVersion = '7a6be04';
+    (readFileSync as jest.Mock).mockImplementation((file: string) => {
+      const marker = file.includes('/7a6be04/') ? 'OLD_SHELL_HTML' : 'NEW_SHELL_HTML';
+      return `<html><head></head><body>${marker}</body></html>`;
+    });
+    const { svc, appVersionRepo } = build({ deployEnvId: '', dualEnv: true });
+    appVersionRepo.findOne.mockImplementation(({ where }: any) =>
+      Promise.resolve(
+        where.appKey === 'shell' && where.envId === 'dev' ? { currentVersion: shellVersion } : null,
+      ),
+    );
+
+    const oldHtml = await svc.render('shell', req);
+    shellVersion = 'next123';
+    svc.clearVersionCache();
+    const newHtml = await svc.render('shell', req);
+
+    expect(oldHtml).toContain('OLD_SHELL_HTML');
+    expect(newHtml).toContain('NEW_SHELL_HTML');
+    expect(newHtml).not.toContain('OLD_SHELL_HTML');
+    expect(readFileSync).toHaveBeenCalledTimes(2);
   });
 
   it('resolveShellAssetPath(..., req)：资源与 prod HTML 同源', async () => {

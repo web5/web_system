@@ -634,13 +634,14 @@ export class IndexHtmlService {
    * 退回历史固定路径 `public/shell/index.html`（保证老部署仍可启动）。
    */
   private async readHtml(pub: string, req?: unknown): Promise<string> {
-    const file = pub === 'shell' ? await this.resolveShellHtmlFile(req) : join(PUBLIC_ROOT, pub, 'index.html');
+    const requested = pub === 'shell' ? await this.resolveShellHtmlFile(req) : join(PUBLIC_ROOT, pub, 'index.html');
+    const file = resolve(requested);
     try {
       const mtime = statSync(file).mtimeMs;
-      const cached = this.htmlCache.get(pub);
+      const cached = this.htmlCache.get(file);
       if (cached && cached.mtime === mtime) return cached.content;
       const content = readFileSync(file, 'utf-8');
-      this.htmlCache.set(pub, { mtime, content });
+      this.htmlCache.set(file, { mtime, content });
       return content;
     } catch {
       return '<html><head></head><body>index.html not found for ' + pub + '</body></html>';
