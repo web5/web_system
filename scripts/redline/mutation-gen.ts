@@ -122,6 +122,28 @@ const NON_JUDGMENT = new Set([
   "note",
   "exclude_reason",
   "delegate_render",
+  // 纯散文描述（值是自然语言句子，引擎从来不做键查找）：
+  "when",        // R20 / R21：中文描述触发时机
+  "condition",   // R19：中文描述「树与父相同（非 merge）」
+  "aggregate",   // R21：中文描述汇总口径
+  "implementer", // R14：实现位置指路（scripts/ci/changed-packages.sh）
+  "check",       // R20：中文语义「按 exemption.quality 判」；引擎读的是全局 exemption 段
+]);
+
+/**
+ * 🔴 声明性死字段（2026-11-11 #8723 逐键核对 gate.ts 后登记）：
+ * 这些键**长着判据的样子，但引擎不读** —— 对应逻辑在 gate.ts 里硬编码
+ * （如 R9/R9b 的 passport 放行、R19 的 merge 跳过、R9b 的结构标签正则）。
+ * 改它们的值不会改变任何行为，所以**不配变异器、也不进审计**；
+ * 留在这里是为了让「为什么这些字段没有变异器」有案可查，而不是被静默漏掉。
+ * 长期正解是让引擎改为消费 YAML（数据驱动化），另立项，不在 #8723 范围。
+ */
+const DECLARATIVE_ONLY = new Set([
+  "pass_when",        // R9 / R9b：passport 放行逻辑硬编码在 runR9/runR9b
+  "any_of",           // R9 / R10：分支+scope 组合，引擎按 isUiFile 等硬编码
+  "conditions",       // R9：同上（其父键，跳过后子键不再展开）
+  "or_diff_contains", // R9b：/<(view|template|block)/ 硬编码在 runR9b
+  "skip_merges",      // R19：merge 跳过硬编码在 buildSnapshot
 ]);
 
 function collectJudgmentFields(trigger: YamlMap, credential: YamlMap | null): string[] {
@@ -130,7 +152,7 @@ function collectJudgmentFields(trigger: YamlMap, credential: YamlMap | null): st
     if (depth > 2) return;
     for (const [k, v] of Object.entries(obj)) {
       // `*_note` 一律是写给人看的解释（为什么这么判、踩过什么坑），不是判据
-      if (NON_JUDGMENT.has(k) || k.endsWith("_note")) continue;
+      if (NON_JUDGMENT.has(k) || DECLARATIVE_ONLY.has(k) || k.endsWith("_note")) continue;
       const path = prefix + k;
       out.push(path);
       if (v !== null && typeof v === "object" && !Array.isArray(v)) {
@@ -222,8 +244,10 @@ const MUTATORS: Mutator[] = [
     apply: (b) => replaceOnce(b, "- report_header_blocking_zero: true", "- report_header_blocking_zero: false"),
   },
   {
+    // covers 同时记 trigger.threshold：lines 是 threshold 映射的判定内容，
+    // 变异 lines 就是在变异 threshold 本身；不重复造一个同锚点的变异器。
     name: "trigger.threshold.lines 放大到 99999",
-    covers: ["trigger.threshold.lines"],
+    covers: ["trigger.threshold", "trigger.threshold.lines"],
     applies: () => true,
     apply: (b) => {
       const m = /^(\s+)lines: \d+$/m.exec(b);
@@ -328,6 +352,118 @@ const MUTATORS: Mutator[] = [
       const m = /^(\s+)status: \[.*\]$/m.exec(b);
       if (m === null) return null;
       return b.replace(/^(\s+)status: \[.*\]$/m, '$1status: ["X"]');
+    },
+  },
+  // ---- #8723 补网：以下字段引擎确实消费（已逐键核对 gate.ts），缺的只是变异器 ----
+  {
+    // runDelegated 对不存在的脚本直接 return（门静默跳过）→ 有用例盯着就会被发现
+    name: "trigger.delegate 改成不存在的脚本（门静默跳过）",
+    covers: ["trigger.delegate"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)delegate: \S+$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)delegate: \S+$/m, "$1delegate: scripts/redline/zzz-no-such-script.py");
+    },
+  },
+  {
+    // 把本门自己的 scope 加进排除列表 → 匹配面归零
+    name: "trigger.exclude_scopes 排除本门自己的 scope（匹配面归零）",
+    covers: ["trigger.exclude_scopes"],
+    applies: () => true,
+    apply: (b) => {
+      const sm = /^\s+scope: (\w+)$/m.exec(b);
+      const em = /^(\s+)exclude_scopes: \[([^\]]*)\]$/m.exec(b);
+      if (sm === null || em === null) return null;
+      if (em[2].includes(sm[1])) return null;
+      return b.replace(/^(\s+)exclude_scopes: \[([^\]]*)\]$/m, `$1exclude_scopes: [$2, ${sm[1]}]`);
+    },
+  },
+  {
+    name: "trigger.file_contains 改成永不命中",
+    covers: ["trigger.file_contains"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)file_contains: '.*'$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)file_contains: '.*'$/m, "$1file_contains: 'zzz-never-hit-zzz'");
+    },
+  },
+  {
+    // 杀法：把它的值换成同门 file_contains 的值 —— 「必须包含 X 且不包含 X」永假，
+    // 门必然不触发，与夹具内容无关，确定可判。
+    name: "trigger.file_not_contains 换成 file_contains 的值（条件自相矛盾）",
+    covers: ["trigger.file_not_contains"],
+    applies: () => true,
+    apply: (b) => {
+      const hm = /^\s+file_contains: '(.*)'$/m.exec(b);
+      if (hm === null) return null;
+      if (!/^\s+file_not_contains: '.*'$/m.test(b)) return null;
+      return b.replace(/^(\s+)file_not_contains: '.*'$/m, `$1file_not_contains: '${hm[1]}'`);
+    },
+  },
+  {
+    // alt 整条分支一次废掉（目前只有 R2.secret-file 有 alt；子字段随父一起覆盖）
+    name: "trigger.alt 整条废掉（match_re 永不命中 + exclude_paths 排除全部）",
+    covers: ["trigger.alt", "trigger.alt.match_re", "trigger.alt.exclude_paths"],
+    applies: () => true,
+    apply: (b) => {
+      const re = /(alt:\n\s+match_re: )'[^']*'(\n\s+exclude_paths: )\[[^\]]*\]/;
+      if (!re.test(b)) return null;
+      return b.replace(re, `$1'zzz-never-hit-zzz'$2["*"]`);
+    },
+  },
+  {
+    name: "trigger.case_insensitive 反转",
+    covers: ["trigger.case_insensitive"],
+    applies: () => true,
+    apply: (b) => {
+      if (b.includes("case_insensitive: true")) return replaceOnce(b, "case_insensitive: true", "case_insensitive: false");
+      if (b.includes("case_insensitive: false")) return replaceOnce(b, "case_insensitive: false", "case_insensitive: true");
+      return null;
+    },
+  },
+  {
+    // src 不存在 → runR12 直接 return（门静默通过）
+    name: "trigger.compare_pair.src 改成不存在目录（门静默通过）",
+    covers: ["trigger.compare_pair.src"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)src: \S+$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)src: \S+$/m, "$1src: .codebuddy/zzz-no-such-src");
+    },
+  },
+  {
+    // dst 不存在 → src 下每个文件都报「目标缺失」
+    name: "trigger.compare_pair.dst 改成不存在目录（全量报缺失）",
+    covers: ["trigger.compare_pair", "trigger.compare_pair.dst"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)dst: \S+$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)dst: \S+$/m, "$1dst: .codebuddy/zzz-no-such-dst");
+    },
+  },
+  {
+    // exclude 的判定是 rel.includes(x)：空串是任何字符串的子串 → 排除面=全量，门必然不响
+    name: 'trigger.exclude 置为 [""]（空串匹配一切，排除面=全量）',
+    covers: ["trigger.exclude"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)exclude: \[.*\]$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)exclude: \[.*\]$/m, '$1exclude: [""]');
+    },
+  },
+  {
+    name: "trigger.extensions 换成不存在的扩展名",
+    covers: ["trigger.extensions"],
+    applies: () => true,
+    apply: (b) => {
+      const m = /^(\s+)extensions: \[.*\]$/m.exec(b);
+      if (m === null) return null;
+      return b.replace(/^(\s+)extensions: \[.*\]$/m, '$1extensions: [".zzz"]');
     },
   },
 ];
