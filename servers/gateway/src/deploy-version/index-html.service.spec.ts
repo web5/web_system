@@ -2,6 +2,12 @@ import { existsSync, readFileSync } from 'fs';
 import { IndexHtmlService } from './index-html.service';
 
 /**
+ * TestScope: B（用户拍板抽样：gateway 全包 test/build/lint:ci + shell build；admin/portal smoke 由独立 tester 后续执行）
+ * 核心回归：prod shell HTML、render、/shell/*、shell/admin __version__、dev/无站点/无 req、legacy、回落与站点查询失败。
+ * 未覆盖：admin/portal 浏览器 smoke 与独立黑盒验证；不声称全仓测试或 prod 已修复。
+ */
+
+/**
  * 清单读取源单测（2026-09-28 **停用 legacy**）。
  *
  * 背景：控制台的版本切换（`AppsService.switchVersion`）早就只写新表
@@ -33,7 +39,14 @@ const VERSION_ROWS = [
   { appKey: 'shell', envId: 'dev', currentVersion: '7a6be04' },
 ];
 const SITE = { key: 'dev', host: 'dev.kedouai.com', defaultEnvId: 'dev', switchable: true };
+const PROD_SITE = { key: 'prod', host: 'kedouai.com', defaultEnvId: 'prod', switchable: true };
 const ENV_ROWS = [{ envId: 'dev', name: '主开发环境', isProd: false }];
+const PROD_ENV_ROWS = [{ envId: 'prod', name: '生产环境', isProd: true }];
+const PROD_VERSION_ROWS = [
+  { appKey: 'admin', envId: 'prod', currentVersion: 'b6ec9950' },
+  { appKey: 'portal', envId: 'prod', currentVersion: 'c6ec9950' },
+  { appKey: 'shell', envId: 'prod', currentVersion: 'a82270f9' },
+];
 
 function makeRepo() {
   return { find: jest.fn().mockResolvedValue([]), findOne: jest.fn().mockResolvedValue(null) };
@@ -46,11 +59,13 @@ function build(
     assetOrigin?: string;
     assetMode?: string;
     assetCssApps?: string;
+    deployEnvId?: string;
+    dualEnv?: boolean;
   } = {},
 ) {
   const cfg = {
     get: (k: string) => {
-      if (k === 'DEPLOY_ENV_ID') return 'dev';
+      if (k === 'DEPLOY_ENV_ID') return opts.deployEnvId ?? 'dev';
       if (k === 'DEPLOY_LEGACY_READ' && opts.legacyRead) return '1';
       if (k === 'MF_PRELOAD' && opts.preloadOff) return '0';
       // Phase 1：资源 URL 配置（默认全空 = legacy 兼容模式）
@@ -68,15 +83,16 @@ function build(
   const appRepo = makeRepo();
   const appVersionRepo = makeRepo();
 
+  const versionRows = opts.dualEnv ? [...VERSION_ROWS, ...PROD_VERSION_ROWS] : VERSION_ROWS;
   appRepo.find.mockResolvedValue(APP_ROWS);
-  appVersionRepo.find.mockResolvedValue(VERSION_ROWS);
+  appVersionRepo.find.mockResolvedValue(versionRows);
   appVersionRepo.findOne.mockImplementation(({ where }: any) =>
     Promise.resolve(
-      VERSION_ROWS.find((v) => v.appKey === where.appKey && v.envId === where.envId) ?? null,
+      versionRows.find((v) => v.appKey === where.appKey && v.envId === where.envId) ?? null,
     ),
   );
-  siteRepo.find.mockResolvedValue([SITE]);
-  envRepo.find.mockResolvedValue(ENV_ROWS);
+  siteRepo.find.mockResolvedValue(opts.dualEnv ? [SITE, PROD_SITE] : [SITE]);
+  envRepo.find.mockResolvedValue(opts.dualEnv ? [...ENV_ROWS, ...PROD_ENV_ROWS] : ENV_ROWS);
 
   const svc = new IndexHtmlService(
     cfg as any,
@@ -92,6 +108,7 @@ function build(
 }
 
 const req = { headers: { host: 'dev.kedouai.com' }, query: {} };
+const prodReq = { headers: { host: 'kedouai.com' }, query: {} };
 
 describe('IndexHtmlService.buildManifest（读取源 = NEW 域）', () => {
   it('站点匹配：byEnv 用 env-dir 固定入口，兼容字段 modules 由新表合成整包目录', async () => {
@@ -291,6 +308,136 @@ describe('IndexHtmlService.resolveShellAssetPath（/shell/* 与 html 同源）',
     expect(await svc.resolveShellAssetPath('/shell/../secret.txt')).toBeNull();
     expect(await svc.resolveShellAssetPath('/shell/')).toBeNull();
     expect(await svc.resolveShellAssetPath('/shell//abs/path.js')).toBeNull();
+  });
+});
+
+describe('IndexHtmlService 站点 defaultEnv（shell / 静态资源 / __version__）', () => {
+  beforeEach(() => {
+    (existsSync as jest.Mock).mockReset();
+    (existsSync as jest.Mock).mockReturnValue(true);
+    (readFileSync as jest.Mock).mockReset();
+    (readFileSync as jest.Mock).mockReturnValue('<html><head></head><body></body></html>');
+  });
+
+  it('prod Host + 无 DEPLOY_ENV_ID：shell HTML 读 prod 版本目录，指针查询不得落到 dev', async () => {
+    const { svc, appVersionRepo } = build({ deployEnvId: '', dualEnv: true });
+
+    const file = await (svc as any).resolveShellHtmlFile(prodReq);
+
+    expect(file).toBe('/public/static/modules/shell/prod/a82270f9/index.html');
+    expect(appVersionRepo.findOne).toHaveBeenCalledWith({ where: { appKey: 'shell', envId: 'prod' } });
+    expect(appVersionRepo.findOne).not.toHaveBeenCalledWith({ where: { appKey: 'shell', envId: 'dev' } });
+  });
+
+  it("render('shell', req)：HTML 与 manifest defaultEnv 同为 prod，兼容 env 仍保留配置缺省 dev", async () => {
+    (readFileSync as jest.Mock).mockImplementation((file: string) =>
+      file === '/public/static/modules/shell/prod/a82270f9/index.html'
+        ? '<html><head></head><body>PROD_SHELL_HTML</body></html>'
+        : '<html><head></head><body>LEGACY_FIXED_SHELL</body></html>',
+    );
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+    const expected = await svc.buildManifest(prodReq);
+
+    const html = await svc.render('shell', prodReq);
+    const serialized = html.match(/window\.__MODULES_MANIFEST__=(.*?);<\/script>/)?.[1];
+    const manifest = JSON.parse(serialized || '{}');
+
+    expect(readFileSync).toHaveBeenCalledWith('/public/static/modules/shell/prod/a82270f9/index.html', 'utf-8');
+    expect(html).toContain('PROD_SHELL_HTML');
+    expect(html).not.toContain('LEGACY_FIXED_SHELL');
+    expect(manifest.defaultEnv).toBe('prod');
+    expect(manifest.byEnv).toEqual(expected.byEnv);
+    expect(manifest.modules).toEqual(expected.modules);
+    expect(manifest.env).toBe('dev');
+  });
+
+  it('resolveShellAssetPath(..., req)：资源与 prod HTML 同源', async () => {
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+
+    const file = await (svc as any).resolveShellAssetPath('/shell/assets/index.prod.js', prodReq);
+
+    expect(file).toBe('/public/static/modules/shell/prod/a82270f9/assets/index.prod.js');
+  });
+
+  it.each(['shell', 'admin'])("resolveModuleVersion('%s', req)：env/version/entry/assetsBase 全为 prod", async (moduleKey) => {
+    const { svc, appVersionRepo } = build({ deployEnvId: '', dualEnv: true });
+    const version = moduleKey === 'shell' ? 'a82270f9' : 'b6ec9950';
+
+    const result = await svc.resolveModuleVersion(moduleKey, prodReq);
+
+    expect(result).toMatchObject({
+      env: 'prod',
+      version,
+      entry: `/static/modules/${moduleKey}/prod/${version}/index.js`,
+      assetsBase: `/static/modules/${moduleKey}/prod/${version}/`,
+      source: 'new',
+    });
+    expect(appVersionRepo.findOne).toHaveBeenCalledWith({ where: { appKey: moduleKey, envId: 'prod' } });
+  });
+
+  it('dev 站点无配置仍命中 dev；Host 未命中与无 req 旧调用均回退 dev', async () => {
+    const { svc } = build({ deployEnvId: '', dualEnv: true });
+    const noSiteReq = { headers: { host: '127.0.0.1' }, query: {} };
+
+    await expect((svc as any).resolveShellHtmlFile(req)).resolves.toBe(
+      '/public/static/modules/shell/dev/7a6be04/index.html',
+    );
+    await expect((svc as any).resolveShellHtmlFile(noSiteReq)).resolves.toBe(
+      '/public/static/modules/shell/dev/7a6be04/index.html',
+    );
+    await expect((svc as any).resolveShellHtmlFile()).resolves.toBe(
+      '/public/static/modules/shell/dev/7a6be04/index.html',
+    );
+    await expect(svc.resolveModuleVersion('admin', noSiteReq)).resolves.toMatchObject({
+      env: 'dev',
+      version: '3d5ce61',
+    });
+    await expect(svc.resolveModuleVersion('admin')).resolves.toMatchObject({ env: 'dev', version: '3d5ce61' });
+  });
+
+  it('DEPLOY_LEGACY_READ=1：prod Host 仍走配置 env + 旧表扁平路径，且不查询站点', async () => {
+    const { svc, deployRepo, siteRepo } = build({ deployEnvId: '', dualEnv: true, legacyRead: true });
+    deployRepo.findOne.mockImplementation(({ where }: any) =>
+      Promise.resolve({ currentVersion: where.moduleKey === 'shell' ? 'a6013f8' : 'd9889ff' }),
+    );
+
+    await expect((svc as any).resolveShellHtmlFile(prodReq)).resolves.toBe(
+      '/public/static/modules/shell/a6013f8/index.html',
+    );
+    await expect(svc.resolveModuleVersion('admin', prodReq)).resolves.toMatchObject({
+      env: 'dev',
+      version: 'd9889ff',
+      entry: '/static/modules/admin/d9889ff/index.js',
+      assetsBase: '/static/modules/admin/d9889ff/',
+      source: 'legacy',
+    });
+    expect(deployRepo.findOne).toHaveBeenCalledWith({
+      where: { envId: 'dev', moduleKey: 'admin' },
+      order: { deployedAt: 'DESC' },
+    });
+    expect(siteRepo.find).not.toHaveBeenCalled();
+    expect(siteRepo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('prod 无指针、版本目录缺失与资源缺失仍保留固定目录 / null 回落', async () => {
+    const missingPointer = build({ deployEnvId: '', dualEnv: true });
+    missingPointer.appVersionRepo.findOne.mockResolvedValue(null);
+    await expect((missingPointer.svc as any).resolveShellHtmlFile(prodReq)).resolves.toBe('/public/shell/index.html');
+
+    const missingDir = build({ deployEnvId: '', dualEnv: true });
+    (existsSync as jest.Mock).mockReturnValue(false);
+    await expect((missingDir.svc as any).resolveShellHtmlFile(prodReq)).resolves.toBe('/public/shell/index.html');
+    await expect((missingDir.svc as any).resolveShellAssetPath('/shell/assets/missing.js', prodReq)).resolves.toBeNull();
+    await expect((missingDir.svc as any).resolveShellAssetPath('/shell/../secret.txt', prodReq)).resolves.toBeNull();
+  });
+
+  it('NEW 站点查询失败：__version__ 显式失败，shell 保留固定目录可用性兜底', async () => {
+    const { svc, siteRepo, deployRepo } = build({ deployEnvId: '', dualEnv: true });
+    siteRepo.find.mockRejectedValue(new Error('site db down'));
+
+    await expect(svc.resolveModuleVersion('admin', prodReq)).rejects.toThrow('site db down');
+    await expect((svc as any).resolveShellHtmlFile(prodReq)).resolves.toBe('/public/shell/index.html');
+    expect(deployRepo.findOne).not.toHaveBeenCalled();
   });
 });
 
