@@ -172,6 +172,14 @@ function handleUnauthorized(token: string, options: RequestOptions): void {
 
 /** 通用请求方法 */
 export async function request<T = unknown>(options: RequestOptions): Promise<T> {
+  // 不变量：业务接口一律走 /api 前缀。漏写前缀的 URL 会被网关 SPA 兜底成
+  // 200 + shell HTML（2026-11-11 appearance.ts '/users/me' 实测），2xx 判据
+  // 会把壳当成功吞掉且静默出错——在此显式失败，把运行时诡异提前为开发期显错。
+  if (!options.url.startsWith('/api/')) {
+    const err = new Error(`[request] url 必须以 /api/ 开头，收到: ${options.url}`);
+    console.error(err.message);
+    throw err;
+  }
   // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
   const baseUrl = getApiBase();
   if (!baseUrl) {
