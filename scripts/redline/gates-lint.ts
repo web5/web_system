@@ -30,6 +30,23 @@ const GATE_SHARED = join(HERE, "gate-shared.sh");
 const GATE_TS = join(HERE, "gate.ts");
 const SCENARIOS = join(HERE, "cases", "scenarios.tsv");
 
+/**
+ * 主链路执行点 —— status=enforcing 后，这三处必须跑 gate.ts，不能再以 bash 调 scan-rules.sh。
+ *
+ * 为什么要机器检查：改 YAML 的 status 不改这三个文件，就是**假切主** ——
+ * 声明写着 enforcing、文档写着「以 gates.yaml 为准」，实际判案子的还是 bash。
+ * 这种状态比不切更糟：两份权威并存且无人知道哪份在生效。
+ */
+const MAIN_CHAIN = [
+  { path: join(TOP, ".githooks", "pre-commit"), label: ".githooks/pre-commit", varname: "SCANNER" },
+  { path: join(TOP, ".github", "workflows", "quality-gate.yml"), label: ".github/workflows/quality-gate.yml", varname: null },
+  { path: join(HERE, "collect-gate-observations.sh"), label: "scripts/redline/collect-gate-observations.sh", varname: null },
+  // 🔴 黄金用例运行器必须被测引擎是 gate.ts —— 这处最容易漏，因为它是"测试"不是"链路"。
+  //   2026-11-11 切主时实测踩到：三处入口都切了，run.sh 还在跑 bash，于是
+  //   「把 gates.yaml 的判据改坏」这件事没有任何测试会红 —— CI 全绿，判据已失效。
+  { path: join(HERE, "cases", "run.sh"), label: "scripts/redline/cases/run.sh", varname: "SCAN" },
+];
+
 const LEVELS = ["error", "warning", "notice"];
 const ACCEPTS = ["pass", "path", "sha"];
 const BATCHES = ["1", "2", "3", "external"];
@@ -45,9 +62,20 @@ interface Failure {
 
 const failures: Failure[] = [];
 const passes: string[] = [];
+/** 提示项：既不阻断也不计入通过，用于「切主后属预期」的差异 */
+const notes: string[] = [];
+
+/**
+ * status 的运行时值（main 里解析后赋值）。
+ * 它决定「YAML ↔ legacy bash 一致性」是阻断还是仅提示 —— 见 diffSets。
+ */
+let specStatus = "";
 
 function ok(label: string, note?: string): void {
   passes.push(note ? `${label}（${note}）` : label);
+}
+function note(text: string): void {
+  notes.push(text);
 }
 function bad(kind: string, detail: string): void {
   failures.push({ kind, detail });
@@ -125,19 +153,41 @@ function extractCaseGuardModes(src: string, env: string): string[] | null {
   return null;
 }
 
+/**
+ * 对比 YAML 与 bash 的集合。
+ *
+ * 🔴 切主（status=enforcing）后语义变了，这里必须区别对待，否则会自相矛盾：
+ *   declared   bash 是权威 → 不一致 = 声明写错了 → **阻断**
+ *   enforcing  YAML 是权威 → 不一致 = 有人合法改了判据、bash 作为遗留参考实现落后了
+ *              → 这是预期内的事，**只提示不阻断**。若在 enforcing 下仍阻断，
+ *                等于要求「改 YAML 的同时同步改 bash」，S3 想要的「改 1 处」直接失效。
+ *
+ * 那 gate.ts 的正确性靠谁守？靠黄金用例（cases/run.sh 逐字节比 expected）与
+ * 变异测试 —— 它们直接测执行结果，不依赖 bash 还准不准。
+ */
 function diffSets(label: string, yamlList: string[], bashList: string[]): void {
   const a = [...yamlList].sort();
   const b = [...bashList].sort();
-  if (a.join("\u0000") === b.join("\u0000")) {
+  const same = a.join("\u0000") === b.join("\u0000");
+  const onlyYaml = a.filter((x) => !b.includes(x));
+  const onlyBash = b.filter((x) => !a.includes(x));
+  const detail = [
+    onlyYaml.length > 0 ? `YAML 多出: ${onlyYaml.join(" , ")}` : "",
+    onlyBash.length > 0 ? `legacy bash 有而 YAML 缺: ${onlyBash.join(" , ")}` : "",
+  ]
+    .filter((s) => s !== "")
+    .join("；");
+
+  if (specStatus === "enforcing") {
+    if (same) ok(`${label} 与 legacy bash 一致`, `${a.length} 条`);
+    else note(`${label} 与 legacy bash 已分叉（${detail}）—— 切主后属预期：bash 已停更，YAML 是权威`);
+    return;
+  }
+  if (same) {
     ok(`${label} 与 bash 一致`, `${a.length} 条`);
     return;
   }
-  const onlyYaml = a.filter((x) => !b.includes(x));
-  const onlyBash = b.filter((x) => !a.includes(x));
-  const parts: string[] = [];
-  if (onlyYaml.length > 0) parts.push(`YAML 多出: ${onlyYaml.join(" , ")}`);
-  if (onlyBash.length > 0) parts.push(`bash 有而 YAML 缺: ${onlyBash.join(" , ")}`);
-  bad("漂移", `${label} 与 bash 不一致 —— ${parts.join("；")}`);
+  bad("漂移", `${label} 与 bash 不一致 —— ${detail}`);
 }
 
 function resolveSpecRef(ref: string): { external: boolean; exists: boolean } {
@@ -147,6 +197,81 @@ function resolveSpecRef(ref: string): { external: boolean; exists: boolean } {
   }
   if (ref.startsWith("/")) return { external: true, exists: existsSync(ref) };
   return { external: false, exists: existsSync(join(TOP, ref)) };
+}
+
+/**
+ * 防假切主：status=enforcing 时，主链路必须真的跑 gate.ts。
+ *
+ * 分文件判，不做通用正则 —— 三处的写法本来就不一样：
+ *   pre-commit  用 SCANNER 变量 + exec，字面量里没有路径拼接后的调用
+ *   CI          只看 `run:` 行（注释里提到 scan-rules.sh 是合法的）
+ *   采集脚本    非注释行里的实际命令
+ * 通用正则会同时误判注释和真调用，那种检查绿了也不可信。
+ */
+function checkMainChain(): void {
+  const stale: string[] = [];
+
+  // ① 用变量中转引擎路径的入口（pre-commit / cases/run.sh）：变量必须指向 gate.ts，
+  //    且调用它的运行时必须是 node（.ts 不能用 bash 跑）
+  for (const entry of MAIN_CHAIN) {
+    if (entry.varname === null) continue;
+    const src = safeRead(entry.path);
+    if (src === null) {
+      bad("接线", `读不到 ${entry.label}（切主后这个文件是必需的）`);
+      continue;
+    }
+    const declared = new RegExp(`^${entry.varname}="([^"]+)"`, "m").exec(src);
+    const value = declared === null ? "" : declared[1];
+    if (!value.endsWith("gate.ts")) stale.push(`${entry.label} 的 ${entry.varname}=${value || "(缺失)"}`);
+
+    // 调用行：`exec node "$SCANNER"` 或 `( cd … && node "$SCAN" … )`
+    const callRe = new RegExp(`(?:exec|&&)\\s+(\\S+)\\s+"\\$${entry.varname}"`, "m");
+    const call = callRe.exec(src);
+    if (call === null) bad("接线", `${entry.label} 里找不到调用 $${entry.varname} 的行（无法确认执行器）`);
+    else if (call[1] !== "node") stale.push(`${entry.label} 用 ${call[1]} 执行 gate.ts（ts 必须用 node）`);
+  }
+
+  // ② CI：redline-scan job 的 run: 行必须调 gate.ts，且不得调 bash scan-rules.sh
+  const ci = safeRead(MAIN_CHAIN[1].path);
+  if (ci === null) {
+    bad("接线", "读不到 .github/workflows/quality-gate.yml");
+  } else {
+    const runLines = ci
+      .split("\n")
+      .filter((l) => /^\s*(run:\s*)?[^#\s]/.test(l) && !/^\s*#/.test(l))
+      .filter((l) => l.includes("scan-rules.sh") || l.includes("redline/gate.ts"));
+    for (const l of runLines) {
+      if (/bash\s+\S*scan-rules\.sh/.test(l)) stale.push(`CI 仍在跑 bash scan-rules.sh：${l.trim().slice(0, 60)}`);
+    }
+    if (!runLines.some((l) => /node\s+\S*redline\/gate\.ts/.test(l))) {
+      bad("接线", "CI 里找不到 `node scripts/redline/gate.ts`（切主后主扫描器必须是它）");
+    }
+  }
+
+  // ③ 采集脚本：非注释行不得调 bash scan-rules.sh
+  const collect = safeRead(MAIN_CHAIN[2].path);
+  if (collect === null) {
+    bad("接线", "读不到 scripts/redline/collect-gate-observations.sh");
+  } else {
+    for (const l of collect.split("\n")) {
+      if (/^\s*#/.test(l)) continue;
+      if (/bash\s+\S*scan-rules\.sh/.test(l)) stale.push(`采集脚本仍在跑 bash scan-rules.sh：${l.trim().slice(0, 60)}`);
+    }
+  }
+
+  if (stale.length === 0) {
+    ok("主链路已切到 gate.ts", "pre-commit / CI / 采集 / 黄金用例运行器 四处");
+  } else {
+    for (const s of stale) bad("接线", `假切主：${s}`);
+  }
+}
+
+function safeRead(p: string): string | null {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function main(): number {
@@ -179,6 +304,7 @@ function main(): number {
   const schema = asStr(doc.schema, "schema");
   if (schema !== "gate-spec/v1") bad("结构", `schema 应为 gate-spec/v1，实际 ${schema}`);
   const status = asStr(doc.status, "status");
+  specStatus = status;
   const meta = asMap(doc.meta, "meta");
   if (status === "declared") {
     if (asStr(meta.authority, "meta.authority") !== "bash") {
@@ -186,6 +312,15 @@ function main(): number {
     } else {
       ok("权威声明一致", "status=declared → 权威为 bash");
     }
+  } else if (status === "enforcing") {
+    if (asStr(meta.authority, "meta.authority") !== "gate.ts") {
+      bad("结构", "status=enforcing 时 meta.authority 必须是 gate.ts（切主后 bash 不再是权威）");
+    } else {
+      ok("权威声明一致", "status=enforcing → 权威为 gate.ts");
+    }
+    checkMainChain();
+  } else {
+    bad("结构", `status 只能是 declared / enforcing，实际 ${status}`);
   }
   if (asStr(doc.owner, "owner") === "") bad("结构", "缺 owner（没有归属的门不会有人管退场）");
 
@@ -492,6 +627,10 @@ function main(): number {
   // ---------- 汇报 ----------
   const out: string[] = [];
   for (const p of passes) out.push(`  ✓ ${p}`);
+  if (notes.length > 0) {
+    out.push("");
+    for (const n of notes) out.push(`  · ${n}`);
+  }
   if (failures.length > 0) {
     out.push("");
     out.push(`✗ ${failures.length} 项失败`);

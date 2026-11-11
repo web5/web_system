@@ -1,6 +1,6 @@
 exit=1
 errors=2
-warnings=12
+warnings=13
 --- stdout ---
 ══ 红线违规（error）══
   [R11] UI commit 缺设计评审凭证
@@ -19,6 +19,9 @@ warnings=12
   [R13] 契约与数据变更 commit 缺评审凭证
        feat(db): 批量加列并建索引
        message 须带 Contract: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
+  [R13] Contract 凭证指向的报告不存在
+       docs/development/reviews/does-not-exist.md
+       报告须随该 commit 落盘
   [R14] 发布与环境变更 commit 缺评审凭证
        chore(ci): 加 fixture workflow
        message 须带 Release: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
@@ -46,4 +49,4 @@ warnings=12
   [R23] 测试范围决策 commit 缺评审凭证
        chore(ci): 加 fixture workflow
        message 须带 TestScope: pass（或报告路径）；纯微调走 Micro-exempt: <理由>（specs/rd-process-model §3.7）
-✗ 红线扫描未通过（2 error / 12 warning）
+✗ 红线扫描未通过（2 error / 13 warning）

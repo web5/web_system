@@ -5,7 +5,7 @@
 # 用法：bash scripts/redline/test-gate-hardening.sh
 #
 # 设计：造一个**临时 git 仓库**（隔离，不碰真实仓库），在里面构造各种 commit，
-#       逐条断言 scan-rules.sh / check-commit-msg.sh 的判定是否符合预期。
+#       逐条断言 gate.ts（判据来自 gates.yaml）/ check-commit-msg.sh 是否符合预期。
 #       每个用例都有「变异测试」注释 —— 故意改坏实现时该用例会红。
 #
 # 为什么用临时仓库：真实 master 上「造一个 Micro-exempt: R11 但缺 Plan:」的 commit
@@ -14,7 +14,7 @@
 set -uo pipefail
 
 TOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCAN="$TOP/scripts/redline/scan-rules.sh"
+SCAN="$TOP/scripts/redline/gate.ts"
 CHECK_MSG="$TOP/scripts/redline/check-commit-msg.sh"
 
 PASS=0
@@ -52,7 +52,7 @@ newcommit() { # $1=msg  $2..=文件路径（相对仓库根，内容自动写）
 
 # 扫描单个 commit 的判定：输出该 commit 命中的规则
 scan_one() { # $1=commit sha
-  bash "$SCAN" diff "$1^..$1" --no-color 2>/dev/null | grep -oE '\[R[0-9]+b?\]' | tr -d '[]' | sort -u | tr '\n' ' '
+  node "$SCAN" diff "$1^..$1" --no-color 2>/dev/null | grep -oE '\[R[0-9]+b?\]' | tr -d '[]' | sort -u | tr '\n' ' '
 }
 
 expect_rules() { # $1=label $2=commit $3=期望规则(空格分隔) $4=不该有的规则(空格分隔)
@@ -259,13 +259,38 @@ else
   bad "verify-deliverables.sh 存在" "文件缺失"
 fi
 
+# 功能断言（不只是「文件在」）：缺件必须判不合格。
+#
+# 🔴 为什么造「只缺 ①」的目录而不是空目录：四件套里缺任意一项都是 exit 1，
+#    空目录会让四条 bad 同时命中 —— 这时把 ① 的 bad 改成 ok（mutation-test 的变异手法）
+#    exit code 依然是 1，变异就永远「抓不到」。只有让 ① 成为**唯一**失败项，
+#    这条断言才真的在管 ①。这也是变异测试反推出来的断言写法：断言要能区分「哪一条判据挂了」。
+DELIV_TMP="$(mktemp -d "${TMPDIR:-/tmp}/deliv.XXXXXX")"
+printf '需求\n' > "$DELIV_TMP/x需求单.md"
+printf '用例\n' > "$DELIV_TMP/x测试.md"
+printf '交互\n' > "$DELIV_TMP/x交互清单.md"
+out="$(bash "$DELIV" "$DELIV_TMP" 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q '① 方案文档缺失'; then
+  ok "只缺方案文档 → 判不合格并点名 ①"
+else
+  bad "只缺方案文档 → 判不合格并点名 ①" "exit=${rc}（应非 0 且报 ①）"
+fi
+rm -rf "$DELIV_TMP"
+
+# 自检模式本身要能跑通（脚本被改坏时这里会先红）
+if bash "$DELIV" --self-check >/dev/null 2>&1; then
+  ok "自检模式可用（--self-check exit 0）"
+else
+  bad "自检模式可用" "bash scripts/verify-deliverables.sh --self-check 应 exit 0"
+fi
+
 # ============================================================
 sec_head "范围保护 · 上限拒绝 / 显式放行（#8250）"
 # ============================================================
 # 背景：1517 commit 全历史实测 17m27s、峰值 186MB —— 不是内存问题，但会被外部超时
 #   杀掉（exit 137/139），看起来像崩溃。加保护的目的不是"跑得快"，是"别让人等 17 分钟
 #   才被 kill"。⚠️ 判据里必须包含「不得静默截断」：只扫一部分却打印通过，是另一种假通过。
-out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 1 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 1 2>&1)"; rc=$?
 if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '扫描范围过大'; then
   ok "上限：超限 exit 2 + 报「扫描范围过大」"
 else
@@ -280,7 +305,7 @@ else
 fi
 
 # --max-commits 0 = 不限制
-out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 0 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$SCAN" --no-color diff "$BASE..HEAD" --max-commits 0 2>&1)"; rc=$?
 if ! printf '%s' "$out" | grep -q '扫描范围过大'; then
   ok "上限：--max-commits 0 不拦截"
 else
@@ -288,7 +313,7 @@ else
 fi
 
 # 非法值必须报错，不能静默当成 0 —— 当 0 等于悄悄关掉保护（假通过的近亲）
-out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" --max-commits abc 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$SCAN" --no-color diff "$BASE..HEAD" --max-commits abc 2>&1)"; rc=$?
 if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '非负整数'; then
   ok "上限：非法值 exit 2（不当成 0 悄悄关保护）"
 else
@@ -296,16 +321,18 @@ else
 fi
 
 # 默认 300 不得误伤正常 PR 范围（CI 单 PR <20 commit）
-out="$(cd "$WORK" && bash "$SCAN" --no-color diff "$BASE..HEAD" 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$SCAN" --no-color diff "$BASE..HEAD" 2>&1)"; rc=$?
 if ! printf '%s' "$out" | grep -q '扫描范围过大'; then
   ok "上限：默认 300 不误伤正常 PR 范围"
 else
   bad "上限：默认 300 不误伤正常 PR 范围" "rc=$rc"
 fi
 
-# SCAN_PROFILE 要能定位「哪一门慢」——只有累计值时要人做减法，等于半个工具
-out="$(cd "$WORK" && SCAN_PROFILE=1 bash "$SCAN" --no-color diff "$BASE..HEAD" 2>&1 >/dev/null)"
-if printf '%s' "$out" | grep -qE '\+[[:space:]]*[0-9]+s.*累计'; then
+# SCAN_PROFILE 要能定位「哪一门慢」——只有累计值时要人做减法，等于半个工具。
+# 精度到 0.001s 而不是 legacy bash 的整数秒：gate.ts 快一个数量级，整数秒会全是 0，
+# 那时「能定位慢门」这个意图就落空了。判定的是「有没有本段+累计两列」，不是数字精度。
+out="$(cd "$WORK" && SCAN_PROFILE=1 node "$SCAN" --no-color diff "$BASE..HEAD" 2>&1 >/dev/null)"
+if printf '%s' "$out" | grep -qE '\+[[:space:]]*[0-9.]+s.*累计'; then
   ok "profile：逐门输出「本段 +Ns / 累计 Ns」"
 else
   bad "profile：逐门输出「本段 +Ns / 累计 Ns」" "out=$(printf '%s' "$out" | head -3 | tr '\n' ' ')"

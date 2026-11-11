@@ -11,8 +11,11 @@
 # 返回码：0 = 全部一致；1 = 有差异或场景本身报错；2 = 用法错误
 #
 # 🔴 什么时候该跑它：
-#   · 改 scan-rules.sh / gate-shared.sh 的判定逻辑 → 先跑它，diff 里每一条变化都必须是"你有意改的"
-#   · 换执行引擎（门禁架构重构 S2 影子期）→ 新引擎跑它，输出必须与 expected/ 逐字节一致
+#   · 改 gates.yaml 的判据 → 必须跑它，diff 里每一条变化都必须是"你有意改的"
+#     （2026-11-11 切主后判据在 YAML，执行者是 gate.ts）
+#   · 改 gate.ts 的引擎逻辑 → 必须跑它，输出要与 expected/ 逐字节一致
+#   · 改 legacy bash（scan-rules.sh）→ 也跑它，但注意本脚本测的是 gate.ts；
+#     bash 侧的变化由 cases/shadow.sh 负责对拍
 # 🔴 什么时候不该直接 --update：
 #   期望值只能由"人工确认过的行为"产生。先看 diff，确认变化是对的，再 --update。
 #   盲目 --update 等于把"当前行为"当"正确行为"，黄金集就退化成快照记录器了。
@@ -21,7 +24,9 @@ set -uo pipefail
 
 CASES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP="$(cd "$CASES_DIR/../../.." && pwd)"
-SCAN="$TOP/scripts/redline/scan-rules.sh"
+# 2026-11-11 切主（S3）：被测引擎从 bash 换成 gate.ts。
+# 这是切主后 gate.ts 唯一的**行为**回归网 —— 它直接比对执行结果，不依赖 bash 还在不在。
+SCAN="$TOP/scripts/redline/gate.ts"
 EXPECTED_DIR="$CASES_DIR/expected"
 
 UPDATE=0
@@ -39,6 +44,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$SCAN" ] || { echo "找不到 $SCAN" >&2; exit 2; }
+command -v node >/dev/null 2>&1 || { echo "需要 node（gate.ts 用 Node 22 原生跑 TS）" >&2; exit 2; }
 mkdir -p "$EXPECTED_DIR"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-cases.XXXXXX")"
@@ -67,7 +73,7 @@ run_one() { # $1=id $2=mode $3=args
   local expanded
   expanded="$(eval "printf '%s' \"$args\"")"
   # shellcheck disable=SC2086
-  ( cd "$WORK" && bash "$SCAN" --no-color "$mode" $expanded ) > "$raw_out" 2> "$raw_err"
+  ( cd "$WORK" && node "$SCAN" --no-color "$mode" $expanded ) > "$raw_out" 2> "$raw_err"
   local rc=$?
 
   local norm_out="${WORK}/.norm.${id}"
