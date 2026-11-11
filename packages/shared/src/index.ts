@@ -158,6 +158,9 @@ export {
   resolvePublicUrl,
 } from './public-url';
 
+// 公网根地址读取客户端（服务间调用 system-service，带缓存 + env 兜底，唯一实现）
+export { PublicBaseUrlService } from './public-base-url.service';
+
 /**
  * 环境变量获取
  */
