@@ -191,7 +191,10 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         ...options.header,
       },
       success(res) {
-        if (res.statusCode === 200) {
+        // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
+        // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
+        // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
+        if (res.statusCode >= 200 && res.statusCode < 300) {
           const body = res.data as unknown;
           if (isAiAgentErrorEnvelope(body)) {
             if (body.code === 4010) {

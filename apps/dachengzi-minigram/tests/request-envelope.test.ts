@@ -93,3 +93,46 @@ describe('request.ts 对 ai-agent 错误信封的识别（HTTP 200 + { code, mes
     await expect(p).resolves.toEqual({ code: 0, message: 'ok', data: { list: [] } });
   });
 });
+
+/**
+ * HTTP 判据统一为 2xx —— 原先只认 200，把 201/204 这类合法成功也判失败。
+ * 口径与 services/auth.ts:95 的 `>= 200 && < 300` 一致。
+ *
+ * ⚠️ 特意钉住 304：304 Not Modified 是「条件请求未变更」的重定向语义，
+ * 对小程序请求封装而言拿不到业务 body，必须走失败分支——判据不得放宽成「所有 3xx」。
+ */
+describe('request.ts 的 HTTP 成功判据统一为 2xx（不只 200）', () => {
+  it('200 OK → resolve', async () => {
+    const p = request<{ ok: boolean }>({ url: '/api/anything' });
+    fireSuccess({ statusCode: 200, data: { ok: true } });
+    await expect(p).resolves.toEqual({ ok: true });
+  });
+
+  it('201 Created → resolve（原先被判失败，本次修复点）', async () => {
+    const p = request<{ id: number }>({ url: '/api/anything', method: 'POST', data: {} });
+    fireSuccess({ statusCode: 201, data: { id: 7 } });
+    await expect(p).resolves.toEqual({ id: 7 });
+    expect(wxMock.showToast).not.toHaveBeenCalled();
+  });
+
+  it('204 No Content（body 为空）→ resolve，不 toast', async () => {
+    const p = request({ url: '/api/anything', method: 'DELETE' });
+    fireSuccess({ statusCode: 204, data: '' });
+    await expect(p).resolves.toBe('');
+    expect(wxMock.showToast).not.toHaveBeenCalled();
+  });
+
+  it('304 Not Modified → reject（304 不是成功，判据不得放宽到所有 3xx）', async () => {
+    const p = request({ url: '/api/anything' });
+    fireSuccess({ statusCode: 304, data: '' });
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledWith({ title: '请求失败 (304)', icon: 'none' });
+  });
+
+  it('401 仍走未授权分支（2xx 判据改动不得影响 401 语义）', async () => {
+    const p = request({ url: '/api/anything' });
+    fireSuccess({ statusCode: 401, data: { message: 'Unauthorized' } });
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.removeStorageSync).toHaveBeenCalledWith('access_token');
+  });
+});

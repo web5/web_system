@@ -172,16 +172,25 @@ export function uploadAvatar(filePath: string): Promise<string> {
       name: 'file',
       header: { Authorization: `Bearer ${token}` },
       success(res) {
-        if (res.statusCode === 200) {
+        // wx.uploadFile 的 res.data 是**字符串**（与 wx.request 不同，不按 content-type 自动解析）。
+        // 直接 reject(res) 会让公共函数 readMessage/readConflict 取 `err.data.message`（对象路径）
+        // 永远拿不到 → 恒回落 fallback 文案。故先就地尝试解析一次；非 JSON（网关异常页/代理报错）
+        // 则保留原始字符串原样透出，由上层回落 fallback。
+        if (typeof res.data === 'string') {
           try {
-            const parsed = JSON.parse(res.data) as { data?: { url?: unknown } };
-            const url = parsed?.data?.url;
-            if (typeof url === 'string' && url) {
-              resolve(url);
-              return;
-            }
+            (res as unknown as { data: unknown }).data = JSON.parse(res.data);
           } catch {
-            // 响应非 JSON（网关异常页/代理报错）按上传失败处理
+            // 非 JSON：保留原始字符串
+          }
+        }
+        // 成功判据统一 2xx（不只 200）：upload-service / 网关按 POST 语义返回 201 Created 时
+        // 仍是成功。与 services/auth.ts:95 的 `>= 200 && < 300` 同口径。
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const body = res.data as unknown as { data?: { url?: unknown } } | null | undefined;
+          const url = body?.data?.url;
+          if (typeof url === 'string' && url) {
+            resolve(url);
+            return;
           }
         }
         reject(res);
