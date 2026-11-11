@@ -130,6 +130,9 @@ Page({
       this.setData({ nickname: next });
       // 写本地缓存：供「我的」页秒显/兜底（与头像同口径）
       writeLocalNickname(next);
+      // 跨页广播「资料已更新」：已在页面栈里的「我的」页收到后立即回显。
+      // 不依赖它 onShow 重跑 / fetchProfile 成功 —— 这是台账 #8688「保存成功但我的页仍显示旧值」的根治项。
+      if (app && app.eventBus) app.eventBus.emit('profile:updated', { nickname: next });
       wx.showToast({ title: '昵称已更新', icon: 'none' });
     } catch (err) {
       wx.showToast({ title: readMessage(err, '昵称保存失败'), icon: 'none' });
@@ -165,5 +168,8 @@ Page({
       app.globalData.userInfo.avatar = path;
     }
     this.setData({ avatarUrl: resolveAvatarUrl(path) });
+    // 跨页广播「资料已更新」（同 saveNickname）：payload 给**原值**，
+    // 由接收方按自己的渲染口径过 resolveAvatarUrl（「我的」页 index.ts:122 同口径）。
+    if (app && app.eventBus) app.eventBus.emit('profile:updated', { avatar: path });
   },
 });
