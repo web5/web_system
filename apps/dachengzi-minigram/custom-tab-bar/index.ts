@@ -36,6 +36,18 @@ Component({
 
   lifetimes: {
     attached() {
+      // 立即高亮：切 tab 后本组件是**新页面里的独立实例**，selected 会回到初始值 0，
+      // 若只等 onShow 登记，会出现「页面切过去了、高亮还停在上一项」的半拍闪跳。
+      // 先读 globalData 缓存的当前 tab（onSwitch / setTabBarSelected 都会写），
+      // 命中即立即恢复；读不到（首启未登记）再走 syncFromRoute 兜底。
+      try {
+        const app = getApp<IAppOption>();
+        if (app && typeof app.globalData.tabIndex === 'number') {
+          this.setData({ selected: app.globalData.tabIndex });
+        }
+      } catch {
+        // getApp 不可用（极早期）：交给 syncFromRoute
+      }
       if (!this.data._registered) this.syncFromRoute();
     },
   },
@@ -72,8 +84,15 @@ Component({
       // （10-13 实测：点「对话」误走 switchTab，而 chat 不在 tabBar.list → 失败不跳转，
       // 但 selected 已置 0 → 高亮与当前页错位）。统一数值化后比较。
       const isTab = Number(istab) === 1;
-      // 乐观高亮：切页前先亮，目标页 onShow 会再登记一次（幂等、值一致）
+      // 乐观高亮：切页前先亮（当前实例），并把 idx 写入 globalData，供目标页新实例
+      // attached 时立即读回（消除 onShow 登记前的半拍）。目标页 onShow 会再登记一次
+      // （幂等、值一致）。
       this.setData({ selected: idx });
+      try {
+        getApp<IAppOption>().globalData.tabIndex = idx;
+      } catch {
+        // getApp 不可用：仅乐观高亮，onShow 仍会兜底登记
+      }
       if (isTab) wx.switchTab({ url: path });
     },
   },

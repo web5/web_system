@@ -34,5 +34,13 @@ export function setTabBarSelected(
   if (typeof getTabBar !== 'function') return;
   const bar = getTabBar();
   if (!bar) return;
+  // 同步到 globalData：自定义 tabBar 组件是每页独立实例，切 tab 后新实例的 selected
+  // 会回到初始值 0，只能靠 onShow 登记恢复 —— 中间会闪「高亮停在上一项」。
+  // 落一份跨实例共享值，让新实例 attached 时立即读回，消除这半拍（2026-11-11 实测）。
+  try {
+    getApp<IAppOption>().globalData.tabIndex = idx;
+  } catch {
+    // getApp 不可用（极早期）：只登记当前实例，globalData 下次再补
+  }
   bar.setData({ selected: idx, _registered: true });
 }
