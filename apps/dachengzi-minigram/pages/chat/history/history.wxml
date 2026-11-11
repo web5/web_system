@@ -9,8 +9,8 @@
   <!-- 加载中 -->
   <view wx:if="{{loading}}" class="loading">加载中…</view>
 
-  <!-- 有数据 -->
   <block wx:elif="{{list.length > 0}}">
+    <!-- 有数据 -->
     <view class="list">
       <view class="r" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="open">
         <view class="rl">
@@ -23,8 +23,8 @@
     <view class="foot">对话记录跟随账号，换设备也能接着聊</view>
   </block>
 
-  <!-- 空态 -->
   <view class="empty" wx:else>
+    <!-- 空态 -->
     <view class="ill">
       <view class="ill-bubble ill-b1">A</view>
       <view class="ill-bubble ill-b2">文</view>

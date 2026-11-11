@@ -194,8 +194,8 @@ export interface AgentApi {
   readonly agentId: string;
   /** 发起一次流式对话 */
   stream(userInput: string, options: AgentStreamOptions, handlers: AgentStreamHandlers): void;
-  /** 会话列表（分页） */
-  listConversations(page?: number, pageSize?: number): Promise<{ list: ConversationSummary[]; total: number }>;
+  /** 会话列表（分页）；source 过滤会话来源（chat=主对话 / tool=工具页），不传则后端默认 chat */
+  listConversations(page?: number, pageSize?: number, source?: 'chat' | 'tool'): Promise<{ list: ConversationSummary[]; total: number }>;
   /** 会话详情 */
   getConversation<Report = unknown>(conversationId: string): Promise<ConversationDetail<Report>>;
 }
@@ -534,11 +534,11 @@ export function createAgentApi(agentId: string): AgentApi {
     stream(userInput, options, handlers) {
       requestAgentStream(agentId, userInput, options, handlers);
     },
-    listConversations(page = 1, pageSize = 20) {
-      // ⚠️ 不要在这里加未声明的 query 参数：后端 ListConversationsDto 只声明 page/pageSize，
-      // 且 main.ts 的 ValidationPipe 开了 forbidNonWhitelisted → 多余参数直接 400。
-      // 「按 agentId 过滤」是后端 P1 项，待其 DTO 支持后再补 `&agentId=`。
-      return get<{ list: ConversationSummary[]; total: number }>(`${CONVERSATIONS_URL}?page=${page}&pageSize=${pageSize}`);
+    listConversations(page = 1, pageSize = 20, source?: 'chat' | 'tool') {
+      // source 是 ListConversationsDto 已声明的 @IsOptional 字段，传了不会触发 forbidNonWhitelisted 400。
+      const base = `${CONVERSATIONS_URL}?page=${page}&pageSize=${pageSize}`;
+      const url = source ? `${base}&source=${source}` : base;
+      return get<{ list: ConversationSummary[]; total: number }>(url);
     },
     getConversation<Report = unknown>(conversationId: string) {
       return get(`${CONVERSATIONS_URL}/${conversationId}`) as Promise<ConversationDetail<Report>>;

@@ -144,3 +144,6 @@ scripts/redline/__pycache__/
 
 # 端到端测试报告产物（contract-risk 评测 run 输出，001.md + raw final 原文，非源码）
 servers/ai-agent/e2e/contract-risk/reports/
+
+# 微信开发者工具私有配置（含个人 urlCheck 等 IDE 设置），不入库
+**/project.private.config.json

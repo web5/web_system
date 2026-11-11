@@ -89,6 +89,43 @@ export function isNicknameUnset(nickname?: string): boolean {
   return !n || n.startsWith('wx_');
 }
 
+/** 头像本地缓存 storage key（保存成功后落库，供「我的」页秒显/兜底） */
+const AVATAR_STORAGE_KEY = 'kd_profile_avatar';
+/** 昵称本地缓存 storage key（保存成功后落库，供「我的」页秒显/兜底） */
+const NICKNAME_STORAGE_KEY = 'kd_profile_nickname';
+
+/** 读本地持久化头像路径（读不到返回空串，交由渲染层兜底「橙」占位） */
+export function readLocalAvatar(): string {
+  try {
+    return wx.getStorageSync(AVATAR_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 读本地持久化昵称（读不到返回空串） */
+export function readLocalNickname(): string {
+  try {
+    return wx.getStorageSync(NICKNAME_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 写本地头像缓存（写失败不影响展示，吞掉） */
+export function writeLocalAvatar(path: string): void {
+  try {
+    wx.setStorageSync(AVATAR_STORAGE_KEY, path);
+  } catch {}
+}
+
+/** 写本地昵称缓存（写失败不影响展示，吞掉） */
+export function writeLocalNickname(nickname: string): void {
+  try {
+    wx.setStorageSync(NICKNAME_STORAGE_KEY, nickname);
+  } catch {}
+}
+
 /** 取 apiBase：优先 storage，兜底 wx.getApp（与 utils/request.ts 同一口径）。
  *  wx.uploadFile 不走 request 封装，需自行取 base。 */
 function getUploadBase(): string {
@@ -111,7 +148,7 @@ function getUploadBase(): string {
 export function resolveAvatarUrl(url?: string): string {
   const u = (url || '').trim();
   if (!u) return '';
-  if (/^https?:\/\//i.test(u) || u.startsWith('wxfile://')) return u;
+  if (/^https?:\/\//i.test(u) || /^wxfile:\/\//i.test(u)) return u;
   if (u.startsWith('/')) {
     const base = getUploadBase();
     return base ? `${base.replace(/\/+$/, '')}${u}` : u;
@@ -135,16 +172,25 @@ export function uploadAvatar(filePath: string): Promise<string> {
       name: 'file',
       header: { Authorization: `Bearer ${token}` },
       success(res) {
-        if (res.statusCode === 200) {
+        // wx.uploadFile 的 res.data 是**字符串**（与 wx.request 不同，不按 content-type 自动解析）。
+        // 直接 reject(res) 会让公共函数 readMessage/readConflict 取 `err.data.message`（对象路径）
+        // 永远拿不到 → 恒回落 fallback 文案。故先就地尝试解析一次；非 JSON（网关异常页/代理报错）
+        // 则保留原始字符串原样透出，由上层回落 fallback。
+        if (typeof res.data === 'string') {
           try {
-            const parsed = JSON.parse(res.data) as { data?: { url?: unknown } };
-            const url = parsed?.data?.url;
-            if (typeof url === 'string' && url) {
-              resolve(url);
-              return;
-            }
+            (res as unknown as { data: unknown }).data = JSON.parse(res.data);
           } catch {
-            // 响应非 JSON（网关异常页/代理报错）按上传失败处理
+            // 非 JSON：保留原始字符串
+          }
+        }
+        // 成功判据统一 2xx（不只 200）：upload-service / 网关按 POST 语义返回 201 Created 时
+        // 仍是成功。与 services/auth.ts:95 的 `>= 200 && < 300` 同口径。
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const body = res.data as unknown as { data?: { url?: unknown } } | null | undefined;
+          const url = body?.data?.url;
+          if (typeof url === 'string' && url) {
+            resolve(url);
+            return;
           }
         }
         reject(res);

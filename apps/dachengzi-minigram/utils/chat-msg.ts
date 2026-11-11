@@ -16,6 +16,8 @@ import {
   type TranslateDetail,
 } from './translate-parse';
 import type { ChatSeed, TranslateTask } from './translate-keys';
+// 仅类型导入（编译期擦除，不引入 markdown.ts 运行时的 wx 依赖，保持本文件裸跑约束）
+import type { MdNode } from './markdown';
 
 /* ==================== 类型 ==================== */
 
@@ -51,6 +53,10 @@ export interface ChatMsg {
   detail?: TranslateDetail;
   /** 翻译卡详情是否展开（卡内「查看详解」折叠，UI 态） */
   detailOpen?: boolean;
+  /** 运行时：正文的 rich-text nodes 缓存（markdown 渲染，见 utils/markdown.ts；在页面层生成） */
+  _nodes?: MdNode[];
+  /** 生成 _nodes 时的原文：命中即跳过重解析（流式期每条 delta 只重算当前条） */
+  _mdSrc?: string;
 }
 
 /** 会话级锁定 agentId：仅 translate / auto 两种 */
