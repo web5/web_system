@@ -105,6 +105,9 @@ type LoginEnsurer = () => Promise<boolean>;
 
 let loginEnsurer: LoginEnsurer | null = null;
 
+/** 静默重登进行中标志：并发 401 只触发一次重登，避免多个请求同时弹登录墙 */
+let isRelogging = false;
+
 /** 注入登录确保器（services/auth.ts 调用一次） */
 export function setLoginEnsurer(fn: LoginEnsurer): void {
   loginEnsurer = fn;
@@ -209,57 +212,82 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     throw new Error('NOT_LOGGED_IN');
   }
 
-  return new Promise((resolve, reject) => {
-    wx.request({
-      url: `${baseUrl}${options.url}`,
-      // wx.request 运行时支持 PATCH，但 @types/wechat-miniprogram 的 method 枚举未收录 PATCH，
-      // 此处按运行时能力放宽类型（保留 PATCH 透传）。
-      method: (options.method || 'GET') as WechatMiniprogram.RequestOption['method'],
-      data: options.data,
-      timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
-      header: {
-        'Content-Type': 'application/json',
-        // 强制不压缩：gateway 启用了 compression，但 wx.request 在开发者工具对 gzip 响应解析失败
-        // (Failed to load response data)。identity 表示不压缩，gateway 会返回明文。
-        'Accept-Encoding': 'identity',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.header,
-      },
-      success(res) {
-        // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
-        // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
-        // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          const body = res.data as unknown;
-          if (isAiAgentErrorEnvelope(body)) {
-            if (body.code === 4010) {
-              // ai-agent 未授权/缺 token：与 HTTP 401 同口径处理（清 token + 提示/广播重登）
-              handleUnauthorized(token, options);
+  const doRequest = (tk: string): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      wx.request({
+        url: `${baseUrl}${options.url}`,
+        // wx.request 运行时支持 PATCH，但 @types/wechat-miniprogram 的 method 枚举未收录 PATCH，
+        // 此处按运行时能力放宽类型（保留 PATCH 透传）。
+        method: (options.method || 'GET') as WechatMiniprogram.RequestOption['method'],
+        data: options.data,
+        timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
+        header: {
+          'Content-Type': 'application/json',
+          // 强制不压缩：gateway 启用了 compression，但 wx.request 在开发者工具对 gzip 响应解析失败
+          // (Failed to load response data)。identity 表示不压缩，gateway 会返回明文。
+          'Accept-Encoding': 'identity',
+          ...(tk ? { Authorization: `Bearer ${tk}` } : {}),
+          ...options.header,
+        },
+        success(res) {
+          // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
+          // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
+          // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            const body = res.data as unknown;
+            if (isAiAgentErrorEnvelope(body)) {
+              if (body.code === 4010) {
+                // ai-agent 未授权/缺 token：标记未授权，交由 request() 统一静默重登重试
+                reject(Object.assign(res, { __unauthorized: true }));
+                return;
+              }
+              const msg = body.message || `请求失败 (${body.code})`;
+              if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
               reject(res);
               return;
             }
-            const msg = body.message || `请求失败 (${body.code})`;
+            resolve(res.data as T);
+          } else if (res.statusCode === 401) {
+            // HTTP 401：标记未授权，交由 request() 统一静默重登重试
+            reject(Object.assign(res, { __unauthorized: true }));
+          } else {
+            const data = res.data as any;
+            const msg = data?.message || `请求失败 (${res.statusCode})`;
             if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
             reject(res);
-            return;
           }
-          resolve(res.data as T);
-        } else if (res.statusCode === 401) {
-          handleUnauthorized(token, options);
-          reject(res);
-        } else {
-          const data = res.data as any;
-          const msg = data?.message || `请求失败 (${res.statusCode})`;
-          if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
-          reject(res);
-        }
-      },
-      fail(err) {
-        if (!options.silent) wx.showToast({ title: '网络请求失败', icon: 'none' });
-        reject(err);
-      },
+        },
+        fail(err) {
+          if (!options.silent) wx.showToast({ title: '网络请求失败', icon: 'none' });
+          reject(err);
+        },
+      });
     });
-  });
+
+  try {
+    return await doRequest(token);
+  } catch (res) {
+    const is401 = (res as any)?.__unauthorized === true;
+    // 静默重登：401 且非主动登出、非 silent、有 loginEnsurer、当前无并发重登时，
+    // 先确保登录成功，再用新 token 重试一次；仍失败则走 handleUnauthorized。
+    if (is401 && !isLoggedOut() && !options.silent && loginEnsurer && !isRelogging) {
+      isRelogging = true;
+      try {
+        const ok = await Promise.race([
+          loginEnsurer(),
+          new Promise<false>((r) => setTimeout(() => r(false), LOGIN_ENSURE_TIMEOUT)),
+        ]);
+        if (ok) {
+          const nt = getToken();
+          if (nt) return await doRequest(nt);
+        }
+      } finally {
+        isRelogging = false;
+      }
+    }
+    if (is401) handleUnauthorized(token, options);
+    throw res;
+  }
 }
 
 /** GET 快捷方法 */
