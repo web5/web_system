@@ -317,6 +317,258 @@ TestScope: docs/test-scope/scope.md" $t; t=$((t + 60))
 Micro-exempt: R17: yes" "$off_weak"
   echo "C_EXEMPT_WEAK $(git rev-parse HEAD)"
 
+  # ============================================================
+  # 2026-11-11 #8722/#8256 扩展段：八仙豁免 + 凭证分支 + R9/R9b
+  # ============================================================
+
+  # ---- R9 阳性：新增页面、同 range 无 passport ----
+  # Proto 用 BASE 的 sha（祖先判定通过）、Design: pass —— 把 R10/R11 隔离开，只留 R9
+  _fx_write apps/admin/pages/r9new/index.wxml '<view>r9</view>'
+  git add -A
+  _fx_commit "feat(admin): 新增 r9 页面（无原型）
+Proto: $BASE
+Design: pass" $t; t=$((t + 60))
+  echo "C_R9_PAGE $(git rev-parse HEAD)"
+
+  # ---- R9 阴性：新增页面且同 commit 带原型 ----
+  _fx_write apps/admin/pages/r9ok/index.wxml '<view>r9ok</view>'
+  _fx_write docs/ui/prototypes/r9ok.md '# r9ok 原型'
+  git add -A
+  _fx_commit "feat(admin): 新增 r9ok 页面（带原型）
+Proto: $BASE
+Design: pass" $t; t=$((t + 60))
+  echo "C_R9_PASSPORT $(git rev-parse HEAD)"
+
+  # ---- R9b 阳性：修改既有 UI（结构标签），无 passport ----
+  _fx_write apps/admin/src/views/Base.vue \
+    '<template>' \
+    '  <view class="card">c1</view>' \
+    '  <view class="card">c2</view>' \
+    '  <view class="card">c3</view>' \
+    '  <view class="card">c4</view>' \
+    '  <view class="card">c5</view>' \
+    '  <view class="card">c6</view>' \
+    '</template>'
+  git add -A
+  _fx_commit "feat(admin): 重排卡片（无原型）
+Proto: $BASE
+Design: pass
+Test: pass" $t; t=$((t + 60))
+  echo "C_R9B_MOD $(git rev-parse HEAD)"
+
+  # ---- R9b 阴性：修改既有 UI 且同 commit 带原型 ----
+  _fx_write apps/admin/src/views/Base.vue \
+    '<template>' \
+    '  <view class="card">c1</view>' \
+    '  <view class="card">c2</view>' \
+    '  <view class="card">c3</view>' \
+    '  <view class="card">c4</view>' \
+    '  <view class="card">c5</view>' \
+    '  <view class="card">c6</view>' \
+    '  <view class="card">c7</view>' \
+    '</template>'
+  _fx_write docs/ui/prototypes/r9b-ok.md '# r9b 原型'
+  git add -A
+  _fx_commit "feat(admin): 再排卡片（带原型）
+Proto: $BASE
+Design: pass
+Test: pass" $t; t=$((t + 60))
+  echo "C_R9B_PASSPORT $(git rev-parse HEAD)"
+
+  # ---- R9b 豁免通路：既有 UI 修改 ≥5 行 + Micro-exempt: R9b ----
+  # R9b 的豁免是内联循环但真读 g.exempt（`if (!g.exempt) break`）——
+  # 「exempt: true → false」变异唯一有观测的场景：豁免生效输出零、变异后 R9b 翻红。
+  # Proto/Design/Test trailer 齐：隔开 R10/R11/R17，让本场景只盯 R9b 豁免。
+  _fx_write apps/admin/src/views/Base.vue \
+    '<template>' \
+    '  <view class="card">c1</view>' \
+    '  <view class="card">c2</view>' \
+    '  <view class="card">c3</view>' \
+    '  <view class="card">c4</view>' \
+    '  <view class="card">c5</view>' \
+    '  <view class="card">c6</view>' \
+    '  <view class="card">c7</view>' \
+    '  <view class="card">c8</view>' \
+    '</template>'
+  git add -A
+  _fx_commit "feat(admin): 三排卡片（豁免）
+Proto: $BASE
+Design: pass
+Test: pass
+Micro-exempt: R9b: 卡片重排为纯视觉微调，交互与数据流未变（夹具验证 R9b 豁免通路）" $t; t=$((t + 60))
+  echo "C_R9B_EXEMPT $(git rev-parse HEAD)"
+
+  # ---- 八仙豁免：一个 commit 同时命中 8 门 + 一条 scoped 豁免全列 ----
+  # 这是「exempt 字段活化」（2026-11-11 #8722，引擎此前从不读 exempt）的主干断言：
+  # 豁免后输出为零；任何一门 exempt 被改成 false，对应门立刻翻红 → 变异必捕获。
+  _fx_write apps/admin/src/views/Mega.vue '<template><view>mega</view></template>'
+  _fx_write servers/api/src/modules/mega/mega.controller.ts \
+    'export class MegaController {' \
+    '  a() { return 1; }' \
+    '  b() { return 2; }' \
+    '  c() { return 3; }' \
+    '  d() { return 4; }' \
+    '  e() { return 5; }' \
+    '}'
+  _fx_write .github/workflows/mega.yml \
+    'name: mega' \
+    'on: [push]' \
+    'jobs: {a: {runs-on: ubuntu-latest, steps: [{run: echo ok}]}}'
+  git add -A
+  _fx_commit "feat: 八仙过海（UI + 契约 + 发布面 + 共享面，全豁免）
+Micro-exempt: R10,R11,R13,R14,R15,R17,R18,R23: 夹具验证八门豁免通路各自独立生效" $t; t=$((t + 60))
+  echo "C_EXEMPT_ALL $(git rev-parse HEAD)"
+
+  # ---- R13 阻塞分支：Contract 指向真实报告但阻塞未清零 ----
+  _fx_write archive/migrations/20260104-fixture-blocked.sql \
+    'ALTER TABLE fixture ADD COLUMN g1 INT;' \
+    'ALTER TABLE fixture ADD COLUMN g2 INT;' \
+    'ALTER TABLE fixture ADD COLUMN g3 INT;' \
+    'ALTER TABLE fixture ADD COLUMN g4 INT;' \
+    'ALTER TABLE fixture ADD COLUMN g5 INT;' \
+    'CREATE INDEX idx_fixture_g1 ON fixture (g1);'
+  _fx_write docs/reviews/c13-blocked.md \
+    '# 契约评审' \
+    '阻塞: 1' \
+    '- 字段命名未收敛'
+  git add -A
+  _fx_commit "feat(db): 加列（评审有阻塞）
+Contract: docs/reviews/c13-blocked.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R13_BLOCKING $(git rev-parse HEAD)"
+
+  # ---- R14 三分支：有效路径 / 假路径 / 阻塞（Release 凭证）----
+  _fx_write .github/workflows/r14v.yml \
+    'name: r14v' \
+    'on: [push]' \
+    'jobs: {a: {runs-on: ubuntu-latest, steps: [{run: echo ok}]}}'
+  _fx_write docs/reviews/c14.md \
+    '# 发布评审' \
+    '阻塞: 0'
+  git add -A
+  _fx_commit "chore(ci): 加 r14v（凭证齐全）
+Release: docs/reviews/c14.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R14_VALID $(git rev-parse HEAD)"
+
+  _fx_write .github/workflows/r14f.yml \
+    'name: r14f' \
+    'on: [push]' \
+    'jobs: {a: {runs-on: ubuntu-latest, steps: [{run: echo ok}]}}'
+  git add -A
+  _fx_commit "chore(ci): 加 r14f（凭证指向不存在）
+Release: docs/reviews/no-such-release.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R14_FAKE $(git rev-parse HEAD)"
+
+  _fx_write .github/workflows/r14b.yml \
+    'name: r14b' \
+    'on: [push]' \
+    'jobs: {a: {runs-on: ubuntu-latest, steps: [{run: echo ok}]}}'
+  _fx_write docs/reviews/c14b.md \
+    '# 发布评审' \
+    '阻塞: 2' \
+    '- 回滚方案未评审' \
+    '- 灰度比例未定'
+  git add -A
+  _fx_commit "chore(ci): 加 r14b（评审有阻塞）
+Release: docs/reviews/c14b.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R14_BLOCKING $(git rev-parse HEAD)"
+
+  # ---- R15 三分支（Code 凭证；浅层 controller 避开 R13，Test/Plan 用 pass 隔离）----
+  _fx_write servers/api/src/r15v.controller.ts \
+    'export class R15vController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  _fx_write docs/reviews/c15.md \
+    '# 方案评审' \
+    '阻塞: 0'
+  git add -A
+  _fx_commit "feat(api): 新增 r15v 接口（凭证齐全）
+Code: docs/reviews/c15.md
+Test: pass
+Plan: pass" $t; t=$((t + 60))
+  echo "C_R15_VALID $(git rev-parse HEAD)"
+
+  _fx_write servers/api/src/r15f.controller.ts \
+    'export class R15fController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  git add -A
+  _fx_commit "feat(api): 新增 r15f 接口（凭证指向不存在）
+Code: docs/reviews/no-such-code.md
+Test: pass
+Plan: pass" $t; t=$((t + 60))
+  echo "C_R15_FAKE $(git rev-parse HEAD)"
+
+  _fx_write servers/api/src/r15b.controller.ts \
+    'export class R15bController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  _fx_write docs/reviews/c15b.md \
+    '# 方案评审' \
+    '阻塞: 1' \
+    '- 错误码未定义'
+  git add -A
+  _fx_commit "feat(api): 新增 r15b 接口（评审有阻塞）
+Code: docs/reviews/c15b.md
+Test: pass
+Plan: pass" $t; t=$((t + 60))
+  echo "C_R15_BLOCKING $(git rev-parse HEAD)"
+
+  # ---- R18 三分支（Plan 凭证，与 R15 同构）----
+  _fx_write servers/api/src/r18v.controller.ts \
+    'export class R18vController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  _fx_write docs/reviews/c18.md \
+    '# 方案评审' \
+    '阻塞: 0'
+  git add -A
+  _fx_commit "feat(api): 新增 r18v 接口（凭证齐全）
+Plan: docs/reviews/c18.md
+Code: pass
+Test: pass" $t; t=$((t + 60))
+  echo "C_R18_VALID $(git rev-parse HEAD)"
+
+  _fx_write servers/api/src/r18f.controller.ts \
+    'export class R18fController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  git add -A
+  _fx_commit "feat(api): 新增 r18f 接口（凭证指向不存在）
+Plan: docs/reviews/no-such-plan.md
+Code: pass
+Test: pass" $t; t=$((t + 60))
+  echo "C_R18_FAKE $(git rev-parse HEAD)"
+
+  _fx_write servers/api/src/r18b.controller.ts \
+    'export class R18bController {' \
+    '  ping() { return "pong"; }' \
+    '}'
+  _fx_write docs/reviews/c18b.md \
+    '# 方案评审' \
+    '阻塞: 1' \
+    '- 回退策略未评审'
+  git add -A
+  _fx_commit "feat(api): 新增 r18b 接口（评审有阻塞）
+Plan: docs/reviews/c18b.md
+Code: pass
+Test: pass" $t; t=$((t + 60))
+  echo "C_R18_BLOCKING $(git rev-parse HEAD)"
+
+  # ---- R23 阻塞分支：TestScope 清单存在但阻塞未清零 ----
+  _fx_write scripts/ci/r23b.sh 'echo r23b'
+  _fx_write docs/test-scope/blocked.md \
+    '# 测试范围决策' \
+    '阻塞: 1' \
+    '- 抽样比例未评审'
+  git add -A
+  _fx_commit "chore(ci): r23b（清单有阻塞）
+TestScope: docs/test-scope/blocked.md" $t; t=$((t + 60))
+  echo "C_R23_BLOCKING $(git rev-parse HEAD)"
+
   # ---- R2.secret-file：路径判据是**正则**不是 glob ----
   #
   # 🔴 为什么单独造、且**故意不提交**：
@@ -331,6 +583,53 @@ Micro-exempt: R17: yes" "$off_weak"
   printf 'SECRET=1\n' > r2fx/.env
   printf -- '-----BEGIN KEY-----\n' > r2fx/server.pem
   printf 'SECRET=<placeholder>\n' > r2fx/.env.example
+
+  # ============================================================
+  # 2026-11-11 #8722/#8256：工作区文件（写而不提交，与 r2fx 同理）
+  # ============================================================
+
+  # ---- scope 边界组：code_file 含 *.js 而 ts_file 不含 ----
+  # scope 变异（code_file↔ts_file 互换）此前无观测差异（baseline 4 条）：
+  # 既有夹具全是 .ts，两个 scope 都命中。补 .js 违规文件后：
+  #   R1/R2.cred/R3（code_file→ts_file）由「报」变「不报」；
+  #   R4.any（ts_file→code_file）由「不报」变「报」。
+  _fx_write servers/api/src/dbg.js 'console.log("js debug");'
+  _fx_write servers/api/src/cred2.js "const apiSecret = 'cdef5678ijkl';"
+  _fx_write servers/api/src/todo2.js 'const t2 = 1; // TODO: js todo'
+  _fx_write servers/api/src/any3.js 'export const p3: any = {};'
+
+  # ---- 行级三门阳性（uncovered 清零：R3.weak / R4.ts-ignore / R5.wildcard-origin）----
+  _fx_write servers/api/src/weak.ts 'export const w = 1; // HACK: 临时代替'
+  _fx_write servers/api/src/tsignore.ts \
+    '// @ts-ignore 历史包袱' \
+    'export const ti = 1;'
+  _fx_write servers/api/src/corswild.ts "app.enableCors({ origin: '*' });"
+
+  # ---- skip_comment_line 观测面：在既有文件**末尾**追加注释形态的违规 ----
+  # skip=true（现状）不报、反转后报 → 4 条 baseline 变捕获。
+  # 🔴 必须在末尾追加：既有 finding 的行号不进期望偏移；diff 场景读 commit 树不受影响。
+  printf '// console.log("commented out");\n' >> servers/api/src/dbg.ts
+  printf '// password = "commented99";\n' >> servers/api/src/cred.ts
+  printf '// const commented: any = 0;\n' >> servers/api/src/any.ts
+
+  # ---- 2026-11-11 #8722 第二批：新认领门的变异观测面 ----
+  # weak2.js：R3.weak 的 scope 边界（.js 属 code_file 不属 ts_file）
+  #   + skip_comment_line 观测（整行注释：skip=false 报 / 反转 true 跳过）
+  _fx_write servers/api/src/weak2.js '// HACK: js 整行注释弱占位'
+  # tsignore2.js：R4.ts-ignore 的 scope 边界 + skip 观测（整行注释，同 weak2.js 双杀）
+  _fx_write servers/api/src/tsignore2.js '// @ts-ignore js 历史包袱'
+  # corscomment.ts：R5.wildcard-origin 的 skip 观测 —— 基线 skip=true **不报**（期望零输出），
+  #   反转成 false 后整行注释被扫 → 报 → 捕获
+  _fx_write servers/api/src/corscomment.ts "// origin: '*' 注释形态"
+
+  printf '// app.enableCors();\n' >> servers/api/src/main.ts
+
+  # ---- R12 阴性：双源一致（无漂移不报）----
+  # 阳性（造漂移）会让**每个** diff 场景的期望都带上 R12 条目 —— 为测一门污染全部基线，
+  # 与 r2fx 不提交同理，只守「不误报」这一半；阳性分支维持 uncovered 登记。
+  mkdir -p .codebuddy/agent-kit/skills/demo .codebuddy/skills/demo
+  printf '# demo\n' > .codebuddy/agent-kit/skills/demo/SKILL.md
+  printf '# demo\n' > .codebuddy/skills/demo/SKILL.md
 
   return 0
 }

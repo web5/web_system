@@ -1,0 +1,9 @@
+exit=0
+errors=0
+warnings=1
+--- stdout ---
+══ 红线提示（warning）══
+  [R9b] 既有 UI 改动无同行原型/豁免
+       1 个文件 / 8 行
+       须同行改原型/规格（apps/*/prototype/**、specs/**/page-spec*.md），或 commit 带 Proto: <已落库原型 sha>（三段式流程），或 Micro-exempt: <理由>（§3.5.1）
+✓ 红线扫描通过（0 error / 1 warning）

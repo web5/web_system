@@ -306,6 +306,9 @@ interface GateSpec {
   stage: string;
   trigger: YamlMap;
   credential: YamlMap | null;
+  /** 是否接受 Micro-exempt。🔴 必须真读（2026-11-11 #8722）：此前引擎从不读它，
+   *  YAML 写 false 也照豁免 —— 「声明冒充判据」（同 #8602 的教训） */
+  exempt: boolean;
   message: string;
   raw: YamlMap;
 }
@@ -391,6 +394,7 @@ function loadSpec(): void {
       stage: asStr(gm.stage, `${id}.stage`),
       trigger: asMapOrNull(gm.trigger) ?? {},
       credential: asMapOrNull(gm.credential),
+      exempt: gm.exempt === true,
       message: asStr(gm.message, `${id}.message`),
       raw: gm,
     };
@@ -740,6 +744,10 @@ function countsOf(c: CommitInfo): { uiN: number; totN: number } {
  * 两处文案不完全相同，必须各自保留（逐字节比对会抓）。
  */
 function exemptForGate(c: CommitInfo, gateId: string, suffix: string): boolean {
+  // 🔴 exempt: false 的门不接受任何豁免。这个检查曾长期缺失 —— 引擎不读 exempt 字段，
+  //    变异「exempt: true → false」因此无观测差异（38 条 baseline 里有 8 条是这个）。
+  const g = SPEC.byKey.get(gateId);
+  if (g !== undefined && !g.exempt) return false;
   const st = exemptParse(c.body);
   if (st === null) return false;
   if (!exemptCovers(st, gateId)) return false;
@@ -1186,6 +1194,7 @@ function runR9b(): void {
 
   // 豁免：R9b 在 bash 里是内联循环（不走 exempt_for_gate），文案后缀与后者略有不同 —— 保留
   for (const c of SNAP.commits) {
+    if (!g.exempt) break; // 与 exemptForGate 同口径：门声明不接受豁免则整个跳过
     const st = exemptParse(c.body);
     if (st === null) continue;
     if (!exemptCovers(st, "R9b")) continue;

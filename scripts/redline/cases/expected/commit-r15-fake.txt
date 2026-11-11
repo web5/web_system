@@ -1,0 +1,9 @@
+exit=0
+errors=0
+warnings=1
+--- stdout ---
+══ 红线提示（warning）══
+  [R15] Code 凭证指向的报告不存在
+       docs/reviews/no-such-code.md
+       报告须随该 commit 落盘
+✓ 红线扫描通过（0 error / 1 warning）

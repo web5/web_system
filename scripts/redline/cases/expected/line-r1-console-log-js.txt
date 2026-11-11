@@ -1,0 +1,9 @@
+exit=1
+errors=1
+warnings=0
+--- stdout ---
+══ 红线违规（error）══
+  [R1] 调试残留(console.log/debug/debugger)
+       servers/api/src/dbg.js:1
+       console.log("js debug");
+✗ 红线扫描未通过（1 error / 0 warning）
