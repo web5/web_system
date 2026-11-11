@@ -156,7 +156,7 @@ export class IndexHtmlService {
   async render(pub: string, req?: any): Promise<string> {
     const cfg = this.asset;
     // cdn 模式把模板里写死的 /static/cdn/ 公共依赖重写到 common/（legacy 原样返回，零变化）
-    const html = this.rewriteCommonLibUrls(await this.readHtml(pub), cfg);
+    const html = this.rewriteCommonLibUrls(await this.readHtml(pub, req), cfg);
     if (pub !== 'shell') {
       // deploy-console 等非微前端应用，只注入环境标识
       const meta = `<script>window.__DEPLOY_ENV__=${JSON.stringify(this.envId)};</script>`;
@@ -534,7 +534,7 @@ export class IndexHtmlService {
    * **应急通道**（`DEPLOY_LEGACY_READ=1`）：旧扁平布局 + `deploy_deployments`。
    */
   async resolveModuleVersion(moduleKey: string, req?: any): Promise<Record<string, any>> {
-    const envId = this.envId;
+    const envId = this.legacyRead ? this.envId : await this.resolveDefaultEnv(req);
     const module = await this.moduleRepo.findOne({ where: { key: moduleKey } });
 
     const cfg = this.asset;
@@ -579,6 +579,12 @@ export class IndexHtmlService {
       assetsBase: base,
       source: this.legacyRead ? 'legacy' : 'new',
     };
+  }
+
+  /** NEW 域默认环境：站点命中时使用站点默认环境，未命中保留配置回退。 */
+  private async resolveDefaultEnv(req?: unknown): Promise<string> {
+    const site = await this.resolveSite(req);
+    return site?.defaultEnvId || this.envId;
   }
 
   /** 站点解析：显式 `?site=` 优先，其次按 Host 匹配（忽略端口、大小写不敏感） */
@@ -627,14 +633,15 @@ export class IndexHtmlService {
    * `public/static/modules/shell/<版本>/index.html` 读；取不到版本或文件不存在时
    * 退回历史固定路径 `public/shell/index.html`（保证老部署仍可启动）。
    */
-  private async readHtml(pub: string): Promise<string> {
-    const file = pub === 'shell' ? await this.resolveShellHtmlFile() : join(PUBLIC_ROOT, pub, 'index.html');
+  private async readHtml(pub: string, req?: unknown): Promise<string> {
+    const requested = pub === 'shell' ? await this.resolveShellHtmlFile(req) : join(PUBLIC_ROOT, pub, 'index.html');
+    const file = resolve(requested);
     try {
       const mtime = statSync(file).mtimeMs;
-      const cached = this.htmlCache.get(pub);
+      const cached = this.htmlCache.get(file);
       if (cached && cached.mtime === mtime) return cached.content;
       const content = readFileSync(file, 'utf-8');
-      this.htmlCache.set(pub, { mtime, content });
+      this.htmlCache.set(file, { mtime, content });
       return content;
     } catch {
       return '<html><head></head><body>index.html not found for ' + pub + '</body></html>';
@@ -651,8 +658,8 @@ export class IndexHtmlService {
    * **应急通道**（`DEPLOY_LEGACY_READ=1`）：按旧扁平布局
    * `static/modules/shell/<版本>/index.html` + `deploy_deployments` 指针。
    */
-  private async resolveShellHtmlFile(): Promise<string> {
-    return join(await this.resolveShellDir(), 'index.html');
+  private async resolveShellHtmlFile(req?: unknown): Promise<string> {
+    return join(await this.resolveShellDir(req), 'index.html');
   }
 
   /**
@@ -666,7 +673,7 @@ export class IndexHtmlService {
    * 抽成目录（而不是直接给 html 路径）是为了让 `/shell/*` 静态资源走同一份解析
    * —— 见 `resolveShellAssetPath`。
    */
-  private async resolveShellDir(): Promise<string> {
+  private async resolveShellDir(req?: unknown): Promise<string> {
     const envId = this.envId;
     const fixed = join(PUBLIC_ROOT, 'shell');
     if (this.legacyRead) {
@@ -680,9 +687,10 @@ export class IndexHtmlService {
       }
     }
     try {
-      const version = await this.getCurrentAppVersion('shell', envId);
+      const defaultEnv = await this.resolveDefaultEnv(req);
+      const version = await this.getCurrentAppVersion('shell', defaultEnv);
       if (!version) return fixed;
-      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', envId, version);
+      const versioned = join(PUBLIC_ROOT, 'static/modules/shell', defaultEnv, version);
       if (existsSync(versioned)) return versioned;
       // 静态资源请求也会走这里，只告警一次，避免刷日志
       if (!this.shellDirWarned) {
@@ -709,13 +717,13 @@ export class IndexHtmlService {
    * @param urlPath 形如 `/shell/assets/index.<hash>.js`（也接受相对路径 `assets/...`）
    * @returns 绝对路径；不可用（非法 / 穿越 / 不存在）返回 `null`
    */
-  async resolveShellAssetPath(urlPath: string): Promise<string | null> {
+  async resolveShellAssetPath(urlPath: string, req?: unknown): Promise<string | null> {
     const rel = urlPath.startsWith('/shell/') ? urlPath.slice('/shell/'.length) : urlPath;
     // 目录穿越防护：禁用 `..`、`\0`、绝对路径形态
     if (!rel || rel.includes('\0') || /(^|[\\/])\.\.([\\/]|$)/.test(rel) || rel.startsWith('/')) {
       return null;
     }
-    const dir = await this.resolveShellDir();
+    const dir = await this.resolveShellDir(req);
     const file = resolve(dir, rel);
     // 归一化后必须仍在基座目录内（二次兜底）
     if (file !== resolve(dir) && !file.startsWith(resolve(dir) + sep)) return null;
