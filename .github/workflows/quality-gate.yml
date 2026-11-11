@@ -216,10 +216,16 @@ jobs:
       #
       # 🔴 它测的是「断言有没有真的管着判据」，这是黄金集自己做不到的 ——
       #   判据写错、expected 也照着错的一起更新时，run.sh 永远绿。
-      # 切主（S3）后判据全在 gates.yaml，所以变异目标换成 YAML 字段；
+      # 切主（S3）后判据全在 gates.yaml；S4（2026-11-11）把手写的 8 条精选换成
+      # 生成式：遍历「门表 × 字段类型」，新加门/新加字段不会再漏。
       # 旧 mutation-test.sh（变异 bash 源码）的 14 项已随之失效，见该脚本头部说明。
-      - name: 判据变异测试（改坏 YAML 判据，黄金集必须红）
-        run: bash scripts/redline/cases/mutation-yaml.sh
+      #
+      # 🔴 为什么这一步用 baseline 而不是要求 0 缺口：
+      #   首次全量跑出 38 个真缺口（用例没覆盖到的判据分支）。直接红等于把流水线钉死，
+      #   而「全红」的结果是没人看 —— 和不跑一样。baseline 只登记存量债，
+      #   新增缺口立刻阻断（这是它能长期活着的前提）。
+      - name: 判据变异测试（生成式：改坏 YAML 判据，黄金集必须红）
+        run: node scripts/redline/mutation-gen.ts
 
       # 影子比对：gate.ts 与 legacy bash 在同一组输入上逐字节一致。
       #
