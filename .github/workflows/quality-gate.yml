@@ -145,6 +145,67 @@ jobs:
       - name: 全量 ESLint 水位（warning 不超基线）
         run: pnpm lint:ci
 
+  # E2E 冒烟 PR 门禁（2026-11-11 立，03 方案 §2.5 第一档）
+  #
+  # 跑什么：tests/e2e 下 @smoke 标签的 portal/admin 两 project（chromium）。
+  #   smoke 语义 = 「页面能开、静态资源完整」，不验业务链路（那是 @release-smoke，
+  #   连真实环境跑，不进 PR 门禁）。
+  #
+  # 为什么不带 console project：console @smoke 断言 /api/apps 存活（200|401），
+  #   需要 deploy-console 后端 + MySQL——全栈环境编排是 03 方案明确排除的 M 档工程。
+  #   console / release 两 project 保持本地/发布后手动跑。
+  #
+  # 环境从哪来：不起真后端。vite build 出 portal/admin 的 SPA 产物，由
+  #   tests/support/static-server.mjs 按 gateway 同款路径前缀（/portal/ /admin/）静态伺服，
+  #   Playwright webServer（E2E_WEBSERVER=1）自起自灭。服务没起来时
+  #   tests/global-setup.ts 的 preflight 会 FAIL-fast 报「环境不可用」而非用例超时瀑布。
+  #
+  # 为什么用 vite build 而不是包的 build script：build script 带 vue-tsc 类型检查，
+  #   那是 changed-packages job 的职责；本 job 只要构建产物，重复类型检查白烧几分钟。
+  e2e-smoke:
+    name: E2E 冒烟（@smoke · portal/admin）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        name: pnpm setup
+        with:
+          version: 9   # 与 changed-packages job 对齐
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: 安装 Chromium（含系统依赖）
+        run: npx playwright install --with-deps chromium
+
+      - name: 构建前端产物（仅 vite build，类型检查归 changed-packages）
+        run: |
+          # 前端以 dist 消费 workspace 共享包（@web-system/ui 等），不先构建它们 vite resolve 直接失败
+          pnpm --filter @web-system/shared --filter @web-system/types --filter @web-system/ui --filter @web-system/agent-message build
+          pnpm --filter @web-system/portal exec vite build
+          pnpm --filter @web-system/admin exec vite build
+
+      - name: 跑 @smoke（webServer 自起静态伺服）
+        env:
+          CI: 1
+          E2E_WEBSERVER: 1
+          BASE_URL: http://127.0.0.1:8899
+        run: pnpm test:e2e --grep @smoke --project=portal --project=admin
+
+      - name: 失败时上传 Playwright 报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-e2e-smoke
+          path: playwright-report/
+          retention-days: 7
+
   # 交付物完整性检查（卡 2.4 · 2026-10-29）
   #
   # 判据源：~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md §2.10「交付物清单」四件套
