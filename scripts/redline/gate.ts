@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * gate.ts — 红线门禁执行引擎（重构 S2 · 影子期）
+ * gate.ts — 红线门禁执行引擎（S5 起是唯一执行者）
  *
- * 用法与 scan-rules.sh 完全一致（影子期两者必须可以互相替换）：
- *   node scripts/redline/gate.ts cached
- *   node scripts/redline/gate.ts diff <range>
- *   node scripts/redline/gate.ts files <path...>
- *   node scripts/redline/gate.ts tree [dir]
- * 选项：--strict / --no-color / --max-commits <N>
+ *   node scripts/redline/gate.ts cached                       本地 pre-commit：扫暂存区
+ *   node scripts/redline/gate.ts diff <range>                 CI / 采集：扫一段 commit
+ *   node scripts/redline/gate.ts files <path...>              指定文件（排障用）
+ *   node scripts/redline/gate.ts tree [dir]                   全仓静态扫描
+ *   node scripts/redline/gate.ts commit-msg <msgfile> [merge] commit-msg 钩子：判据不变，只是
+ *                                                            把「还没有 commit」伪装成一个 commit
+ * 选项：--strict / --no-color / --max-commits <N> / --obs-json
  *
  * ★ 本文件解决的两个结构问题
  *
@@ -330,6 +331,8 @@ interface Spec {
   byKey: Map<string, GateSpec>;
   scopes: Map<string, string[]>;
   observations: ObsSpec | null;
+  /** commit-msg 阶段（commit 还没生成）能判的门，见 gates.yaml local_commit_msg */
+  localCommitMsg: string[];
 }
 
 function asMap(v: YamlValue, ctx: string): YamlMap {
@@ -400,7 +403,13 @@ function loadSpec(): void {
     scopes.set(name, strList(asMap(v, `scopes.${name}`).include));
   }
 
-  SPEC = { gates, byKey, scopes, observations: parseObservations(doc.observations) };
+  SPEC = {
+    gates,
+    byKey,
+    scopes,
+    observations: parseObservations(doc.observations),
+    localCommitMsg: strList(asMapOrNull(doc.local_commit_msg)?.gates),
+  };
 
   const ex = asMap(doc.exemption, "exemption");
   const q = asMap(ex.quality, "exemption.quality");
@@ -527,6 +536,51 @@ function buildSnapshot(range: string): Snapshot {
   }
 
   return { range, commits, rangeFiles };
+}
+
+/**
+ * commit-msg 阶段的快照：staged 改动 + 尚未落库的 message。
+ *
+ * 🔴 为什么必须造一个「合成 commit」而不是直接跳过 commit 门：
+ *   旧实现是一份独立的 bash 脚本（check-commit-msg.sh）重写了 is_ui / is_passport /
+ *   exempt_parse / exempt_quality —— 同一套判据两份实现，本地认、CI 不认的摩擦就是这样来的。
+ *   现在把它变成「同一个引擎的另一个入口」：判据仍然只从 gates.yaml 读，
+ *   这里只负责把「还没有 commit」这件事伪装成一个 commit。
+ *
+ * sha 用 "HEAD"：R10 的祖先校验需要它（见 PRE_COMMIT 注释），其余字段都是占位。
+ */
+function buildStagedSnapshot(msgFile: string, isMerge: boolean): Snapshot {
+  const files: ChangedFile[] = [];
+  const st = git(["diff", "--cached", "--name-status", "--no-renames", "--"]);
+  if (st.status === 0) {
+    for (const line of st.out.split("\n")) {
+      if (line === "") continue;
+      const cf = parseStatusLine(line);
+      if (cf !== null) files.push(cf);
+    }
+  }
+
+  let text = "";
+  try {
+    text = readFileSync(msgFile, "utf8");
+  } catch {
+    text = "";
+  }
+  const body = text.replace(/\n+$/, "");
+  const subject = body.split("\n").find((l) => l.trim() !== "") ?? "";
+
+  const commit: CommitInfo = {
+    sha: "HEAD",
+    ct: Math.floor(Date.now() / 1000),
+    parents: ["HEAD"],
+    subject,
+    body,
+    files,
+    // 合并提交在 commit-msg 阶段直接放行：合并进来的改动早就在各自分支走过凭证流程，
+    // 把「合并结果」当「本次改动」判定会稳定误报（2026-09-24 实测）。
+    isMerge,
+  };
+  return { range: "--cached", commits: [commit], rangeFiles: files };
 }
 
 // ---- 懒加载 numstat：只有需要行数阈值时才付这个成本 ----
@@ -1044,6 +1098,18 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
 
 let SNAP: Snapshot;
 
+/**
+ * 当前是否在 commit-msg 阶段（commit 尚未生成）。
+ *
+ * 只影响两处判据的「参照物」，不影响判据本身：
+ *   ① R10 的祖先校验：commit-msg 时新 commit 还不存在，能被参照的只有 HEAD，
+ *      所以 `must_be_ancestor_of: commit^` 的 `commit` 换成 HEAD 而**不再加 `^`**
+ *      （新 commit 的祖先链 == HEAD 的祖先链 + HEAD）。
+ *   ② R11 的非 UI 分支：它要判断「报告文件是否在本 commit 的树里」，而此刻树还没生成，
+ *      只能等 CI 判。UI 分支（只认 Design: pass）不受影响。
+ */
+let PRE_COMMIT = false;
+
 function runR9(): void {
   const g = gate("R9");
   CUR_KEY = g.key;
@@ -1160,7 +1226,10 @@ function runR10(): void {
     // `must_be_ancestor_of: commit^` 里的 `commit` 是占位符，换成当前 commit 的 sha。
     // 2026-11-11 切主前这里是硬编码 `${c.sha}^`，YAML 的 must_be_ancestor_of 只是摆设。
     const ancSpec = g.credential === null ? "commit^" : strOr(checkMap(g.credential).get("must_be_ancestor_of") as YamlValue, "commit^");
-    const ancRef = ancSpec.replace("commit", c.sha);
+    // commit-msg 阶段（PRE_COMMIT）没有新 commit，参照物是 HEAD 本身而不是 HEAD^：
+    // 原型只要落在 HEAD 的祖先链上（含 HEAD）就算「已先落库」。这与旧 check-commit-msg.sh
+    // 的 `merge-base --is-ancestor <sha> HEAD` 同义，也是本地与 CI 口径统一的那条线。
+    const ancRef = PRE_COMMIT ? c.sha : ancSpec.replace("commit", c.sha);
     if (git(["merge-base", "--is-ancestor", sha, ancRef]).status !== 0) {
       emitRule(
         g.level,
@@ -1182,6 +1251,9 @@ function runR11(): void {
     const dval = trailerValue(c.body, "Design");
 
     if (!isui) {
+      // commit-msg 阶段还没有新 commit 的树，「报告是否落盘」无从判断（blobAtPath 读的是
+      // HEAD 的树，会把本 commit 新增的报告判成不存在 → 稳定误报）。这一支交 CI 的 R11。
+      if (PRE_COMMIT) continue;
       if (dval === "" || dval === "pass") continue;
       if (!blobAtPath(c.sha, dval)) {
         emitRule(
@@ -1486,6 +1558,42 @@ function scanDiffRange(range: string): void {
   }
 }
 
+/**
+ * commit-msg 阶段：staged 改动 + 未落库的 message，跑 gates.yaml 里声明的那几道门。
+ *
+ * 返回 "" = 正常执行；非空 = 配置错误（调用方按 exit 2 处理，绝不静默放行）。
+ *
+ * 🔴 为什么门清单放 YAML 而不是写死 R10/R11：
+ *   写死就等于「哪几道门能在 commit-msg 阶段判」这条规则又回到代码里，
+ *   而它恰恰是一条判据。放 YAML 后，加门的人必须先想清楚「它能不能在 commit 前判」。
+ *   同时这里对未实现的门**报错而不是跳过** —— 声明了却没接线，是最不该静默的那类事。
+ */
+function scanCommitMsg(msgFile: string, isMerge: boolean): string {
+  const ids = SPEC.localCommitMsg;
+  if (ids.length === 0) return "gates.yaml 缺 local_commit_msg.gates —— commit-msg 阶段会静默放行一切";
+  for (const id of ids) {
+    if (SPEC.byKey.get(id) === undefined) return `local_commit_msg.gates 引用了不存在的门 ${id}`;
+  }
+
+  PRE_COMMIT = true;
+  SNAP = buildStagedSnapshot(msgFile, isMerge);
+  if (isMerge) return ""; // 合并提交无「本次改动」可判，见 buildStagedSnapshot 注释
+
+  for (const id of ids) {
+    switch (id) {
+      case "R10":
+        prof("R10", () => runR10());
+        break;
+      case "R11":
+        prof("R11", () => runR11());
+        break;
+      default:
+        return `local_commit_msg.gates 里的 ${id} 尚未在 gate.ts 接线（目前只支持 R10/R11）`;
+    }
+  }
+  return "";
+}
+
 function scanTree(dir: string): void {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) {
     process.stderr.write(`目录不存在: ${dir}\n`);
@@ -1525,7 +1633,7 @@ function main(argv: string[]): number {
     else if (a === "-h" || a === "--help") {
       process.stdout.write(
         [
-          "用法: gate.ts [--strict] [--no-color] [--max-commits N] [--obs-json] <cached|diff <range>|files <path...>|tree [dir]>",
+          "用法: gate.ts [--strict] [--no-color] [--max-commits N] [--obs-json] <cached|diff <range>|files <path...>|tree [dir]|commit-msg <msgfile> [merge]>",
           "  --obs-json  按门条目输出 JSON 计数（供采集脚本消费），不打印人类可读报告",
           "",
         ].join("\n"),
@@ -1616,8 +1724,21 @@ function main(argv: string[]): number {
     case "tree":
       scanTree(modeArgs[0] ?? ".");
       break;
+    case "commit-msg": {
+      // .githooks/commit-msg 的入口：$1 = message 文件，$2 = "merge"（合并提交）
+      if (modeArgs.length < 1) {
+        process.stderr.write("用法: gate.ts commit-msg <msgfile> [merge]\n");
+        return 2;
+      }
+      const err = scanCommitMsg(modeArgs[0], modeArgs[1] === "merge");
+      if (err !== "") {
+        process.stderr.write(`✗ ${err}\n`);
+        return 2;
+      }
+      break;
+    }
     default:
-      process.stderr.write("用法: gate.ts <cached|diff <range>|files <path...>|tree [dir]>\n");
+      process.stderr.write("用法: gate.ts <cached|diff <range>|files <path...>|tree [dir]|commit-msg <msgfile>>\n");
       return 2;
   }
 

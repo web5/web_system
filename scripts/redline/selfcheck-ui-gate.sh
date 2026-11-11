@@ -119,19 +119,24 @@ else
   bad "V20 settings.json 接线完整" "文件不存在"
 fi
 
-# V21 设计评审门禁接线完整（R11 挂进 scan-rules.sh；commit-msg 校验 Design trailer）
+# V21 设计评审门禁接线完整
+# 🔴 S5（2026-11-11）：判据全在 gates.yaml，执行者是 gate.ts，commit-msg 钩子也走 gate.ts。
+#   原来 grep scan-rules.sh / check-commit-msg.sh 的两条已失去对象（文件已删），
+#   改成查「判据在 YAML 里 + 引擎读了档位 + 钩子接的是 gate.ts」——
+#   这三处任一处断掉，R11 都会静默失效。
 miss=""
-grep -q 'check_r11 ' "$BIN/scan-rules.sh" || miss="$miss check_r11"
-grep -q 'DESIGN_ANCHOR_MODE' "$BIN/scan-rules.sh" || miss="$miss DESIGN_ANCHOR_MODE"
-grep -q 'DESIGN_ANCHOR_SCOPE' "$BIN/scan-rules.sh" || miss="$miss DESIGN_ANCHOR_SCOPE(分批)"
-grep -q 'Design:' "$BIN/check-commit-msg.sh" || miss="$miss Design-trailer"
+grep -q '^  - id: R11$' "$BIN/gates.yaml" || miss="$miss R11判据"
+grep -q 'env: DESIGN_ANCHOR_MODE' "$BIN/gates.yaml" || miss="$miss DESIGN_ANCHOR_MODE"
+grep -q 'level_switch' "$BIN/gate.ts" || miss="$miss level_switch接线"
+grep -q 'commit-msg' "$TOP/.githooks/commit-msg" || miss="$miss commit-msg入口"
 if [ -z "$miss" ]; then ok "V21 设计评审门禁接线完整"
 else bad "V21 设计评审门禁接线完整" "缺：${miss# }"; fi
 
 # V22 锚点比对默认 off（存量回填完成前不阻断，§3.7.1）
-if grep -qE '^DESIGN_ANCHOR_MODE="\$\{DESIGN_ANCHOR_MODE:-off\}"' "$BIN/scan-rules.sh"; then
+# 默认值现在声明在 gates.yaml 的 level_switch.default（单一真相源），不再写在 bash 里。
+if grep -A 2 'env: DESIGN_ANCHOR_MODE' "$BIN/gates.yaml" | grep -q 'default: off'; then
   ok "V22 锚点比对默认 off（未回填不阻断）"
-else bad "V22 锚点比对默认 off（未回填不阻断）" "默认值不是 off"; fi
+else bad "V22 锚点比对默认 off（未回填不阻断）" "level_switch.default 不是 off"; fi
 
 # V23 锚点扫描器可用，且未回填时输出 SKIP（未回填 ≠ 已漂移）
 if [ -f "$BIN/scan-design-drift.py" ]; then
@@ -143,26 +148,29 @@ if [ -f "$BIN/scan-design-drift.py" ]; then
   esac
 else bad "V23 锚点扫描器可用" "scan-design-drift.py 不存在"; fi
 
-# V24 kit 同源守门接线（通用骨架 + R12 + 保护清单 + 已挂主流程）
+# V24 kit 同源守门接线（R12 + 保护清单 + 已挂主流程）
+# 🔴 S5（2026-11-11）：判据从 scan-rules.sh 迁到 gates.yaml（R12 的 compare_pair / exclude），
+#   执行在 gate.ts（runR12）。原来 grep bash 函数名的断言全部失去对象，改为查声明与接线。
 miss=""
-grep -q 'check_sync_pair' "$BIN/scan-rules.sh" || miss="$miss check_sync_pair"
-grep -q 'check_r12' "$BIN/scan-rules.sh" || miss="$miss check_r12"
-grep -q 'project-context.md' "$BIN/scan-rules.sh" || miss="$miss 保护清单"
-# 调用形态宽匹配：`check_r12;`（裸调用）/ `check_r12 `（带参）都算已挂载；
-# 不认 `check_r12(`（那是定义）。旧断言只认「双空格 / 行尾」，被 `check_r12; _prof` 写法误判缺失。
-grep -qE '^[[:space:]]*check_r12[; ]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+grep -q '^  - id: R12$' "$BIN/gates.yaml" || miss="$miss R12判据"
+grep -q 'compare_pair' "$BIN/gates.yaml" || miss="$miss compare_pair"
+grep -q 'project-context.md' "$BIN/gates.yaml" || miss="$miss 保护清单"
+grep -q 'function runR12' "$BIN/gate.ts" || miss="$miss runR12"
+grep -q 'runR12()' "$BIN/gate.ts" || miss="$miss 主流程挂载"
 if [ -z "$miss" ]; then ok "V24 kit 同源守门接线完整（含保护清单）"
 else bad "V24 kit 同源守门接线完整（含保护清单）" "缺：${miss# }"; fi
 
-# V25 契约/发布评审门禁接线（R13/R14 + 两面判定 + 主流程挂载 + 收窄未回退）
+# V25 契约/发布评审门禁接线（R13/R14 + 两面判定 + 收窄未回退）
 miss=""
-grep -q 'check_r13_r14' "$BIN/scan-rules.sh" || miss="$miss check_r13_r14"
-grep -q 'is_contract_file' "$BIN/scan-rules.sh" || miss="$miss is_contract_file"
-grep -q 'is_release_file' "$BIN/scan-rules.sh" || miss="$miss is_release_file"
-grep -q 'check_r13_r14  ' "$BIN/scan-rules.sh" || grep -q 'check_r13_r14 "' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
-# 防回退：不得把整个 SDK 纳入契约面（应限定到 interfaces 等明确路径）。只检测「全包通配」写法，
-# 否则会把合规的窄路径（packages/agent-core/src/interfaces/*）误判为回退。
-if grep -A12 '^is_contract_file' "$BIN/scan-rules.sh" | grep -qE 'packages/agent-core/\*\)'; then
+grep -q '^  - id: R13$' "$BIN/gates.yaml" || miss="$miss R13判据"
+grep -q '^  - id: R14$' "$BIN/gates.yaml" || miss="$miss R14判据"
+# BSD grep 的 BRE 不认 \|，用 -E（2026-11-11 实测：写成 'a\|b' 在 macOS 上恒不匹配）
+grep -qE 'contract_file' "$BIN/gates.yaml" || miss="$miss contract_file"
+grep -q 'release_file' "$BIN/gates.yaml" || miss="$miss release_file"
+grep -q 'runCredentialGates(\["R13", "R14"\])' "$BIN/gate.ts" || miss="$miss 主流程挂载"
+# 防回退：契约面不得退化成「整个 SDK」。判据现在是 scopes.contract_file 的 include 列表，
+# 只要出现 `packages/agent-core/*`（不带 src/interfaces）就算回退。
+if grep -A 2 '^  contract_file:' "$BIN/gates.yaml" | grep -qE '"packages/agent-core/\*"|packages/agent-core/\*"'; then
   miss="$miss 契约面回退为全SDK"
 fi
 if [ -z "$miss" ]; then ok "V25 契约/发布评审门禁接线完整（含收窄防回退）"
@@ -171,19 +179,20 @@ else bad "V25 契约/发布评审门禁接线完整（含收窄防回退）" "�
 # V26 CI 兜底层接线（红线规则必须真的挂在 workflow 上）
 # 背景（2026-09-24）：redline-scan job 曾在 2026-09-18 随红线机制整体下线，而 9-20 机制回归时
 #   未跟着恢复 → R9–R14 全部失去 CI 兜底，仅剩可被 --no-verify 绕过的本地 hook。
-#   此前自检只查 hook/规则接线（静态读文件），查不出「CI 层其实是空的」，故补本断言。
-if grep -rlsE 'scan-rules\.sh' .github/workflows/ 2>/dev/null | grep -q .; then
-  ok "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）"
+# 🔴 S5：扫描器换成 gate.ts，本条改为「有 workflow 真的执行 gate.ts」。
+# [[:space:]] 而不是 \s：\s 是 GNU 扩展，macOS 的 BSD grep -E 不认
+if grep -rqsE 'node[[:space:]]+[^[:space:]]*redline/gate\.ts' .github/workflows/ 2>/dev/null; then
+  ok "V26 CI 兜底层接线（workflow 执行 gate.ts）"
 else
-  bad "V26 CI 兜底层接线（有 workflow 调用 scan-rules.sh）" "无任何 workflow 引用 scan-rules.sh —— 红线规则失去 CI 兜底，本地 hook 可被 --no-verify 绕过"
+  bad "V26 CI 兜底层接线（workflow 执行 gate.ts）" "无任何 workflow 执行 gate.ts —— 红线规则失去 CI 兜底，本地 hook 可被 --no-verify 绕过"
 fi
 
 # V27 SSE 事件契约一致性机检接线（R16 + 扫描器 + 主流程挂载）
 miss=""
-grep -q 'check_r16' "$BIN/scan-rules.sh" || miss="$miss check_r16"
+grep -q '^  - id: R16$' "$BIN/gates.yaml" || miss="$miss R16判据"
 [ -f "$BIN/check-sse-contract.py" ] || miss="$miss check-sse-contract.py"
-# 同 V24：宽匹配调用形态（`check_r16;` / `check_r16 `），排除定义（`check_r16(`）
-grep -qE '^[[:space:]]*check_r16[; ]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+grep -q 'check-sse-contract.py' "$BIN/gates.yaml" || miss="$miss delegate 指向"
+grep -q 'runDelegated("R16"' "$BIN/gate.ts" || miss="$miss 主流程挂载"
 if [ -z "$miss" ]; then ok "V27 SSE 契约一致性机检接线完整"
 else bad "V27 SSE 契约一致性机检接线完整" "缺：${miss# }"; fi
 
@@ -192,16 +201,16 @@ else bad "V27 SSE 契约一致性机检接线完整" "缺：${miss# }"; fi
 # 判成「能力源缺失」漂移 → CI 报错。这条断言把「同批纪律」变成可机检。
 miss=""
 [ -f .codebuddy/skills/contract-reviewer/SKILL.md ] || miss="$miss SKILL.md"
-grep -q 'contract-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
+grep -q 'contract-reviewer' "$BIN/gates.yaml" || miss="$miss R12保护清单"
 if [ -z "$miss" ]; then ok "V28 contract-reviewer 角色接线完整"
 else bad "V28 contract-reviewer 角色接线完整" "缺：${miss# }"; fi
 
 # V29 code-reviewer 角色接线（技能 + R12 保护清单 + R15 判定与主流程挂载）
 miss=""
 [ -f .codebuddy/skills/code-reviewer/SKILL.md ] || miss="$miss SKILL.md"
-grep -q 'code-reviewer' "$BIN/scan-rules.sh" || miss="$miss R12保护清单"
-grep -q 'check_r15' "$BIN/scan-rules.sh" || miss="$miss check_r15"
-grep -qE '^[[:space:]]*check_r15[[:space:]]' "$BIN/scan-rules.sh" || miss="$miss 主流程挂载"
+grep -q 'code-reviewer' "$BIN/gates.yaml" || miss="$miss R12保护清单"
+grep -q '^  - id: R15$' "$BIN/gates.yaml" || miss="$miss R15判据"
+grep -q 'runCredentialGates(\["R15"\])' "$BIN/gate.ts" || miss="$miss 主流程挂载"
 if [ -z "$miss" ]; then ok "V29 code-reviewer 角色接线完整（含 R15 与保护清单）"
 else bad "V29 code-reviewer 角色接线完整（含 R15 与保护清单）" "缺：${miss# }"; fi
 

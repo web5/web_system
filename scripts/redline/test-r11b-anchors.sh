@@ -7,10 +7,10 @@
 # 为什么单独一个文件（而不是往 cases/scenarios.tsv 里加行）：
 #   scenarios.tsv 的四列是「id / mode / args / 描述」，**没有环境变量列**，
 #   而 R11b 的判定完全由 DESIGN_ANCHOR_MODE 三档开关决定 —— 加不进去。
-#   改 scenarios 格式要同时动 run.sh 与 shadow.sh 两个运行器，风险大于收益。
+#   改 scenarios 格式要同时动 run.sh 与 mutation-gen.ts 两个消费者，风险大于收益。
 #
 # 🔴 为什么 R11b 此前一条用例都没有（2026-11-06 查明）：
-#   cases/ 与 test-gate-hardening.sh 都造**临时仓库**，而 scan-rules.sh 的 TOP 取
+#   cases/ 与 test-gate-hardening.sh 都造**临时仓库**，而引擎的 TOP 取
 #   `git rev-parse --show-toplevel`（= cwd 的仓库根），check_r11b 又只在
 #   `$TOP/scripts/redline/scan-design-drift.py` 存在时才跑。
 #   临时仓库里没有这个脚本 → `[ -f "$py" ] || return 0` → **R11b 被静默跳过**，
@@ -21,9 +21,9 @@
 set -uo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REAL_SCAN="$SCRIPTS_DIR/scan-rules.sh"
+REAL_GATE="$SCRIPTS_DIR/gate.ts"
 REAL_PY="$SCRIPTS_DIR/scan-design-drift.py"
-[ -f "$REAL_SCAN" ] || { echo "找不到 $REAL_SCAN" >&2; exit 2; }
+[ -f "$REAL_GATE" ] || { echo "找不到 $REAL_GATE" >&2; exit 2; }
 [ -f "$REAL_PY" ]   || { echo "找不到 $REAL_PY" >&2; exit 2; }
 
 PASS=0
@@ -49,22 +49,23 @@ mkdir -p apps/demo/prototype apps/demo/src scripts/redline
 #    整条规则静默跳过，所有用例都会"通过"（假绿）。
 cp "$REAL_PY" scripts/redline/scan-design-drift.py
 # 🔴 必须先垫一个 init commit（不放 apps 文件）。
-#    否则第一个用例的 `$sha^..$sha` 左侧 rev 不存在，scan-rules.sh 会**直接中止**
+#    否则第一个用例的 `$sha^..$sha` 左侧 rev 不存在，引擎会**直接中止**
 #    （"扫描范围左侧 ref 不可解析"），一条规则都不跑 —— 用例全绿但什么都没测。
 #    这种空转是本文件最容易踩的假绿，故由 commit() + r11b_out() 双重拦截。
 echo "fixture" > README.md
 git add -A >/dev/null 2>&1 && git commit -qm "init" >/dev/null 2>&1
 
-# scan-rules.sh 本身不进临时仓库：它按 cwd 取 TOP，所以从 $WORK 调用就会扫 $WORK。
+# gate.ts 本身不进临时仓库：它按 cwd 取 TOP（git rev-parse --show-toplevel），
+# 所以从 $WORK 调用就会扫 $WORK；gates.yaml 仍从真实仓库读（判据只有一份）。
 # 但 scan-design-drift.py 必须进（check_r11b 用 $TOP/scripts/redline/ 下的路径找它）。
-SCAN="$REAL_SCAN"
+SCAN="$REAL_GATE"
 
 # 断言辅助：在某个 commit 范围上跑 bash 引擎，返回 R11b 相关输出（不含 SKIP/INFO，与真实打印一致）
 # 引擎若因范围不可解析而中止，会一条规则都不跑 —— 此时任何断言都是空转，
 # 所以在这里直接判死（而不是返回空串让用例"通过"）。
 r11b_out() { # $1=mode  $2=range  $3=extra mode(diff|cached)
   local mode="$1" range="$2" sub="${3:-diff}" raw
-  raw="$( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" bash "$SCAN" --no-color "$sub" $range 2>&1 )"
+  raw="$( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" node "$SCAN" --no-color "$sub" $range 2>&1 )"
   if printf '%s' "$raw" | grep -q '扫描范围左侧 ref 不可解析\|扫描范围无效'; then
     printf '\033[0;31m夹具错误：引擎因范围不可解析中止（%s %s）—— 用例会空转\033[0m\n' "$sub" "$range" >&2
     exit 1
@@ -74,7 +75,7 @@ r11b_out() { # $1=mode  $2=range  $3=extra mode(diff|cached)
 # 断言辅助：R11b 这条落在哪个分节 —— "error" / "warning" / 空（没报）
 # 不用全局退出码：临时仓库里别的规则也会产生 error，退出码对 R11b 没有区分力。
 r11b_sev() { # $1=mode  $2=range
-  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" bash "$SCAN" --no-color diff "$2" 2>/dev/null ) | awk '
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" node "$SCAN" --no-color diff "$2" 2>/dev/null ) | awk '
     /红线违规（error）/   { sec="error" }
     /红线提示（warning）/ { sec="warning" }
     /\[R11b\]/            { print sec; exit }
@@ -193,74 +194,66 @@ git reset -q HEAD -- apps/demo/src/page.vue >/dev/null 2>&1
 git checkout -- apps/demo/src/page.vue >/dev/null 2>&1
 
 # ============================================================
-sec_head "E. 双引擎一致：warn / strict / scoped / cached / 未知档位（#8602 回归）"
+sec_head "E. 档位语义：warn / strict / scoped / cached / 未知档位（#8602 回归）"
 
-# #8602 的原始症状：同一 commit、DESIGN_ANCHOR_MODE=strict
-#   bash → 40 error；gate.ts → 0 error + 40 warning（写死 level: warning，从不读 level_switch）
-# 所以这一节不只断言"级别对不对"，而是断言**两个引擎的 stdout 逐字节相同**。
-REAL_GATE="$SCRIPTS_DIR/gate.ts"
-[ -f "$REAL_GATE" ] || { printf '\033[0;31m找不到 %s\033[0m\n' "$REAL_GATE" >&2; exit 2; }
+# 🔴 S5（2026-11-11）删掉 legacy bash 后，这一节从「两引擎逐字节一致」改成**单引擎断言**。
+#   原因必须写清楚：旧版比对的是 scan-rules.sh 与 gate.ts，两者是独立实现，逐字节相等
+#   才有信息量。现在只剩 gate.ts，再比对就是自己跟自己比 —— 恒等、恒绿、什么都不证明，
+#   而这正是本仓库最忌讳的假绿。替代物是「把档位 → 分节的映射逐条点名」+ 文案关键词：
+#   #8602 的原始症状（strict 下仍报 warning，因为写死不读 level_switch）E2 就能抓到。
 command -v node >/dev/null 2>&1 || { printf '\033[0;31m需要 node（gate.ts）\033[0m\n' >&2; exit 2; }
 
-both_same() { # $1=mode $2=scope $3=range → identical / 差异摘要
-  local mode="$1" scope="$2" range="$3"
-  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" DESIGN_ANCHOR_SCOPE="$scope" bash "$SCAN" --no-color diff "$range" 2>/dev/null ) > "$WORK/.b.out"
-  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$mode" DESIGN_ANCHOR_SCOPE="$scope" node "$REAL_GATE" --no-color diff "$range" 2>/dev/null ) > "$WORK/.g.out"
-  if cmp -s "$WORK/.b.out" "$WORK/.g.out"; then echo identical
-  else echo "diff: $(diff "$WORK/.b.out" "$WORK/.g.out" | head -6 | tr '\n' ' ')"; fi
-}
-ts_sev() { # $1=mode $2=scope $3=range → gate.ts 侧 R11b 落在哪一节
-  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" DESIGN_ANCHOR_SCOPE="$2" node "$REAL_GATE" --no-color diff "$3" 2>/dev/null ) | awk '
+ts_sev() { # $1=mode $2=scope $3=range → R11b 落在哪一节
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" DESIGN_ANCHOR_SCOPE="$2" node "$SCAN" --no-color diff "$3" 2>/dev/null ) | awk '
     /红线违规（error）/   { sec="error" }
     /红线提示（warning）/ { sec="warning" }
     /\[R11b\]/            { print sec; exit }
   '
 }
+ts_lines() { # $1=mode $2=scope $3=range → R11b 的输出行
+  ( cd "$WORK" && DESIGN_ANCHOR_MODE="$1" DESIGN_ANCHOR_SCOPE="$2" node "$SCAN" --no-color diff "$3" 2>/dev/null ) | grep -E '\[R11b\]' || true
+}
 
-# E0 靶子就位：C_C 上有 2 条 MISSING，warn 下两引擎都必须有输出且有 R11b
-ts_out="$( ( cd "$WORK" && DESIGN_ANCHOR_MODE=warn node "$REAL_GATE" --no-color diff "$C_C^..$C_C" 2>/dev/null ) | grep -c '\[R11b\]' || true )"
-[ "$ts_out" = "2" ] && ok "E0 gate.ts 在 warn 下检出 2 条 R11b（靶子就位）" \
-  || bad "E0 gate.ts 未检出预期 2 条 R11b" "实际 ${ts_out} 条"
+# E0 靶子就位：C_C 上有 2 条 MISSING，warn 下必须有输出且有 R11b
+n_r11b="$(ts_lines warn "" "$C_C^..$C_C" | grep -c . || true)"
+[ "$n_r11b" = "2" ] && ok "E0 warn 下检出 2 条 R11b（靶子就位）" \
+  || bad "E0 未检出预期 2 条 R11b" "实际 ${n_r11b} 条"
 
-# E1 warn：两引擎输出必须逐字节相同
-r="$(both_same warn "" "$C_C^..$C_C")"
-[ "$r" = "identical" ] && ok "E1 warn → 两引擎 stdout 逐字节一致" || bad "E1 warn 两引擎不一致（#8602）" "$r"
+# E1 warn：落在 warning 节，且文案带锚点关键词（断言内容，不只断言级别）
+[ "$(ts_sev warn "" "$C_C^..$C_C")" = "warning" ] && ok "E1 warn → R11b 归 warning 节" \
+  || bad "E1 warn 下 R11b 未归 warning 节" "实际：$(ts_sev warn "" "$C_C^..$C_C")"
+if ts_lines warn "" "$C_C^..$C_C" | grep -qE 'MISSING'; then
+  ok "E1b warn → 文案含锚点缺失标记 MISSING"
+else
+  bad "E1b warn → 文案缺 MISSING 标记（判定内容变了）" "$(ts_lines warn "" "$C_C^..$C_C" | head -2)"
+fi
 
-# E2 strict：必须同为 error 节，且输出仍逐字节一致
-[ "$(ts_sev strict "" "$C_C^..$C_C")" = "error" ] && ok "E2 strict → gate.ts 升级为 error（不再静默降级）" \
-  || bad "E2 strict 下 gate.ts 未升级为 error" "实际：$(ts_sev strict "" "$C_C^..$C_C")"
-r="$(both_same strict "" "$C_C^..$C_C")"
-[ "$r" = "identical" ] && ok "E2b strict → 两引擎 stdout 逐字节一致" || bad "E2b strict 两引擎不一致" "$r"
+# E2 strict：必须升到 error 节（#8602 的原始症状就是这里不升）
+[ "$(ts_sev strict "" "$C_C^..$C_C")" = "error" ] && ok "E2 strict → 升级为 error（不再静默降级）" \
+  || bad "E2 strict 下未升级为 error" "实际：$(ts_sev strict "" "$C_C^..$C_C")"
 
 # E3 scoped：scope 内的 app（demo）升级 error，scope 外仍 warning
 [ "$(ts_sev scoped demo "$C_C^..$C_C")" = "error" ] && ok "E3 scoped 命中 demo → error" \
   || bad "E3 scoped 命中 demo 未升级" "实际：$(ts_sev scoped demo "$C_C^..$C_C")"
 [ "$(ts_sev scoped other "$C_C^..$C_C")" = "warning" ] && ok "E3b scoped 未命中 → 仍 warning" \
   || bad "E3b scoped 未命中却升级了" "实际：$(ts_sev scoped other "$C_C^..$C_C")"
-r="$(both_same scoped demo "$C_C^..$C_C")"
-[ "$r" = "identical" ] && ok "E3c scoped → 两引擎 stdout 逐字节一致" || bad "E3c scoped 两引擎不一致" "$r"
 
-# E4 cached：两引擎都必须不跑 R11b（gate.ts 之前只判 env=off，cached 下会误报）
+# E4 cached：cached 模式不得跑 R11b（之前只判 env=off，cached 下会误报）
 printf '\n<!-- parity cached -->\n' >> apps/demo/src/page.vue
 git add apps/demo/src/page.vue >/dev/null 2>&1
-cached_b="$( cd "$WORK" && DESIGN_ANCHOR_MODE=warn bash "$SCAN" --no-color cached 2>/dev/null | grep -c '\[R11b\]' || true )"
-cached_g="$( cd "$WORK" && DESIGN_ANCHOR_MODE=warn node "$REAL_GATE" --no-color cached 2>/dev/null | grep -c '\[R11b\]' || true )"
-[ "$cached_b" = "0" ] && [ "$cached_g" = "0" ] && ok "E4 cached → 两引擎都不跑 R11b" \
-  || bad "E4 cached 下仍有引擎跑 R11b" "bash=${cached_b} gate.ts=${cached_g}"
+cached_n="$( cd "$WORK" && DESIGN_ANCHOR_MODE=warn node "$SCAN" --no-color cached 2>/dev/null | grep -c '\[R11b\]' || true )"
+[ "$cached_n" = "0" ] && ok "E4 cached → 不跑 R11b" || bad "E4 cached 下仍跑了 R11b" "实际 ${cached_n} 条"
 git reset -q HEAD -- apps/demo/src/page.vue >/dev/null 2>&1
 git checkout -- apps/demo/src/page.vue >/dev/null 2>&1
 
-# E5 未知档位：两引擎都必须判死（退出码 2 + stdout 为空），不许回落成 warning
-( cd "$WORK" && DESIGN_ANCHOR_MODE=stric bash "$SCAN" --no-color diff "$C_C^..$C_C" > "$WORK/.ub.out" 2> "$WORK/.ub.err" ); eb=$?
-( cd "$WORK" && DESIGN_ANCHOR_MODE=stric node "$REAL_GATE" --no-color diff "$C_C^..$C_C" > "$WORK/.ug.out" 2> "$WORK/.ug.err" ); eg=$?
-if [ "$eb" = "2" ] && [ "$eg" = "2" ] && [ ! -s "$WORK/.ub.out" ] && [ ! -s "$WORK/.ug.out" ] \
-   && grep -q '未知档位' "$WORK/.ub.err" && grep -q '未知档位' "$WORK/.ug.err"; then
-  ok "E5 未知档位 stric → 两引擎都 exit 2 且不出违规报告"
+# E5 未知档位：必须判死（exit 2 + stdout 为空 + stderr 点名），不许回落成 warning
+( cd "$WORK" && DESIGN_ANCHOR_MODE=stric node "$SCAN" --no-color diff "$C_C^..$C_C" > "$WORK/.ub.out" 2> "$WORK/.ub.err" ); eb=$?
+if [ "$eb" = "2" ] && [ ! -s "$WORK/.ub.out" ] && grep -q '未知档位' "$WORK/.ub.err"; then
+  ok "E5 未知档位 stric → exit 2、无违规报告、stderr 点名"
 else
-  bad "E5 未知档位未被判死（会静默降级）" "bash exit=${eb} gate exit=${eg}；stdout 字节 bash=$(wc -c < "$WORK/.ub.out") gate=$(wc -c < "$WORK/.ug.out")"
+  bad "E5 未知档位未被判死（会静默降级）" "exit=${eb}；stdout 字节 $(wc -c < "$WORK/.ub.out" | tr -d ' ')"
 fi
 
-# ============================================================
 printf '\n通过 %s / 失败 %s\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then
   printf '失败用例：%s\n' "$FAILED_CASES"
