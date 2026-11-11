@@ -11,11 +11,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
-import { ConfigService } from '@nestjs/config';
 import { UploadService } from './upload.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { createUploadInterceptor } from './upload-multer';
-import { resolvePublicUrl, normalizePublicBaseUrl, PUBLIC_BASE_URL_ENV } from '@web-system/shared';
+import { resolvePublicUrl, PublicBaseUrlService } from '@web-system/shared';
 
 /**
  * 用户上传入口。
@@ -33,7 +32,7 @@ export class UploadController {
 
   constructor(
     private readonly uploadService: UploadService,
-    private readonly configService: ConfigService,
+    private readonly publicBaseUrl: PublicBaseUrlService,
   ) {}
 
   /** 获取支持的上传分类信息（无需鉴权，供前端参考） */
@@ -122,11 +121,9 @@ export class UploadController {
     category: string,
     req: Request,
   ) {
+    const base = await this.publicBaseUrl.resolve();
     const data = {
-      url: resolvePublicUrl(
-        this.uploadService.buildUrl(file.filename, dir),
-        normalizePublicBaseUrl(this.configService.get(PUBLIC_BASE_URL_ENV)),
-      ),
+      url: resolvePublicUrl(this.uploadService.buildUrl(file.filename, dir), base),
       filename: file.filename,
       size: file.size,
       mimetype: file.mimetype,

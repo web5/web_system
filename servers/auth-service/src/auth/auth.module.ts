@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { PublicBaseUrlService } from '@web-system/shared';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { InternalAuthController } from './internal-auth.controller';
@@ -24,7 +25,7 @@ import { QrcodeModule } from '../qrcode/qrcode.module';
     }),
   ],
   controllers: [AuthController, InternalAuthController],
-  providers: [AuthService, JwtStrategy, LocalStrategy],
+  providers: [AuthService, JwtStrategy, LocalStrategy, PublicBaseUrlService],
   exports: [AuthService],
 })
 export class AuthModule {}
