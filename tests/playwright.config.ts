@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as path from 'node:path';
 import { BASE_URL, CONSOLE_URL } from './support/env';
 
 /**
@@ -46,7 +47,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [['html'], ['list']] : 'list',
+  // 产物目录钉死在 tests/ 下（与 cwd 无关），由 tests/.gitignore 兜底不入仓
+  outputDir: path.join(__dirname, 'test-results'),
+  reporter: process.env.CI ? [['html', { outputFolder: path.join(__dirname, 'playwright-report') }], ['list']] : 'list',
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
