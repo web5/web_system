@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# commit-msg — UI 源码 commit 须携带 Proto 凭证（v1.1 · 方案 B）
+# commit-msg — UI 源码 commit 须携带 Proto / Design 凭证（v1.2 · 单一引擎）
 # 由 git 通过 core.hooksPath=.githooks 自动调用；由 install-git-hooks.sh 激活。
 # 为什么放 commit-msg：pre-commit 拿不到 commit message，无法校验 trailer。
-# 规则见 scripts/redline/check-commit-msg.sh（§3.8）。
+#
+# 🔴 2026-11-11（S5）：原实现是 check-commit-msg.sh —— 它自己重写了 is_ui / is_passport /
+# exempt_parse / exempt_quality，等于同一套判据两份实现（本地认、CI 不认的摩擦就从这来）。
+# 现在它只是 gate.ts 的另一个入口：判据仍然只从 gates.yaml 读，
+# 「commit-msg 阶段判哪几道门」也声明在 gates.yaml 的 local_commit_msg 里。
+# check-commit-msg.sh 已删除。
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
@@ -13,4 +18,4 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 
 # 传 $2（source）：merge 提交需被识别并豁免——否则合并进来的、早已走过凭证流程的
 # UI 文件会被当成「本次改动」稳定误报（2026-09-24 实测）。
-exec bash "$ROOT/scripts/redline/check-commit-msg.sh" "$1" "${2:-}"
+exec node "$ROOT/scripts/redline/gate.ts" commit-msg "$1" "${2:-}"

@@ -15,8 +15,9 @@
 #   · 改 gates.yaml 的判据 → 必须跑它，diff 里每一条变化都必须是"你有意改的"
 #     （2026-11-11 切主后判据在 YAML，执行者是 gate.ts）
 #   · 改 gate.ts 的引擎逻辑 → 必须跑它，输出要与 expected/ 逐字节一致
-#   · 改 legacy bash（scan-rules.sh）→ 也跑它，但注意本脚本测的是 gate.ts；
-#     bash 侧的变化由 cases/shadow.sh 负责对拍
+#   · 改 commit-msg 阶段的判据 → 也跑它（R10/R11 的用例在 commit 组）
+#   🔴 S5（2026-11-11）：legacy bash 已删除，cases/shadow.sh 随之删除。
+#     本脚本现在是 gate.ts **唯一的行为回归网** —— 没有第二个实现可以对照了。
 # 🔴 什么时候不该直接 --update：
 #   期望值只能由"人工确认过的行为"产生。先看 diff，确认变化是对的，再 --update。
 #   盲目 --update 等于把"当前行为"当"正确行为"，黄金集就退化成快照记录器了。
