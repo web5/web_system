@@ -2,7 +2,7 @@
  * 大橙子个人助理 · 首页（tab 1 / 启动页）
  *
  * 设计同源：docs/ui/prototypes/dachengzi-3tab-2026-11-09.html 的 A1 帧。
- * 分工：首页只放「问候 + 今日一句 + 两条快捷入口 + 最近对话」，能力说明归发现页，
+ * 分工：首页只放「问候 + 今日一句 + 新对话入口 + 最近对话」，能力说明归发现页，
  * 设置统一收在「我的」——三 tab 各管一件事，首页不做能力清单。
  *
  * 为什么首页必须自己登记 tabBar 高亮：
@@ -10,7 +10,7 @@
  * 读到旧栈顶 —— 表现为「页面切过去了、高亮还停在上一项」（2026-10-13 实测）。
  * 权威做法见 utils/tabbar.ts 的 setTabBarSelected。
  *
- * 未登录口径：两条入口**不灰化、不禁用**（灰化会让空首页看起来像坏了），
+ * 未登录口径：入口**不灰化、不禁用**（灰化会让空首页看起来像坏了），
  * 点击后再判登录 —— 未登录则提示并把人送到「我的」登录入口。
  * 最近对话拉取需登录态：未登录不发请求、显示空态（与科豆 login-gate 同语义）。
  */
@@ -124,19 +124,9 @@ Page({
     this.loadRecent();
   },
 
-  /** 新对话：hero 区快捷入口，独立于两条能力入口（缺省 agentId=auto，无 conversationId） */
+  /** 新对话：hero 区快捷入口，独立于能力入口（缺省 agentId=auto，无 conversationId） */
   goChat() {
     openEntry('/pages/chat/index/index');
-  },
-
-  /** 能力入口 1：翻译（分包页） */
-  goTranslate() {
-    openEntry('/packageTranslate/pages/translate/index/index');
-  },
-
-  /** 能力入口 2：新概念英语逐句精读（主包页） */
-  goNce() {
-    openEntry('/pages/nce/index/index');
   },
 
   /**

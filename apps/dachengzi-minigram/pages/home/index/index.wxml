@@ -1,6 +1,6 @@
 <!-- 大橙子个人助理 · 首页（tab 1 / 启动页）
-     结构固定：问候 hero → 两条能力入口（翻译 / 新概念英语）→ 最近使用 → 提示 → 合规两行。
-     ⚠️ 只放两条能力入口，不要加第三条 —— 新能力先进「发现」，首页只留最常用的两个。 -->
+     结构固定：问候 hero → 今日一句 → 新对话 → 最近使用 → 提示 → 合规两行。
+     ⚠️ 首页只保留「新对话」快捷入口，能力清单统一归「发现」页。 -->
 <view class="page {{radiusClass}}">
   <!-- 问候 hero -->
   <view class="hero">
@@ -18,7 +18,7 @@
     <view class="daily-en">{{quote.en}}</view>
   </view>
 
-  <!-- 新对话：hero 区快捷入口（独立于两条能力入口，不新增第三条能力） -->
+  <!-- 新对话：hero 区快捷入口（首页唯一的能力入口） -->
   <view class="newchat" hover-class="newchat-hover" bindtap="goChat">
     <view class="n-ic">＋</view>
     <view class="n-tx">
@@ -26,26 +26,6 @@
       <view class="n-e">直接和 AI 聊天 · 随时追问</view>
     </view>
     <text class="n-go">›</text>
-  </view>
-
-  <!-- 能力入口 1：翻译 -->
-  <view class="cap" hover-class="cap-hover" bindtap="goTranslate">
-    <view class="ic">译</view>
-    <view class="tx">
-      <view class="b">翻译</view>
-      <view class="e">中英互译 · 译完可以继续追问</view>
-    </view>
-    <text class="go">›</text>
-  </view>
-
-  <!-- 能力入口 2：新概念英语 -->
-  <view class="cap" hover-class="cap-hover" bindtap="goNce">
-    <view class="ic">英</view>
-    <view class="tx">
-      <view class="b">新概念英语</view>
-      <view class="e">逐句精读 · 生词与跟读练习</view>
-    </view>
-    <text class="go">›</text>
   </view>
 
   <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态；点卡片恢复该会话） -->
@@ -72,10 +52,10 @@
 
   <view wx:else class="w-recent">
     <!-- 空态：保留原空态文案 -->
-    <view class="empty">还没有记录。翻译一次或学一课后会出现在这里；登录后换设备也能接着看。</view>
+    <view class="empty">还没有记录。和 AI 聊一次后会出现在这里；登录后换设备也能接着看。</view>
   </view>
 
-  <view class="hint">两个能力，进来就能用完 —— 不需要先学会怎么用。</view>
+  <view class="hint">直接对话，进来就能用 —— 不需要先学会怎么用。</view>
 
   <view class="claim-foot">
     <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
