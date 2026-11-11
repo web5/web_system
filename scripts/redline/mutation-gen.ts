@@ -146,13 +146,44 @@ const DECLARATIVE_ONLY = new Set([
   "skip_merges",      // R19：merge 跳过硬编码在 buildSnapshot
 ]);
 
-function collectJudgmentFields(trigger: YamlMap, credential: YamlMap | null): string[] {
+/**
+ * 🔴 门级声明性字段（2026-11-11 #8722 逐函数核对 runR10/runR11 后登记）：
+ * 同一个字段名，在通用骨架门（R13–R18/R23）里是真判据，在 R10/R11 的定制实现里
+ * 却是硬编码 —— 全局登记会误伤通用门，只能按门登记：
+ *   R10：trailer 正则被 /^Proto:[ \t]/ 硬编码（gate.ts ~1215）、sha 提取硬编码、
+ *        scope/status 由 isUiFile 硬编码；唯一真读的 credential 键是 must_be_ancestor_of。
+ *   R11：trailerValue(c.body, "Design") 硬编码（~1251）、blobAtPath/reportBlocking
+ *        硬编码；trigger 的 scope 在 any_of 分支里（父键已全局声明），
+ *        credential 的 trailer/accept/checks 全是声明。
+ * 两处用途：① collectJudgmentFields 跳过（审计不再列）② 变异计划跳过
+ * （变异器是文本正则扫门块，会命中 any_of 里的 scope —— 不在计划层拦就会跑出「必不捕获」）。
+ */
+const DECLARATIVE_PER_GATE: Record<string, string[]> = {
+  R10: ["scope", "status", "trailer", "accept"],
+  R11: ["scope", "trailer", "accept", "checks"],
+  // 2026-11-11 #8722 第二批（逐函数核对 runR9/runR9b 后登记）：
+  //   R9 ：matchGlob("apps/*/pages/*") 与 /"(pages|tabBar)"/ 硬编码（gate.ts ~1128/1141），
+  //        status.startsWith("A") 硬编码 —— any_of 里的 status/match_path/diff_contains 全死。
+  //   R9b：isUiFile 硬编码、非 A 判定硬编码、R9B_LINES 常量硬编码（~1192）——
+  //        scope/status/threshold 全死；exempt 是真读（`if (!g.exempt) break`）不登记。
+  R9: ["status", "match_path", "diff_contains"],
+  R9b: ["scope", "status", "threshold"],
+};
+
+/** 点分路径的叶名（trigger.alt.match_re → match_re） */
+function leafOf(path: string): string {
+  const i = path.lastIndexOf(".");
+  return i < 0 ? path : path.slice(i + 1);
+}
+
+function collectJudgmentFields(trigger: YamlMap, credential: YamlMap | null, gateKey: string): string[] {
   const out: string[] = ["level", "exempt"];
+  const perGate = new Set(DECLARATIVE_PER_GATE[gateKey] ?? []);
   const walk = (obj: YamlMap, prefix: string, depth: number): void => {
     if (depth > 2) return;
     for (const [k, v] of Object.entries(obj)) {
       // `*_note` 一律是写给人看的解释（为什么这么判、踩过什么坑），不是判据
-      if (NON_JUDGMENT.has(k) || DECLARATIVE_ONLY.has(k) || k.endsWith("_note")) continue;
+      if (NON_JUDGMENT.has(k) || DECLARATIVE_ONLY.has(k) || perGate.has(k) || k.endsWith("_note")) continue;
       const path = prefix + k;
       out.push(path);
       if (v !== null && typeof v === "object" && !Array.isArray(v)) {
@@ -200,6 +231,7 @@ function loadGates(src: string): Gate[] {
         m.credential !== null && typeof m.credential === "object" && !Array.isArray(m.credential)
           ? (m.credential as YamlMap)
           : null,
+        sub ?? id,
       ),
       start,
       end,
@@ -674,8 +706,12 @@ function main(argv: string[]): number {
       .filter((x): x is Scenario => x !== undefined);
     if (scs.length === 0) continue;
     const block = src.slice(g.start, g.end);
+    const skipLeafs = new Set(DECLARATIVE_PER_GATE[g.key] ?? []);
     for (const mu of MUTATORS) {
       if (!mu.applies(g)) continue;
+      // 门级声明性字段：变异器是文本正则，会命中引擎不读的键（如 R11 any_of 里的 scope），
+      // 不拦就会跑出「必不捕获」的假缺口（38 条 baseline 里 R10/R11 占 8 条，全是这类）
+      if (mu.covers.some((c) => skipLeafs.has(leafOf(c)))) continue;
       if (mu.apply(block) === null) continue; // 该门没这个字段
       plan.push({
         gateKey: g.key,

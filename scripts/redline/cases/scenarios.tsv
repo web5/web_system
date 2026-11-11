@@ -54,3 +54,35 @@ commit-r23-missing	diff	${C_TS_MISSING}^..${C_TS_MISSING}	R23 阳性：改 scrip
 commit-r23-sample-missing	diff	${C_TS_SAMPLE_MISSING}^..${C_TS_SAMPLE_MISSING}	R23 阳性：TestScope 指向的抽样清单没随 commit 落盘（卡 2.2 真实性）
 commit-r23-pass	diff	${C_TS_PASS}^..${C_TS_PASS}	R23 阴性：TestScope: pass（全量已跑）放行
 commit-r23-sample	diff	${C_TS_SAMPLE}^..${C_TS_SAMPLE}	R23 阴性：TestScope 指向真实落盘的抽样清单放行
+
+# ---------------- 2026-11-11 #8722/#8256：八仙豁免 / 凭证分支 / R9/R9b / scope 边界 ----------------
+commit-r9-page	diff	${C_R9_PAGE}^..${C_R9_PAGE}	R9 阳性：新增页面无 passport 须报（Proto/Design 隔离 R10/R11）
+commit-r9-passport	diff	${C_R9_PASSPORT}^..${C_R9_PASSPORT}	R9 阴性：同 commit 带原型 → 不报
+commit-r9b-mod	diff	${C_R9B_MOD}^..${C_R9B_MOD}	R9b 阳性：既有 UI 结构改动无 passport 须报
+commit-r9b-passport	diff	${C_R9B_PASSPORT}^..${C_R9B_PASSPORT}	R9b 阴性：带原型 → 不报
+commit-exempt-all	diff	${C_EXEMPT_ALL}^..${C_EXEMPT_ALL}	八仙豁免：8 门 scoped 豁免全列 → 零输出（exempt 字段活化后的主干断言）
+commit-r13-blocking	diff	${C_R13_BLOCKING}^..${C_R13_BLOCKING}	R13 阳性：Contract 报告真实但阻塞未清零
+commit-r14-valid	diff	${C_R14_VALID}^..${C_R14_VALID}	R14 阴性：Release 路径凭证齐全（捕获 trailer 改名 / accept 去 path）
+commit-r14-fake	diff	${C_R14_FAKE}^..${C_R14_FAKE}	R14 阳性：Release 指向不存在（捕获路径存在性变异）
+commit-r14-blocking	diff	${C_R14_BLOCKING}^..${C_R14_BLOCKING}	R14 阳性：Release 报告阻塞未清零（捕获阻塞归零变异）
+commit-r15-valid	diff	${C_R15_VALID}^..${C_R15_VALID}	R15 阴性：Code 路径凭证齐全
+commit-r15-fake	diff	${C_R15_FAKE}^..${C_R15_FAKE}	R15 阳性：Code 指向不存在
+commit-r15-blocking	diff	${C_R15_BLOCKING}^..${C_R15_BLOCKING}	R15 阳性：Code 报告阻塞未清零
+commit-r18-valid	diff	${C_R18_VALID}^..${C_R18_VALID}	R18 阴性：Plan 路径凭证齐全
+commit-r18-fake	diff	${C_R18_FAKE}^..${C_R18_FAKE}	R18 阳性：Plan 指向不存在
+commit-r18-blocking	diff	${C_R18_BLOCKING}^..${C_R18_BLOCKING}	R18 阳性：Plan 报告阻塞未清零
+commit-r23-blocking	diff	${C_R23_BLOCKING}^..${C_R23_BLOCKING}	R23 阳性：TestScope 清单阻塞未清零
+commit-r12-clean	diff	${C_TS_PASS}^..${C_TS_PASS}	R12 阴性：kit 双源一致无漂移（阳性会破坏全部场景基线，维持登记）
+line-r1-console-log-js	files	servers/api/src/dbg.js	R1 scope 边界：.js 属 code_file 不属 ts_file
+line-r2-cred-js	files	servers/api/src/cred2.js	R2.cred scope 边界：.js 里的凭据模式
+line-r3-todo-js	files	servers/api/src/todo2.js	R3 scope 边界：.js 里的 TODO
+line-r4-any-js	files	servers/api/src/any3.js	R4.any scope 边界：ts_file→code_file 变宽后 .js 须报
+line-r3-weak	files	servers/api/src/weak.ts	R3.weak 阳性：HACK 弱占位（uncovered 清零）
+line-r4-tsignore	files	servers/api/src/tsignore.ts	R4.ts-ignore 阳性（uncovered 清零）
+line-r5-wildcard	files	servers/api/src/corswild.ts	R5.wildcard-origin 阳性：origin:'*'（uncovered 清零）
+
+# ---------------- 2026-11-11 #8722 第二批：新认领门的变异观测面 ----------------
+commit-r9b-exempt	diff	${C_R9B_EXEMPT}^..${C_R9B_EXEMPT}	R9b 豁免通路：修改≥5行+Micro-exempt → 零输出（exempt 变异的唯一观测面）
+line-r3-weak-js	files	servers/api/src/weak2.js	R3.weak scope 边界（.js）+ 整行注释 skip 观测
+line-r4-tsignore-js	files	servers/api/src/tsignore2.js	R4.ts-ignore scope 边界（.js）+ 整行注释 skip 观测
+line-r5-wildcard-comment	files	servers/api/src/corscomment.ts	R5.wildcard skip 观测：整行注释形态，基线零输出
