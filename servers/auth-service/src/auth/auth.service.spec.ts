@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import axios from 'axios';
 import { PublicBaseUrlService } from '@web-system/shared';
@@ -66,6 +70,7 @@ describe('AuthService', () => {
     jwtService = {
       signAsync: jest.fn(),
       verifyAsync: jest.fn(),
+      decode: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<JwtService>;
 
     configService = {
@@ -371,6 +376,131 @@ describe('AuthService', () => {
       });
 
       expect(result.accessToken).toBe(mockToken);
+    });
+  });
+
+  describe('V4：Redis 黑名单只允许成功后形成结论', () => {
+    it.each([
+      [0, false],
+      [1, true],
+    ])('无 sid token 的 exists=%s 返回 %s', async (exists, expected) => {
+      redisClient.exists.mockResolvedValue(exists);
+
+      await expect(service.isTokenBlacklisted('test-token')).resolves.toBe(expected);
+      expect(redisClient.exists).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      [1, 0, true],
+      [0, 1, true],
+      [0, 0, false],
+    ])('有 sid 时 hash=%s、sid=%s 返回 %s', async (byHash, bySid, expected) => {
+      (jwtService.decode as jest.Mock).mockReturnValue({ sid: 'test-session' });
+      redisClient.exists.mockResolvedValueOnce(byHash).mockResolvedValueOnce(bySid);
+
+      await expect(service.isTokenBlacklisted('test-token')).resolves.toBe(expected);
+      expect(redisClient.exists).toHaveBeenCalledTimes(2);
+    });
+
+    it('exists 命令失败必须抛 503，不得 fail-open 为 false', async () => {
+      redisClient.exists.mockRejectedValue(new Error('test command unavailable'));
+
+      await expect(service.isTokenBlacklisted('test-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('获取 Redis 客户端失败必须抛 503，不得 fail-open 为 false', async () => {
+      (redisService.getOrThrow as jest.Mock).mockImplementation(() => {
+        throw new Error('test client unavailable');
+      });
+
+      await expect(service.isTokenBlacklisted('test-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
+  describe('V9：logout 黑名单写入语义', () => {
+    it('正常登出同时写入 token 与 sid 黑名单', async () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      (jwtService.decode as jest.Mock).mockReturnValue({
+        exp: nowSec + 60,
+        sid: 'test-session',
+      });
+      redisClient.set.mockResolvedValue('OK');
+
+      await expect(service.logout('test-token')).resolves.toBeUndefined();
+      expect(redisClient.set).toHaveBeenCalledTimes(2);
+    });
+
+    it('黑名单写入失败必须抛 503，不得静默返回登出成功', async () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      (jwtService.decode as jest.Mock).mockReturnValue({ exp: nowSec + 60 });
+      redisClient.set.mockRejectedValue(new Error('test command unavailable'));
+
+      await expect(service.logout('test-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
+  describe('V5：token 状态与鉴权保留 503', () => {
+    it('空 token 返回 invalid，且不查询 Redis', async () => {
+      await expect(service.getTokenStatus('')).resolves.toEqual({ valid: false, reason: 'invalid' });
+      expect(redisClient.exists).not.toHaveBeenCalled();
+    });
+
+    it('JWT 无效返回 expired，且不查询 Redis', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('test jwt invalid'));
+
+      await expect(service.getTokenStatus('test-token')).resolves.toEqual({
+        valid: false,
+        reason: 'expired',
+      });
+      expect(redisClient.exists).not.toHaveBeenCalled();
+    });
+
+    it('已吊销 token 返回 valid:false / blacklisted', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 1 });
+      redisClient.exists.mockResolvedValue(1);
+
+      await expect(service.getTokenStatus('test-token')).resolves.toEqual({
+        valid: false,
+        reason: 'blacklisted',
+      });
+    });
+
+    it('有效 token 返回 valid:true', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 1 });
+      redisClient.exists.mockResolvedValue(0);
+
+      await expect(service.getTokenStatus('test-token')).resolves.toEqual({ valid: true });
+    });
+
+    it('getTokenStatus 透传 Redis 503', async () => {
+      (jwtService.verifyAsync as jest.Mock).mockResolvedValue({ sub: 1 });
+      redisClient.exists.mockRejectedValue(new Error('test command unavailable'));
+
+      await expect(service.getTokenStatus('test-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('verifyToken 不得把 Redis 503 吞成 401', async () => {
+      redisClient.exists.mockRejectedValue(new Error('test command unavailable'));
+
+      await expect(service.verifyToken('test-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('refreshToken 不得把 Redis 503 吞成 401', async () => {
+      redisClient.exists.mockRejectedValue(new Error('test command unavailable'));
+
+      await expect(service.refreshToken('test-refresh-token')).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
   });
 });
