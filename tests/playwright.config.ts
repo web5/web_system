@@ -55,6 +55,12 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
+    // 代理加固：本地 e2e 流量纯本地，强制禁系统代理。
+    // 背景：Chromium 默认跟随系统代理，macOS 豁免名单不含 local.kedouai.com，
+    // 系统代理开启时域名路径会被发给代理服务器（ERR_PROXY_CONNECTION_FAILED /
+    // ERR_TUNNEL_CONNECTION_FAILED），且 preflight TCP 探测不走代理 → 出现
+    // 「preflight 绿但导航全挂」假象。实测证据见 tests/README.md 已知限制节。
+    launchOptions: { args: ['--no-proxy-server'] },
   },
   // 仅在显式要求时自起静态伺服（本地全栈/连 dev 时不抢戏）
   ...(process.env.E2E_WEBSERVER === '1'

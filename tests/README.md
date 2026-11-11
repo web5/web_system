@@ -126,6 +126,7 @@ Playwright 原生口径（03 方案 §3.3「统一原则不统一数值」）：
 - **W④ Chromium 受限端口**：`http://localhost:6000`（gateway 直口）在浏览器受限端口清单（ERR_UNSAFE_PORT），BASE_URL 默认走 `https://local.kedouai.com`（envoy→6000）。preflight 用 TCP 探测不受影响。
 - **W⑤ 全量回归的后端环境编排未立项**：CI 里起 MySQL + 后端服务跑 `@regression` 全量是独立 M 档工程（03 方案 §2.5），当前 CI 只有 `@smoke` 门禁。
 - **W⑥ console project 不进 CI @smoke**：其断言依赖 deploy-console 后端（`/api/apps`），同属 W⑤ 范围；本地/发布后可手动 `--project=console`。
+- **W⑦ 系统代理与 `--no-proxy-server` 口径**：Chromium 默认跟随系统代理；macOS 代理豁免名单（`scutil --proxy` 的 ExceptionsList：`localhost/127.*/内网网段/*.local`）**不含** `local.kedouai.com`，系统代理开启时域名路径会被发给代理服务器，导航报 `ERR_PROXY_CONNECTION_FAILED`/`ERR_TUNNEL_CONNECTION_FAILED`；而 preflight TCP 探测（net.connect）不走代理，会出现「preflight 绿但导航全挂」的假象。2026-11-11 探针实测（死代理 + macOS 豁免名单模拟）：域名 → `ERR_PROXY_CONNECTION_FAILED`，`127.0.0.1` → `ERR_CONNECTION_REFUSED`（豁免生效、直连形态）；加 `--no-proxy-server` 后两者均恢复直连形态。故 `playwright.config.ts` 的 `use.launchOptions.args` 固定 `['--no-proxy-server']`：本地 e2e 流量纯本地，禁代理最干净；`127.0.0.1:8899` 静态伺服路径本就在豁免名单内，加固前后行为一致（实测 6 passed 无回归）。⚠️ 副作用：若将来要连必须走代理才能到达的环境（如某些内网 dev），需临时去掉该参数或改走 `BASE_URL` 直连可达地址。
 
 ## ⑥ 账号与守卫
 
