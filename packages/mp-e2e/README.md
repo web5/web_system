@@ -187,6 +187,11 @@ close→launch 间隙被清）。用例若写了垃圾 key，自行在用例内�
 **Q：E 用例内部 close→launch 后，runner 还会 close 吗？**
 runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 launch 的新会话自行 close（E3 先例）。
 
+**Q：切换系统代理会影响跑测吗？**
+不影响。automator 与 devtools 之间走 127.0.0.1 本地端口，不经过系统代理（macOS 代理例外列表
+默认含 `127.*`/`localhost`）；2026-11-11 实测代理切换前后 PASS/FAIL/BLOCKED 分布一致。
+唯一例外：代理工具开 TUN/增强模式劫持回环时 automator launch 可能异常——遇到先关 TUN 再复跑。
+
 ---
 
 ## 附录 A · 测试用例卡模板与规范
