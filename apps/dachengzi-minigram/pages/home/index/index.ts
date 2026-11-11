@@ -187,14 +187,24 @@ Page({
 
     try {
       const api = createAgentApi('auto');
-      const res = await api.listConversations(1, 1);
-      const list = Array.isArray(res?.list) ? res.list : null;
-      if (list === null) {
-        // 信封 / 结构异常：按「接口异常」处理，不显示「暂无记录」空态
+      // 列表接口按 source 过滤（默认只查 chat），翻译会话 source='tool' 会被漏掉。
+      // 并发查两路再合并取最新，避免首页「最近会话」空态。
+      const [chatRes, toolRes] = await Promise.all([
+        api.listConversations(1, 1, 'chat').catch(() => null),
+        api.listConversations(1, 1, 'tool').catch(() => null),
+      ]);
+      const merged = [
+        ...(chatRes && Array.isArray(chatRes.list) ? chatRes.list : []),
+        ...(toolRes && Array.isArray(toolRes.list) ? toolRes.list : []),
+      ];
+      // 按 updatedAt 倒序取最新一条（updatedAt 可能为 undefined，用字符串比较兜底）
+      const first = merged.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))[0];
+
+      if (chatRes === null && toolRes === null) {
+        // 两路都异常（都 reject）：按「接口异常」处理，不显示「暂无记录」空态
         this.setData({ recent: null, recentLoading: false, recentError: true });
         return;
       }
-      const first = list[0];
       if (!first) {
         // 真·空态：确实还没有会话
         this.setData({ recent: null, recentLoading: false, recentError: false });

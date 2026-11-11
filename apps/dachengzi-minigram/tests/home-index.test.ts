@@ -86,7 +86,8 @@ describe('loadRecent（最近对话 stale-while-revalidate）', () => {
     const ctx = makeThis();
     await pageConfig.loadRecent.call(ctx);
     // 最终因后台刷新返回空会话，缓存被清、回空态
-    expect(agentApiMock.listConversations).toHaveBeenCalledWith(1, 1);
+    expect(agentApiMock.listConversations).toHaveBeenCalledWith(1, 1, 'chat');
+    expect(agentApiMock.listConversations).toHaveBeenCalledWith(1, 1, 'tool');
     expect(ctx.data.recent).toBeNull();
     expect(ctx.data.recentLoading).toBe(false);
     expect(wxMock.removeStorageSync).toHaveBeenCalledWith('welcome_recent_cache');
