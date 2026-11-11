@@ -108,6 +108,52 @@ interface RequestOptions {
   timeout?: number;
 }
 
+/**
+ * ai-agent 统一异常过滤器会把一切业务异常转成 HTTP 200 + { code, message, data: null } 信封
+ * （unified-exception.filter.ts）。仅当 code+message 同时存在且 code 非 0 才视为错误信封，
+ * 避免误伤「成功直返」里恰好带 code 字段的正常数据（如某些 agent 的直返结构）。
+ */
+interface AiAgentErrorEnvelope {
+  code: number;
+  message?: string;
+  data?: unknown;
+}
+
+/** 判定响应体是否 ai-agent 错误信封（code 非 0 才算错，code===0 视为正常直返） */
+function isAiAgentErrorEnvelope(body: unknown): body is AiAgentErrorEnvelope {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const obj = body as Record<string, unknown>;
+  return 'code' in obj && 'message' in obj && typeof obj.code === 'number' && obj.code !== 0;
+}
+
+/**
+ * 401 / ai-agent 4010 信封共用的「未授权」处理：清 token（防启动竞态误清）+ 提示 / 广播重登。
+ * auth-service 的 4xx/5xx 走 HTTP 状态码分支；ai-agent 的 4010 走 HTTP 200 信封分支，二者行为对齐。
+ */
+function handleUnauthorized(token: string, options: RequestOptions): void {
+  // 仅当「本次请求携带的 token」仍等于当前存储的 token 才清除：
+  // 防止登录完成前发出的旧请求在登录后返回 401，把刚写入的新 token 误清（启动竞态）。
+  if (token && token === getToken()) {
+    clearToken();
+  }
+  if (!options.silent) {
+    if (isLoggedOut()) {
+      // 已主动退出：不自动重登、不跳欢迎页（欢迎页无登录入口），只提示需要登录
+      wx.showToast({ title: '请先登录', icon: 'none' });
+    } else {
+      wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
+      // 通知各页弹登录墙（login-gate：静默 wx.login 一键恢复）。
+      // 禁 reLaunch 回首页：会清空整个页面栈——用户从任何页进来都被弹回首页，
+      // 且此后右滑返回永远回首页（栈已脏，「对话页右滑始终回首页」的元凶）。
+      try {
+        getApp<IAppOption>().eventBus?.emit('auth:expired');
+      } catch {
+        // getApp 不可用（极早期）：放弃广播，页面 onShow 仍会兜底刷新登录态
+      }
+    }
+  }
+}
+
 /** 通用请求方法 */
 export async function request<T = unknown>(options: RequestOptions): Promise<T> {
   // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
@@ -146,29 +192,22 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       },
       success(res) {
         if (res.statusCode === 200) {
+          const body = res.data as unknown;
+          if (isAiAgentErrorEnvelope(body)) {
+            if (body.code === 4010) {
+              // ai-agent 未授权/缺 token：与 HTTP 401 同口径处理（清 token + 提示/广播重登）
+              handleUnauthorized(token, options);
+              reject(res);
+              return;
+            }
+            const msg = body.message || `请求失败 (${body.code})`;
+            if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
+            reject(res);
+            return;
+          }
           resolve(res.data as T);
         } else if (res.statusCode === 401) {
-          // 仅当「本次请求携带的 token」仍等于当前存储的 token 才清除：
-          // 防止登录完成前发出的旧请求在登录后返回 401，把刚写入的新 token 误清（启动竞态）。
-          if (token && token === getToken()) {
-            clearToken();
-          }
-          if (!options.silent) {
-            if (isLoggedOut()) {
-              // 已主动退出：不自动重登、不跳欢迎页（欢迎页无登录入口），只提示需要登录
-              wx.showToast({ title: '请先登录', icon: 'none' });
-            } else {
-              wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
-              // 通知各页弹登录墙（login-gate：静默 wx.login 一键恢复）。
-              // 禁 reLaunch 回首页：会清空整个页面栈——用户从任何页进来都被弹回首页，
-              // 且此后右滑返回永远回首页（栈已脏，「对话页右滑始终回首页」的元凶）。
-              try {
-                (getApp() as any)?.eventBus?.emit('auth:expired');
-              } catch {
-                // getApp 不可用（极早期）：放弃广播，页面 onShow 仍会兜底刷新登录态
-              }
-            }
-          }
+          handleUnauthorized(token, options);
           reject(res);
         } else {
           const data = res.data as any;

@@ -1,7 +1,11 @@
 <!-- 大橙子个人助理 · 首页（tab 1 / 启动页）
      结构固定：问候 hero → 今日一句 → 新对话 → 最近使用 → 提示 → 合规两行。
      ⚠️ 首页只保留「新对话」快捷入口，能力清单统一归「发现」页。 -->
-<view class="page {{radiusClass}}">
+<view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
+  <!-- 未登录：整页只渲染登录引导卡（login-gate），不发任何业务请求 -->
+  <login-gate wx:if="{{!loggedIn}}" desc="对话记录都跟着账号走，登录后接着聊" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+
+  <block wx:if="{{loggedIn}}">
   <!-- 问候 hero -->
   <view class="hero">
     <view class="logo">橙</view>
@@ -28,8 +32,8 @@
     <text class="n-go">›</text>
   </view>
 
-  <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态；点卡片恢复该会话） -->
-  <view class="sec-t">最近对话<text wx:if="{{!recentLoading && !recent}}" class="em">暂无记录</text></view>
+  <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态）+ 异常态；点卡片恢复该会话 -->
+  <view class="sec-t">最近对话<text wx:if="{{!recentLoading && !recent && !recentError}}" class="em">暂无记录</text></view>
 
   <!-- 加载骨架：尺寸对齐真实卡片，切换不跳变 -->
   <view wx:if="{{recentLoading}}" class="w-recent">
@@ -51,8 +55,10 @@
   </view>
 
   <view wx:else class="w-recent">
-    <!-- 空态：保留原空态文案 -->
-    <view class="empty">还没有记录。和 AI 聊一次后会出现在这里；登录后换设备也能接着看。</view>
+    <!-- 接口异常：可点重试（区别于真·空态） -->
+    <view wx:if="{{recentError}}" class="empty retry" bindtap="loadRecent">加载失败，点此重试</view>
+    <!-- 真·空态：保留原空态文案 -->
+    <view wx:else class="empty">还没有记录。和 AI 聊一次后会出现在这里；登录后换设备也能接着看。</view>
   </view>
 
   <view class="hint">直接对话，进来就能用 —— 不需要先学会怎么用。</view>
@@ -61,4 +67,5 @@
     <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
 已依法完成大模型与算法备案</view>
   </view>
+  </block>
 </view>

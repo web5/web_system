@@ -79,10 +79,14 @@ Page({
     radiusClass: '',
     /** 今日一句（本地文案池按日期取模，同天稳定、隔天自动换） */
     quote: getDailyQuote(),
+    /** 登录态：false 时整页渲染登录引导卡（login-gate），不发起任何业务请求 */
+    loggedIn: true,
     /** 最近一次会话（最多展示一条）；null = 还没有任何会话 */
     recent: null as Recent | null,
-    /** 最近对话是否加载中 —— true 显示骨架，false 显示卡片（或空态） */
+    /** 最近对话是否加载中 —— true 显示骨架，false 显示卡片（或空态/异常态） */
     recentLoading: true,
+    /** 最近对话是否处于「接口异常」态 —— true 显示「加载失败，点此重试」，false 显示真·空态 */
+    recentError: false,
   },
 
   /**
@@ -90,25 +94,38 @@ Page({
    * ⚠️ Page() 参数是对象字面量：运行时字段初始化只能写成 `null as <类型>`。
    */
   _offAuthLogged: null as (() => void) | null,
+  _offAuthExpired: null as (() => void) | null,
 
   onLoad() {
-    // 登录成功广播：首启静默登录成功后重拉最近对话（loadRecent 内部按登录态收敛），
+    // 登录成功广播：首启静默登录成功后刷新登录态并重拉最近对话（loadRecent 内部按登录态收敛），
     // 替代「仅 onShow 同步判 isLoggedIn」导致的首启不刷新竞态。
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
     if (__bus) {
-      this._offAuthLogged = () => this.loadRecent();
+      this._offAuthLogged = () => {
+        this.setData({ loggedIn: isLoggedIn() });
+        this.loadRecent();
+      };
       __bus.on('auth:logged', this._offAuthLogged);
+      // 登录态过期广播：request 401 / ai-agent 4010 信封清 token 后发 auth:expired → 本页弹登录墙
+      this._offAuthExpired = () => this.setData({ loggedIn: false });
+      __bus.on('auth:expired', this._offAuthExpired);
     }
   },
 
   onUnload() {
-    // 退订登录成功广播，避免回调打到已销毁实例
+    // 退订登录态广播，避免回调打到已销毁实例
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
-    if (__bus && this._offAuthLogged) {
-      __bus.off('auth:logged', this._offAuthLogged);
-      this._offAuthLogged = null;
+    if (__bus) {
+      if (this._offAuthLogged) {
+        __bus.off('auth:logged', this._offAuthLogged);
+        this._offAuthLogged = null;
+      }
+      if (this._offAuthExpired) {
+        __bus.off('auth:expired', this._offAuthExpired);
+        this._offAuthExpired = null;
+      }
     }
   },
 
@@ -120,8 +137,17 @@ Page({
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : '';
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
 
+    // 每次回到首页先同步登录态，再决定是否拉最近对话
+    this.setData({ loggedIn: isLoggedIn() });
+
     // 最近对话：每次回到首页刷新（先缓存秒显，再后台刷新）
     this.loadRecent();
+  },
+
+  /** 登录卡登录成功后回调：刷新登录态与页面内容 */
+  onLogged() {
+    this.setData({ loggedIn: isLoggedIn() });
+    this.onShow();
   },
 
   /** 新对话：hero 区快捷入口，独立于能力入口（缺省 agentId=auto，无 conversationId） */
@@ -156,12 +182,22 @@ Page({
       this.setData({ recentLoading: true });
     }
 
+    // 每次发起请求前重置异常态，避免上一次的「加载失败」残留到本轮
+    this.setData({ recentError: false });
+
     try {
       const api = createAgentApi('auto');
       const res = await api.listConversations(1, 1);
-      const first = (res?.list || [])[0];
+      const list = Array.isArray(res?.list) ? res.list : null;
+      if (list === null) {
+        // 信封 / 结构异常：按「接口异常」处理，不显示「暂无记录」空态
+        this.setData({ recent: null, recentLoading: false, recentError: true });
+        return;
+      }
+      const first = list[0];
       if (!first) {
-        this.setData({ recent: null, recentLoading: false });
+        // 真·空态：确实还没有会话
+        this.setData({ recent: null, recentLoading: false, recentError: false });
         try {
           wx.removeStorageSync(RECENT_CACHE_KEY);
         } catch {
@@ -186,15 +222,15 @@ Page({
         preview,
         timeText: formatTime(first.updatedAt),
       };
-      this.setData({ recent: next, recentLoading: false });
+      this.setData({ recent: next, recentLoading: false, recentError: false });
       try {
         wx.setStorageSync(RECENT_CACHE_KEY, next);
       } catch {
         /* 缓存写失败不影响本次显示 */
       }
     } catch {
-      // 加载失败：骨架和卡片都不显示（整块隐藏），避免被误读成「还没有会话」
-      this.setData({ recent: null, recentLoading: false });
+      // 加载失败：按「接口异常」处理（区别于真·空态），不误读成「还没有会话」
+      this.setData({ recent: null, recentLoading: false, recentError: true });
     }
   },
 

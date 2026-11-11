@@ -96,7 +96,7 @@ page {
   line-height: 1.6;
 }
 
-/* ---------- 新对话快捷入口（hero 区，独立于两条能力入口） ---------- */
+/* ---------- 新对话快捷入口（hero 区，首页唯一的能力入口） ---------- */
 .newchat {
   display: flex;
   align-items: center;
@@ -126,64 +126,7 @@ page {
 .n-e { font-size: 22rpx; color: rgba(255, 255, 255, .86); margin-top: 4rpx; }
 .n-go { color: #fff; font-size: 36rpx; opacity: .9; flex: 0 0 auto; margin-left: 12rpx; }
 
-/* ---------- 能力入口（两条，与发现页 .cap 同构） ---------- */
-.cap {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  margin-top: 20rpx;
-  padding: 28rpx;
-  background: var(--card);
-  border: 1rpx solid rgba(37, 99, 235, .10);
-  border-radius: var(--r-card);
-  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
-}
-
-.cap-hover {
-  opacity: .75;
-}
-
-.ic {
-  flex: 0 0 80rpx;
-  width: 80rpx;
-  height: 80rpx;
-  border-radius: var(--r-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32rpx;
-  font-weight: 600;
-  background: var(--brand-soft);
-  color: var(--brand-txt);
-}
-
-.tx {
-  flex: 1;
-  min-width: 0;
-}
-
-.tx .b {
-  font-size: 29rpx;
-  font-weight: 600;
-  color: var(--t1);
-}
-
-.tx .e {
-  font-size: 23rpx;
-  color: #6B7280;
-  line-height: 1.45;
-  margin-top: 6rpx;
-}
-
-/* 右侧箭头：用字符而非图标，与发现页 .go 同手法 */
-.go {
-  font-size: 34rpx;
-  color: #B9C1CF;
-  margin-left: 12rpx;
-  flex: 0 0 auto;
-}
-
-/* ---------- 最近对话（会话维度：三态骨架 / 卡片 / 空态） ---------- */
+/* ---------- 最近对话（会话维度：三态骨架 / 卡片 / 空态 + 异常态） ---------- */
 .sec-t {
   display: flex;
   align-items: center;
@@ -262,6 +205,12 @@ page {
   border: 1rpx solid rgba(37, 99, 235, .10);
   border-radius: var(--r-card);
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
+}
+
+/* 接口异常：可点重试（区别于真·空态），用品牌色 + 下划线提示可点 */
+.empty.retry {
+  color: var(--brand-txt);
+  text-decoration: underline;
 }
 
 /* ---------- 提示行 ---------- */
