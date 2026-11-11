@@ -2,6 +2,7 @@ import {
   PUBLIC_BASE_URL_ENV,
   normalizePublicBaseUrl,
   resolvePublicUrl,
+  stripPublicBaseUrl,
 } from './public-url';
 
 /**
@@ -82,5 +83,57 @@ describe('resolvePublicUrl', () => {
 
   it('非 / 开头的相对值原样返回（不误拼）', () => {
     expect(resolvePublicUrl('wxfile://tmp/a.png', base)).toBe('wxfile://tmp/a.png');
+  });
+});
+
+/**
+ * 写侧净化（2026-11-11 写侧污染修复）：小程序把 upload-service 返回的完整 URL
+ * 原样 PUT 落库，导致 DB 写入带公网 origin 的 avatar。stripPublicBaseUrl 是
+ * resolvePublicUrl 的逆操作，落库前把误带 origin 的值剥回相对路径。
+ */
+describe('stripPublicBaseUrl', () => {
+  const base = 'https://dev.kedouai.com';
+
+  it('命中前缀 → 剥掉 base，返回以 / 开头的相对路径', () => {
+    expect(stripPublicBaseUrl('https://dev.kedouai.com/api/uploads/avatars/x.jpeg', base)).toBe(
+      '/api/uploads/avatars/x.jpeg',
+    );
+  });
+
+  it('base 带结尾斜杠也能命中（去尾斜杠后匹配）', () => {
+    expect(stripPublicBaseUrl('https://dev.kedouai.com/api/uploads/avatars/x.jpeg', 'https://dev.kedouai.com/')).toBe(
+      '/api/uploads/avatars/x.jpeg',
+    );
+  });
+
+  it('空值 / 空串 → 空串', () => {
+    expect(stripPublicBaseUrl('', base)).toBe('');
+    expect(stripPublicBaseUrl(null, base)).toBe('');
+    expect(stripPublicBaseUrl(undefined, base)).toBe('');
+  });
+
+  it('base 为空 → 原样返回（不剥，兼容模式）', () => {
+    expect(stripPublicBaseUrl('https://dev.kedouai.com/api/uploads/avatars/x.jpeg', '')).toBe(
+      'https://dev.kedouai.com/api/uploads/avatars/x.jpeg',
+    );
+    expect(stripPublicBaseUrl('/api/uploads/avatars/x.jpeg', '')).toBe('/api/uploads/avatars/x.jpeg');
+  });
+
+  it('第三方 URL（微信头像等）原样返回，不动', () => {
+    expect(stripPublicBaseUrl('https://thirdwx.qlogo.cn/mmopen/abc/132', base)).toBe(
+      'https://thirdwx.qlogo.cn/mmopen/abc/132',
+    );
+  });
+
+  it('已是相对路径 → 原样返回（幂等）', () => {
+    expect(stripPublicBaseUrl('/api/uploads/avatars/x.jpeg', base)).toBe('/api/uploads/avatars/x.jpeg');
+  });
+
+  it('与 base 同域但路径不是 base 子路径的边界：origin 后无 / 不剥', () => {
+    // 恰好等于 base（无路径）不是 `${base}/` 前缀，原样返回
+    expect(stripPublicBaseUrl('https://dev.kedouai.com', base)).toBe('https://dev.kedouai.com');
+    // 与 resolvePublicUrl 互逆：剥完再拼回原值
+    const full = 'https://dev.kedouai.com/api/uploads/avatars/x.jpeg';
+    expect(resolvePublicUrl(stripPublicBaseUrl(full, base), base)).toBe(full);
   });
 });

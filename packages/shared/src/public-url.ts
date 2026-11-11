@@ -70,3 +70,25 @@ export function resolvePublicUrl(path: string | null | undefined, base: string):
   if (p.startsWith('/')) return `${b}${p}`;
   return p;
 }
+
+/**
+ * 写侧净化（resolvePublicUrl 的逆操作）：落库前把误带公网 origin 的 avatar 剥回相对路径。
+ *
+ * 背景（2026-11-11 写侧污染）：upload-service 的 avatar 上传响应返回完整 URL，小程序
+ * 拿到后原样 PUT 落库，DB 被写入 `https://dev.kedouai.com/api/uploads/avatars/xxx`。
+ * D1 铁律要求 DB 恒定存相对路径，故写侧落库前先过本函数。
+ *
+ * - 空值 → 空串
+ * - base 为空 → 原样返回（兼容模式，与 resolvePublicUrl 的「base 空保持相对」对称）
+ * - path 以 `${base}/` 开头（base 先去尾斜杠）→ 剥掉 base，返回以 `/` 开头的相对路径
+ * - 其它（第三方 URL 如微信头像、已是相对路径）→ 原样返回
+ */
+export function stripPublicBaseUrl(path: string | null | undefined, base: string): string {
+  const p = (path || '').trim();
+  if (!p) return '';
+
+  const b = (base || '').trim().replace(/\/+$/, '');
+  if (!b) return p;
+  if (p.startsWith(`${b}/`)) return p.slice(b.length);
+  return p;
+}
