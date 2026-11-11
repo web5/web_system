@@ -19,6 +19,9 @@ line-r4-any	files	servers/api/src/any.ts	R4 阳性：裸 `: any` 报 error
 line-r4-any-spec	files	servers/api/src/typed.spec.ts	R4 阴性：测试文件里的 `: any` 不报
 line-r5-cors-main	files	servers/api/src/main.ts	R5+R8 阳性：main.ts 的 enableCors() 无参 + 缺 useGlobalFilters
 line-r2-cred	files	servers/api/src/cred.ts	R2 阳性：疑似硬编码凭据
+line-r2-secret-env	files	r2fx/.env	R2 阳性：.env 必须报（路径判据是正则，不是 glob —— 切主后曾漏报）
+line-r2-secret-pem	files	r2fx/server.pem	R2 阳性：证书/私钥文件必须报
+line-r2-secret-example	files	r2fx/.env.example	R2 阴性：*.example* 不报
 line-no-trailing-newline	files	servers/api/src/nonl.ts	踩坑 #967：文件末尾无换行时最后一行不得被整行跳过
 
 # ---------------- commit 门（8 道）----------------
@@ -26,6 +29,7 @@ commit-r10-ui-no-proto	diff	${C_UI_NO_PROTO}^..${C_UI_NO_PROTO}	R10 阳性：改
 commit-new-api	diff	${C_NEW_API}^..${C_NEW_API}	R15/R17/R18 阳性：新增 controller + service，凭证全缺
 commit-r13-migration-small	diff	${C_MIGRATION_SMALL}^..${C_MIGRATION_SMALL}	R13 阴性：单行迁移低于行数阈值(5)，属微调不报（阈值下界）｜R23 阳性：迁移属共享面，与行数无关
 commit-r13-migration	diff	${C_MIGRATION}^..${C_MIGRATION}	R13 阳性：6 行迁移过阈值，契约面须 Contract 凭证｜R23 阳性：迁移属共享面
+commit-r13-fake-path	diff	${C_R13_FAKE}^..${C_R13_FAKE}	R13 阳性：Contract 指向不存在的报告 → 路径存在性校验必须报错（覆盖「有凭证但路径假」这一分支）
 commit-release	diff	${C_RELEASE}^..${C_RELEASE}	R14 阳性：CI workflow 属发布面｜R23 阳性：CI 属测试基建共享面
 commit-empty	diff	${C_EMPTY}^..${C_EMPTY}	R19 阳性：空提交（不能靠 Micro-exempt 绕过）
 commit-r17-fake-path	diff	${C_TEST_FAKE}^..${C_TEST_FAKE}	R17 阳性：Test 指向不存在的路径（卡 2.2 真实性）

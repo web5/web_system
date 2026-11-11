@@ -3,19 +3,27 @@
  *
  * 用途：`node scripts/redline/gates-lint.ts`
  *
- * 为什么需要它：一份「看起来像配置的散文」没用。YAML 必须被机器钉在 bash 行为上，
+ * 为什么需要它：一份「看起来像配置的散文」没用。YAML 必须被机器钉住，
  *   否则它只是第二份会漂移的文档 —— 那正是 S1 要消灭的问题。
  *
- * 四类检查：
+ * 五类检查：
  *   ① 结构   —— 解析 + 必填字段 + 枚举 + 引用完整性（scope 名、gate 号）
- *   ② 漂移   —— YAML 里的 glob 必须与 bash 里 case 分支**逐个相等**（含 gate-shared 的重复实现）
+ *   ② 自洽   —— scope 双向引用闭合、豁免清单与门声明对齐、档位被 gate.ts 读
  *   ③ 用例   —— 每道门要么有黄金用例，要么进 uncovered（承认没覆盖，不许含糊）
- *   ④ 接线   —— 声明必须可豁免的门，代码里真的接了豁免
+ *   ④ 接线   —— 主链路四个入口 + commit-msg 钩子都真的跑 gate.ts
+ *   ⑤ 生成物 —— 文档门表 / PR 模板 / 观察日志表头都与 YAML 同步
+ *
+ * 🔴 S5（2026-11-11）删掉 legacy bash 后，② 从「与 bash 逐条比对」降级成「YAML 内部自洽」。
+ *   这是一次**真实的能力损失**，不是等价替换：bash 是独立实现，能发现「改了 YAML 忘改代码」；
+ *   自洽检查发现不了这个。补位的是行为侧的两层（黄金用例 + 生成式变异，见 cases/ 与
+ *   mutation-gen.ts），它们直接跑引擎，不读源码猜。残留的盲区写在
+ *   docs/development/gates/00-单一真相源.md §三 与 §八。
  *
  * 退出码：0=全部通过 1=有失败 2=用法错误
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,10 +33,26 @@ import type { YamlMap, YamlValue } from "./lib/yaml-mini.ts";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TOP = resolve(HERE, "../..");
 const GATES_YAML = join(HERE, "gates.yaml");
-const SCAN_RULES = join(HERE, "scan-rules.sh");
-const GATE_SHARED = join(HERE, "gate-shared.sh");
 const GATE_TS = join(HERE, "gate.ts");
 const SCENARIOS = join(HERE, "cases", "scenarios.tsv");
+
+/**
+ * 主链路执行点 —— status=enforcing 后，这几处必须跑 gate.ts。
+ * （.githooks/commit-msg 单独查：它调的是另一套子命令 commit-msg，见 checkCommitMsgHook）
+ *
+ * 为什么要机器检查：改 YAML 的 status 不改这三个文件，就是**假切主** ——
+ * 声明写着 enforcing、文档写着「以 gates.yaml 为准」，实际判案子的还是 bash。
+ * 这种状态比不切更糟：两份权威并存且无人知道哪份在生效。
+ */
+const MAIN_CHAIN = [
+  { path: join(TOP, ".githooks", "pre-commit"), label: ".githooks/pre-commit", varname: "SCANNER" },
+  { path: join(TOP, ".github", "workflows", "quality-gate.yml"), label: ".github/workflows/quality-gate.yml", varname: null },
+  { path: join(HERE, "collect-gate-observations.sh"), label: "scripts/redline/collect-gate-observations.sh", varname: null },
+  // 🔴 黄金用例运行器必须被测引擎是 gate.ts —— 这处最容易漏，因为它是"测试"不是"链路"。
+  //   2026-11-11 切主时实测踩到：三处入口都切了，run.sh 还在跑 bash，于是
+  //   「把 gates.yaml 的判据改坏」这件事没有任何测试会红 —— CI 全绿，判据已失效。
+  { path: join(HERE, "cases", "run.sh"), label: "scripts/redline/cases/run.sh", varname: "SCAN" },
+];
 
 const LEVELS = ["error", "warning", "notice"];
 const ACCEPTS = ["pass", "path", "sha"];
@@ -45,9 +69,20 @@ interface Failure {
 
 const failures: Failure[] = [];
 const passes: string[] = [];
+/** 提示项：既不阻断也不计入通过，用于「切主后属预期」的差异 */
+const notes: string[] = [];
+
+/**
+ * status 的运行时值（main 里解析后赋值）。
+ * S5 删 bash 后它只剩一个分支（enforcing），留着是因为状态字段仍在 schema 里。
+ */
+let specStatus = "";
 
 function ok(label: string, note?: string): void {
   passes.push(note ? `${label}（${note}）` : label);
+}
+function note(text: string): void {
+  notes.push(text);
 }
 function bad(kind: string, detail: string): void {
   failures.push({ kind, detail });
@@ -81,65 +116,6 @@ function describe(v: YamlValue): string {
   return `${typeof v}(${String(v)})`;
 }
 
-/** 从 bash 的 case 分支抽出 `pattern) return 0` 的模式集合 */
-function extractCasePatterns(src: string, func: string): string[] | null {
-  const lines = src.split("\n");
-  const startIdx = lines.findIndex((l) => new RegExp(`^${func}\\(\\)\\s+\\{`).test(l));
-  if (startIdx < 0) return null;
-  let endIdx = startIdx;
-  if (!lines[startIdx].includes("esac")) {
-    endIdx = lines.findIndex((l, i) => i > startIdx && /^\}/.test(l));
-    if (endIdx < 0) return null;
-  }
-  const body = lines.slice(startIdx, endIdx + 1).join("\n");
-  const out: string[] = [];
-  const re = /([^\s)]+)\)\s*return 0/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    for (const p of m[1].split("|")) {
-      const t = p.trim();
-      if (t.length > 0) out.push(t);
-    }
-  }
-  return out;
-}
-
-/** 从 `case "$ENV" in` 后紧跟的那一行抽出档位白名单（`off|warn|strict) ;;`） */
-function extractCaseGuardModes(src: string, env: string): string[] | null {
-  const lines = src.split("\n");
-  const head = new RegExp(`^[ \\t]*case "\\$\\{?${env}\\}?" in[ \\t]*$`);
-  const i = lines.findIndex((l) => head.test(l));
-  if (i < 0) return null;
-  for (let j = i + 1; j < lines.length && j < i + 6; j++) {
-    const t = lines[j].trim();
-    if (t === "" || t.startsWith("#")) continue;
-    // 行形如 `off|warn|strict|scoped) ;;` —— 取第一个 `)` 之前的部分，尾部 `;;` 不参与
-    const close = t.indexOf(")");
-    if (close < 0) return null;
-    return t
-      .slice(0, close)
-      .split("|")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-  }
-  return null;
-}
-
-function diffSets(label: string, yamlList: string[], bashList: string[]): void {
-  const a = [...yamlList].sort();
-  const b = [...bashList].sort();
-  if (a.join("\u0000") === b.join("\u0000")) {
-    ok(`${label} 与 bash 一致`, `${a.length} 条`);
-    return;
-  }
-  const onlyYaml = a.filter((x) => !b.includes(x));
-  const onlyBash = b.filter((x) => !a.includes(x));
-  const parts: string[] = [];
-  if (onlyYaml.length > 0) parts.push(`YAML 多出: ${onlyYaml.join(" , ")}`);
-  if (onlyBash.length > 0) parts.push(`bash 有而 YAML 缺: ${onlyBash.join(" , ")}`);
-  bad("漂移", `${label} 与 bash 不一致 —— ${parts.join("；")}`);
-}
-
 function resolveSpecRef(ref: string): { external: boolean; exists: boolean } {
   if (ref.startsWith("~")) {
     const p = join(homedir(), ref.slice(1));
@@ -147,6 +123,184 @@ function resolveSpecRef(ref: string): { external: boolean; exists: boolean } {
   }
   if (ref.startsWith("/")) return { external: true, exists: existsSync(ref) };
   return { external: false, exists: existsSync(join(TOP, ref)) };
+}
+
+/**
+ * 防假切主：status=enforcing 时，主链路必须真的跑 gate.ts。
+ *
+ * 分文件判，不做通用正则 —— 三处的写法本来就不一样：
+ *   pre-commit  用 SCANNER 变量 + exec，字面量里没有路径拼接后的调用
+ *   CI          只看 `run:` 行（注释里提到 scan-rules.sh 是合法的）
+ *   采集脚本    非注释行里的实际命令
+ * 通用正则会同时误判注释和真调用，那种检查绿了也不可信。
+ */
+function checkMainChain(): void {
+  const stale: string[] = [];
+
+  // ① 用变量中转引擎路径的入口（pre-commit / cases/run.sh）：变量必须指向 gate.ts，
+  //    且调用它的运行时必须是 node（.ts 不能用 bash 跑）
+  for (const entry of MAIN_CHAIN) {
+    if (entry.varname === null) continue;
+    const src = safeRead(entry.path);
+    if (src === null) {
+      bad("接线", `读不到 ${entry.label}（切主后这个文件是必需的）`);
+      continue;
+    }
+    const declared = new RegExp(`^${entry.varname}="([^"]+)"`, "m").exec(src);
+    const value = declared === null ? "" : declared[1];
+    if (!value.endsWith("gate.ts")) stale.push(`${entry.label} 的 ${entry.varname}=${value || "(缺失)"}`);
+
+    // 调用行：`exec node "$SCANNER"` 或 `( cd … && node "$SCAN" … )`
+    const callRe = new RegExp(`(?:exec|&&)\\s+(\\S+)\\s+"\\$${entry.varname}"`, "m");
+    const call = callRe.exec(src);
+    if (call === null) bad("接线", `${entry.label} 里找不到调用 $${entry.varname} 的行（无法确认执行器）`);
+    else if (call[1] !== "node") stale.push(`${entry.label} 用 ${call[1]} 执行 gate.ts（ts 必须用 node）`);
+  }
+
+  // ② CI：redline-scan job 的 run: 行必须调 gate.ts，且不得调 bash scan-rules.sh
+  const ci = safeRead(MAIN_CHAIN[1].path);
+  if (ci === null) {
+    bad("接线", "读不到 .github/workflows/quality-gate.yml");
+  } else {
+    const runLines = ci
+      .split("\n")
+      .filter((l) => /^\s*(run:\s*)?[^#\s]/.test(l) && !/^\s*#/.test(l))
+      .filter((l) => l.includes("scan-rules.sh") || l.includes("redline/gate.ts"));
+    for (const l of runLines) {
+      if (/bash\s+\S*scan-rules\.sh/.test(l)) stale.push(`CI 仍在跑 bash scan-rules.sh：${l.trim().slice(0, 60)}`);
+    }
+    if (!runLines.some((l) => /node\s+\S*redline\/gate\.ts/.test(l))) {
+      bad("接线", "CI 里找不到 `node scripts/redline/gate.ts`（切主后主扫描器必须是它）");
+    }
+  }
+
+  // ③ 采集脚本：非注释行不得调 bash scan-rules.sh
+  const collect = safeRead(MAIN_CHAIN[2].path);
+  if (collect === null) {
+    bad("接线", "读不到 scripts/redline/collect-gate-observations.sh");
+  } else {
+    for (const l of collect.split("\n")) {
+      if (/^\s*#/.test(l)) continue;
+      if (/bash\s+\S*scan-rules\.sh/.test(l)) stale.push(`采集脚本仍在跑 bash scan-rules.sh：${l.trim().slice(0, 60)}`);
+    }
+  }
+
+  if (stale.length === 0) {
+    ok("主链路已切到 gate.ts", "pre-commit / CI / 采集 / 黄金用例运行器 四处");
+  } else {
+    for (const s of stale) bad("接线", `假切主：${s}`);
+  }
+}
+
+function safeRead(p: string): string | null {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ⑤-a 文档生成区块必须最新。
+ *
+ * 为什么用子进程调 `gen-docs.ts --check` 而不是 import 它的函数：
+ *   gen-docs.ts 是脚本（末尾 process.exit），import 会直接把 lint 进程带走。
+ *   子进程的退出码正好就是要的信号，也不必把渲染逻辑搬进来复制一份。
+ *
+ * 为什么这条要卡在 CI：手抄的门号清单不会「报错」，只会慢慢和实际不符。
+ *   读者按文档判断「这提交会不会被拦」——文档说三道门、实际五道，是最难查的那种错。
+ */
+function checkGeneratedDocs(): void {
+  const r = spawnSync("node", [join(HERE, "gen-docs.ts"), "--check"], { encoding: "utf8", cwd: TOP });
+  if (r.status === 0) {
+    ok("文档生成区块最新", "3 处（03 门表 / 质量门禁总纲 / PR 模板）");
+    return;
+  }
+  if (r.status === 2) {
+    bad("生成物", `gen-docs.ts 无法运行：${(r.stderr || "").trim().split("\n").slice(0, 3).join(" / ")}`);
+    return;
+  }
+  // 过期：stderr 里每行 `    <file>  [<id>]` 是被判定过期的目标
+  const stale = (r.stderr || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.includes("[") && l.includes("]") && l.includes(".md"));
+  bad("生成物", "文档里的门号清单与 gates.yaml 不一致，跑 `node scripts/redline/gen-docs.ts` 重新生成");
+  for (const s of stale) bad("生成物", `过期区块：${s}`);
+}
+
+/**
+ * ⑤-b 观察期口径：观测清单在 YAML 一处，日志表头必须与它同序。
+ *
+ * 这条要防的是「列错位」——不是文件不存在那种明显故障，而是：
+ *   加了一个观察指标却没改日志表头 → 新数据插到旧列下，每列的数字都还是数字，
+ *   看起来完全正常，但那一列的含义变了。观察期数据是用来判断「该不该升 error」的，
+ *   列错位等于用错的数据做决定。
+ *
+ * 2026-11-04 还发生过另一种失效：日志被归档到 archive/，而采集脚本仍写活跃区路径，
+ * 于是 `--append` 打印「跳过追加」并 exit 0 —— 7 天一行数据没落，没人发现。
+ * 所以这里也检查文件存在性。
+ */
+function checkObservations(doc: YamlMap, ids: Set<string>): void {
+  let o: YamlMap;
+  try {
+    o = asMap(doc.observations, "observations");
+  } catch {
+    bad("观察口径", "缺 observations 段 —— 采集脚本拒绝在无声明的情况下采数据");
+    return;
+  }
+
+  const docPath = asStr(o.doc, "observations.doc");
+  if (docPath === "") {
+    bad("观察口径", "observations.doc 为空，采集无处落盘");
+    return;
+  }
+  const full = join(TOP, docPath);
+  if (!existsSync(full)) {
+    bad("观察口径", `observations.doc 指向的文件不存在：${docPath}（采集 --append 会失败）`);
+    return;
+  }
+
+  const metricKeys = (v: YamlValue | undefined, ctx: string): string[] => {
+    if (v === undefined) return [];
+    return asList(v, ctx).map((item) => {
+      const m = asMap(item, ctx);
+      const key = asStr(m.key, `${ctx}[].key`);
+      if (!ids.has(key)) bad("观察口径", `${ctx} 引用了不存在的门 ${key}`);
+      return key;
+    });
+  };
+  const upg = metricKeys(o.upgrade_candidates, "observations.upgrade_candidates");
+  const ref = metricKeys(o.reference, "observations.reference");
+  if (upg.length === 0) bad("观察口径", "upgrade_candidates 为空 —— 没有观察对象的采集没有意义");
+
+  // 表头比对：定位 `## 2 采集记录` 段里的第一行表格
+  const text = readFileSync(full, "utf8");
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => /^## 2 /.test(l));
+  if (start < 0) {
+    bad("观察口径", `${docPath} 里找不到「## 2 采集记录」段（采集行无处插入）`);
+    return;
+  }
+  const header = lines.slice(start).find((l) => l.startsWith("|"));
+  if (header === undefined) {
+    bad("观察口径", `${docPath} 的「## 2 采集记录」段里没有表格`);
+    return;
+  }
+  const cols = header
+    .split("|")
+    .slice(1, -1)
+    .map((c) => c.trim().replace(/\*$/, "")); // `R16*` 的星号是脚注标记，不参与比较
+
+  const expected = ["采集时间", "范围", "commits", ...upg, ...ref, "Micro-exempt", "UI_GATE=off"];
+  if (cols.join("\u0000") === expected.join("\u0000")) {
+    ok("观察日志表头对齐", `${cols.length} 列，与 observations 声明同序`);
+    return;
+  }
+  bad(
+    "观察口径",
+    `日志表头与 observations 声明不一致 —— 实得 [${cols.join(" | ")}]，应为 [${expected.join(" | ")}]`,
+  );
 }
 
 function main(): number {
@@ -169,8 +323,6 @@ function main(): number {
     throw e;
   }
   const doc = asMap(root, "顶层");
-  const scanSrc = readFileSync(SCAN_RULES, "utf8");
-  const sharedSrc = readFileSync(GATE_SHARED, "utf8");
   const gateSrc = readFileSync(GATE_TS, "utf8");
   /** 档位声明（门循环里收集，接线检查在扫过 bash/ts 源码之后做） */
   const switches: Array<{ key: string; env: string; modes: string[] }> = [];
@@ -179,6 +331,7 @@ function main(): number {
   const schema = asStr(doc.schema, "schema");
   if (schema !== "gate-spec/v1") bad("结构", `schema 应为 gate-spec/v1，实际 ${schema}`);
   const status = asStr(doc.status, "status");
+  specStatus = status;
   const meta = asMap(doc.meta, "meta");
   if (status === "declared") {
     if (asStr(meta.authority, "meta.authority") !== "bash") {
@@ -186,6 +339,15 @@ function main(): number {
     } else {
       ok("权威声明一致", "status=declared → 权威为 bash");
     }
+  } else if (status === "enforcing") {
+    if (asStr(meta.authority, "meta.authority") !== "gate.ts") {
+      bad("结构", "status=enforcing 时 meta.authority 必须是 gate.ts（切主后 bash 不再是权威）");
+    } else {
+      ok("权威声明一致", "status=enforcing → 权威为 gate.ts");
+    }
+    checkMainChain();
+  } else {
+    bad("结构", `status 只能是 declared / enforcing，实际 ${status}`);
   }
   if (asStr(doc.owner, "owner") === "") bad("结构", "缺 owner（没有归属的门不会有人管退场）");
 
@@ -342,66 +504,122 @@ function main(): number {
     }
   }
 
-  // ---------- ② 与 bash 的触发面漂移 ----------
-  // 档位开关接线：① bash 的档位白名单必须与 values 的键逐个相等
-  //               ② gate.ts 必须真的读 level_switch（否则声明即空文，#8602 的前半因）
+  // ---------- ② YAML 内部自洽（S5 删掉 legacy bash 后唯一的静态对照物） ----------
+  // 🔴 这一节必须写明「删 bash 丢了什么」，否则下一个人会把「lint 全绿」理解成切主前的意思：
+  //   切主前的 ② 是「YAML 的 glob ↔ bash 的 case 分支逐个相等」。bash 是**独立实现**，
+  //   所以它能抓到「改了 YAML 忘了改代码」。
+  //   bash 删掉后这个对照物不存在了。现在的 ② 只能保证 YAML **自己说得通**：
+  //   没有死配置、引用不悬空、两侧说的是同一批门。这类错是**更弱**的一档 ——
+  //   「YAML 写了、gate.ts 没读」它抓不到。那一类交给：
+  //     · mutation-gen.ts 的字段审计（列出「没有变异器」的字段 = 没测过）
+  //     · 黄金用例（真跑引擎，不读源码猜）
+  //   这不是等价替换。写在这里是为了别让人误以为保证等级没变。
+
+  // ②-a 档位开关：gate.ts 必须真的读 level_switch（否则声明即空文，#8602 的前半因）
   for (const sw of switches) {
-    const guard = extractCaseGuardModes(scanSrc, sw.env);
-    if (guard === null) {
-      bad("接线", `${sw.key}: gates.yaml 声明了 ${sw.env} 档位，但 scan-rules.sh 里找不到该变量的 case 白名单`);
-    } else {
-      diffSets(`${sw.key} 档位 ${sw.env} ↔ scan-rules.sh case`, sw.modes, guard);
-    }
+    if (sw.modes.length === 0) bad("结构", `${sw.key}: level_switch.values 为空（没有合法档位）`);
   }
   if (switches.length > 0) {
     if (!gateSrc.includes("level_switch")) {
       bad("接线", `gates.yaml 有 ${switches.length} 处 level_switch 声明，但 gate.ts 从不读它 —— strict/scoped 会被静默降级成写死的 level`);
     } else {
-      ok("档位开关接线", `${switches.length} 处声明，gate.ts 已读，bash 白名单逐个对齐`);
+      ok("档位开关接线", `${switches.length} 处声明，gate.ts 已读`);
     }
   }
 
-  const bindings: Array<[scope: string, file: string, func: string]> = [
-    ["code_file", scanSrc, "is_code_file"],
-    ["ts_file", scanSrc, "is_ts_file"],
-    ["ui_file", scanSrc, "is_ui_file"],
-    ["contract_file", scanSrc, "is_contract_file"],
-    ["release_file", scanSrc, "is_release_file"],
-    ["test_surface", scanSrc, "is_test_surface_file"],
-    ["test_path", scanSrc, "is_test_path"],
-  ];
-  for (const [scope, src, func] of bindings) {
-    const declared = scopeIncludes.get(scope);
-    const actual = extractCasePatterns(src, func);
-    if (declared === undefined) {
-      bad("结构", `缺少 scope ${scope}`);
-      continue;
+  // ②-b scope 双向引用闭合：
+  //   门引用不存在的 scope → 该门会静默不触发（最坏的错：门在，但从不响）
+  //   声明了没人用的 scope → 死配置（改了以为生效，其实没门读）
+  const usedScopes = new Set<string>();
+  // 「被引用」按名字收集：门的任意字段值只要**恰好等于**某个声明过的 scope 名，就算引用。
+  // 为什么不做字段白名单：scope 会被 trigger.scope / exclude_scopes / range_contains_scope /
+  // conditions.* 等多处引用，白名单每加一种写法就要改一次 lint —— 那本身又是一个漂移源。
+  const collectRefs = (v: YamlValue): void => {
+    if (typeof v === "string") {
+      if (scopeIncludes.has(v)) usedScopes.add(v);
+      return;
     }
-    if (actual === null) {
-      bad("漂移", `在 bash 里找不到函数 ${func}（YAML 声明的 scope 失去了绑定对象）`);
-      continue;
+    if (Array.isArray(v)) {
+      for (const x of v) collectRefs(x);
+      return;
     }
-    diffSets(`scope ${scope} ↔ ${func}()`, declared, actual);
+    if (v !== null && typeof v === "object") {
+      for (const x of Object.values(v as YamlMap)) collectRefs(x);
+    }
+  };
+  for (const g of gatesRaw) {
+    const gm = asMap(g, "gates[]");
+    collectRefs(gm);
+    // 反方向（引用了不存在的 scope）只能查显式字段：拼错的名字没法按名字匹配发现，
+    // 但「门声明了 scope: xxx 而 xxx 不存在」是可以确定的死门 —— 它永远不会触发。
+    const trig = gm.trigger;
+    if (trig === null || trig === undefined || typeof trig !== "object" || Array.isArray(trig)) continue;
+    for (const field of ["scope", "exclude_scopes", "range_contains_scope"]) {
+      const v = (trig as YamlMap)[field];
+      const list: string[] =
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? [v] : [];
+      for (const sc of list) {
+        if (!scopeIncludes.has(sc)) bad("结构", `${String(gm.id)}: trigger.${field} 引用了不存在的 scope「${sc}」`);
+      }
+    }
+  }
+  for (const name of scopeNames) {
+    if (!usedScopes.has(name)) bad("结构", `scopes.${name} 声明了但没有任何门引用 —— 死配置，改了不会生效`);
+  }
+  if (scopeNames.length > 0) {
+    ok("scope 引用闭合", `${scopeNames.length} 个 scope 均被门引用；门引用的 scope 均存在`);
   }
 
-  // 重复实现必须与主实现逐字一致（is_ui_file 在 gate-shared 里又写了一份）
-  const sharedUi = extractCasePatterns(sharedSrc, "exempt_is_ui_file");
-  const mainUi = extractCasePatterns(scanSrc, "is_ui_file");
-  if (sharedUi === null || mainUi === null) {
-    bad("漂移", "找不到 is_ui_file / exempt_is_ui_file，无法校验重复实现");
+  // ②-c 豁免：eligible_gates 与门上的 exempt: true 必须逐一对齐（双向）
+  //   切主前这条靠 grep bash 里的接线代码，只能证明「某处出现过这个字符串」；
+  //   对齐能证明两侧说的是同一批门 —— 删 bash 之后这里反而更硬了。
+  const exemptTrue = new Set<string>();
+  for (const g of gatesRaw) {
+    const gm = asMap(g, "gates[]");
+    if (gm.exempt === true) exemptTrue.add(asStr(gm.id, "id"));
+  }
+  const eligibleSet = new Set(eligible);
+  for (const id of eligibleSet) {
+    if (!exemptTrue.has(id)) bad("接线", `${id} 在 exemption.eligible_gates 里，但门上写的是 exempt: false —— 豁免永远不会生效`);
+  }
+  for (const id of exemptTrue) {
+    if (!eligibleSet.has(id)) bad("接线", `${id} 声明 exempt: true，但不在 exemption.eligible_gates 里 —— 同一件事两个说法`);
+    if (ineligible.includes(id)) bad("接线", `${id} 同时出现在 eligible_gates 与 ineligible_gates`);
+  }
+  if (eligibleSet.size > 0) ok("豁免接线", `${eligibleSet.size} 道可豁免门与 exempt: true 逐一对齐`);
+
+  // ②-d commit-msg 阶段的门清单（local_commit_msg）
+  //   这一份清单决定「本地 commit 前判哪几道门」。它写错的两种形态都是静默的：
+  //   写成不存在的门 → gate.ts 报错退出（还算响）；漏写 → 本地少判一门，只有 CI 兜。
+  const lcm = doc.local_commit_msg === undefined || doc.local_commit_msg === null ? null : asMap(doc.local_commit_msg, "local_commit_msg");
+  if (lcm === null) {
+    bad("结构", "缺 local_commit_msg.gates —— commit-msg 钩子会在没有声明的情况下判门");
   } else {
-    diffSets("is_ui_file ↔ exempt_is_ui_file（重复实现）", mainUi, sharedUi);
+    const lcmGates = asList(lcm.gates, "local_commit_msg.gates").map((x) => asStr(x, "local_commit_msg.gates[]"));
+    if (lcmGates.length === 0) bad("结构", "local_commit_msg.gates 为空 —— commit-msg 阶段等于不判任何门");
+    for (const id of lcmGates) {
+      if (!ids.has(id)) bad("结构", `local_commit_msg.gates 引用了不存在的门 ${id}`);
+    }
+    const hookSrc = safeRead(join(TOP, ".githooks", "commit-msg"));
+    if (hookSrc === null) {
+      bad("接线", "读不到 .githooks/commit-msg（S5 之后它必须存在并调 gate.ts commit-msg）");
+    } else {
+      // 只查非注释行：新钩子的注释里写着「check-commit-msg.sh 已删除」，
+      // 整文件 grep 会把这句说明当成调用（实测踩到）。
+      const hookCode = hookSrc
+        .split("\n")
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      if (hookCode.includes("check-commit-msg.sh")) {
+        bad("接线", ".githooks/commit-msg 仍在调已删除的 check-commit-msg.sh");
+      }
+      if (!/gate\.ts"?\s+commit-msg/.test(hookSrc) && !hookSrc.includes("commit-msg \"$1\"")) {
+        bad("接线", ".githooks/commit-msg 没有调 gate.ts commit-msg —— 本地凭证门形同虚设");
+      } else if (lcmGates.length > 0) {
+        ok("commit-msg 接线", `${lcmGates.length} 道门在 commit 前判（${lcmGates.join(" / ")}）`);
+      }
+    }
   }
-
-  // 声明可豁免的门，代码里必须真的接了豁免（R9b 是内联循环，单独认）
-  for (const id of eligible) {
-    const wired =
-      scanSrc.includes(`exempt_for_gate "$c" "$body" "${id}"`) ||
-      scanSrc.includes(`exempt_covers "${id}"`) ||
-      sharedSrc.includes(`"${id}"`);
-    if (!wired) bad("接线", `${id} 在 eligible_gates 里，但 scan-rules.sh 里找不到它的豁免接线`);
-  }
-  if (eligible.length > 0) ok("豁免接线", `${eligible.length} 道可豁免门均能找到接线`);
 
   // ---------- ③ 黄金用例覆盖 ----------
   const scenarioIds = new Set<string>();
@@ -489,9 +707,16 @@ function main(): number {
   }
   ok("已知分歧登记", `${divergenceOk} 条，均带台账号`);
 
+  // ---------- ⑤ 生成物与观察口径（S4）----------
+  checkGeneratedDocs();
+  checkObservations(doc, ids);
+
   // ---------- 汇报 ----------
-  const out: string[] = [];
-  for (const p of passes) out.push(`  ✓ ${p}`);
+  const out: string[] = [];  for (const p of passes) out.push(`  ✓ ${p}`);
+  if (notes.length > 0) {
+    out.push("");
+    for (const n of notes) out.push(`  · ${n}`);
+  }
   if (failures.length > 0) {
     out.push("");
     out.push(`✗ ${failures.length} 项失败`);

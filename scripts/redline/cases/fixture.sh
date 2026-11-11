@@ -133,6 +133,23 @@ build_fixture() {
   _fx_commit "feat(db): 批量加列并建索引" $t; t=$((t + 60))
   echo "C_MIGRATION $(git rev-parse HEAD)"
 
+  # R13 的「报告路径」分支：凭证指向一个不存在的文件 → 必须报 error。
+  # 🔴 为什么必须单独造一个：上面两个迁移场景都**不带**契约凭证，走的是「缺凭证」分支，
+  #    把 accept 或 path_exists_in_commit_tree 改坏对它们毫无影响 —— 变异测试会因此
+  #    报「变异未被捕获」，看起来像判据没生效，其实是覆盖缺口（2026-11-11 切主实测）。
+  _fx_write archive/migrations/20260103-fixture-fake.sql \
+    'ALTER TABLE fixture ADD COLUMN f INT;' \
+    'ALTER TABLE fixture ADD COLUMN g INT;' \
+    'ALTER TABLE fixture ADD COLUMN h INT;' \
+    'ALTER TABLE fixture ADD COLUMN i INT;' \
+    'ALTER TABLE fixture ADD COLUMN j INT;' \
+    'CREATE INDEX idx_fixture_f ON fixture (f);'
+  git add -A
+  _fx_commit "feat(db): 加列（凭证指向不存在的报告）
+Contract: docs/development/reviews/does-not-exist.md
+TestScope: pass" $t; t=$((t + 60))
+  echo "C_R13_FAKE $(git rev-parse HEAD)"
+
   # ---- R14：发布面（CI workflow）----
   _fx_write .github/workflows/fixture.yml \
     'name: fixture' \
@@ -299,6 +316,21 @@ TestScope: docs/test-scope/scope.md" $t; t=$((t + 60))
   _fx_commit "feat: 改 ex_weak
 Micro-exempt: R17: yes" "$off_weak"
   echo "C_EXEMPT_WEAK $(git rev-parse HEAD)"
+
+  # ---- R2.secret-file：路径判据是**正则**不是 glob ----
+  #
+  # 🔴 为什么单独造、且**故意不提交**：
+  #   2026-11-11 切主后发现 gate.ts 把 R2 的 `(^|/)[^/]*\.(pem|key|crt|cert)$` 当 glob 处理，
+  #   `(^|/)` 被转义成字面量 → .env 与证书文件一条都不报。当时 R2.secret-file **零用例**，
+  #   影子比对因此一直绿（两个引擎在没人测过的分支上一样地错）。
+  #
+  #   为什么不能 git add：这几个文件一旦进 BASE commit，30 个 diff 场景的输出全都会多出 R2 条目，
+  #   所有期望文件都得跟着改 —— 那是为了测一条判据把整个基线搅一遍。
+  #   files 模式只看工作区文件、不看 commit，所以「写而不提交」正好够用。
+  mkdir -p r2fx
+  printf 'SECRET=1\n' > r2fx/.env
+  printf -- '-----BEGIN KEY-----\n' > r2fx/server.pem
+  printf 'SECRET=<placeholder>\n' > r2fx/.env.example
 
   return 0
 }

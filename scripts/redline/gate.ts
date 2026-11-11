@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * gate.ts — 红线门禁执行引擎（重构 S2 · 影子期）
+ * gate.ts — 红线门禁执行引擎（S5 起是唯一执行者）
  *
- * 用法与 scan-rules.sh 完全一致（影子期两者必须可以互相替换）：
- *   node scripts/redline/gate.ts cached
- *   node scripts/redline/gate.ts diff <range>
- *   node scripts/redline/gate.ts files <path...>
- *   node scripts/redline/gate.ts tree [dir]
- * 选项：--strict / --no-color / --max-commits <N>
+ *   node scripts/redline/gate.ts cached                       本地 pre-commit：扫暂存区
+ *   node scripts/redline/gate.ts diff <range>                 CI / 采集：扫一段 commit
+ *   node scripts/redline/gate.ts files <path...>              指定文件（排障用）
+ *   node scripts/redline/gate.ts tree [dir]                   全仓静态扫描
+ *   node scripts/redline/gate.ts commit-msg <msgfile> [merge] commit-msg 钩子：判据不变，只是
+ *                                                            把「还没有 commit」伪装成一个 commit
+ * 选项：--strict / --no-color / --max-commits <N> / --obs-json
  *
  * ★ 本文件解决的两个结构问题
  *
@@ -60,14 +61,31 @@ interface Finding {
   desc: string;
   loc: string;
   content: string;
+  /**
+   * 该条命中属于哪个门条目（`sub ?? id`）。
+   *
+   * 为什么不能直接用 `rule` 统计：`rule` 是**展示用的门号**，一号两义的门会撞在一起
+   * —— R2.secret-file 与 R2.cred 都打印 `[R2]`，按 rule 计数会把两门合成一个数。
+   * 采集口径（collect-gate-observations.sh）要回答「哪一道门命中几次」，必须按条目算。
+   */
+  key: string;
 }
 
 const errors: Finding[] = [];
 const warnings: Finding[] = [];
 const notices: Finding[] = [];
 
+/**
+ * 当前正在执行的门条目 key，由各门入口设置，emitRule 自动读取。
+ *
+ * 为什么用上下文变量而不是给 emitRule 加参数：29 个调用点分散在 23 个门函数里，
+ * 逐个补参数既容易漏（漏的那个门在采集口径里被算到上一道门头上），也把 diff 摊得到处都是。
+ * 门是**串行**执行的（一次只跑一道），所以上下文变量不会串味。
+ */
+let CUR_KEY = "";
+
 function emitRule(level: Level, rule: string, desc: string, loc: string, content: string): void {
-  const f: Finding = { level, rule, desc, loc, content };
+  const f: Finding = { level, rule, desc, loc, content, key: CUR_KEY === "" ? rule : CUR_KEY };
   if (level === "error") errors.push(f);
   else if (level === "warning") warnings.push(f);
   else notices.push(f);
@@ -116,9 +134,7 @@ function render(): number {
     }
   }
 
-  let code = 0;
-  if (errors.length > 0) code = 1;
-  else if (warnings.length > 0 && strict) code = 1;
+  const code = exitCode();
 
   out.push(
     code === 0
@@ -127,6 +143,68 @@ function render(): number {
   );
   process.stdout.write(out.join("\n") + "\n");
   return code;
+}
+
+/** 退出码契约：0=通过，1=有 error（或 --strict 下有 warning）。与 legacy bash 完全一致。 */
+function exitCode(): number {
+  if (errors.length > 0) return 1;
+  if (warnings.length > 0 && strict) return 1;
+  return 0;
+}
+
+/**
+ * 结构化观察输出（`--obs-json`），供 collect-gate-observations.sh 消费。
+ *
+ * 🔴 为什么必须由引擎直接给结构化数据，而不是让采集端 grep 输出文本：
+ *   文本是给人看的，措辞为可读性随时会改（2026-11-11 切主时就改过一次）。
+ *   采集端如果靠 `grep -cE "^[[:space:]]+\[R13\]"` 反解，改一次文案就静默数错 ——
+ *   不报错、不崩溃，只是数字慢慢偏离真相，而观察期数据正是用来判断「该不该升 error」的。
+ *
+ * 键用「门条目」（`sub ?? id`）而不是展示门号：R2.secret-file 与 R2.cred 都打印 `[R2]`，
+ * 按门号统计会把两门合成一个数，采集口径就不是「每道门命中几次」了。
+ *
+ * 全部条目都出现在结果里（没命中记 0），采集端不需要自己补零；
+ * 也能直接看出「哪道门一次都没报」，这是「该不该退场」的信号之一。
+ */
+/**
+ * 解析 `observations` 段。缺失时返回 null（采集脚本会据此报错，而不是偷偷采一批空数据）。
+ *
+ * 这里刻意不设默认值：观察指标是「升 error 的判断依据」，配错了应当立刻发现，
+ * 而不是回落到某个内置清单 —— 那样日志列序会静默错位，数据看起来正常但列是错的。
+ */
+function parseObservations(raw: YamlValue | undefined): ObsSpec | null {
+  const m = asMapOrNull(raw);
+  if (m === null) return null;
+  const pick = (v: YamlValue | undefined): ObsMetric[] => {
+    if (!Array.isArray(v)) return [];
+    return v.map((item) => {
+      const im = asMap(item, "observations[]");
+      return { key: asStr(im.key, "observations[].key"), title: asStr(im.title, "observations[].title") };
+    });
+  };
+  return {
+    doc: asStr(m.doc, "observations.doc"),
+    upgradeCandidates: pick(m.upgrade_candidates),
+    reference: pick(m.reference),
+  };
+}
+
+function buildObs(range: string): string {
+  const gates: Record<string, number> = {};
+  for (const g of SPEC.gates) gates[g.key] = 0;
+  for (const f of [...errors, ...warnings, ...notices]) {
+    gates[f.key] = (gates[f.key] ?? 0) + 1;
+  }
+  return JSON.stringify(
+    {
+      range,
+      totals: { error: errors.length, warning: warnings.length, notice: notices.length },
+      gates,
+      observations: SPEC.observations,
+    },
+    null,
+    2,
+  );
 }
 
 // ============================================================
@@ -232,10 +310,29 @@ interface GateSpec {
   raw: YamlMap;
 }
 
+interface ObsMetric {
+  key: string;
+  title: string;
+}
+
+/**
+ * 观察期指标声明（gates.yaml 的 `observations` 段）。
+ * 采集脚本 grep 输出去反解门号的时代结束了：要采哪些门、按什么顺序、落在哪个文件，
+ * 全在这一份声明里，`--obs-json` 直接把它连同计数一起输出。
+ */
+interface ObsSpec {
+  doc: string;
+  upgradeCandidates: ObsMetric[];
+  reference: ObsMetric[];
+}
+
 interface Spec {
   gates: GateSpec[];
   byKey: Map<string, GateSpec>;
   scopes: Map<string, string[]>;
+  observations: ObsSpec | null;
+  /** commit-msg 阶段（commit 还没生成）能判的门，见 gates.yaml local_commit_msg */
+  localCommitMsg: string[];
 }
 
 function asMap(v: YamlValue, ctx: string): YamlMap {
@@ -306,7 +403,13 @@ function loadSpec(): void {
     scopes.set(name, strList(asMap(v, `scopes.${name}`).include));
   }
 
-  SPEC = { gates, byKey, scopes };
+  SPEC = {
+    gates,
+    byKey,
+    scopes,
+    observations: parseObservations(doc.observations),
+    localCommitMsg: strList(asMapOrNull(doc.local_commit_msg)?.gates),
+  };
 
   const ex = asMap(doc.exemption, "exemption");
   const q = asMap(ex.quality, "exemption.quality");
@@ -433,6 +536,51 @@ function buildSnapshot(range: string): Snapshot {
   }
 
   return { range, commits, rangeFiles };
+}
+
+/**
+ * commit-msg 阶段的快照：staged 改动 + 尚未落库的 message。
+ *
+ * 🔴 为什么必须造一个「合成 commit」而不是直接跳过 commit 门：
+ *   旧实现是一份独立的 bash 脚本（check-commit-msg.sh）重写了 is_ui / is_passport /
+ *   exempt_parse / exempt_quality —— 同一套判据两份实现，本地认、CI 不认的摩擦就是这样来的。
+ *   现在把它变成「同一个引擎的另一个入口」：判据仍然只从 gates.yaml 读，
+ *   这里只负责把「还没有 commit」这件事伪装成一个 commit。
+ *
+ * sha 用 "HEAD"：R10 的祖先校验需要它（见 PRE_COMMIT 注释），其余字段都是占位。
+ */
+function buildStagedSnapshot(msgFile: string, isMerge: boolean): Snapshot {
+  const files: ChangedFile[] = [];
+  const st = git(["diff", "--cached", "--name-status", "--no-renames", "--"]);
+  if (st.status === 0) {
+    for (const line of st.out.split("\n")) {
+      if (line === "") continue;
+      const cf = parseStatusLine(line);
+      if (cf !== null) files.push(cf);
+    }
+  }
+
+  let text = "";
+  try {
+    text = readFileSync(msgFile, "utf8");
+  } catch {
+    text = "";
+  }
+  const body = text.replace(/\n+$/, "");
+  const subject = body.split("\n").find((l) => l.trim() !== "") ?? "";
+
+  const commit: CommitInfo = {
+    sha: "HEAD",
+    ct: Math.floor(Date.now() / 1000),
+    parents: ["HEAD"],
+    subject,
+    body,
+    files,
+    // 合并提交在 commit-msg 阶段直接放行：合并进来的改动早就在各自分支走过凭证流程，
+    // 把「合并结果」当「本次改动」判定会稳定误报（2026-09-24 实测）。
+    isMerge,
+  };
+  return { range: "--cached", commits: [commit], rangeFiles: files };
 }
 
 // ---- 懒加载 numstat：只有需要行数阈值时才付这个成本 ----
@@ -669,8 +817,35 @@ function lineGatesFor(file: string, line: string, lineNo: string): void {
       if (seenR5.has(g.message)) continue;
       seenR5.add(g.message);
     }
+    CUR_KEY = g.key;
     emitRule(g.level, g.id, g.message, `${file}:${lineNo}`, line);
   }
+}
+
+// 路径判据命中：`match_re` 走正则、`match_path` 走 glob。
+//
+// 🔴 这两个字段为什么必须分开（2026-11-11 切主后发现的真实漏报）：
+//   bash 里 R2.secret-file 用的是 `[[ "$file" =~ (^|/)[^/]*\.(pem|key|crt|cert)$ ]]` —— **正则**；
+//   其余门（R5/R8/R9b/R13…）用的是 `case` 的 glob 分支 —— **glob**。
+//   S1 把它们统一写成 `match_path` 后，引擎一律按 glob 解释：`(^|/)` 中的括号被转义成字面量，
+//   于是 `.env` 和证书文件**一条都不报**。
+//
+//   为什么影子比对没抓到：R2.secret-file 当时零用例（台账 #8256）。两个引擎在没人测过的
+//   分支上一样地错，逐字节比对自然全绿 —— 这是「影子比对只能证明两者相同、不能证明两者都对」
+//   的实例。补用例才是唯一能发现它的手段。
+//
+// ⚠️ 本注释不要写成块注释：下面提到的 glob 里含「星号+斜杠」，会提前终止块注释。
+function triggerPathHit(t: YamlMap, file: string): boolean {
+  const re = typeof t.match_re === "string" ? t.match_re : "";
+  if (re !== "") return cachedRe(re, "").test(file);
+  const glob = typeof t.match_path === "string" ? t.match_path : "";
+  if (glob !== "") return matchGlob(glob, file);
+  return false;
+}
+
+/** 该 trigger 是否声明了路径判据（两个字段都没有 = 不按路径过滤） */
+function hasPathCondition(t: YamlMap): boolean {
+  return typeof t.match_re === "string" || typeof t.match_path === "string";
 }
 
 /** 文件级门：R2.secret-file / R5.main-cors / R8。bash 里 main.ts 只判一次（_MAINTS_SEEN） */
@@ -680,13 +855,15 @@ function fileGatesFor(file: string): void {
   const r2 = SPEC.byKey.get("R2.secret-file");
   if (r2 !== undefined) {
     const t = r2.trigger;
-    if (typeof t.match_path === "string" && matchGlob(t.match_path, file)) {
+    if (hasPathCondition(t) && triggerPathHit(t, file)) {
+      CUR_KEY = r2.key;
       emitRule(r2.level, r2.id, r2.message, file, "证书/私钥文件不应提交");
     }
     const alt = asMapOrNull(t.alt);
-    if (alt !== null && typeof alt.match_path === "string" && matchGlob(alt.match_path, file)) {
+    if (alt !== null && hasPathCondition(alt) && triggerPathHit(alt, file)) {
       const ex = strList(alt.exclude_paths);
       if (!(ex.length > 0 && matchAnyGlob(ex, file))) {
+        CUR_KEY = r2.key;
         emitRule(r2.level, r2.id, r2.message, file, ".env* 不应提交（.gitignore 已兜底）");
       }
     }
@@ -707,6 +884,7 @@ function fileGatesFor(file: string): void {
   if (mainGate !== undefined) {
     const m = strOr(mainGate.trigger.file_contains, "");
     if (m !== "" && cachedRe(m, "").test(text)) {
+      CUR_KEY = mainGate.key;
       emitRule(mainGate.level, mainGate.id, mainGate.message, file, strOr(mainGate.raw.hint, ""));
     }
   }
@@ -714,6 +892,7 @@ function fileGatesFor(file: string): void {
     const has = strOr(r8.trigger.file_contains, "");
     const not = strOr(r8.trigger.file_not_contains, "");
     if (has !== "" && text.includes(has) && !(not !== "" && text.includes(not))) {
+      CUR_KEY = r8.key;
       emitRule(r8.level, r8.id, r8.message, file, strOr(r8.raw.hint, ""));
     }
   }
@@ -765,6 +944,23 @@ function trailerValue(body: string, name: string): string {
   return "";
 }
 
+/** 逐门耗时记录（仅 SCAN_PROFILE=1 时填充），单位毫秒 */
+const profTimings: Array<{ label: string; ms: number }> = [];
+
+/**
+ * 跑一道门并计时。SCAN_PROFILE 未开时直接执行，不引入 hrtime 开销
+ * （门禁在 pre-commit 里跑，多几百次 hrtime 也是成本）。
+ */
+function prof(label: string, fn: () => void): void {
+  if (process.env.SCAN_PROFILE !== "1") {
+    fn();
+    return;
+  }
+  const t0 = process.hrtime.bigint();
+  fn();
+  profTimings.push({ label, ms: Number(process.hrtime.bigint() - t0) / 1e6 });
+}
+
 function reportBlocking(sha: string, path: string): number {
   const r = git(["show", `${sha}:${path}`]);
   if (r.status !== 0) return 0;
@@ -791,19 +987,32 @@ function pathExistsAnywhere(sha: string, p: string, base: string): boolean {
 /**
  * credential.checks 在 YAML 里写成「键值对列表」（`- path_exists_in_commit_tree: true`），
  * 不是字符串列表。第一版按字符串读 → 全是 undefined → 所有路径校验被**静默跳过**，
- * R17 假路径用例因此假绿（影子比对抓到）。这里统一摊平成名字列表。
+ * R17 假路径用例因此假绿（影子比对抓到）。
+ *
+ * 🔴 2026-11-11 切主时又发现第二层问题：只摊平成「名字列表」还不够 ——
+ * 那份实现丢了 value，于是 `- path_exists_anywhere: false` 也照样生效（只看键在不在）。
+ * 切主后 gates.yaml 是唯一判据来源，**写 false 必须真的是关掉**，否则声明就是假的
+ * （变异测试 mutation-gen.ts 的 `credential.checks` 变异器会把它抓成「未被捕获」）。
+ * 这里保留 value 原样：布尔型按 true 判，字符串型（如 must_be_ancestor_of: commit^）按非空判。
  */
-function checkNames(cred: YamlMap): string[] {
-  const out: string[] = [];
+function checkMap(cred: YamlMap): Map<string, YamlValue> {
+  const out = new Map<string, YamlValue>();
   for (const item of strOrList(cred.checks)) {
     if (typeof item === "string") {
-      out.push(item);
+      out.set(item, true);
       continue;
     }
     const m = asMapOrNull(item as YamlValue);
-    if (m !== null) for (const k of Object.keys(m)) out.push(k);
+    if (m !== null) for (const k of Object.keys(m)) out.set(k, m[k]);
   }
   return out;
+}
+
+/** checks 里的某项是否启用：true 或非空字符串算启用，false / null / 缺省算不启用 */
+function checkOn(checks: Map<string, YamlValue>, name: string): boolean {
+  const v = checks.get(name);
+  if (v === true) return true;
+  return typeof v === "string" && v !== "";
 }
 
 function strOrList(v: YamlValue | undefined): YamlValue[] {
@@ -823,11 +1032,28 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     emitRule(g.level, g.id, `${bare} commit 缺评审凭证`, c.subject, strOr(g.raw.hint, ""));
     return;
   }
-  if (tval === "pass") return;
 
-  const checks = checkNames(cred);
+  // 🔴 accept 必须真读。2026-11-11 变异测试实测发现原先是硬编码 `if (tval === "pass") return;`，
+  //    YAML 里 accept 写成什么都不影响行为 —— 那是「声明冒充判据」。切主后 YAML 是权威，
+  //    这类字段必须真的控制判定，否则改 YAML 不生效、查问题会白查半天。
+  const accepts = strList(cred.accept);
+  if (accepts.includes(tval)) return; // 字面量型凭证（pass 等）
 
-  if (checks.includes("path_exists_anywhere")) {
+  // 剩下的取值必须被「路径型」凭证接收，否则属于不受支持的取值
+  if (!accepts.includes("path")) {
+    emitRule(
+      g.level,
+      g.id,
+      strOr(g.raw.message_report_missing, `${trailer} 凭证取值不被接受`),
+      tval,
+      `${trailer}: 只接受 ${accepts.join(" / ")}`,
+    );
+    return;
+  }
+
+  const checks = checkMap(cred);
+
+  if (checkOn(checks, "path_exists_anywhere")) {
     if (!pathExistsAnywhere(c.sha, tval, TOP)) {
       emitRule(
         g.level,
@@ -840,7 +1066,7 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     return;
   }
 
-  if (!checks.includes("path_exists_in_commit_tree")) return;
+  if (!checkOn(checks, "path_exists_in_commit_tree")) return;
 
   if (!blobAtPath(c.sha, tval)) {
     emitRule(
@@ -852,7 +1078,7 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
     );
     return;
   }
-  if (checks.includes("report_header_blocking_zero")) {
+  if (checkOn(checks, "report_header_blocking_zero")) {
     const n = reportBlocking(c.sha, tval);
     if (n > 0) {
       emitRule(
@@ -872,8 +1098,21 @@ function credentialCheck(g: GateSpec, c: CommitInfo): void {
 
 let SNAP: Snapshot;
 
+/**
+ * 当前是否在 commit-msg 阶段（commit 尚未生成）。
+ *
+ * 只影响两处判据的「参照物」，不影响判据本身：
+ *   ① R10 的祖先校验：commit-msg 时新 commit 还不存在，能被参照的只有 HEAD，
+ *      所以 `must_be_ancestor_of: commit^` 的 `commit` 换成 HEAD 而**不再加 `^`**
+ *      （新 commit 的祖先链 == HEAD 的祖先链 + HEAD）。
+ *   ② R11 的非 UI 分支：它要判断「报告文件是否在本 commit 的树里」，而此刻树还没生成，
+ *      只能等 CI 判。UI 分支（只认 Design: pass）不受影响。
+ */
+let PRE_COMMIT = false;
+
 function runR9(): void {
   const g = gate("R9");
+  CUR_KEY = g.key;
   const newPages: string[] = [];
   let passport = 0;
   for (const f of SNAP.rangeFiles) {
@@ -908,6 +1147,7 @@ function runR9(): void {
 
 function runR9b(): void {
   const g = gate("R9b");
+  CUR_KEY = g.key;
   let passport = 0;
   const uiFiles: string[] = [];
   for (const f of SNAP.rangeFiles) {
@@ -965,6 +1205,7 @@ function runR9b(): void {
 /** R10：UI commit 的 Proto 必须是祖先（sha 语义，与其它凭证门的「路径存在」不同） */
 function runR10(): void {
   const g = gate("R10");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     if (!c.files.some((f) => isUiFile(f.path))) continue;
     if (exemptForGate(c, "R10", "")) continue;
@@ -982,7 +1223,14 @@ function runR10(): void {
       emitRule(g.level, g.id, g.message, c.subject, strOr(g.raw.hint, ""));
       continue;
     }
-    if (git(["merge-base", "--is-ancestor", sha, `${c.sha}^`]).status !== 0) {
+    // `must_be_ancestor_of: commit^` 里的 `commit` 是占位符，换成当前 commit 的 sha。
+    // 2026-11-11 切主前这里是硬编码 `${c.sha}^`，YAML 的 must_be_ancestor_of 只是摆设。
+    const ancSpec = g.credential === null ? "commit^" : strOr(checkMap(g.credential).get("must_be_ancestor_of") as YamlValue, "commit^");
+    // commit-msg 阶段（PRE_COMMIT）没有新 commit，参照物是 HEAD 本身而不是 HEAD^：
+    // 原型只要落在 HEAD 的祖先链上（含 HEAD）就算「已先落库」。这与旧 check-commit-msg.sh
+    // 的 `merge-base --is-ancestor <sha> HEAD` 同义，也是本地与 CI 口径统一的那条线。
+    const ancRef = PRE_COMMIT ? c.sha : ancSpec.replace("commit", c.sha);
+    if (git(["merge-base", "--is-ancestor", sha, ancRef]).status !== 0) {
       emitRule(
         g.level,
         g.id,
@@ -997,11 +1245,15 @@ function runR10(): void {
 /** R11：两个分支（UI commit 只认 pass；spec commit 校验报告内容），只有 UI 分支可豁免 */
 function runR11(): void {
   const g = gate("R11");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     const isui = c.files.some((f) => isUiFile(f.path));
     const dval = trailerValue(c.body, "Design");
 
     if (!isui) {
+      // commit-msg 阶段还没有新 commit 的树，「报告是否落盘」无从判断（blobAtPath 读的是
+      // HEAD 的树，会把本 commit 新增的报告判成不存在 → 稳定误报）。这一支交 CI 的 R11。
+      if (PRE_COMMIT) continue;
       if (dval === "" || dval === "pass") continue;
       if (!blobAtPath(c.sha, dval)) {
         emitRule(
@@ -1049,6 +1301,7 @@ function runCredentialGates(keys: string[]): void {
   for (const c of SNAP.commits) {
     if (c.isMerge) continue; // bash: --no-merges
     for (const g of specs) {
+      CUR_KEY = g.key;
       if (!commitTriggerHit(g, c, SNAP.range)) continue;
       if (exemptForGate(c, g.id, "，请按 §3.7 补可审计理由")) continue;
       credentialCheck(g, c);
@@ -1058,6 +1311,7 @@ function runCredentialGates(keys: string[]): void {
 
 function runR19(): void {
   const g = gate("R19");
+  CUR_KEY = g.key;
   for (const c of SNAP.commits) {
     if (c.isMerge) continue;
     if (c.files.length !== 0) continue;
@@ -1068,6 +1322,7 @@ function runR19(): void {
 /** R12：两处应同源的路径比对 */
 function runR12(): void {
   const g = gate("R12");
+  CUR_KEY = g.key;
   const pair = asMapOrNull(g.trigger.compare_pair);
   if (pair === null) return;
   const src = strOr(pair.src, "");
@@ -1173,6 +1428,7 @@ function readSwitch(g: GateSpec): { mode: string; skipScanModes: string[] } {
 /** R11b / R16：判定在 python 辅助脚本里，引擎只按同一口径翻译结果 */
 function runDelegated(key: string, args: string[], levels: string[], scanMode: string): void {
   const g = gate(key);
+  CUR_KEY = g.key;
   // 档位是"整道门"级别的：skip → 连 python 都不用跑（bash 同样先 return，保持一致）
   let mode = "";
   if (g.raw.level_switch !== undefined && g.raw.level_switch !== null) {
@@ -1233,22 +1489,26 @@ function scanOneFile(file: string): void {
 function scanDiffRange(range: string): void {
   SNAP = buildSnapshot(range);
 
-  runR9();
-  runR9b();
-  runR10();
-  runR11();
+  // 逐门计时（SCAN_PROFILE=1 时才有开销）。
+  // 为什么要有「本段」而不只给总耗时：只有累计值时要人做减法才知道哪道门贵 ——
+  // 2026-10-30 bash 版实测靠相邻两行相减才发现 R11 单门吃掉 248s（占 commit 门 35%）。
+  // gate.ts 比 bash 快一个数量级，整数秒会全是 0，故精度取 0.001s。
+  prof("R9", () => runR9());
+  prof("R9b", () => runR9b());
+  prof("R10", () => runR10());
+  prof("R11", () => runR11());
   const scanMode = range === "--cached" ? "cached" : "diff";
   // R11b 档位/是否在 cached 下跳过，全部由 gates.yaml 的 level_switch 决定，这里不再写死
-  runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"], scanMode);
-  runCredentialGates(["R13", "R14"]);
-  runCredentialGates(["R15"]);
-  runCredentialGates(["R17"]);
-  runCredentialGates(["R18"]);
+  prof("R11b", () => runDelegated("R11b", ["anchors", range], ["MISSING", "EXTRA"], scanMode));
+  prof("R13+R14", () => runCredentialGates(["R13", "R14"]));
+  prof("R15", () => runCredentialGates(["R15"]));
+  prof("R17", () => runCredentialGates(["R17"]));
+  prof("R18", () => runCredentialGates(["R18"]));
   // R23 测试范围决策：命中共享面须交代全量/抽样（判据源 研发流程SOP.md §7）
-  runCredentialGates(["R23"]);
-  runR19();
-  runR12();
-  runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"], scanMode);
+  prof("R23", () => runCredentialGates(["R23"]));
+  prof("R19", () => runR19());
+  prof("R12", () => runR12());
+  prof("R16", () => runDelegated("R16", [], ["MISSING", "EXTRA", "LOOSE"], scanMode));
 
   if (legacyCount > 0) {
     const g = gate("R21");
@@ -1298,6 +1558,42 @@ function scanDiffRange(range: string): void {
   }
 }
 
+/**
+ * commit-msg 阶段：staged 改动 + 未落库的 message，跑 gates.yaml 里声明的那几道门。
+ *
+ * 返回 "" = 正常执行；非空 = 配置错误（调用方按 exit 2 处理，绝不静默放行）。
+ *
+ * 🔴 为什么门清单放 YAML 而不是写死 R10/R11：
+ *   写死就等于「哪几道门能在 commit-msg 阶段判」这条规则又回到代码里，
+ *   而它恰恰是一条判据。放 YAML 后，加门的人必须先想清楚「它能不能在 commit 前判」。
+ *   同时这里对未实现的门**报错而不是跳过** —— 声明了却没接线，是最不该静默的那类事。
+ */
+function scanCommitMsg(msgFile: string, isMerge: boolean): string {
+  const ids = SPEC.localCommitMsg;
+  if (ids.length === 0) return "gates.yaml 缺 local_commit_msg.gates —— commit-msg 阶段会静默放行一切";
+  for (const id of ids) {
+    if (SPEC.byKey.get(id) === undefined) return `local_commit_msg.gates 引用了不存在的门 ${id}`;
+  }
+
+  PRE_COMMIT = true;
+  SNAP = buildStagedSnapshot(msgFile, isMerge);
+  if (isMerge) return ""; // 合并提交无「本次改动」可判，见 buildStagedSnapshot 注释
+
+  for (const id of ids) {
+    switch (id) {
+      case "R10":
+        prof("R10", () => runR10());
+        break;
+      case "R11":
+        prof("R11", () => runR11());
+        break;
+      default:
+        return `local_commit_msg.gates 里的 ${id} 尚未在 gate.ts 接线（目前只支持 R10/R11）`;
+    }
+  }
+  return "";
+}
+
 function scanTree(dir: string): void {
   if (!existsSync(dir) || !statSync(dir).isDirectory()) {
     process.stderr.write(`目录不存在: ${dir}\n`);
@@ -1324,14 +1620,24 @@ function main(argv: string[]): number {
   let mode = "";
   const modeArgs: string[] = [];
   let maxCommits = process.env.SCAN_MAX_COMMITS ?? "300";
+  let obsJson = false;
+  /** 供 --obs-json 标注数据口径；非 diff/cached 模式留空 */
+  let scannedRange = "";
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--strict") strict = true;
     else if (a === "--no-color") color = false;
+    else if (a === "--obs-json") obsJson = true;
     else if (a === "--max-commits") maxCommits = argv[++i] ?? "";
     else if (a === "-h" || a === "--help") {
-      process.stdout.write("用法: gate.ts [--strict] [--no-color] [--max-commits N] <cached|diff <range>|files <path...>|tree [dir]>\n");
+      process.stdout.write(
+        [
+          "用法: gate.ts [--strict] [--no-color] [--max-commits N] [--obs-json] <cached|diff <range>|files <path...>|tree [dir]|commit-msg <msgfile> [merge]>",
+          "  --obs-json  按门条目输出 JSON 计数（供采集脚本消费），不打印人类可读报告",
+          "",
+        ].join("\n"),
+      );
       return 0;
     } else if (a.startsWith("--")) {
       process.stderr.write(`未知选项: ${a}\n`);
@@ -1359,6 +1665,7 @@ function main(argv: string[]): number {
 
   switch (mode) {
     case "cached":
+      scannedRange = "--cached";
       scanDiffRange("--cached");
       break;
     case "diff": {
@@ -1367,6 +1674,7 @@ function main(argv: string[]): number {
         return 2;
       }
       const range = modeArgs[0];
+      scannedRange = range;
       const left = range.includes("..") ? range.slice(0, range.indexOf("..")) : range;
       if (spawnSync("git", ["rev-parse", "--verify", "--quiet", left], { encoding: "utf8" }).status !== 0) {
         process.stderr.write(
@@ -1416,15 +1724,45 @@ function main(argv: string[]): number {
     case "tree":
       scanTree(modeArgs[0] ?? ".");
       break;
+    case "commit-msg": {
+      // .githooks/commit-msg 的入口：$1 = message 文件，$2 = "merge"（合并提交）
+      if (modeArgs.length < 1) {
+        process.stderr.write("用法: gate.ts commit-msg <msgfile> [merge]\n");
+        return 2;
+      }
+      const err = scanCommitMsg(modeArgs[0], modeArgs[1] === "merge");
+      if (err !== "") {
+        process.stderr.write(`✗ ${err}\n`);
+        return 2;
+      }
+      break;
+    }
     default:
-      process.stderr.write("用法: gate.ts <cached|diff <range>|files <path...>|tree [dir]>\n");
+      process.stderr.write("用法: gate.ts <cached|diff <range>|files <path...>|tree [dir]|commit-msg <msgfile>>\n");
       return 2;
   }
 
+  // --obs-json：只出结构化计数，不打印人类可读报告。
+  // 仍然走完整引擎（判定逻辑一分不减），否则采集到的数就不是「门禁真会报几条」。
+  if (obsJson) {
+    process.stdout.write(buildObs(scannedRange) + "\n");
+    return exitCode();
+  }
+
   const code = render();
-  // SCAN_PROFILE=1 时把「实际调了多少次 git」打到 stderr —— 这是本次重构的核心指标：
-  // bash 的成本 = 门数 × commit 数 × 每门 2~6 次子进程；这里应该只与「范围大小」弱相关。
+  // SCAN_PROFILE=1 时把耗时打到 stderr（stdout 是判定契约，不能被诊断信息污染）。
+  // 两列：`本段` 定位成本、`累计` 看整体 —— 与 legacy bash 的格式同义，
+  // 唯一差别是精度到 0.001s（gate.ts 太快，整数秒全为 0，看不出东西）。
   if (process.env.SCAN_PROFILE === "1") {
+    let cum = 0;
+    for (const p of profTimings) {
+      cum += p.ms;
+      process.stderr.write(
+        `[prof] ${p.label.padEnd(10)} 本段 +${(p.ms / 1000).toFixed(3)}s / 累计 ${(cum / 1000).toFixed(3)}s\n`,
+      );
+    }
+    // git 子进程数是本次重构的核心指标：bash 的成本 = 门数 × commit 数 × 每门 2~6 次，
+    // gate.ts 应该只与「范围大小」弱相关。这条留着用来防止后续改动把快照退回逐门遍历。
     process.stderr.write(`[prof] git 子进程 ${gitCalls} 次（范围内 commit 数见上一行）\n`);
   }
   return code;

@@ -7,12 +7,17 @@
 #   bash scripts/redline/cases/run.sh --update         # 重新生成 expected/（改动规则后必须人工 review diff）
 #   bash scripts/redline/cases/run.sh --filter r17     # 只跑 id 含 r17 的场景
 #   bash scripts/redline/cases/run.sh --keep           # 保留临时夹具仓库（排查用）
+#   bash scripts/redline/cases/run.sh --work /tmp/fx   # 指定夹具目录；已有则复用（生成式变异用）
 #
 # 返回码：0 = 全部一致；1 = 有差异或场景本身报错；2 = 用法错误
 #
 # 🔴 什么时候该跑它：
-#   · 改 scan-rules.sh / gate-shared.sh 的判定逻辑 → 先跑它，diff 里每一条变化都必须是"你有意改的"
-#   · 换执行引擎（门禁架构重构 S2 影子期）→ 新引擎跑它，输出必须与 expected/ 逐字节一致
+#   · 改 gates.yaml 的判据 → 必须跑它，diff 里每一条变化都必须是"你有意改的"
+#     （2026-11-11 切主后判据在 YAML，执行者是 gate.ts）
+#   · 改 gate.ts 的引擎逻辑 → 必须跑它，输出要与 expected/ 逐字节一致
+#   · 改 commit-msg 阶段的判据 → 也跑它（R10/R11 的用例在 commit 组）
+#   🔴 S5（2026-11-11）：legacy bash 已删除，cases/shadow.sh 随之删除。
+#     本脚本现在是 gate.ts **唯一的行为回归网** —— 没有第二个实现可以对照了。
 # 🔴 什么时候不该直接 --update：
 #   期望值只能由"人工确认过的行为"产生。先看 diff，确认变化是对的，再 --update。
 #   盲目 --update 等于把"当前行为"当"正确行为"，黄金集就退化成快照记录器了。
@@ -21,17 +26,24 @@ set -uo pipefail
 
 CASES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOP="$(cd "$CASES_DIR/../../.." && pwd)"
-SCAN="$TOP/scripts/redline/scan-rules.sh"
+# 2026-11-11 切主（S3）：被测引擎从 bash 换成 gate.ts。
+# 这是切主后 gate.ts 唯一的**行为**回归网 —— 它直接比对执行结果，不依赖 bash 还在不在。
+SCAN="$TOP/scripts/redline/gate.ts"
 EXPECTED_DIR="$CASES_DIR/expected"
 
 UPDATE=0
 KEEP=0
 FILTER=""
+# --work DIR：用固定目录当夹具仓库。目录里已有 .aliases 就复用，不重建。
+# 为什么需要：夹具构造约 14s，而生成式变异测试要对同一份夹具跑几十次判据变异，
+# 每次都重建的话 28 个变异要 6 分钟以上，慢到没人愿意跑。
+WORK_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --update) UPDATE=1 ;;
     --keep)   KEEP=1 ;;
     --filter) FILTER="${2:-}"; shift ;;
+    --work)   WORK_ARG="${2:-}"; shift ;;
     -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -39,18 +51,29 @@ while [ $# -gt 0 ]; do
 done
 
 [ -f "$SCAN" ] || { echo "找不到 $SCAN" >&2; exit 2; }
+command -v node >/dev/null 2>&1 || { echo "需要 node（gate.ts 用 Node 22 原生跑 TS）" >&2; exit 2; }
 mkdir -p "$EXPECTED_DIR"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-cases.XXXXXX")"
+if [ -n "$WORK_ARG" ]; then
+  WORK="$WORK_ARG"
+  KEEP=1
+  mkdir -p "$WORK"
+else
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/gate-cases.XXXXXX")"
+fi
 cleanup() { [ "$KEEP" = "1" ] || rm -rf "$WORK"; }
 trap cleanup EXIT
 
 # shellcheck source=/dev/null
 source "$CASES_DIR/fixture.sh"
 
-echo "构造夹具仓库: $WORK" >&2
 MAP="$WORK/.aliases"
-build_fixture "$WORK" > "$MAP" || { echo "夹具构造失败" >&2; exit 2; }
+if [ -f "$MAP" ] && [ -s "$MAP" ]; then
+  echo "复用夹具仓库: $WORK" >&2
+else
+  echo "构造夹具仓库: $WORK" >&2
+  build_fixture "$WORK" > "$MAP" || { echo "夹具构造失败" >&2; exit 2; }
+fi
 # 别名导出为环境变量：场景表里写 ${C_R17_FAKE} 就能在 run_one 的 eval 中展开成真实 sha
 while read -r _n _s; do
   [ -n "${_n:-}" ] && [ -n "${_s:-}" ] && export "$_n=$_s"
@@ -67,7 +90,7 @@ run_one() { # $1=id $2=mode $3=args
   local expanded
   expanded="$(eval "printf '%s' \"$args\"")"
   # shellcheck disable=SC2086
-  ( cd "$WORK" && bash "$SCAN" --no-color "$mode" $expanded ) > "$raw_out" 2> "$raw_err"
+  ( cd "$WORK" && node "$SCAN" --no-color "$mode" $expanded ) > "$raw_out" 2> "$raw_err"
   local rc=$?
 
   local norm_out="${WORK}/.norm.${id}"
