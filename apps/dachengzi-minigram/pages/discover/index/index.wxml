@@ -1,22 +1,12 @@
 <!-- 大橙子英语 · 发现（tab 2）：默认态只呈现新概念英语（纯学习工具）；
-     「对话练习」「文本翻译」卡由本地开关控制（utils/feature-flags.ts），
-     「功能设置」入口卡在暗门解锁（双击发现 tab）后常驻。
+     「对话练习」「文本翻译」卡由本地开关控制（utils/feature-flags.ts）；
+     功能开关入口在「我的 → 设置 → 发现设置」（PRD v0.4 §4），本页不放设置入口卡。
      备案文案已按 P0 从代码中删除（非条件隐藏）。 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不发起任何业务请求 -->
   <login-gate wx:if="{{!loggedIn}}" desc="发现页的能力与记录都关联你的账号" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <!-- 功能设置入口卡：暗门解锁后常驻（第一节标题之上，随页面滚动，200ms 淡入） -->
-  <view wx:if="{{flags.labsUnlocked}}" class="labs fade-in" bindtap="openSettings">
-    <view class="ic s">⚙</view>
-    <view class="tx">
-      <view class="b">功能设置</view>
-      <view class="e">选择要开放的功能</view>
-    </view>
-    <text class="go">›</text>
-  </view>
-
   <view class="sec-t">{{(flags.chat || flags.translate) ? '扩展功能' : '英语学习'}}</view>
 
   <!-- 对话练习：flags.chat 开启时出现（文案恒定中性） -->

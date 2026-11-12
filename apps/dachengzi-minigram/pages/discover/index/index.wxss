@@ -61,27 +61,6 @@ page {
 /* 对话练习：品牌色（与翻译卡同族） */
 .ic.c { background: var(--brand-soft); color: var(--brand-txt); }
 
-/* 功能设置入口卡：暗门解锁后常驻（第一节标题之上，随页面滚动，不吸顶） */
-.labs {
-  display: flex;
-  align-items: center;
-  background: var(--card);
-  border: 1rpx dashed var(--brand-100);
-  border-radius: var(--r-card);
-  padding: 28rpx 26rpx;
-  margin-bottom: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(20, 30, 60, .04);
-}
-.labs:active { opacity: .75; }
-.ic.s { background: var(--brand-soft); color: var(--brand-txt); font-size: 30rpx; }
-
-/* 解锁反馈：入口卡 200ms 淡入 */
-.fade-in { animation: labs-fade-in .2s ease-out; }
-@keyframes labs-fade-in {
-  from { opacity: 0; transform: translateY(-8rpx); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .tx { flex: 1; min-width: 0; }
 .tx .b {
   font-size: 30rpx;

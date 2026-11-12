@@ -1,8 +1,9 @@
 <!-- 大橙子英语 · 首页（tab 1 / 启动页）
      结构：问候 hero → 今日一句 → [新对话卡 | 开关关闭时隐藏] → 新概念英语卡（常驻）
-           → [最近对话 | 学习进度] → 提示。
+           → [最近对话 | 默认关态仅提示语] 。
      功能开关：「新对话」卡与「最近对话」区由本地开关 flags.chat 控制（utils/feature-flags.ts），
-     默认关 = 纯 NCE 英语学习工具呈现；备案文案已按 P0 从代码中删除（非条件隐藏）。
+     默认关 = 纯 NCE 英语学习工具呈现；学习进度卡本版撤下（PRD v0.4「后续迭代」）；
+     备案文案已按 P0 从代码中删除（非条件隐藏）。
      ⚠️ 首页只保留快捷入口，能力清单统一归「发现」页。 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：整页只渲染登录引导卡（login-gate），不发任何业务请求 -->
@@ -78,17 +79,7 @@
   <view class="hint">直接对话，进来就能用 —— 不需要先学会怎么用。</view>
   </block>
 
-  <block wx:else>
-  <!-- 学习进度：默认关态下替换「最近对话」整段（复用「我的」页 nceSummary 口径） -->
-  <view class="sec-t">学习进度</view>
-  <view class="w-recent">
-    <view class="wr-item" bindtap="goNce">
-      <view class="wr-q">课文学习进度</view>
-      <view class="wr-c">{{nceSummary}}</view>
-    </view>
-  </view>
-
-  <view class="hint">每天一句，稳步进阶。</view>
-  </block>
+  <!-- 默认关态：今日一句 + NCE 常驻卡 + 提示语（学习进度卡本版撤下，见 PRD v0.4「后续迭代」） -->
+  <view wx:else class="hint">每天一句，稳步进阶。</view>
   </block>
 </view>

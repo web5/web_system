@@ -1,7 +1,7 @@
 /**
  * 本地功能开关（纯本地存储，零后端）。
  *
- * 设计凭证：AiWorkspace/30-任务产物/2026-11-12-小程序AI功能隐藏与远端开关/01-PRD-功能隐藏与远端开关.md v0.2 §2
+ * 设计凭证：AiWorkspace/30-任务产物/2026-11-12-小程序AI功能隐藏与远端开关/01-PRD-功能隐藏与远端开关.md v0.4 §2
  *
  * 判定口径（单条件，无远端层）：
  *   featureEnabled(f) = storage[feature_<f>] === '1'   // 无存储值 = 关（安全侧，新装即审核态）
@@ -20,9 +20,6 @@ export const FEATURE_STORAGE_KEYS: Record<FeatureKey, string> = {
   translate: 'feature_translate',
 };
 
-/** 暗门解锁标记：'1' = 已解锁（发现页「功能设置」入口卡常驻）；不存在 = 未解锁 */
-export const LABS_UNLOCKED_KEY = 'labs_unlocked';
-
 /** 开关变更广播事件名（app.eventBus 承载） */
 export const FLAGS_UPDATED_EVENT = 'flags:updated';
 
@@ -30,7 +27,6 @@ export const FLAGS_UPDATED_EVENT = 'flags:updated';
 export interface FlagsState {
   chat: boolean;
   translate: boolean;
-  labsUnlocked: boolean;
 }
 
 /** 单功能判定：无存储值 / 非法值 / 读异常一律按「关」处理（安全侧） */
@@ -42,21 +38,11 @@ export function featureEnabled(f: FeatureKey): boolean {
   }
 }
 
-/** 暗门是否已解锁（入口卡常驻显示的唯一判据） */
-export function isLabsUnlocked(): boolean {
-  try {
-    return wx.getStorageSync(LABS_UNLOCKED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 /** 汇总读取：页面 data.flags 的唯一取数入口 */
 export function readFlags(): FlagsState {
   return {
     chat: featureEnabled('chat'),
     translate: featureEnabled('translate'),
-    labsUnlocked: isLabsUnlocked(),
   };
 }
 
@@ -76,20 +62,6 @@ function broadcast(): void {
 export function setFeatureEnabled(f: FeatureKey, on: boolean): void {
   try {
     wx.setStorageSync(FEATURE_STORAGE_KEYS[f], on ? '1' : '0');
-  } catch {
-    return;
-  }
-  broadcast();
-}
-
-/**
- * 暗门解锁（双击发现 tab 触发，custom-tab-bar 调用）。
- * 幂等：已解锁时不重复写存储/广播 —— 已解锁后的再次双击由调用方直接进设置页。
- */
-export function unlockLabs(): void {
-  if (isLabsUnlocked()) return;
-  try {
-    wx.setStorageSync(LABS_UNLOCKED_KEY, '1');
   } catch {
     return;
   }

@@ -1,7 +1,7 @@
 /**
  * utils/feature-flags.ts 单测（纯本地功能开关）。
  *
- * 口径（PRD v0.2 §2）：storage key = feature_chat / feature_translate / labs_unlocked，
+ * 口径（PRD v0.4 §2）：storage key = feature_chat / feature_translate，
  * 值 '1'/'0'；无存储值 = 关（安全侧，新装即审核态）；变更经 app.eventBus 广播 flags:updated。
  */
 export {};
@@ -67,7 +67,6 @@ describe('setFeatureEnabled（写 storage + 广播 flags:updated）', () => {
     expect(bus.emit).toHaveBeenCalledWith('flags:updated', {
       chat: true,
       translate: false,
-      labsUnlocked: false,
     });
   });
 
@@ -80,7 +79,6 @@ describe('setFeatureEnabled（写 storage + 广播 flags:updated）', () => {
     expect(bus.emit).toHaveBeenCalledWith('flags:updated', {
       chat: false,
       translate: false,
-      labsUnlocked: false,
     });
   });
 
@@ -93,32 +91,9 @@ describe('setFeatureEnabled（写 storage + 广播 flags:updated）', () => {
   });
 });
 
-describe('暗门解锁（labs_unlocked）', () => {
-  it('默认未解锁；unlockLabs 后解锁并广播', () => {
-    expect(flags.isLabsUnlocked()).toBe(false);
-    flags.unlockLabs();
-    expect(wxMock.setStorageSync).toHaveBeenCalledWith('labs_unlocked', '1');
-    expect(flags.isLabsUnlocked()).toBe(true);
-    expect(bus.emit).toHaveBeenCalledWith('flags:updated', {
-      chat: false,
-      translate: false,
-      labsUnlocked: true,
-    });
-  });
-
-  it('重复 unlockLabs：幂等，不重复写存储/广播', () => {
-    flags.unlockLabs();
-    jest.clearAllMocks();
-    flags.unlockLabs();
-    expect(wxMock.setStorageSync).not.toHaveBeenCalled();
-    expect(bus.emit).not.toHaveBeenCalled();
-  });
-});
-
 describe('readFlags（页面渲染取数入口）', () => {
-  it('汇总三个键的当前状态', () => {
+  it('汇总两个开关的当前状态', () => {
     store.set('feature_chat', '1');
-    store.set('labs_unlocked', '1');
-    expect(flags.readFlags()).toEqual({ chat: true, translate: false, labsUnlocked: true });
+    expect(flags.readFlags()).toEqual({ chat: true, translate: false });
   });
 });

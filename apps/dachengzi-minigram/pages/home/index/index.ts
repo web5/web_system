@@ -106,9 +106,7 @@ Page({
      * 本地功能开关（utils/feature-flags.ts）：flags.chat 控制「新对话」卡与「最近对话」区。
      * 初始值全关（安全侧），onShow / flags:updated 广播时以 storage 为准刷新。
      */
-    flags: { chat: false, translate: false, labsUnlocked: false } as FlagsState,
-    /** 课文学习进度摘要：默认关态下「学习进度」卡展示（与「我的」页同口径，暂无落库接口） */
-    nceSummary: '未开始',
+    flags: { chat: false, translate: false } as FlagsState,
   },
 
   /**

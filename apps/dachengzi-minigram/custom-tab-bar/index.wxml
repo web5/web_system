@@ -9,7 +9,6 @@
     wx:key="pagePath"
     data-path="{{item.pagePath}}"
     data-index="{{index}}"
-    data-key="{{item.key}}"
     data-istab="{{item.isTab ? 1 : 0}}"
     bindtap="onSwitch"
   >

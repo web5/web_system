@@ -47,7 +47,7 @@ Page({
     /** 课文学习进度：暂无进度落库接口，先显示「未开始」（不编造数字） */
     nceSummary: '未开始',
     /** 本地功能开关：flags.translate 控制「我的翻译记录 / 翻译设置」两行（默认关，安全侧） */
-    flags: { chat: false, translate: false, labsUnlocked: false } as FlagsState,
+    flags: { chat: false, translate: false } as FlagsState,
   },
 
   /**
