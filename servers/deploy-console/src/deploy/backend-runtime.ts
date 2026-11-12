@@ -1,5 +1,5 @@
 export interface BackendRuntimeInput {
-  action: 'package' | 'publish' | 'inspect' | 'activate';
+  action: 'package' | 'publish' | 'inspect' | 'activate' | 'restart';
   workspace?: string;
   runtimeRoot?: string;
   moduleDirectory?: string;
@@ -17,6 +17,10 @@ export interface BackendRuntimeInput {
   runtimeStorageRoot?: string;
   /** 关闭干净重启（回落到 in-place pm2 restart）。远端经 RELEASE_CLEAN_RESTART 注入。 */
   cleanRestart?: boolean;
+  /** restart 专用：只跑只读前置断言并返回执行计划，绝不碰进程。远端经 BACKEND_RUNTIME_DRY_RUN 注入。 */
+  dryRun?: boolean;
+  /** restart 专用：显式注入进程环境的额外键（空格分隔 K=V）；键名计入 env 白名单，值永不回显 */
+  extraEnv?: string;
 }
 
 export interface BackendRuntimeAdapters {
@@ -295,11 +299,14 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
 
-  if (!input.versionDirectory) throw new Error('Runtime version directory required');
+  // restart 只认 storage 里的隔离运行时（当前指针版本），不需要投递副本 versionDirectory；
+  // 其余 action 仍强制（restart 分支在前已 return，到不了这里取 undefined）。
+  if (!input.versionDirectory && input.action !== 'restart') throw new Error('Runtime version directory required');
+  const versionDirectory = input.versionDirectory as string;
   if (input.action === 'publish') {
     if (!input.serviceDirectory || !input.archivePath || !/^[a-f0-9]{64}$/.test(input.archiveSha256 || '')) throw new Error('Runtime publication requires service, archive, and checksum');
     const service = fs.realpathSync(input.serviceDirectory);
-    const destination = canonical(input.versionDirectory);
+    const destination = canonical(versionDirectory);
     if (!contains(service, destination) || service === destination) throw new Error('Runtime publication target escapes service');
     if (hash(fs.readFileSync(input.archivePath)) !== input.archiveSha256) throw new Error('Runtime archive checksum mismatch');
     const names = run('tar', ['-tzf', input.archivePath]).trim().split('\n');
@@ -337,8 +344,143 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
     } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
   if (input.action === 'inspect') {
-    const inspected = inspect(input.versionDirectory);
+    const inspected = inspect(versionDirectory);
     return { action: 'inspect', moduleKey: input.moduleKey, versionTag: input.versionTag, files: inspected.payload.files, payloadSha256: inspected.payload.sha256 };
+  }
+  if (input.action === 'restart') {
+    // ── 「重启当前指针版本」（设计 §3.3）：与 activate 共用序列化下投框架与探活断言，
+    // 但 env 构造全新 —— 仅 PATH/HOME/PORT(+PM2_HOME/+EXTRA_ENV 显式项)。
+    // 🔴 不继承 pm2 env、不读 ecosystem、不读 .bootstrap、不读 dump.pm2 ——
+    // 这是与 activate 内嵌 cleanRestart（引导键继承）的本质区别：
+    // prod 旧 ecosystem 会把残留键（如回环 REDIS_URL）回注进程环境。
+    if (!input.serviceDirectory) throw new Error('restart 前置断言失败：缺少服务目录');
+    const service = fs.realpathSync(input.serviceDirectory);
+    const storage = canonical(input.runtimeStorageRoot || path.join(os.homedir(), 'web_system_runtimes'));
+    const installed = canonical(path.join(storage, input.moduleKey, input.versionTag));
+    // 断言①：storage 中该版本 runtime 存在且 inspect 通过（指针指向未落地版本 → 拒绝）
+    if (!fs.existsSync(path.join(installed, 'runtime-manifest.json'))) {
+      throw new Error('restart 前置断言失败：storage 中不存在当前指针版本的隔离运行时（' + input.moduleKey + '@' + input.versionTag + '）——restart 不改版本，请先走发布/回滚');
+    }
+    inspect(installed, service);
+    if (!contains(storage, installed) || storage === installed) throw new Error('Isolated runtime storage escapes its root');
+    // 断言②：dist 软链已指向该版本（指针与运行目录撕裂 → 拒绝用重启掩盖）
+    const active = path.join(service, 'dist');
+    const distTarget = fs.realpathSync(path.join(installed, 'dist'));
+    if (!fs.existsSync(active) || !fs.lstatSync(active).isSymbolicLink() || fs.realpathSync(active) !== distTarget) {
+      throw new Error('restart 前置断言失败：dist 软链未指向当前指针版本（' + input.versionTag + '）——restart 不切版本，请先走发布/回滚对齐');
+    }
+    // 断言③：pm2 恰好一个归属进程（pm_cwd=服务目录）且 online（与 activate 同款断言）
+    const list = () => JSON.parse(run('pm2', ['jlist'], { cwd: service })) as Array<{ name: string; pid: number; pm2_env: Record<string, any> }>;
+    const owned = list().filter(row => row.pm2_env.pm_cwd && fs.realpathSync(row.pm2_env.pm_cwd) === service);
+    if (owned.length !== 1 || owned[0].pm2_env.status !== 'online') {
+      throw new Error('restart 前置断言失败：目标服务必须恰好一个归属服务目录的 online 进程（实际 ' + owned.length + ' 个）');
+    }
+    const selected = owned[0];
+    // 断言④：端口可解析（.env/.env.generated PORT 优先 → pm2_env.PORT 兜底）
+    let configuredPort = input.port;
+    for (const name of ['.env', '.env.generated']) {
+      const file = path.join(service, name);
+      if (fs.existsSync(file)) {
+        const value = /^\s*(?:export\s+)?PORT\s*=\s*['"]?(\d+)['"]?\s*(?:#.*)?$/m.exec(fs.readFileSync(file, 'utf8'))?.[1];
+        if (value) {
+          if (configuredPort && Number(configuredPort) !== Number(value)) throw new Error('restart 前置断言失败：端口与目标环境配置不一致（PORT=' + value + '）');
+          configuredPort = value;
+        }
+      }
+    }
+    if (!configuredPort) configuredPort = selected.pm2_env.PORT ?? selected.pm2_env.env?.PORT;
+    const port = Number(configuredPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('restart 前置断言失败：端口未知（.env/.env.generated 与 pm2 进程环境均无 PORT）');
+    }
+    const entry = path.join(installed, 'dist', 'main.js');
+    if (!fs.existsSync(entry)) throw new Error('restart 前置断言失败：隔离运行时入口缺失 ' + entry);
+
+    // EXTRA_ENV 显式注入项（空格分隔 K=V）：键名计入 env 白名单；值只进进程环境、永不回显
+    const extraEnvironment: Record<string, string> = {};
+    for (const pair of String(input.extraEnv || '').split(/\s+/).filter(Boolean)) {
+      const eq = pair.indexOf('=');
+      if (eq <= 0) throw new Error('restart 前置断言失败：EXTRA_ENV 项必须是 K=V 形式（' + pair + '）');
+      const key = pair.slice(0, eq);
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || ['PATH', 'HOME', 'PORT', 'PM2_HOME'].includes(key)) {
+        throw new Error('restart 前置断言失败：EXTRA_ENV 键非法或与基础键冲突（' + key + '）');
+      }
+      extraEnvironment[key] = pair.slice(eq + 1);
+    }
+
+    const environment: Record<string, string> = { PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin', HOME: process.env.HOME || '/root', PORT: String(port), ...extraEnvironment };
+    if (process.env.PM2_HOME) environment.PM2_HOME = process.env.PM2_HOME;
+
+    // dryRun：只跑上面的只读断言，返回执行计划，绝不碰进程
+    if (input.dryRun) {
+      return {
+        action: 'restart', dryRun: true, moduleKey: input.moduleKey, versionTag: input.versionTag,
+        process: selected.name, pid: selected.pid, port, runtimeDirectory: installed,
+        envKeys: Object.keys(environment).sort(),
+        plan: [
+          'pm2 delete ' + selected.name,
+          'env -i ' + Object.keys(environment).sort().join(' ') + ' pm2 start ' + entry + ' --name ' + selected.name + ' --cwd ' + service,
+          'waitHealthy（online + GET 127.0.0.1:' + port + (input.healthPath || '/health') + ' 2xx + ss 端口归属 pid + pid 稳定两拍）',
+          'pm2 save（固化干净 env 进 dump.pm2）',
+        ],
+      };
+    }
+
+    // 探活：与 activate 同一判据（进程 online + /health 2xx + ss 端口归属 pid 匹配 + pid 稳定两拍）。
+    // 必须定义在函数体内：本函数会被 toString() 序列化后 ssh 到目标机执行。
+    const waitHealthy = async () => {
+      const deadline = now() + (input.timeoutMs ?? 30000);
+      let stable: number | null = null;
+      while (now() < deadline) {
+        const process = list().find(row => row.name === selected.name);
+        const status = await probe(port, input.healthPath || '/health');
+        let listener = '';
+        try { listener = run('ss', ['-ltnp', 'sport = :' + port], { cwd: service }); } catch {}
+        if (process?.pm2_env.status === 'online' && status >= 200 && status < 300 && listener.includes('pid=' + process.pid + ',')) {
+          if (stable === process.pid) return process;
+          stable = process.pid;
+        } else stable = null;
+        await sleep(500);
+      }
+      throw new Error('Runtime did not become healthy with the expected process and port');
+    };
+
+    const startedAt = now();
+    const pidBefore = selected.pid;
+    const recoveryHint = '恢复指引：pm2 resurrect（dump 镜像）恢复进程，或经流水线切版本（先发历史版本再发回当前版本；rollback 到同版本会被 400 硬拒，不可作为恢复手段）';
+    // 干净重建：pm2 delete + env -i 白名单 start（入口 = 隔离运行时 dist/main.js，--cwd 服务目录）
+    try { run('pm2', ['delete', selected.name], { cwd: service }); } catch { /* 进程可能已不存在 */ }
+    const start = () => run('pm2', ['start', entry, '--name', selected.name, '--cwd', service], { cwd: service, env: environment });
+    // 失败恢复：start/探活失败 → 同 dist 自动再 start 一次（restart 无版本可回滚）→ 仍失败抛错保留现场
+    let healthyProcess;
+    try {
+      start();
+      healthyProcess = await waitHealthy();
+    } catch (first) {
+      try {
+        start();
+        healthyProcess = await waitHealthy();
+      } catch (second) {
+        throw new Error('restart 失败：干净重建两次均未通过探活，现场已保留（首次: ' + (first as Error).message + '；重试: ' + (second as Error).message + '）。' + recoveryHint);
+      }
+    }
+
+    // env 干净自检：重启后 pm2 jlist 取该进程 pm2_env，点名**非白名单键**。
+    // 键名非密可回显；值永不出现在任何输出（ residueKeys 只装键名 ）。
+    // 白名单口径与 restart-clean.sh 对齐：基础键 + 平台前缀 + EXTRA_ENV 显式注入项；期望 ∅。
+    const baseWhitelist = new Set(['PATH', 'HOME', 'PORT', 'PM2_HOME', 'PWD', 'OLDPWD', 'SHELL', 'USER', 'LOGNAME', 'LANG', 'SHLVL', 'NODE_ENV']);
+    const platformPrefixes = ['PM2_', 'LC_', 'NVM_', 'XDG_', 'SSH_', 'NODE_APP'];
+    const injected = new Set(Object.keys(extraEnvironment));
+    const current = list().find(row => row.name === selected.name);
+    const residueKeys = Object.keys(current?.pm2_env ?? {})
+      .filter(key => /^[A-Z_][A-Z0-9_]*$/.test(key))
+      .filter(key => !baseWhitelist.has(key) && !injected.has(key) && !platformPrefixes.some(prefix => key.startsWith(prefix)))
+      .sort();
+
+    // pm2 save：固化干净 env 进 dump.pm2（掐断 resurrect 再注入残留键的通道）
+    run('pm2', ['save'], { cwd: service });
+
+    return { action: 'restart', process: healthyProcess.name, pid: healthyProcess.pid, pidBefore, port, versionTag: input.versionTag, residueKeys, durationMs: now() - startedAt };
   }
   if (input.action !== 'activate' || !input.serviceDirectory) throw new Error('Runtime activation requires a service directory');
   const service = fs.realpathSync(input.serviceDirectory);
@@ -351,7 +493,7 @@ export async function executeBackendRuntime(input: BackendRuntimeInput, adapters
   if (fs.existsSync(path.join(installed, 'runtime-manifest.json'))) {
     inspected = inspect(installed, service);
   } else {
-    inspected = inspect(input.versionDirectory);
+    inspected = inspect(versionDirectory);
   }
   const inService = contains(service, inspected.root) && service !== inspected.root;
   const inStorage = contains(storage, inspected.root) && storage !== inspected.root;
@@ -551,12 +693,25 @@ export function backendRuntimeProgramPrelude(): string {
 
 export function backendRuntimeProgram(): string {
   return backendRuntimeProgramPrelude() + '\n(' + executeBackendRuntime.toString() + ')(process.env.BACKEND_RUNTIME_PAYLOAD?JSON.parse(Buffer.from(process.env.BACKEND_RUNTIME_PAYLOAD,"base64").toString("utf8")):{' +
-    "action:process.env.BACKEND_RUNTIME_ACTION,workspace:process.env.RELEASE_DIR,runtimeRoot:process.env.WEB_SYSTEM_DIR,runtimeStorageRoot:process.env.BACKEND_RUNTIME_ROOT,moduleDirectory:process.env.MODULE_DIR,moduleKey:process.env.MODULE_KEY,versionTag:process.env.COMMIT_ID,serviceDirectory:process.env.RUNTIME_SERVICE_DIR,versionDirectory:process.env.RUNTIME_VERSION_DIR,pnpm:process.env.RELEASE_PNPM_BIN||'pnpm',processName:process.env.PM2_NAME,port:process.env.PORT,healthPath:process.env.RUNTIME_HEALTH_PATH||'/health'" +
+    "action:process.env.BACKEND_RUNTIME_ACTION,workspace:process.env.RELEASE_DIR,runtimeRoot:process.env.WEB_SYSTEM_DIR,runtimeStorageRoot:process.env.BACKEND_RUNTIME_ROOT,moduleDirectory:process.env.MODULE_DIR,moduleKey:process.env.MODULE_KEY,versionTag:process.env.COMMIT_ID,serviceDirectory:process.env.RUNTIME_SERVICE_DIR,versionDirectory:process.env.RUNTIME_VERSION_DIR,pnpm:process.env.RELEASE_PNPM_BIN||'pnpm',processName:process.env.PM2_NAME,port:process.env.PORT,healthPath:process.env.RUNTIME_HEALTH_PATH||'/health',dryRun:process.env.BACKEND_RUNTIME_DRY_RUN==='1',extraEnv:process.env.BACKEND_RUNTIME_EXTRA_ENV||''" +
     "}).then(result=>process.stdout.write(JSON.stringify(result)+'\\n')).catch(error=>{console.error(error.message);process.exitCode=1;});";
 }
 
 export function backendRuntimeActivationCommand(input: Omit<BackendRuntimeInput, 'action'>): string {
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   const environment = { BACKEND_RUNTIME_ACTION: 'activate', MODULE_KEY: input.moduleKey, COMMIT_ID: input.versionTag, RUNTIME_SERVICE_DIR: input.serviceDirectory || '', RUNTIME_VERSION_DIR: input.versionDirectory || '', PM2_NAME: input.processName || '', PORT: input.port || '', BACKEND_RUNTIME_ROOT: input.runtimeStorageRoot || '', RUNTIME_HEALTH_PATH: input.healthPath || '/health', RELEASE_CLEAN_RESTART: input.cleanRestart === false ? '0' : '1' };
+  return Object.entries(environment).map(([key, value]) => key + '=' + quote(value)).join(' ') + " node <<'CONSOLE_BACKEND_RUNTIME'\n" + backendRuntimeProgram() + '\nCONSOLE_BACKEND_RUNTIME';
+}
+
+/**
+ * restart action 的远程命令（与 activate 同一序列化程序下投框架）。
+ *
+ * 语义差异（设计 §3.3）：restart 恒等于「重启当前指针版本」——versionTag 由服务端
+ * 从 registry 指针解析后传入，调用方无法指定别的版本（构造上杜绝「重启变切版本」）。
+ * env 构造仅 PATH/HOME/PORT(+PM2_HOME/+EXTRA_ENV)，不带任何引导键继承开关。
+ */
+export function backendRuntimeRestartCommand(input: Omit<BackendRuntimeInput, 'action'>): string {
+  const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+  const environment = { BACKEND_RUNTIME_ACTION: 'restart', MODULE_KEY: input.moduleKey, COMMIT_ID: input.versionTag, RUNTIME_SERVICE_DIR: input.serviceDirectory || '', BACKEND_RUNTIME_ROOT: input.runtimeStorageRoot || '', RUNTIME_HEALTH_PATH: input.healthPath || '/health', BACKEND_RUNTIME_DRY_RUN: input.dryRun ? '1' : '0', BACKEND_RUNTIME_EXTRA_ENV: input.extraEnv || '' };
   return Object.entries(environment).map(([key, value]) => key + '=' + quote(value)).join(' ') + " node <<'CONSOLE_BACKEND_RUNTIME'\n" + backendRuntimeProgram() + '\nCONSOLE_BACKEND_RUNTIME';
 }

@@ -7,6 +7,7 @@ import {
   backendRuntimeActivationCommand,
   backendRuntimeProgram,
   backendRuntimeProgramPrelude,
+  backendRuntimeRestartCommand,
   executeBackendRuntime,
   normalizePnpmModulesState,
   normalizePnpmWorkspaceState,
@@ -616,6 +617,189 @@ describe('isolated backend runtime', () => {
     // 否则目标机上取到的是 undefined（不抛错，最难查）。
     const cjsRefs = [...new Set(program.match(/\bexports\.[A-Za-z0-9_]+/g) ?? [])];
     for (const ref of cjsRefs) expect(prelude).toContain(`${ref}=`);
+  });
+
+  // ── action:'restart'（流水线独立干净重启：不改版本、不改配置、不动 dist） ──
+  // 设计真源：docs/development/reports/2026-11-12-pipeline-restart-capability-design.md §3.3
+
+  /**
+   * restart 现场：先走一次 activate（装 storage + 切 dist 软链），再换成 restart 专用
+   * 命令桩（activate 桩对 start 入口写死了 service/dist/main.js，而 restart 的入口是
+   * 隔离运行时的 dist/main.js，两者不同，必须换桩）。
+   */
+  async function restartFixture(envPatch: Record<string, unknown> = {}) {
+    const base = await activationFixture(false, envPatch);
+    await executeBackendRuntime(base.input, base.adapters);
+    let pid = 100;
+    const commands = jest.fn((file: string, args: string[]) => {
+      if (file === 'ss') return 'users:(("node",pid=' + pid + ',fd=18))';
+      if (file !== 'pm2') throw new Error('Unexpected command: ' + file);
+      if (args[0] === 'jlist') return JSON.stringify([{ name: 'todo-service', pid, pm2_env: { pm_cwd: base.service, status: 'online', ...envPatch } }]);
+      if (args[0] === 'delete') { pid++; return ''; }
+      if (args[0] === 'start') return '';
+      if (args[0] === 'save') return '';
+      throw new Error('Unexpected pm2 args: ' + args.join(' '));
+    });
+    const installed = path.join(base.storage, 'todo-service', versionTag);
+    const input = {
+      action: 'restart' as const,
+      moduleKey: 'todo-service',
+      versionTag,
+      serviceDirectory: base.service,
+      runtimeStorageRoot: base.storage,
+      timeoutMs: 1500,
+    };
+    return { ...base, installed, input, commands, adapters: { ...base.adapters, run: commands } };
+  }
+
+  /** restart 桩的 pm2 调用记录（[file, args, options]） */
+  const restartCalls = (fixture: { commands: jest.Mock }, verb: string) =>
+    (fixture.commands.mock.calls as unknown as Array<[string, string[], { env?: Record<string, string> }]>)
+      .filter(([, args]) => args[0] === verb);
+
+  /** env 键集期望：基础三键 + 可选 PM2_HOME（取决于测试进程环境） */
+  const expectedEnvKeys = (...extra: string[]) =>
+    ['HOME', 'PATH', 'PORT', ...(process.env.PM2_HOME ? ['PM2_HOME'] : []), ...extra].sort();
+
+  it('restart：干净重建当前指针版本（delete + 白名单 env start + 探活 + save），dist 与版本不变', async () => {
+    const fixture = await restartFixture();
+    const result = await executeBackendRuntime(fixture.input, fixture.adapters);
+    expect(result).toMatchObject({ action: 'restart', process: 'todo-service', port: 6005, versionTag, residueKeys: [] });
+    expect(typeof (result as { durationMs: number }).durationMs).toBe('number');
+    expect((result as { pidBefore: number }).pidBefore).not.toBe((result as { pid: number }).pid);
+    // delete → start → save 的顺序与语义
+    expect(restartCalls(fixture, 'delete')).toHaveLength(1);
+    expect(restartCalls(fixture, 'restart')).toHaveLength(0); // 绝不用 in-place restart
+    const start = restartCalls(fixture, 'start')[0];
+    expect(start[1][1]).toBe(path.join(fixture.installed, 'dist', 'main.js'));
+    expect(start[1]).toEqual(expect.arrayContaining(['--name', 'todo-service', '--cwd', fixture.service]));
+    expect(Object.keys(start[2].env!).sort()).toEqual(expectedEnvKeys());
+    expect(start[2].env!.PORT).toBe('6005');
+    const verbs = (fixture.commands.mock.calls as unknown as Array<[string, string[]]>)
+      .filter(([file]) => file === 'pm2').map(([, args]) => args[0]);
+    expect(verbs.indexOf('save')).toBeGreaterThan(verbs.lastIndexOf('start'));
+    // dist 软链目标不变（restart 不切版本）
+    expect(fs.realpathSync(path.join(fixture.service, 'dist'))).toBe(fs.realpathSync(path.join(fixture.installed, 'dist')));
+  });
+
+  it('V1：restart 的进程 env 键集恒为 {PATH,HOME,PORT(,PM2_HOME)}，不读 ecosystem/.bootstrap', async () => {
+    const fixture = await restartFixture();
+    // 现场放上「脏」引导文件：activate 的 cleanRestart 会继承它们，restart 必须完全无视
+    write(
+      path.join(runtime, 'ecosystem.config.js'),
+      "module.exports = { apps: [{ name: 'todo-service', env: { JWT_SECRET: 'from-ecosystem', REDIS_URL: 'redis://127.0.0.1:6379', NODE_ENV: 'staging' } }] };",
+    );
+    write(
+      path.join(runtime, '.bootstrap', 'ecosystem.generated.json'),
+      JSON.stringify({ apps: { 'todo-service': { JWT_SECRET: 'from-artifact', STATIC_PUBLIC_ROOT: '/srv/public' } } }),
+    );
+    await executeBackendRuntime(fixture.input, fixture.adapters);
+    const start = restartCalls(fixture, 'start')[0];
+    const env = start[2].env!;
+    expect(Object.keys(env).sort()).toEqual(expectedEnvKeys());
+    expect(env.JWT_SECRET).toBeUndefined();
+    expect(env.REDIS_URL).toBeUndefined();
+    expect(env.STATIC_PUBLIC_ROOT).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
+  });
+
+  it('V1-EXTRA：EXTRA_ENV 显式注入项进入进程 env 且计入白名单', async () => {
+    const fixture = await restartFixture({ STATIC_PUBLIC_ROOT: '/srv/public' });
+    const result = await executeBackendRuntime({ ...fixture.input, extraEnv: 'STATIC_PUBLIC_ROOT=/srv/public' }, fixture.adapters);
+    const start = restartCalls(fixture, 'start')[0];
+    expect(Object.keys(start[2].env!).sort()).toEqual(expectedEnvKeys('STATIC_PUBLIC_ROOT'));
+    expect(start[2].env!.STATIC_PUBLIC_ROOT).toBe('/srv/public');
+    // pm2_env 里有该键也不算残留（显式注入 ≠ 环境污染）
+    expect((result as { residueKeys: string[] }).residueKeys).toEqual([]);
+  });
+
+  it.each(['PATH=/hack', 'HOME=/hack', 'PORT=1', 'PM2_HOME=/hack', 'NO_EQUALS_SIGN'])(
+    'V1-EXTRA：EXTRA_ENV 非法项（撞基础键/缺 =）直接拒绝，未执行 pm2 delete：%s',
+    async extraEnv => {
+      const fixture = await restartFixture();
+      await expect(executeBackendRuntime({ ...fixture.input, extraEnv }, fixture.adapters)).rejects.toThrow(/EXTRA_ENV/);
+      expect(restartCalls(fixture, 'delete')).toHaveLength(0);
+    },
+  );
+
+  it('V2-①：storage 无当前指针版本的运行时 → fail-fast，未执行 pm2 delete', async () => {
+    // 不 activate：storage 为空（dist 也是普通目录）
+    const fixture = await activationFixture();
+    fixture.commands.mockClear();
+    const input = { action: 'restart' as const, moduleKey: 'todo-service', versionTag, serviceDirectory: fixture.service, runtimeStorageRoot: fixture.storage };
+    await expect(executeBackendRuntime(input, fixture.adapters)).rejects.toThrow(/storage 中不存在当前指针版本/);
+    expect(fixture.commands.mock.calls.some(([, args]) => (args as string[])[0] === 'delete')).toBe(false);
+  });
+
+  it('V2-②：dist 软链未指向当前指针版本 → fail-fast，未执行 pm2 delete', async () => {
+    const fixture = await restartFixture();
+    // 撕裂现场：dist 变回普通目录（指针与运行目录不一致，拒绝用重启掩盖）
+    fs.unlinkSync(path.join(fixture.service, 'dist'));
+    fs.mkdirSync(path.join(fixture.service, 'dist'));
+    fs.writeFileSync(path.join(fixture.service, 'dist', 'main.js'), 'tampered');
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/dist 软链未指向当前指针版本/);
+    expect(restartCalls(fixture, 'delete')).toHaveLength(0);
+  });
+
+  it('V2-③：归属进程 ≠ 1 → fail-fast，未执行 pm2 delete', async () => {
+    const fixture = await restartFixture();
+    fixture.commands.mockImplementation((file: string, args: string[]) => {
+      if (file === 'ss') return '';
+      if (file !== 'pm2') throw new Error('Unexpected command');
+      if (args[0] === 'jlist') return JSON.stringify([
+        { name: 'todo-service', pid: 100, pm2_env: { pm_cwd: fixture.service, status: 'online' } },
+        { name: 'todo-service-dup', pid: 101, pm2_env: { pm_cwd: fixture.service, status: 'online' } },
+      ]);
+      return '';
+    });
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/恰好一个归属/);
+    expect(fixture.commands.mock.calls.filter(([, args]) => (args as string[])[0] === 'delete')).toHaveLength(0);
+  });
+
+  it('V2-④：端口未知（.env/.env.generated 与 pm2_env 都无 PORT） → fail-fast，未执行 pm2 delete', async () => {
+    const fixture = await restartFixture(); // envPatch 默认空：pm2_env 无 PORT
+    fs.unlinkSync(path.join(fixture.service, '.env'));
+    await expect(executeBackendRuntime(fixture.input, fixture.adapters)).rejects.toThrow(/端口未知/);
+    expect(restartCalls(fixture, 'delete')).toHaveLength(0);
+  });
+
+  it('dryRun：只跑只读断言返回计划，不碰进程（无 delete/start/save）', async () => {
+    const fixture = await restartFixture();
+    const result = await executeBackendRuntime({ ...fixture.input, dryRun: true }, fixture.adapters);
+    expect(result).toMatchObject({ action: 'restart', dryRun: true, process: 'todo-service', port: 6005, versionTag });
+    expect((result as { plan: string[] }).plan.join('\n')).toContain('pm2 delete todo-service');
+    expect((result as { envKeys: string[] }).envKeys).toEqual(expectedEnvKeys());
+    expect(fixture.commands.mock.calls.filter(([, args]) => ['delete', 'start', 'save'].includes((args as string[])[0]))).toHaveLength(0);
+    // 只读断言确实跑过（jlist 被调用 = 进程归属断言执行了）
+    expect(fixture.commands.mock.calls.some(([, args]) => (args as string[])[0] === 'jlist')).toBe(true);
+  });
+
+  it('env 干净自检：residueKeys 只出键名不出值（安全用例）', async () => {
+    const fixture = await restartFixture({ REDIS_URL: 'redis://dirty-value-a:6379', JWT_SECRET: 'dirty-value-b' });
+    const result = await executeBackendRuntime(fixture.input, fixture.adapters);
+    expect((result as { residueKeys: string[] }).residueKeys).toEqual(['JWT_SECRET', 'REDIS_URL']);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('dirty-value-a');
+    expect(serialized).not.toContain('dirty-value-b');
+  });
+
+  it('失败恢复：探活不过 → 同 dist 自动再 start 一次 → 仍失败抛错保留现场并给恢复指引', async () => {
+    const fixture = await restartFixture();
+    const failing = { ...fixture.adapters, probe: jest.fn(async () => 500) };
+    await expect(executeBackendRuntime(fixture.input, failing)).rejects.toThrow(/pm2 resurrect/);
+    expect(restartCalls(fixture, 'start')).toHaveLength(2);
+    expect(restartCalls(fixture, 'delete')).toHaveLength(1);
+  });
+
+  it('restart action 随序列化程序下投（静态回归 + restart 命令构造）', () => {
+    const program = backendRuntimeProgram();
+    expect(program).toContain('restart');
+    expect(program).toContain('BACKEND_RUNTIME_DRY_RUN');
+    const command = backendRuntimeRestartCommand({ moduleKey: 'todo-service', versionTag, serviceDirectory: "/tmp/service's-folder", runtimeStorageRoot: '/tmp/storage', dryRun: true });
+    expect(command).toContain("BACKEND_RUNTIME_ACTION='restart'");
+    expect(command).toContain("BACKEND_RUNTIME_DRY_RUN='1'");
+    expect(command).toContain("service'\\''s-folder");
+    execFileSync('bash', ['-n'], { input: command });
   });
 
 });
