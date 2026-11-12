@@ -7,6 +7,8 @@ import { StartupReconcileService } from './startup-reconcile.service';
 import { ConsistencyWatchService } from './consistency-watch.service';
 import { RetentionService } from './retention.service';
 import { CleanupScanService } from './cleanup-scan.service';
+import { PointerReconcileService } from './pointer-reconcile.service';
+import { ConfigAuditWatchService } from './config-audit-watch.service';
 
 /**
  * 运维自愈接口（诊断 #12 / #13）。
@@ -31,6 +33,8 @@ export class ReconcileController {
     private readonly retentionSvc: RetentionService,
     private readonly cleanupScan: CleanupScanService,
     private readonly audit: AuditService,
+    private readonly pointerReconcile: PointerReconcileService,
+    private readonly configAudit: ConfigAuditWatchService,
   ) {}
 
   @Post('run')
@@ -130,6 +134,36 @@ export class ReconcileController {
   @ApiOperation({ summary: '列出当前发布锁（谁在发布、是否已过期）' })
   async listLocks() {
     return this.locks.listAll();
+  }
+
+  @Get('pointers')
+  @ApiOperation({ summary: '盘↔表↔manifest 三方对账结果（?run=1 立即执行一次；半发布治理 F2，只观测）' })
+  async pointerReconcileStatus(@Query('run') run: string) {
+    if (run === '1') return this.pointerReconcile.check();
+    return (
+      this.pointerReconcile.lastReport() ?? {
+        ranAt: 0,
+        status: 'skipped',
+        reason: '尚未执行过对账（用 ?run=1 立即执行）',
+        checkedPairs: 0,
+        diffs: [],
+      }
+    );
+  }
+
+  @Get('config-audit')
+  @ApiOperation({ summary: 'config_items ↔ config_revisions 直写库检测结果（?run=1 立即执行；只观测不改数据）' })
+  async configAuditStatus(@Query('run') run: string) {
+    if (run === '1') return this.configAudit.check();
+    return (
+      this.configAudit.lastReport() ?? {
+        ranAt: 0,
+        status: 'skipped',
+        reason: '尚未执行过检测（用 ?run=1 立即执行）',
+        checkedRows: 0,
+        diffs: [],
+      }
+    );
   }
 
   @Delete('locks/:moduleKey/:env')

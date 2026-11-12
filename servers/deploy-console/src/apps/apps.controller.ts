@@ -63,7 +63,7 @@ export class AppsController {
 
   @Post()
   @ApiOperation({ summary: '新建应用（key 创建后不可修改）' })
-  async create(@Body() dto: CreateAppDto, @CurrentUser() user: any) {
+  async create(@Body() dto: CreateAppDto, @CurrentUser() user: { username?: string }) {
     const app = await this.appsService.createApp(dto);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -84,7 +84,7 @@ export class AppsController {
 
   @Put(':key')
   @ApiOperation({ summary: '更新应用（不含 key；key 不可改）' })
-  async update(@Param('key') key: string, @Body() dto: UpdateAppDto, @CurrentUser() user: any) {
+  async update(@Param('key') key: string, @Body() dto: UpdateAppDto, @CurrentUser() user: { username?: string }) {
     const app = await this.appsService.updateApp(key, dto);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -99,7 +99,7 @@ export class AppsController {
 
   @Delete(':key')
   @ApiOperation({ summary: '软删除应用（返回仍在生效的环境清单）' })
-  async remove(@Param('key') key: string, @CurrentUser() user: any) {
+  async remove(@Param('key') key: string, @CurrentUser() user: { username?: string }) {
     const res = await this.appsService.removeApp(key);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -122,7 +122,7 @@ export class AppsController {
 
   @Post(':key/routes')
   @ApiOperation({ summary: '新增挂载路由（同路径被占用时阻断）' })
-  async createRoute(@Param('key') key: string, @Body() dto: AppRouteDto, @CurrentUser() user: any) {
+  async createRoute(@Param('key') key: string, @Body() dto: AppRouteDto, @CurrentUser() user: { username?: string }) {
     const route = await this.appsService.createRoute(key, dto);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -141,7 +141,7 @@ export class AppsController {
     @Param('key') key: string,
     @Param('id') id: string,
     @Body() dto: AppRouteDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { username?: string },
   ) {
     const route = await this.appsService.updateRoute(key, id, dto);
     await this.auditService.log({
@@ -157,7 +157,7 @@ export class AppsController {
 
   @Delete(':key/routes/:id')
   @ApiOperation({ summary: '删除挂载路由' })
-  async removeRoute(@Param('key') key: string, @Param('id') id: string, @CurrentUser() user: any) {
+  async removeRoute(@Param('key') key: string, @Param('id') id: string, @CurrentUser() user: { username?: string }) {
     const res = await this.appsService.removeRoute(key, id);
     await this.auditService.log({
       user: user?.username || 'unknown',
@@ -189,7 +189,7 @@ export class AppsController {
   async switchVersion(
     @Param('key') key: string,
     @Body() dto: SwitchEnvVersionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { username?: string },
   ) {
     // recordTask：UI 操作落 deploy_tasks（此前这类操作完全没有任务记录，出事只能翻 pm2 log）
     const res = await this.appsService.switchVersion(
@@ -216,7 +216,7 @@ export class AppsController {
   async rollback(
     @Param('key') key: string,
     @Body() dto: RollbackVersionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { username?: string },
   ) {
     const res = await this.appsService.rollback(key, dto.envId, dto.version, user?.username, {
       recordTask: true,
@@ -228,6 +228,38 @@ export class AppsController {
       component: key,
       status: 'success',
       detail: `回滚 ${res.from ?? '-'} → ${res.to}`,
+    });
+    return res;
+  }
+
+  /**
+   * 指针修复（半发布正规通道，替代人工直写库）。
+   * 对齐原子步（表→盘→镜像，失败补偿）+ unchanged 仍重写盘指针 + 全程审计。
+   */
+  @Post(':key/envs/:envId/pointer/repair')
+  @ApiOperation({ summary: '指针修复（盘/表撕裂收敛；to 省略时收敛到表侧当前值；prod 必填 reason）' })
+  async repairPointer(
+    @Param('key') key: string,
+    @Param('envId') envId: string,
+    @Body() body: { to?: string; reason?: string },
+    @CurrentUser() user: { username?: string },
+  ) {
+    const res = await this.appsService.repairPointer(
+      key,
+      envId,
+      body?.to,
+      user?.username,
+      body?.reason,
+    );
+    await this.auditService.log({
+      user: user?.username || 'unknown',
+      action: 'apps.pointer.repair',
+      env: envId,
+      component: key,
+      status: 'success',
+      detail:
+        `指针修复 ${key}@${envId}：表=${res.from.table ?? '-'} 盘=${res.from.disk ?? '-'} → ${res.to}` +
+        `（${res.repaired ? '已收敛' : '本已一致'}）reason=${body?.reason ?? '-'}`,
     });
     return res;
   }

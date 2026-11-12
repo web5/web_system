@@ -315,6 +315,8 @@ describe('VerifyCheckKeys 稳定性', () => {
       versionDirPresent: 'artifact.versionDir',
       processAlive: 'process.alive',
       portListening: 'port.listening',
+      // 半发布治理 F1-③（2026-11-12 新增）：只增不改 —— 存量 key 值保持稳定
+      manifestMatches: 'manifest.matches',
     });
   });
 });

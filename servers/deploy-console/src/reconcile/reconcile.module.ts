@@ -14,7 +14,12 @@ import { RetentionService } from './retention.service';
 import { CleanupScanService } from './cleanup-scan.service';
 import { CleanupScanLogService } from './cleanup-scan-log.service';
 import { ApprovalExpiryService } from './approval-expiry.service';
+import { PointerReconcileService } from './pointer-reconcile.service';
+import { ConfigAuditWatchService } from './config-audit-watch.service';
 import { ReconcileController } from './reconcile.controller';
+import { AppsModule } from '../apps/apps.module';
+import { ProbeModule } from '../probe/probe.module';
+import { CommonModule } from '../common/common.module';
 
 /**
  * 运维自愈模块（诊断 #12 / #13）。
@@ -39,6 +44,10 @@ import { ReconcileController } from './reconcile.controller';
     // 审批超时作废：需要审批单查询 + 走既有 cancel 联动终止流水线
     ApprovalModule,
     PipelineModule,
+    // 半发布治理 F2：盘↔表↔manifest 对账要读磁盘指针（EnvArtifactService）与 gateway manifest（Probe+Common）
+    AppsModule,
+    ProbeModule,
+    CommonModule,
   ],
   controllers: [ReconcileController],
   providers: [
@@ -48,6 +57,8 @@ import { ReconcileController } from './reconcile.controller';
     CleanupScanService,
     CleanupScanLogService,
     ApprovalExpiryService,
+    PointerReconcileService,
+    ConfigAuditWatchService,
   ],
   exports: [
     StartupReconcileService,
@@ -56,6 +67,8 @@ import { ReconcileController } from './reconcile.controller';
     CleanupScanService,
     CleanupScanLogService,
     ApprovalExpiryService,
+    PointerReconcileService,
+    ConfigAuditWatchService,
   ],
 })
 export class ReconcileModule {}

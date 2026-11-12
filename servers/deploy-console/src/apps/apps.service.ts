@@ -695,6 +695,124 @@ export class AppsService implements OnModuleInit {
     return this.switchVersion(appKey, envId, to, operator);
   }
 
+  /**
+   * 指针修复（半发布治理 F3，2026-11-12，05a 专项 P0-1 + 03 号文 S2）。
+   *
+   * 受控的「收敛三面」入口，**替代人工直写库**修半发布（盘/表撕裂）。
+   *
+   * 与 `switchVersion` 的差异（repair 语义）：
+   * - 目标版本可省略：默认收敛到**表侧当前值**（新表是 gateway 唯一真相源）；
+   *   表空则收敛到盘侧值（11-09 形态：盘有值表无行 → 补表）；皆空 → 400。
+   * - **unchanged 不短路**：表已在目标值也照样重写磁盘指针并读回校验 ——
+   *   本入口存在的前提就是「三面可能撕裂」，幂等重收敛正是修复动作本身
+   *   （这是对 P1-c unchanged 短路的**局部豁免**，默认路径语义不变）。
+   *
+   * 写入顺序与原子步一致：先表（含云库镜像 strict）→ 再盘 → 盘失败回滚表。
+   * CDN 模式无盘指针：收敛到「表 + 镜像」两面即完成。
+   */
+  async repairPointer(
+    appKey: string,
+    envId: string,
+    to: string | undefined,
+    operator?: string,
+    reason?: string,
+  ) {
+    const app = await this.getApp(appKey);
+    if (app.deployMode !== 'env-dir') {
+      throw new BadRequestException(
+        `仅 env-dir 应用有磁盘入口指针可修复：${appKey}（deployMode=${app.deployMode}）`,
+      );
+    }
+    await this.envsService.getEnv(envId);
+    if (envId === 'prod' && !reason?.trim()) {
+      throw new BadRequestException('prod 环境指针修复必须填写 reason（进审计）');
+    }
+
+    const table = (await this.registry.currentAppVersion(envId, appKey)) ?? null;
+    const disk = this.isCdnLayout() ? null : await this.artifacts.readPointer(envId, appKey);
+    const target = to?.trim() || table || disk;
+    if (!target) {
+      throw new BadRequestException(
+        `无可收敛目标：${appKey}@${envId} 表与磁盘指针均为空，请显式传入 to`,
+      );
+    }
+
+    // 产物存在性校验（与原子步同款 fail-fast：修向一个不存在的版本 = 制造新撕裂）
+    const exists = await this.artifacts.hasVersion(envId, appKey, target);
+    if (!exists) {
+      throw new BadRequestException(
+        `版本产物不存在，无法收敛：${appKey}/${envId}/${target}（${this.artifacts.describeTarget(envId)} 下缺 index.js）`,
+      );
+    }
+
+    const owner = resolveLockOwner(operator);
+    let from = table;
+    let previous: string | null = null;
+    let tableChanged = false;
+
+    // 1) 表先收敛（含云库镜像 strict，失败即抛不碰盘）
+    if (table !== target) {
+      const r = await this.registry.setAppEnvPointer({
+        env: envId,
+        moduleKey: appKey,
+        currentVersion: target,
+        deployedBy: operator,
+        lock: { owner },
+      });
+      from = r.from;
+      previous = r.previous;
+      tableChanged = !r.unchanged;
+    }
+
+    // 2) 盘强制收敛（unchanged 也重写 + 读回校验）；失败回滚第 1 步
+    let pointer: { js: string; css: string | null } | null = null;
+    if (!this.isCdnLayout()) {
+      try {
+        pointer = await this.artifacts.writePointer(envId, appKey, target);
+        const readBack = await this.artifacts.readPointer(envId, appKey);
+        if (readBack !== target) {
+          throw new Error(`指针读回校验失败：读回 ${readBack ?? '（空）'} ≠ 目标 ${target}`);
+        }
+      } catch (e) {
+        if (tableChanged) {
+          await this.revertAppEnvPointer(appKey, envId, from, previous, operator, owner);
+        }
+        throw new BadRequestException(
+          `修复失败（写磁盘入口指针），${tableChanged ? '已回滚版本指针表' : '表侧未变更'}：` +
+            `${appKey}/${envId} → ${target}（${(e as Error).message}）`,
+        );
+      }
+    }
+
+    // 3) gateway 缓存失效（best-effort，与原子步同款语义）
+    try {
+      await this.gatewayCache.notifyVersionChange({
+        env: envId,
+        moduleKey: appKey,
+        version: target,
+        reason: `指针修复 ${table ?? '-'}(表)/${disk ?? '-'}(盘) → ${target}`,
+      });
+    } catch (e) {
+      this.logger.warn(
+        `gateway 缓存刷新失败（指针修复 ${appKey}/${envId} → ${target}）：${(e as Error).message}（最多 10s 后自然生效）`,
+      );
+    }
+
+    const repaired = table !== target || disk !== target;
+    this.logger.log(
+      `指针修复：${appKey}/${envId} 表=${table ?? '-'} 盘=${disk ?? '-'} → ${target}（${repaired ? '已收敛' : '本已一致，幂等重写盘指针'}）operator=${operator ?? '-'} reason=${reason ?? '-'}`,
+    );
+    return {
+      appKey,
+      envId,
+      from: { table, disk },
+      to: target,
+      repaired,
+      pointer,
+    };
+  }
+
+
   /** 内置应用类型与部署模式（供前端下拉） */
   getKinds() {
     return {

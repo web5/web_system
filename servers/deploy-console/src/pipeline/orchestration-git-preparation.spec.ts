@@ -28,11 +28,21 @@ function makeService(tree: EngineStep[] = [scriptStep('git'), scriptStep('build'
     orchestration: tree,
   };
   const afterRun = jest.fn(async () => { events.push('prepare'); });
+  const registry = { setPointer: jest.fn().mockResolvedValue(undefined) };
   Object.assign(service, {
     configService: { get: jest.fn((key: string) => key === 'RELEASE_WORKSPACE' ? '/tmp/build-workspace' : undefined) },
     moduleRegistry: { get: jest.fn().mockResolvedValue({ type: 'micro-frontend', dir: 'admin' }) },
     pipelineVars: { resolve: jest.fn().mockResolvedValue({}) },
-    registry: { setPointer: jest.fn().mockResolvedValue(undefined) },
+    registry,
+    // 半发布治理 F1-②/③：收尾收敛到 ReleaseFinalizerService —— 本桩保持旧断言口径
+    // （成功路径仍经 registry.setPointer；门禁 skipped 不影响这些用例的执行序断言）
+    releaseFinalizer: {
+      finalizeFrontendPointer: jest.fn(async (p: { env: string; moduleKey: string; versionTag: string }) => {
+        await registry.setPointer({ env: p.env, moduleKey: p.moduleKey, currentVersion: p.versionTag });
+        return { finalVersion: p.versionTag, via: 'setPointer', gate: 'skipped' };
+      }),
+      assertManifestMatches: jest.fn(async () => 'skipped'),
+    },
     builtinSteps: { pull: { afterRun } },
     cancelled: new Set<string>(),
     resolveInjectEnv: jest.fn().mockResolvedValue({}),

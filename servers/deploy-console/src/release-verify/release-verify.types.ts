@@ -48,6 +48,8 @@ export const VERIFY_CHECK_KEYS = {
   processAlive: 'process.alive',
   /** 端口是否在监听（同上） */
   portListening: 'port.listening',
+  /** gateway manifest 实供版本是否等于目标版本（半发布治理 F1-③：前端核心项） */
+  manifestMatches: 'manifest.matches',
 } as const;
 
 export type VerifyCheckKey = (typeof VERIFY_CHECK_KEYS)[keyof typeof VERIFY_CHECK_KEYS];
@@ -59,6 +61,7 @@ export const VERIFY_CHECK_TITLES: Record<VerifyCheckKey, string> = {
   [VERIFY_CHECK_KEYS.versionDirPresent]: '目标版本目录存在入口产物',
   [VERIFY_CHECK_KEYS.processAlive]: '服务进程在线',
   [VERIFY_CHECK_KEYS.portListening]: '服务端口监听中',
+  [VERIFY_CHECK_KEYS.manifestMatches]: 'gateway manifest 实供版本等于目标版本',
 };
 
 export interface VerifyCheckResult {
