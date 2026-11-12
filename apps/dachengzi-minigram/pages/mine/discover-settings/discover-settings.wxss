@@ -1,4 +1,4 @@
-/* 功能设置页（发现页暗门进入）。色值一律走 app.wxss 的设计 token。 */
+/* 发现设置页（我的 → 设置 →「发现设置 ›」进入）。色值一律走 app.wxss 的设计 token。 */
 .page {
   min-height: 100vh;
   background: var(--page-bg);
