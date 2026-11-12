@@ -91,6 +91,31 @@ describe('UserService', () => {
     });
   });
 
+  // ---- 兜底防御：openid 为空绝不进 TypeORM where ----
+  // TypeORM 会静默忽略值为 undefined 的 where 条件，退化成无条件查询返回第一行。
+  // 仓储层是最后一道闸：任何调用方漏判，这里也必须 fail-closed。
+  describe('openid 兜底防御', () => {
+    it.each([undefined, null, ''])(
+      'findByMpOpenid 收到 %s 时必须抛 BadRequestException，绝不下发查询',
+      async (openid) => {
+        await expect(service.findByMpOpenid(openid as any)).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(repository.findOne).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([undefined, null, ''])(
+      'findByOaOpenid 收到 %s 时必须抛 BadRequestException，绝不下发查询',
+      async (openid) => {
+        await expect(service.findByOaOpenid(openid as any)).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(repository.findOne).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   // ============ 创建微信用户（独立，不合并）============
 
   describe('createMpUser', () => {
