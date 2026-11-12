@@ -12,6 +12,7 @@
  * 这个测试把这条转发链钉死，配合 `mcp-tool-declaration.spec.ts`（守住声明侧）形成闭环。
  */
 import { Test } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { McpController } from './mcp.controller';
 import { McpAuthService } from './mcp-auth.service';
 import { PipelineService } from '../pipeline/pipeline.service';
@@ -324,6 +325,104 @@ describe('McpController.approvePipeline / rejectPipeline（prod 去 auto-approve
       controller.rejectPipeline('job-1', { comment: '  ' }, req as any),
     ).rejects.toThrow(/拒绝必须填写审批意见/);
     expect(reject).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * McpController.restart（V3：MCP 负例与入参归一，设计 §3.8/§3.9）。
+ *
+ * 锁定的事：
+ * - prod 缺 confirm:true → 400；prod 缺 reason → 400；
+ * - env 非法 → 400；moduleKey 缺失 → 400；
+ * - 模块未登记/非 backend → 服务层 NotFoundException（404）原样外抛；
+ * - component / dry_run 别名正确归一为 moduleKey / dryRun；
+ * - triggerSource 强制 mcp:<keyName>（与发布流水线同一套归因语言）。
+ */
+describe('McpController.restart（V3 负例 + 入参归一）', () => {
+  let controller: McpController;
+  let restartService: jest.Mock;
+
+  beforeEach(async () => {
+    restartService = jest.fn(async (input: Record<string, unknown>) => ({
+      env: input.env,
+      moduleKey: input.moduleKey,
+      versionTag: 'auth-service-prod/abc1234',
+      process: 'auth-service',
+      pid: 4321,
+      port: 6002,
+      residueKeys: [],
+      durationMs: 1800,
+      dryRun: input.dryRun === true,
+      triggerSource: input.triggerSource,
+    }));
+    const moduleRef = await Test.createTestingModule({
+      controllers: [McpController],
+      providers: [
+        { provide: PipelineService, useValue: { submit: jest.fn() } },
+        {
+          provide: DeployService,
+          useValue: { listModules: jest.fn(), getCurrentVersions: jest.fn(), restartService },
+        },
+        { provide: ApproverService, useValue: { list: jest.fn(async () => ({ users: [] })) } },
+        { provide: ReleasePlanService, useValue: { plan: jest.fn() } },
+        { provide: ReleaseVerifyService, useValue: { verify: jest.fn() } },
+        { provide: McpAuthService, useValue: { verifyKey: jest.fn() } },
+      ],
+    }).compile();
+    controller = moduleRef.get(McpController);
+  });
+
+  const req = { mcpOperator: '1', mcpKeyInfo: { ownerId: '1', keyName: 'ai-ops-automation' } };
+  const call = (body: unknown) => controller.restart(body as any, req as any);
+
+  it('V3：prod 缺 confirm:true → 400（不进入服务层）', async () => {
+    await expect(call({ env: 'prod', moduleKey: 'auth-service', reason: 'x' })).rejects.toThrow(/confirm=true/);
+    expect(restartService).not.toHaveBeenCalled();
+  });
+
+  it('V3：prod 缺 reason → 400（confirm 齐了也要 reason，写审计）', async () => {
+    await expect(call({ env: 'prod', moduleKey: 'auth-service', confirm: true })).rejects.toThrow(/reason/);
+    await expect(call({ env: 'prod', moduleKey: 'auth-service', confirm: true, reason: '  ' })).rejects.toThrow(/reason/);
+    expect(restartService).not.toHaveBeenCalled();
+  });
+
+  it('V3：env 非法 → 400', async () => {
+    await expect(call({ env: 'staging', moduleKey: 'auth-service' })).rejects.toThrow(/env 仅支持 dev\/prod/);
+    await expect(call({ env: '', moduleKey: 'auth-service' })).rejects.toThrow(/env 仅支持 dev\/prod/);
+    expect(restartService).not.toHaveBeenCalled();
+  });
+
+  it('V3：moduleKey 与别名 component 都缺 → 400', async () => {
+    await expect(call({ env: 'dev' })).rejects.toThrow(/moduleKey 必填/);
+    expect(restartService).not.toHaveBeenCalled();
+  });
+
+  it('V3：模块未登记/非 backend → 服务层 404 原样外抛', async () => {
+    restartService.mockRejectedValueOnce(new NotFoundException('模块不可重启: ghost'));
+    await expect(call({ env: 'dev', moduleKey: 'ghost' })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('prod 正常：confirm+reason 齐备 → 转发服务层，triggerSource=mcp:<keyName>', async () => {
+    const r = await call({ env: 'prod', moduleKey: 'auth-service', confirm: true, reason: 'env 残留清理' });
+    expect(restartService).toHaveBeenCalledTimes(1);
+    const input = restartService.mock.calls[0][0];
+    expect(input).toMatchObject({
+      env: 'prod', moduleKey: 'auth-service', operator: '1',
+      triggerSource: 'mcp:ai-ops-automation', dryRun: false, reason: 'env 残留清理',
+    });
+    expect(r.versionTag).toBe('auth-service-prod/abc1234');
+  });
+
+  it('component / dry_run 别名归一：按 moduleKey / dryRun 转发', async () => {
+    await call({ env: 'dev', component: 'auth-service', dry_run: true });
+    const input = restartService.mock.calls[0][0];
+    expect(input.moduleKey).toBe('auth-service');
+    expect(input.dryRun).toBe(true);
+  });
+
+  it('keyName 缺失 → triggerSource 回落 mcp:unknown（不静默丢通道）', async () => {
+    await controller.restart({ env: 'dev', moduleKey: 'auth-service' } as any, { mcpOperator: '1' } as any);
+    expect(restartService.mock.calls[0][0].triggerSource).toBe('mcp:unknown');
   });
 });
 

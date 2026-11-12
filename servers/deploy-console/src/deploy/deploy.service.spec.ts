@@ -892,3 +892,169 @@ describe('DeployService.writeGeneratedEnv（配置下发到服务进程）', () 
     expect(configCenter.dispatchPayload).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * DeployService.restartService（干净重启当前指针版本，设计 §3.3/§3.9）。
+ *
+ * 锁定的事：
+ * - 模块未登记/非 backend → 404；无指针 → 400；env 非法 → 400；
+ * - 发布锁 owner=restart:<moduleKey>；versionTag 恒等于调用前指针（服务端自校验）；
+ * - dryRun 下投 BACKEND_RUNTIME_DRY_RUN='1'；审计只记键名/计数，绝不含 env 值。
+ */
+describe('DeployService.restartService（干净重启当前指针版本）', () => {
+  let service: DeployService;
+  let moduleRegistry: { get: jest.Mock };
+  let registry: { withReleaseLock: jest.Mock; currentVersion: jest.Mock };
+  let audit: { log: jest.Mock };
+
+  const POINTER = 'auth-service-prod/abc1234';
+  const RESTART_RESULT = JSON.stringify({
+    action: 'restart',
+    process: 'auth-service',
+    pid: 4321,
+    pidBefore: 4300,
+    port: 6002,
+    versionTag: POINTER,
+    residueKeys: [],
+    durationMs: 1800,
+  });
+
+  beforeEach(async () => {
+    (global as any).__sshCmds = [];
+    (global as any).__sshExecImpl = (cmd: string) => {
+      ((global as any).__sshCmds as string[]).push(cmd);
+      return { code: 0, out: RESTART_RESULT + '\n' };
+    };
+    moduleRegistry = {
+      get: jest.fn().mockResolvedValue({ key: 'auth-service', type: 'backend', dir: 'auth-service', pm2: 'auth-service' }),
+    };
+    registry = {
+      withReleaseLock: jest.fn(async (_input: unknown, work: () => Promise<unknown>) => work()),
+      currentVersion: jest.fn().mockResolvedValue(POINTER),
+    };
+    audit = { log: jest.fn().mockResolvedValue(undefined) };
+
+    const module = await Test.createTestingModule({
+      providers: [
+        { provide: ToolCatalogService, useValue: { get: jest.fn() } },
+        DeployService,
+        { provide: EnvSplitWriterService, useValue: splitWriterStub() },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: getRepositoryToken(DeployTaskEntity), useValue: { save: jest.fn(), update: jest.fn() } },
+        { provide: getRepositoryToken(DeployVersionEntity), useValue: { save: jest.fn(), find: jest.fn() } },
+        { provide: getRepositoryToken(DeployDeploymentEntity), useValue: { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) } },
+        { provide: ReleaseRegistryService, useValue: registry },
+        { provide: EnvironmentService, useValue: { get: jest.fn(), list: jest.fn().mockResolvedValue([]) } },
+        { provide: ModuleRegistryService, useValue: moduleRegistry },
+        { provide: ServerService, useValue: { resolveServers: jest.fn().mockResolvedValue([]) } },
+        { provide: HostsService, useValue: { resolveHostForService: jest.fn().mockResolvedValue(null), resolveEnvHosts: jest.fn().mockResolvedValue([]) } },
+        { provide: SshExecService, useValue: { resolve: jest.fn().mockResolvedValue({ host: '127.0.0.1', port: 22, username: 'u', privateKey: Buffer.from('') }), run: jest.fn().mockResolvedValue('') } },
+        { provide: GatewayCacheService, useValue: { notifyVersionChange: jest.fn().mockResolvedValue({ sent: false, reason: 'not-configured' }) } },
+        { provide: StageCommandService, useValue: { resolve: jest.fn().mockResolvedValue(null) } },
+        { provide: CommandService, useValue: { pm2Bin: jest.fn(() => 'pm2'), exec: jest.fn(() => '') } },
+        { provide: ConfigCenterService, useValue: noDispatchConfigCenter() },
+        { provide: AuditService, useValue: audit },
+        { provide: AppsService, useValue: { findAppOrNull: jest.fn().mockResolvedValue(null) } },
+      ],
+    }).compile();
+    service = module.get(DeployService);
+  });
+
+  const sshCmds = () => ((global as any).__sshCmds as string[]) || [];
+
+  it('正常路径：指针解析 → SSH 下投 restart action → 审计 → 返回（versionTag = 调用前指针）', async () => {
+    const r = await service.restartService({ env: 'prod', moduleKey: 'auth-service', operator: 'tester', triggerSource: 'mcp:ops', reason: 'env 残留清理' });
+
+    // 锁 owner 语义（与发布互斥）
+    expect(registry.withReleaseLock).toHaveBeenCalledWith(
+      expect.objectContaining({ env: 'prod', moduleKey: 'auth-service', owner: 'restart:auth-service' }),
+      expect.any(Function),
+    );
+    // 下投命令：restart action + 指针版本 + 服务目录；不带 dryRun
+    const cmd = sshCmds()[0] || '';
+    expect(cmd).toContain("BACKEND_RUNTIME_ACTION='restart'");
+    expect(cmd).toContain("MODULE_KEY='auth-service'");
+    expect(cmd).toContain(`COMMIT_ID='${POINTER}'`);
+    expect(cmd).toContain("RUNTIME_SERVICE_DIR='/data/web_system/servers/auth-service'");
+    expect(cmd).toContain("BACKEND_RUNTIME_DRY_RUN='0'");
+    // 返回值
+    expect(r).toMatchObject({
+      env: 'prod', moduleKey: 'auth-service', versionTag: POINTER,
+      process: 'auth-service', pid: 4321, pidBefore: 4300, port: 6002,
+      residueKeys: [], durationMs: 1800, dryRun: false, triggerSource: 'mcp:ops',
+    });
+    // 审计：operator / triggerSource / versionTag / pid 前后 / residue 计数 / reason
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    const entry = audit.log.mock.calls[0][0];
+    expect(entry.action).toBe('deploy.restart');
+    expect(entry.status).toBe('success');
+    const detail = JSON.parse(entry.detail);
+    expect(detail).toMatchObject({
+      operator: 'tester', triggerSource: 'mcp:ops', versionTag: POINTER,
+      dryRun: false, reason: 'env 残留清理', pidBefore: 4300, pidAfter: 4321, residueCount: 0, durationMs: 1800,
+    });
+  });
+
+  it('dryRun：下投 DRY_RUN=1，审计 status=dry-run', async () => {
+    (global as any).__sshExecImpl = (cmd: string) => {
+      sshCmds().push(cmd);
+      return { code: 0, out: JSON.stringify({ action: 'restart', dryRun: true, process: 'auth-service', pid: 4300, port: 6002, versionTag: POINTER, envKeys: ['HOME', 'PATH', 'PORT'], plan: ['pm2 delete auth-service'] }) + '\n' };
+    };
+    const r = await service.restartService({ env: 'dev', moduleKey: 'auth-service', operator: 'tester', dryRun: true });
+    expect(sshCmds()[0]).toContain("BACKEND_RUNTIME_DRY_RUN='1'");
+    expect(r.dryRun).toBe(true);
+    expect(r.plan).toEqual(['pm2 delete auth-service']);
+    expect(r.envKeys).toEqual(['HOME', 'PATH', 'PORT']);
+    expect(audit.log.mock.calls[0][0].status).toBe('dry-run');
+  });
+
+  it('模块未登记 → 404（不发 SSH、不写审计）', async () => {
+    moduleRegistry.get.mockRejectedValue(new Error('模块不存在: ghost'));
+    await expect(service.restartService({ env: 'dev', moduleKey: 'ghost' })).rejects.toThrow(/模块不可重启/);
+    await expect(service.restartService({ env: 'dev', moduleKey: 'ghost' })).rejects.toMatchObject({ status: 404 });
+    expect(sshCmds()).toHaveLength(0);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('模块已登记但非 backend → 404', async () => {
+    moduleRegistry.get.mockResolvedValue({ key: 'admin', type: 'micro-frontend', dir: 'admin' });
+    await expect(service.restartService({ env: 'dev', moduleKey: 'admin' })).rejects.toMatchObject({ status: 404 });
+    expect(sshCmds()).toHaveLength(0);
+  });
+
+  it('无当前版本指针 → 400（restart 恒等于指针版本，无指针无从重启）', async () => {
+    registry.currentVersion.mockResolvedValue(undefined);
+    await expect(service.restartService({ env: 'dev', moduleKey: 'auth-service' })).rejects.toThrow(/没有当前版本指针/);
+    expect(sshCmds()).toHaveLength(0);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('env 非法（非 dev/prod）→ 400', async () => {
+    await expect(service.restartService({ env: 'local', moduleKey: 'auth-service' })).rejects.toThrow(/env 仅支持 dev\/prod/);
+    expect(sshCmds()).toHaveLength(0);
+  });
+
+  it('远端前置断言失败 → 400（映射 restart 前置断言失败），审计 status=failed', async () => {
+    (global as any).__sshExecImpl = () => ({ code: 1, out: 'restart 前置断言失败：dist 软链未指向当前指针版本' });
+    const error = await service.restartService({ env: 'prod', moduleKey: 'auth-service', reason: 'x' }).catch((e: Error) => e);
+    expect(String(error)).toMatch(/restart 前置断言失败/);
+    expect((error as { status?: number }).status).toBe(400);
+    expect(audit.log.mock.calls[0][0].status).toBe('failed');
+    // 审计错误摘要不含任何 env 值（只有断言文本）
+    expect(audit.log.mock.calls[0][0].detail).not.toContain('REDIS');
+  });
+
+  it('远端返回 versionTag ≠ 调用前指针 → 拒绝采信（防并发发布把重启变隐式切版本）', async () => {
+    (global as any).__sshExecImpl = () => ({
+      code: 0,
+      out: JSON.stringify({ action: 'restart', process: 'auth-service', pid: 1, port: 6002, versionTag: 'auth-service-prod/other999', residueKeys: [] }) + '\n',
+    });
+    await expect(service.restartService({ env: 'prod', moduleKey: 'auth-service' })).rejects.toThrow(/拒绝采信/);
+    expect(audit.log).not.toHaveBeenCalled(); // 结果不可信，不按成功落审计
+  });
+
+  it('远端返回不可解析 → 显式报错（不静默吞半执行状态）', async () => {
+    (global as any).__sshExecImpl = () => ({ code: 0, out: 'garbage-output' });
+    await expect(service.restartService({ env: 'dev', moduleKey: 'auth-service' })).rejects.toThrow(/远端返回不可解析/);
+  });
+});

@@ -463,6 +463,25 @@ const DEPLOY_HTTP_TOOLS: Array<{
     ],
   },
   {
+    name: 'restart_service',
+    description:
+      '干净重启后端服务到**当前指针版本**（不改版本、不改配置、不动 dist）：pm2 delete + env -i 白名单' +
+      '（PATH/HOME/PORT）重建进程并探活，进程环境残留（如脏 env 键）随 delete 清除。' +
+      '用于「配置已修但进程不生效 / 进程环境污染」的受控恢复；**不能用来切版本**（restart 恒等于当前指针，切版本用 publish_version/rollback）。' +
+      '前置断言不过（无指针 / dist 与指针不一致 / 进程归属≠1 / 端口未知）会 400 且不碰进程；' +
+      '失败自动重试一次。prod 必须 confirm:true + reason（写审计）。' +
+      '先 dry_run=true 看计划与前置断言，再真执行',
+    method: 'POST',
+    path: '/api/mcp/restart',
+    params: [
+      { name: 'env', type: 'string', required: true, description: '环境 dev/prod' },
+      { name: 'component', type: 'string', required: true, description: '后端服务模块 key（仅 type=backend，如 auth-service；不确定先用 list_modules 查）' },
+      { name: 'confirm', type: 'boolean', required: false, description: 'prod 环境必须传 true' },
+      { name: 'dry_run', type: 'boolean', required: false, description: 'true=只跑只读前置断言并返回执行计划，不碰进程（建议 prod 先跑一次）' },
+      { name: 'reason', type: 'string', required: false, description: '重启原因（prod 必填，写审计）' },
+    ],
+  },
+  {
     name: 'promote_release',
     description: '灰度转全量：把 stable 指针切到灰度版本并禁用灰度规则。入参为灰度流水线的 jobId',
     method: 'POST',
