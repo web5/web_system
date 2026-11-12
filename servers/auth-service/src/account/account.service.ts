@@ -138,7 +138,12 @@ export class AccountService {
         // InternalGuard 读 x-internal-key 头（与 mcp-gateway 调用 /internal/* 的口径一致）
         { headers: { 'x-internal-key': key }, timeout: 8000 },
       );
-      if (!data?.ok) throw new BadRequestException(data?.message || '验证码错误或已过期');
+      // user-service 全局 TransformInterceptor 把 2xx 成功响应包成 {code, data, message:'success'}，
+      // 直接读 data.ok 恒为 undefined → 误抛 BadRequestException('success')（dev 绑定邮箱 100% 失败根因）。
+      // 成功路径先解信封；裸返回（未来拦截器摘除）原样兼容。错误体（4xx）由 AllExceptionsFilter
+      // 产出、不经信封，下方 catch 的 err.response.data?.message 取值不变。
+      const payload = data && typeof data === 'object' && 'data' in data ? (data as any).data : data;
+      if (!payload?.ok) throw new BadRequestException(payload?.message || '验证码错误或已过期');
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err;
       if (err?.response?.status === 400) {

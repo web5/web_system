@@ -7,9 +7,13 @@
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { DataSource } from 'typeorm';
+import axios from 'axios';
 import { AccountService } from './account.service';
 import { AuthService } from '../auth/auth.service';
 import { WechatMpService } from './wechat-mp.service';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('AccountService', () => {
   let service: AccountService;
@@ -114,6 +118,49 @@ describe('AccountService', () => {
       expect(result).toMatchObject({ conflict: false, merged: true, source: 'email', accessToken: 'at2' });
       expect(dataSource.createQueryRunner).toHaveBeenCalled();
       expect(runner.commitTransaction).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * verifyEmailCodeWithUserService 信封兼容（bug 根因回归哨兵）：
+   * user-service 全局 TransformInterceptor 把 2xx 包成 {code, data, message:'success'}，
+   * 未解信封时 data.ok 恒 undefined → dev 绑定邮箱 100% 抛 BadRequestException('success')。
+   */
+  describe('bindEmail - verifyEmailCodeWithUserService 解信封', () => {
+    it('信封 {code:0,data:{ok:true},message:"success"}（现网形态）→ 通过不抛，继续落库', async () => {
+      mockedAxios.post.mockResolvedValue({
+        data: { code: 0, data: { ok: true }, message: 'success' },
+      });
+      dataSource.query.mockResolvedValueOnce([]); // 无冲突
+
+      const result = await service.bindEmail(1, 'a@example.com', '123456', false);
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/internal/users/email/verify'),
+        { email: 'a@example.com', code: '123456', userId: 1 },
+        expect.objectContaining({ headers: { 'x-internal-key': expect.any(String) } }),
+      );
+      expect(result).toMatchObject({ conflict: false, bound: true, source: 'email' });
+    });
+
+    it('信封 {code:0,data:{ok:false,message:"验证码错误或已过期"}} → 抛中文文案，不落库', async () => {
+      mockedAxios.post.mockResolvedValue({
+        data: { code: 0, data: { ok: false, message: '验证码错误或已过期' }, message: 'success' },
+      });
+
+      await expect(service.bindEmail(1, 'a@example.com', '000000', false)).rejects.toThrow(
+        '验证码错误或已过期',
+      );
+      expect(dataSource.query).not.toHaveBeenCalled();
+    });
+
+    it('裸返回 {ok:true}（无信封，向后兼容）→ 通过不抛', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { ok: true } });
+      dataSource.query.mockResolvedValueOnce([]); // 无冲突
+
+      const result = await service.bindEmail(1, 'a@example.com', '123456', false);
+
+      expect(result).toMatchObject({ conflict: false, bound: true, source: 'email' });
     });
   });
 });
