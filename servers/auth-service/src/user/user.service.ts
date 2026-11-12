@@ -27,15 +27,24 @@ export class UserService {
 
   /**
    * 根据小程序 openid 查找用户
+   * 兜底防御：openid 为空绝不进 TypeORM where（undefined 条件会被静默忽略，
+   * 退化为无条件查询返回第一行 → 越权），任何调用方漏判这里也 fail-closed。
    */
   async findByMpOpenid(openid: string): Promise<User | null> {
+    if (!openid) {
+      throw new BadRequestException('mpOpenid 不能为空');
+    }
     return this.userRepository.findOne({ where: { mpOpenid: openid } });
   }
 
   /**
    * 根据公众号 openid 查找用户
+   * 兜底防御：同 findByMpOpenid。
    */
   async findByOaOpenid(openid: string): Promise<User | null> {
+    if (!openid) {
+      throw new BadRequestException('oaOpenid 不能为空');
+    }
     return this.userRepository.findOne({ where: { oaOpenid: openid } });
   }
 

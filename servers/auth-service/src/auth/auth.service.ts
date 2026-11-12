@@ -119,7 +119,13 @@ export class AuthService {
         { params: { appid: oaConfig.appId, secret: oaConfig.secret, code: wechatDto.code, grant_type: 'authorization_code' } },
       );
 
-      const { access_token, openid } = tokenResponse.data;
+      // 安全闸：code 无效时微信返回 errcode，且 access_token/openid 缺失。
+      // 缺任一必须拒绝——openid 为 undefined 进 findByOaOpenid 会触发
+      // TypeORM undefined-where 静默忽略，退化为无条件查询返回第一行（越权）。
+      const { access_token, openid, errcode, errmsg } = tokenResponse.data;
+      if (errcode || !access_token || !openid) {
+        throw new BadRequestException(`微信登录失败：${errmsg || 'access_token/openid 缺失'}`);
+      }
 
       const userInfoResponse = await axios.get(
         'https://api.weixin.qq.com/sns/userinfo',
@@ -164,6 +170,10 @@ export class AuthService {
       }
 
       const { openid } = sessionData;
+      // 安全闸：无 errcode 不代表有 openid；空 openid 进 findByMpOpenid 同样触发 undefined-where 退化
+      if (!openid) {
+        throw new BadRequestException('微信登录失败：openid 缺失');
+      }
 
       let user = await this.userService.findByMpOpenid(openid);
       let isNewUser = false;
@@ -501,6 +511,9 @@ export class AuthService {
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);
       }
+      if (!resp.data.openid) {
+        throw new BadRequestException('获取 openid 失败：openid 缺失');
+      }
       await this.userService.bindMpOpenid(userId, resp.data.openid);
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -516,6 +529,9 @@ export class AuthService {
       });
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);
+      }
+      if (!resp.data.openid) {
+        throw new BadRequestException('获取 openid 失败：openid 缺失');
       }
       await this.userService.bindOaOpenid(userId, resp.data.openid);
     } catch (error) {

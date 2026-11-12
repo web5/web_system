@@ -210,6 +210,44 @@ describe('AuthService', () => {
 
       await expect(service.wechatLogin({ code: 'bad_code' })).rejects.toThrow(BadRequestException);
     });
+
+    // ---- 安全回归：任意假 code 越权拿 admin token ----
+    // 原实现两处根因叠加：①oauth2/access_token 响应未判 errcode（code 无效时
+    // access_token/openid 为 undefined，流程继续）；②findByOaOpenid(undefined)
+    // 触发 TypeORM 静默忽略 where 条件 → 退化为无条件查询 → 返回 users 表第一行（admin）。
+    it('微信 access_token 返回 errcode（40029/40125）时必须拒绝，不查库、不签发 token', async () => {
+      for (const errcode of [40029, 40125]) {
+        mockedAxios.get.mockResolvedValueOnce({
+          data: { errcode, errmsg: 'invalid code' },
+        });
+
+        await expect(service.wechatLogin({ code: 'fake_code' })).rejects.toThrow(
+          BadRequestException,
+        );
+      }
+      expect(userService.findByOaOpenid).not.toHaveBeenCalled();
+      expect(userService.createOaUser).not.toHaveBeenCalled();
+      expect(jwtService.signAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['openid 缺失', { access_token: 'oa_access_token' }],
+      ['openid 为空串', { access_token: 'oa_access_token', openid: '' }],
+      ['access_token 缺失', { openid: 'oa_openid_123' }],
+      ['两者皆缺', {}],
+    ])(
+      'access_token 响应无 errcode 但 %s 时必须拒绝，绝不进 findByOaOpenid',
+      async (_label, tokenData) => {
+        mockedAxios.get.mockResolvedValue({ data: tokenData });
+
+        await expect(service.wechatLogin({ code: 'fake_code' })).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(userService.findByOaOpenid).not.toHaveBeenCalled();
+        expect(userService.createOaUser).not.toHaveBeenCalled();
+        expect(jwtService.signAsync).not.toHaveBeenCalled();
+      },
+    );
   });
 
   // ============ 小程序登录 ============
@@ -271,6 +309,25 @@ describe('AuthService', () => {
         service.miniprogramLogin({ code: 'bad_code', nickname: '', avatar: '' }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    // 安全回归：errcode 缺省但 openid 缺失/为空时，绝不能让 undefined/空串
+    // 进入 findByMpOpenid（TypeORM 会静默忽略值为 undefined 的 where 条件）
+    it.each([
+      ['openid 缺失', { session_key: 'mock_key' }],
+      ['openid 为空串', { session_key: 'mock_key', openid: '' }],
+    ])(
+      'jscode2session 无 errcode 但 %s 时必须拒绝且不查库、不签发 token',
+      async (_label, sessionData) => {
+        mockedAxios.get.mockResolvedValue({ data: sessionData });
+
+        await expect(
+          service.miniprogramLogin({ code: 'fake_code', nickname: '', avatar: '' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(userService.findByMpOpenid).not.toHaveBeenCalled();
+        expect(userService.createMpUser).not.toHaveBeenCalled();
+        expect(jwtService.signAsync).not.toHaveBeenCalled();
+      },
+    );
   });
 
   // ============ 绑定方法 ============
@@ -294,6 +351,13 @@ describe('AuthService', () => {
 
       await expect(service.bindMpOpenid(1, 'bad_code')).rejects.toThrow(BadRequestException);
     });
+
+    it('微信响应无 errcode 但缺 openid 时必须拒绝且不调用绑定', async () => {
+      mockedAxios.get.mockResolvedValue({ data: { session_key: 'mock_key' } });
+
+      await expect(service.bindMpOpenid(1, 'fake_code')).rejects.toThrow(BadRequestException);
+      expect(userService.bindMpOpenid).not.toHaveBeenCalled();
+    });
   });
 
   describe('bindOaOpenid', () => {
@@ -314,6 +378,13 @@ describe('AuthService', () => {
       });
 
       await expect(service.bindOaOpenid(1, 'bad_code')).rejects.toThrow(BadRequestException);
+    });
+
+    it('微信响应无 errcode 但缺 openid 时必须拒绝且不调用绑定', async () => {
+      mockedAxios.get.mockResolvedValue({ data: { access_token: 'token' } });
+
+      await expect(service.bindOaOpenid(1, 'fake_code')).rejects.toThrow(BadRequestException);
+      expect(userService.bindOaOpenid).not.toHaveBeenCalled();
     });
   });
 
