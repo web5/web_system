@@ -628,8 +628,8 @@ describe('cmdUpload --notify 通知文案（开发版本 ≠ 体验版；脚本�
     expect(content).toContain('正式版');
     expect(content).toContain('脚本不代做');
     expect(content).toContain('体验成员');
-    expect(content).toContain('连 dev');
-    expect(content).toContain('连 prod');
+    expect(content).toContain('**体验版**（可选，连 prod）');
+    expect(content).toContain('**正式版**（连 prod）');
     expect(content).toContain('分步指引：npm run publish -- trial ｜ npm run publish -- release');
     // 「设为体验版 / 提交审核」并列成一步的旧误导不得回归
     expect(content).not.toContain('设为体验版并提交审核');
@@ -708,7 +708,7 @@ describe('cmdTrial / cmdRelease：纯打印人工分步指引（零副作用）'
     expect(out).toContain('【人工步骤】');
     expect(out).toContain(`  · package.json 版本已递增（当前 v${pkg.version}；微信要求递增，重复会被拒）`);
     expect(out).toContain('  · 体验成员已添加：公众平台 → 管理 → 成员管理 → 体验成员');
-    expect(out).toContain('  · 体验版连 https://dev.kedouai.com（dev），请在 request 合法域名登记');
+    expect(out).toContain('  · 体验版连 https://kedouai.com（prod），请在 request 合法域名登记');
     expect(out).toContain(`  2. 选中 v${pkg.version} → 点击「设为体验版」`);
     expect(out).toContain('勿手填 path');
     expect(out).toContain('官方口径 7 天');
@@ -732,7 +732,7 @@ describe('cmdTrial / cmdRelease：纯打印人工分步指引（零副作用）'
     expect(out).toContain('【回滚】');
     expect(out).toContain('版本回退');
     expect(out).toContain('撤回审核');
-    expect(out).toContain('【环境】正式版连 https://kedouai.com（prod）；体验版/开发版连 dev。');
+    expect(out).toContain('【环境】正式版/体验版连 https://kedouai.com（prod）；开发版连 dev。');
   });
 
   it('零副作用：cmdTrial / cmdRelease 不调 execFileSync（含 wecom/media/git/which/cli）、不写文件、不 exit', () => {
