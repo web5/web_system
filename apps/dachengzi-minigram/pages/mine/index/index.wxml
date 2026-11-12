@@ -15,19 +15,18 @@
   </view>
 
   <view class="list">
-    <view class="r" bindtap="goHistory"><text>我的翻译记录</text><text class="v">{{trCount}} ›</text></view>
+    <!-- 我的翻译记录：随 translate 开关恢复（默认关态隐藏） -->
+    <view wx:if="{{flags.translate}}" class="r" bindtap="goHistory"><text>我的翻译记录</text><text class="v">{{trCount}} ›</text></view>
     <view class="r" bindtap="goNce"><text>课文学习进度</text><text class="v">{{nceSummary}} ›</text></view>
     <view class="r" bindtap="goGlossary"><text>生词本</text><text class="v">{{glossarySummary}} ›</text></view>
   </view>
 
   <view class="list">
-    <view class="r" bindtap="goTrSettings"><text>翻译设置</text><text class="v">›</text></view>
+    <!-- 翻译设置：随 translate 开关恢复（默认关态隐藏） -->
+    <view wx:if="{{flags.translate}}" class="r" bindtap="goTrSettings"><text>翻译设置</text><text class="v">›</text></view>
     <view class="r" bindtap="goAppSettings"><text>设置</text><text class="v">›</text></view>
     <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
     <view class="r" bindtap="goAbout"><text>关于与免责</text><text class="v">›</text></view>
   </view>
   </block>
-
-  <view class="foot">本服务使用生成式人工智能
-已依法完成大模型与算法备案</view>
 </view>
