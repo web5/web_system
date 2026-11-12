@@ -139,11 +139,11 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 |---|---|---|---|
 | **开发版** | 本地 `cli preview` 出的二维码（`npm run publish -- preview`） | `https://dev.kedouai.com` | 约 25 分钟；开发者本人 + 体验成员 |
 | **开发版本** | `cli upload` 传到公众平台后台「开发版本」列表的条目 | —（后台条目） | 长期；需人工设为体验版或提审 |
-| **体验版** | 后台**人工**把开发版本设为体验版 | `https://dev.kedouai.com` | 体验版二维码官方口径 7 天；体验成员可扫 |
+| **体验版** | 后台**人工**把开发版本设为体验版 | `https://kedouai.com` | 体验版二维码官方口径 7 天；体验成员可扫 |
 | **正式版** | 后台**人工**提交审核 → 审核通过 → 发布 | `https://kedouai.com` | 线上用户 |
 
 > 版本与环境切换的真源以本包 `app.ts` 的 `resolveApiBase()` 为准；
-> 「开发版 / 体验版连 dev、正式版连 prod」不要混写。
+> 「开发版连 dev、体验版 / 正式版连 prod」不要混写。
 
 ### 体验版设置步骤（`npm run publish -- trial` 打印指引）
 
@@ -151,7 +151,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - **入口**：`https://mp.weixin.qq.com/` → 管理 → 版本管理 → 开发版本 → 选中版本 →
   点击「设为体验版」。
 - **前置检查**：`package.json` 版本已递增（重复会被拒）；开发版本已上传（否则先 `npm run publish -- upload`）；
-  体验成员已添加；`https://dev.kedouai.com` 已在「request 合法域名」登记。
+  体验成员已添加；`https://kedouai.com` 已在「request 合法域名」登记。
 - **体验成员**：公众平台 → 管理 → 成员管理 → 体验成员 → 添加；谁能扫、上限以微信侧为准。
 - **二维码**：用系统生成的标准二维码，**勿手填 path**（带 path 的旧码会一直生效，
   指向未注册页面会冷启动白屏；本包默认页为 `pages/home/index/index`）。
@@ -169,7 +169,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - **驳回处理**：按驳回原因修改 → 重新上传开发版本 → 重新提审。
 - **发布**：审核通过后点击「发布」（全量或分阶段灰度）。
 - **发布后真机验证**：正式版连 prod，确认不打到 dev。
-  ⚠️ 体验版连 dev 不代表 prod 已具备该功能；发布前确认 prod 后端、接口、合法域名、
+  ⚠️ 体验版同样连 prod：设为体验版前就须确认 prod 后端、接口、合法域名、
   AppSecret 均已就绪，再用真机验证。
 - **小程序侧回滚**：审核中可在「审核版本」区撤回审核；已发布可在
   公众平台 → 管理 → 版本管理 → 线上版本 → 版本回退（回到上一线上版本）。
