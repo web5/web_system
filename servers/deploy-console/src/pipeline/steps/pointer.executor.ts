@@ -4,6 +4,7 @@ import * as path from 'path';
 import { CanaryService } from '../../canary/canary.service';
 import { ModuleRegistryService } from '../../module-registry/module-registry.service';
 import { ReleaseRegistryService } from '../../registry/release-registry.service';
+import { AppsService } from '../../apps/apps.service';
 import { CdnAssetVerifier } from '../cdn-asset-verifier.service';
 import { defaultReleaseWorkspace } from '../release-paths';
 import { StepContext } from './step.types';
@@ -25,6 +26,7 @@ export class PointerExecutor {
     private readonly configService: ConfigService,
     private readonly moduleRegistry: ModuleRegistryService,
     private readonly cdnVerifier: CdnAssetVerifier,
+    private readonly appsService: AppsService,
   ) {}
 
   async run(ctx: StepContext): Promise<void> {
@@ -48,6 +50,27 @@ export class PointerExecutor {
     }
 
     await ctx.enterStage('切换当前版本指针');
+    // 半发布治理 F1-②（2026-11-12，05a 专项 P0-1）：env-dir 应用切版本收敛到
+    // **唯一原子步** `AppsService.switchVersion`（表 → 磁盘入口指针 → 云库镜像，
+    // 失败补偿回滚）。此前这里直连 `registry.setPointer` —— 只写表不写盘，
+    // 与「脚本自写盘不落表」互为镜像的两条半发布路径（11-09/11-07 实证）。
+    // lockOwner 传流水线 run id：流水线自持 `moduleKey × env` 锁（owner=run id），
+    // 同 owner 重入才不会被自己那把锁判成并发。
+    const app = await this.appsService.findAppOrNull(p.moduleKey);
+    if (app?.deployMode === 'env-dir') {
+      const r = await this.appsService.switchVersion(
+        p.moduleKey,
+        p.env,
+        p.versionTag!,
+        p.operator,
+        String(p.id),
+      );
+      ctx.log(
+        `指针已切换（原子步: 表→盘→镜像）: ${p.env}/${p.moduleKey} ${r.from ?? '-'} → ${p.versionTag}${r.unchanged ? '（无变化）' : ''}`,
+      );
+      await ctx.save();
+      return;
+    }
     await this.registry.setPointer({
       env: p.env,
       moduleKey: p.moduleKey,

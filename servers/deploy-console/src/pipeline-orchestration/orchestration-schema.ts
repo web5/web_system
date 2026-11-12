@@ -7,6 +7,77 @@
 
 import { validateCondition } from '../pipeline/steps/condition';
 
+/**
+ * 磁盘入口指针的确切路径形态（legacy env-dir 布局）：
+ * `static/modules/<app>/<env>/index.js|index.css`（entry-pointer.ts 的 envArtifactsDir）。
+ */
+const POINTER_PATH_RE = /static\/modules\/[\w.-]+\/[\w.-]+\/index\.(?:js|css)/;
+/** 从一行文本里取第一个盘指针路径（供错误文案回显） */
+function pointerPathOf(line: string): string | null {
+  const m = POINTER_PATH_RE.exec(line);
+  return m ? m[0] : null;
+}
+
+/**
+ * 半发布治理 F1-①：检出「脚本自写磁盘入口指针」（2026-11-12，05a 专项 P0-1）。
+ *
+ * 背景：11-09 portal 半发布 = 发布脚本自写盘指针却不落 `deploy_app_env_versions`，
+ * 错位存活 2 天无判据发现。磁盘入口指针的**唯一写入口**是平台原子步
+ * （`AppsService.switchVersion`，表→盘→云库镜像 + 失败补偿）；
+ * 脚本要切指针必须调 `POST /internal/release/pointer`（env-dir 自动含盘写）
+ * 或使用内置 pointer 步骤。
+ *
+ * 检出形态（白名单式，只认确切指针路径，避免误伤正常脚本）：
+ *  1. 重定向 / heredoc 写入指针文件（`>` `>>`）；
+ *  2. `tee` 写指针文件；
+ *  3. `cp` / `mv` / `ln` 以指针文件为**目标**（最后一个参数）；
+ *  4. `node -e` 直调 `writeEnvEntryPointer`。
+ *
+ * 已知盲区（静态分析无法覆盖，由三方对账巡检兜底发现漂移）：
+ * 指针路径经变量拼接触盘（如 `cat > "$DIR/index.js"`，DIR 含 static/modules/...）。
+ *
+ * @returns 命中描述列表（含行号与路径），空数组 = 通过
+ */
+export function findSelfPointerWrites(script: string): string[] {
+  const hits: string[] = [];
+  const lines = script.split('\n');
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) return;
+    const where = `第 ${i + 1} 行`;
+
+    // 形态 4：node -e 直调指针写函数（与路径形态无关，函数名即红线）
+    if (/\bnode\s+(-[\w.]+\s+)*-e\b/.test(line) && line.includes('writeEnvEntryPointer')) {
+      hits.push(`${where}：node -e 直调 writeEnvEntryPointer 写磁盘入口指针`);
+      return;
+    }
+
+    const ptr = pointerPathOf(line);
+    if (!ptr) return;
+
+    // 形态 1：重定向写入（`>`/`>>` 目标含指针路径）
+    if (/(?:^|[^>])>>?\s*"?'?[^"'|;&]*static\/modules\//.test(line) && />>?/.test(line)) {
+      hits.push(`${where}：重定向写入磁盘入口指针（${ptr}）`);
+      return;
+    }
+    // 形态 2：tee 写指针文件
+    if (/\btee\b/.test(line) && POINTER_PATH_RE.test(line.slice(line.search(/\btee\b/)))) {
+      hits.push(`${where}：tee 写入磁盘入口指针（${ptr}）`);
+      return;
+    }
+    // 形态 3：cp/mv/ln 以指针文件为目标（按空白分词，目标 = 最后一个参数）
+    if (/\b(cp|mv|ln)\b/.test(line)) {
+      const tokens = line.split(/\s+/).filter(Boolean);
+      const last = tokens[tokens.length - 1]?.replace(/^["']|["']$/g, '');
+      if (POINTER_PATH_RE.test(last)) {
+        hits.push(`${where}：cp/mv/ln 以磁盘入口指针为目标（${ptr}）`);
+      }
+    }
+  });
+  return hits;
+}
+
+
 export interface ActionInput {
   name: string;
   script: string;
@@ -127,6 +198,14 @@ export function validateTree(
               checkScript(action.script);
             } catch (e) {
               errs.push(`${aPrefix}：脚本语法错误：${(e as Error).message.replace(/^shell 语法错误：/, '')}`);
+            }
+            // 半发布治理 F1-①：脚本自写磁盘入口指针 = 半发布直通车，保存即拒
+            const ptrHits = findSelfPointerWrites(action.script);
+            for (const hit of ptrHits) {
+              errs.push(
+                `${aPrefix}：禁止脚本自写磁盘入口指针（${hit}）—— ` +
+                  '切指针请调 POST /internal/release/pointer（env-dir 应用由平台原子步自动含磁盘指针写入）或改用内置 pointer 步骤',
+              );
             }
             if (checkVars) {
               const miss = checkVars(action.script);
