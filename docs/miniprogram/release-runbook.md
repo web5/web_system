@@ -196,16 +196,16 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - **完整后台入口**：`https://mp.weixin.qq.com/` → 管理 → 版本管理 → 开发版本 →
   选中目标版本 → 点击「设为体验版」。
 - **前置检查**：`package.json` 版本已递增（微信要求递增，重复会被拒）；开发版本已上传
-  （否则先 `npm run publish -- upload`）；`https://dev.kedouai.com` 已在 request 合法域名登记。
+  （否则先 `npm run publish -- upload`）；`https://kedouai.com` 已在 request 合法域名登记。
 - **体验成员配置**：公众平台 → 管理 → 成员管理 → 体验成员 → 添加（微信号）；谁能扫、
   上限以微信侧为准。只有开发者本人 + 体验成员能扫。
 - **二维码**：用系统生成的标准二维码，**勿手填 path**：带 path 的旧码会一直生效，
   指向未注册页面会冷启动白屏（本包默认页为 `pages/home/index/index`）。
-- **连哪个后端**：体验版连 `https://dev.kedouai.com`（dev）。
+- **连哪个后端**：体验版连 `https://kedouai.com`（prod）。
 - **验收项**：体验成员真机扫码，验证气泡对话 / NCE 书籍列表 / 头像昵称同步等核心链路。
 - **有效期**：体验版二维码以微信侧为准（官方口径 7 天）。
 - **失败怎么办**：扫码白屏先查二维码 path（是否手填、页面是否已注册/改名），
-  再查 request 合法域名与 dev 后端是否可达；仍白屏才回到代码层。
+  再查 request 合法域名与 prod 后端是否可达；仍白屏才回到代码层。
 - 分步指引：`npm run publish -- trial`（纯打印，零副作用）。
 
 ### 3.5 提交审核 → 发布正式版步骤（人工）
@@ -219,7 +219,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 - **驳回处理**：按驳回原因修改 → 重新上传开发版本 → 重新提审。
 - **发布**：审核通过后点击「发布」（全量或分阶段灰度）。
 - **发布后真机验证**：正式版连 prod，确认不打到 dev。
-  ⚠️ 体验版连 dev 不代表 prod 已具备该功能；发布前确认 prod 后端、接口、合法域名、
+  ⚠️ 体验版同样连 prod：设为体验版前就须确认 prod 后端、接口、合法域名、
   AppSecret 均已就绪，再用真机验证。
 - **小程序侧回滚**：审核中可在「审核版本」区撤回审核；已发布可在
   公众平台 → 管理 → 版本管理 → 线上版本 → 版本回退（回到上一线上版本）。
@@ -310,12 +310,13 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 |---|---|---|
 | 开发者工具 | (platform=devtools) | `https://dev.kedouai.com` |
 | 开发版 | develop | `https://dev.kedouai.com` |
-| 体验版 | trial | `https://dev.kedouai.com` |
+| 体验版 | trial | `https://kedouai.com` |
 | **正式版** | release | `https://kedouai.com` |
 
 > 🔴 文档漂移已订正（2026-11-10）：开发者工具一行原写一个 `http://` 开头的本地网关域名（已废弃），
 > 与真源 `apps/dachengzi-minigram/app.ts` 的 `resolveApiBase()` 不符（该函数里该本地域名零命中，
-> devtools 与 develop/trial 一律走 dev 公网网关）。本表是 §九「9.1 环境对照」的真源。
+> devtools 与 develop 走 dev 公网网关）。本表是 §九「9.1 环境对照」的真源。
+> 2026-11-12 起 trial 体验版切到 prod（与 release 一致），仅 develop 预览码与开发者工具连 dev。
 
 老基础库不支持该 API 时兜底 dev（宁可连错环境也不白屏）。
 
@@ -372,8 +373,8 @@ curl -s "https://api.weixin.qq.com/sns/jscode2session?appid=$MINI_PROGRAM_APP_ID
 
 ## 六、后端部署：把 dev 验证过的东西送到 prod
 
-小程序连的后端（dev/prod）与小程序代码是**两条独立发布线**：体验版连 dev，正式版连 prod。
-prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正式版 404」。
+小程序连的后端（dev/prod）与小程序代码是**两条独立发布线**：开发版连 dev，体验版/正式版连 prod。
+prod 落后时（曾落后 88 个提交）会出现「开发版有语音、体验版/正式版 404」。
 
 **流程（可回滚优先）**：
 
@@ -410,6 +411,7 @@ prod 落后时（曾落后 88 个提交）会出现「体验版有语音、正�
 | 2026-11-10 | §八 一键发布 `scripts/publish.js`（出码 + 推企业微信）；速查表补「出码 + 推企业微信」一行 |
 | 2026-11-10 | `publish.js` 新增 `--mode cli|ci`：默认 cli（微信开发者工具 CLI，免 IP 白名单），ci 降级为 `--mode ci`；§1.3 修正白名单口径 |
 | 2026-11-10 | 头部改为「同时适用两个包」；L1 标题覆盖版本管理；§5.3 修正 devtools apiBase 漂移（弃用的本地网关域名 → `https://dev.kedouai.com`，真源 `app.ts` 的 `resolveApiBase()`）；能力边界前置到速查表之后；新增 §3.4/§3.5 人工步骤、§九「版本管理指引（体验版 / 正式版）」；`publish.js` 新增 `trial` / `release` 纯打印零副作用子命令 |
+| 2026-11-12 | trial 体验版 apiBase 由 dev 切到 prod（`resolveApiBase()`：trial/release → `https://kedouai.com`，develop/开发者工具保持 dev）；§3.4/§3.5/§5.3/§六/§9.1-9.3 与 `publish.js`/`preview.js`/README 体验版口径同步更新 |
 
 ---
 
@@ -492,7 +494,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 |---|---|---|---|---|
 | **开发版** | 本地 `cli preview` 出的二维码，推企业微信 | 开发者本人 + 体验成员（约 25 分钟） | `https://dev.kedouai.com`（dev） | ❌ 25 分钟预览码，过期重跑 |
 | **开发版本** | 本地 `cli upload` 传到公众平台后台「开发版本」列表的条目 | —（后台条目，非二维码） | —（后台条目） | ❌ 长期存在，但须人工设为体验版或提审 |
-| **体验版** | 公众平台**人工**把开发版本设为体验版 | 体验成员 | `https://dev.kedouai.com`（dev） | ✅ 系统生成的体验版二维码，官方口径 7 天 |
+| **体验版** | 公众平台**人工**把开发版本设为体验版 | 体验成员 | `https://kedouai.com`（prod） | ✅ 系统生成的体验版二维码，官方口径 7 天 |
 | **正式版** | 公众平台**人工**提交审核 → 审核通过 → 发布 | 线上用户 | `https://kedouai.com`（prod） | —（线上版本，用户从微信入口进入） |
 
 > 两个小程序包共用 dev/prod 域名，但**默认页与页面路径各包独立**；本包默认页为 `pages/home/index/index`。
@@ -506,7 +508,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 |---|---|
 | 二维码 | 长期可扫的是「公众平台设为体验版后由系统生成的体验版二维码」（官方口径 7 天）；本地 cli preview 出的 25 分钟码是开发版预览码，两者不是同一个东西。 |
 | 上传产物 | `npm run publish -- upload` 的产物是公众平台后台「开发版本」条目，不是体验版；设为体验版须人工点。 |
-| 体验版连 dev | ⚠️ 体验版连 dev，不代表 prod 已具备该功能；发布前确认 prod 后端、接口、合法域名、AppSecret 均已就绪，再用真机验证。 |
+| 体验版连 prod | ⚠️ 体验版直连 prod：设为体验版前就须确认 prod 后端、接口、合法域名、AppSecret 均已就绪，再用真机验证。 |
 | 手填 path | 用公众平台自动生成二维码，勿手填 path：带 path 的旧码会一直生效，指向未注册页面会冷启动白屏（本包默认页为 `pages/home/index/index`）。 |
 | 小程序码 path 手填白屏 | 扫码白屏先查二维码 path，再查 request 合法域名；排查手法见 §5.2（二分：微信首页下拉直接点开小程序）。 |
 | 后端回滚 | 小程序侧「版本回退 / 撤回审核」与后端服务回滚（§六 pm2 + `dist` 备份）是两条独立的线，不要混写。 |
@@ -519,7 +521,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 | 谁有权 | 公众平台管理员 / 有「版本管理」权限的开发者（需先完成成员授权） | 同左，且需审核通过 |
 | 完整后台入口 | `https://mp.weixin.qq.com/` → 管理 → 版本管理 → 开发版本 → 设为体验版 | 同页 → 提交审核 →（审核通过）→ 发布 |
 | 体验成员 | 管理 → 成员管理 → 体验成员 → 添加（谁能扫、上限以微信侧为准） | 线上用户，无需配置体验成员 |
-| 连哪个后端 | `https://dev.kedouai.com`（dev） | `https://kedouai.com`（prod） |
+| 连哪个后端 | `https://kedouai.com`（prod） | `https://kedouai.com`（prod） |
 | 二维码 | 系统生成的标准码，勿手填 path，官方口径 7 天 | 线上版本，无「二维码」概念 |
 | 审核时长 | — | 以微信侧为准，可催审；驳回按原因修改 → 重新上传 → 重新提审 |
 | 发布方式 | 点击「设为体验版」 | 点击「发布」（全量或分阶段灰度） |
