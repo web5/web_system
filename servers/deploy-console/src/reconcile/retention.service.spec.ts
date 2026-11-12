@@ -10,13 +10,20 @@ import { RetentionService, retentionCutoff, DEFAULT_KEEP_DAYS } from './retentio
 describe('RetentionService（诊断 #18 数据保留）', () => {
   const DAY = 24 * 60 * 60 * 1000;
   let query: jest.Mock;
+  let readPointer: jest.Mock;
   let svc: RetentionService;
 
+  // 半发布治理 F2：磁盘指针保护名单依赖 EnvArtifactService（默认无盘指针 = CDN 形态）
   const makeSvc = (map: Record<string, string | undefined>) =>
-    new RetentionService({ get: (k: string) => map[k] } as never, { query } as never);
+    new RetentionService(
+      { get: (k: string) => map[k] } as never,
+      { query } as never,
+      { readPointer } as never,
+    );
 
   beforeEach(() => {
     query = jest.fn(async () => [{ c: 0 }]);
+    readPointer = jest.fn(async () => null);
   });
 
   describe('retentionCutoff（纯函数）', () => {
@@ -64,6 +71,7 @@ describe('RetentionService（诊断 #18 数据保留）', () => {
           return [{ env_id: 'prod', app_key: 'portal', current_version: 'v2', previous_version: 'v1' }];
         if (sql.includes('FROM deploy_deployments'))
           return [{ env_id: 'dev', module_key: 'auth-service', current_version: 'a9' }];
+        if (sql.includes('deploy_apps')) return [];
         if (sql.startsWith('SELECT COUNT')) return [{ c: 3 }];
         return { affectedRows: 0 };
       });
@@ -83,6 +91,7 @@ describe('RetentionService（诊断 #18 数据保留）', () => {
       query.mockImplementation(async (sql: string) => {
         if (sql.includes('FROM deploy_app_env_versions')) return [];
         if (sql.includes('FROM deploy_deployments')) return [];
+        if (sql.includes('deploy_apps')) return [];
         if (sql.startsWith('SELECT COUNT')) return [{ c: 5 }];
         return { affectedRows: 0 };
       });
@@ -91,6 +100,53 @@ describe('RetentionService（诊断 #18 数据保留）', () => {
         .map((c) => String(c[0]))
         .find((s) => s.startsWith('DELETE FROM `deploy_tasks`'));
       expect(del).toContain("status IN ('success','failed','cancelled')");
+    });
+
+    // 半发布治理 F2：磁盘指针指向的版本不受保护就会被 GC 清掉 → 404 白屏（05a P0-2）
+    it('磁盘入口指针解析值并入保护名单（原始值 + 归一值两种拼写都进）', async () => {
+      svc = makeSvc({ RETENTION_ENABLED: 'true' });
+      query.mockImplementation(async (sql: string) => {
+        if (sql.includes('FROM deploy_app_env_versions')) return [];
+        if (sql.includes('FROM deploy_deployments')) return [];
+        if (sql.includes('deploy_apps')) return [{ app: 'portal', env: 'prod' }];
+        if (sql.startsWith('SELECT COUNT')) return [{ c: 3 }];
+        return { affectedRows: 0 };
+      });
+      readPointer.mockResolvedValue('portal/abc1234');
+
+      await svc.run(1_000_000_000);
+      const del = query.mock.calls
+        .map((c) => String(c[0]))
+        .filter((s) => s.startsWith('DELETE FROM `deploy_versions`'));
+      expect(del.length).toBeGreaterThan(0);
+      expect(del[0]).toContain('NOT (');
+      // 原始拼写 + 纯 commit 拼写各一条
+      expect(del[0].match(/\(env = \? AND component = \? AND version_tag = \?\)/g)?.length).toBe(2);
+      const params = query.mock.calls.find((c) => String(c[0]).startsWith('DELETE FROM `deploy_versions`'))?.[1];
+      expect(params).toContain('portal/abc1234');
+      expect(params).toContain('abc1234');
+    });
+
+    it('读磁盘指针失败不拖垮整体（该对缺席保护，其余照常）', async () => {
+      svc = makeSvc({ RETENTION_ENABLED: 'true' });
+      query.mockImplementation(async (sql: string) => {
+        if (sql.includes('FROM deploy_app_env_versions'))
+          return [{ env_id: 'prod', app_key: 'portal', current_version: 'v2', previous_version: null }];
+        if (sql.includes('FROM deploy_deployments')) return [];
+        if (sql.includes('deploy_apps')) return [{ app: 'portal', env: 'prod' }];
+        if (sql.startsWith('SELECT COUNT')) return [{ c: 1 }];
+        return { affectedRows: 0 };
+      });
+      readPointer.mockRejectedValue(new Error('ssh 不可达'));
+
+      const r = await svc.run(1_000_000_000);
+      expect(r.status).not.toBe('error');
+      const del = query.mock.calls
+        .map((c) => String(c[0]))
+        .find((s) => s.startsWith('DELETE FROM `deploy_versions`'));
+      // 表侧保护仍在（v2），盘侧缺席
+      expect(del).toContain('NOT (');
+      expect(del?.match(/\(env = \? AND component = \? AND version_tag = \?\)/g)?.length).toBe(1);
     });
   });
 

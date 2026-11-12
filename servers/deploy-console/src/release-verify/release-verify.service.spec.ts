@@ -3,6 +3,8 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { FactCollectService, FactBatchReport } from '../fact/fact-collect.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
+import { HttpProbeService } from '../probe/http-probe.service';
 import { FactStatus } from '../entities/deploy-fact-snapshot.entity';
 import { ReleaseVerifyService } from './release-verify.service';
 import { VERIFY_CHECK_KEYS, VerifyCheckKey, ReleaseVerifyReport } from './release-verify.types';
@@ -37,6 +39,9 @@ const WRITE_METHODS: Record<string, string[]> = {
     'switchPointer',
   ],
   facts: [],
+  // manifest 比对（F1-③）只读：urlFor 读配置、fetchGatewayManifest 是 GET
+  gatewayCache: ['notifyVersionChange'],
+  probe: [],
 };
 
 interface Opts {
@@ -55,6 +60,10 @@ interface Opts {
   }>;
   currentVersion?: string | undefined;
   collectThrows?: boolean;
+  /** manifest 门禁（F1-③）：gateway 内部地址；不传 = 未配置 → 该检查 skipped */
+  gatewayUrl?: string;
+  /** fetchGatewayManifest 返回值（null = 取不到） */
+  manifest?: Record<string, unknown> | null;
 }
 
 const NOW = Date.now();
@@ -114,6 +123,13 @@ function buildHarness(opts: Opts = {}) {
       drift: jest.fn(async () => ({ batchId: 'b1', items: [] as never[] })),
       snapshots: jest.fn(async () => [] as never[]),
     },
+    gatewayCache: {
+      urlFor: jest.fn(() => opts.gatewayUrl ?? ''),
+      notifyVersionChange: jest.fn(async () => ({ ok: true, reason: 'notified' })),
+    },
+    probe: {
+      fetchGatewayManifest: jest.fn(async () => opts.manifest ?? null),
+    },
   };
   return { mocks };
 }
@@ -133,6 +149,8 @@ async function buildService(mocks: ReturnType<typeof buildHarness>['mocks']) {
       { provide: ReleaseRegistryService, useValue: mocks.registry },
       { provide: PipelineService, useValue: mocks.pipelines },
       { provide: FactCollectService, useValue: mocks.facts },
+      { provide: GatewayCacheService, useValue: mocks.gatewayCache },
+      { provide: HttpProbeService, useValue: mocks.probe },
     ],
   }).compile();
   return moduleRef.get(ReleaseVerifyService);
@@ -478,6 +496,68 @@ describe('ReleaseVerifyService', () => {
       );
 
       assertReadOnly(mocks);
+    });
+  });
+
+  describe('manifest 硬门禁（半发布治理 F1-③）', () => {
+    const manifestOk = { byEnv: { dev: { admin: { version: 'aaa111' } } } };
+
+    it('manifest 实供 == 目标版本（拼写差归一）→ pass 且不影响 verified', async () => {
+      const { mocks } = buildHarness({
+        gatewayUrl: 'http://gw',
+        manifest: { byEnv: { dev: { admin: { version: 'admin/aaa111' } } } },
+      });
+      const svc = await buildService(mocks);
+      const r = await svc.verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111', jobId: 'job-1' });
+      expect(find(r, VERIFY_CHECK_KEYS.manifestMatches).status).toBe('pass');
+      expect(r.verdict).toBe('verified');
+      assertReadOnly(mocks);
+    });
+
+    it('manifest 实供旧版本（11-09 半发布形态）→ core fail → verdict failed', async () => {
+      const { mocks } = buildHarness({
+        gatewayUrl: 'http://gw',
+        manifest: { byEnv: { dev: { admin: { version: 'old999' } } } },
+      });
+      const svc = await buildService(mocks);
+      const r = await svc.verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111' });
+      const c = find(r, VERIFY_CHECK_KEYS.manifestMatches);
+      expect(c.status).toBe('fail');
+      expect(c.core).toBe(true);
+      expect(r.verdict).toBe('failed');
+      expect(r.blockers.some((b) => b.includes('manifest'))).toBe(true);
+    });
+
+    it('未配置 gateway 地址 → skipped（不阻断 verdict）', async () => {
+      const { mocks } = buildHarness();
+      const svc = await buildService(mocks);
+      const r = await svc.verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111' });
+      expect(find(r, VERIFY_CHECK_KEYS.manifestMatches).status).toBe('skipped');
+      expect(r.verdict).toBe('verified');
+    });
+
+    it('manifest 取不到（gateway 不可达）→ unknown（判不了不判死）', async () => {
+      const { mocks } = buildHarness({ gatewayUrl: 'http://gw', manifest: null });
+      const svc = await buildService(mocks);
+      const r = await svc.verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111' });
+      expect(find(r, VERIFY_CHECK_KEYS.manifestMatches).status).toBe('unknown');
+      expect(r.verdict).toBe('unknown');
+    });
+
+    it('后端模块 → skipped（不经 manifest 供数）', async () => {
+      const { mocks } = buildHarness({
+        moduleType: 'backend',
+        gatewayUrl: 'http://gw',
+        manifest: manifestOk,
+        factItems: [
+          { kind: 'version', targetKey: 'admin', status: 'ok', expected: 'aaa111', actual: 'aaa111' },
+          { kind: 'process', targetKey: 'admin', status: 'ok', expected: 'online', actual: 'online' },
+          { kind: 'port', targetKey: 'admin', status: 'ok', expected: '3001', actual: '监听中' },
+        ],
+      });
+      const svc = await buildService(mocks);
+      const r = await svc.verify({ env: 'dev', moduleKey: 'admin', versionTag: 'aaa111' });
+      expect(find(r, VERIFY_CHECK_KEYS.manifestMatches).status).toBe('skipped');
     });
   });
 });

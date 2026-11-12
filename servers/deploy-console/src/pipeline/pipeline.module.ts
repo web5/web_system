@@ -48,6 +48,9 @@ import { RemoteDeliveryModule } from '../remote/remote-delivery.module';
 // 工具目录（能力单元）：shell 工具正文的真相源，编排按 code 引用
 import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
 // 部署动作（发布部署整体的第二个动作）：前端切指针走应用域
+import { AppsModule } from '../apps/apps.module';
+import { CommonModule } from '../common/common.module';
+import { ReleaseFinalizerService } from './release-finalizer.service';
 
 @Module({
   imports: [
@@ -96,6 +99,10 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
     RemoteDeliveryModule,
     // 工具目录（shell 工具正文引用执行）
     ToolCatalogModule,
+    // 应用域原子步（env-dir 切版本收敛：pointer 执行体 / 编排收尾兜底用）
+    AppsModule,
+    // gateway 缓存通知地址解析（manifest 门禁按环境取 gateway 内部地址）
+    CommonModule,
   ],
   controllers: [PipelineController, PipelineVarController],
   providers: [
@@ -114,6 +121,8 @@ import { ToolCatalogModule } from '../tool-catalog/tool-catalog.module';
     DispatchConfigExecutor,
     // 切指针前的 CDN 校验（指针执行体注入；legacy 模式空转）
     CdnAssetVerifier,
+    // 发布收尾器（半发布治理）：前端指针收敛原子步 + manifest 硬门禁
+    ReleaseFinalizerService,
     // 步骤注册表：按步骤元数据（category/commandMode/守卫/执行体）组装，engine 数据驱动分派
     {
       provide: PIPELINE_BUILTIN_STEPS,

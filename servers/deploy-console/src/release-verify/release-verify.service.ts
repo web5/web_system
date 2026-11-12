@@ -3,6 +3,9 @@ import { ModuleRegistryService } from '../module-registry/module-registry.servic
 import { ReleaseRegistryService } from '../registry/release-registry.service';
 import { PipelineService } from '../pipeline/pipeline.service';
 import { FactCollectService, FactBatchReport } from '../fact/fact-collect.service';
+import { GatewayCacheService } from '../common/gateway-cache.service';
+import { HttpProbeService } from '../probe/http-probe.service';
+import { manifestVersionOf } from '../pipeline/release-final-guard';
 import { toCommitId } from '../pipeline/release-paths';
 import {
   ReleaseVerifyInput,
@@ -67,6 +70,8 @@ export class ReleaseVerifyService {
     private readonly registry: ReleaseRegistryService,
     private readonly pipelines: PipelineService,
     private readonly facts: FactCollectService,
+    private readonly gatewayCache: GatewayCacheService,
+    private readonly probe: HttpProbeService,
   ) {}
 
   /**
@@ -109,6 +114,10 @@ export class ReleaseVerifyService {
       ),
       await this.safe(VERIFY_CHECK_KEYS.portListening, false, () =>
         this.checkPort(norm.moduleKey, batch, isFrontend),
+      ),
+      // 半发布治理 F1-③：盘/表指针正确 ≠ 线上供数正确；manifest 是用户实际拿到的面
+      await this.safe(VERIFY_CHECK_KEYS.manifestMatches, isFrontend, () =>
+        this.checkManifest(norm.env, norm.moduleKey, expectation.version, isFrontend),
       ),
     ];
 
@@ -437,6 +446,64 @@ export class ReleaseVerifyService {
         ? `端口 ${item.expected} 正在监听（host=${batch.host}）`
         : `端口 ${item.expected} 未在监听（实际=${item.actual ?? '未监听'}）—— 服务可能起来了但没绑上端口`,
       evidence: { host: batch.host, port: item.expected },
+    });
+  }
+
+  /**
+   * 核心检查（前端）：gateway `/__manifest__` 实供版本 == 目标版本（半发布治理 F1-③）。
+   *
+   * 表指针（pointer.matches）正确 ≠ 用户拿到的正确 —— 11-09 半发布形态下
+   * manifest 由 DB 驱动仍供旧版本。本项直接比对**供数面**。
+   * 双侧 toCommitId 归一（`<ns>/<commit>` vs 纯 commit 拼写差不误伤）。
+   */
+  private async checkManifest(
+    env: string,
+    moduleKey: string,
+    expected: string | null,
+    isFrontend: boolean,
+  ): Promise<VerifyCheckResult> {
+    if (!isFrontend) {
+      return skippedCheck(
+        VERIFY_CHECK_KEYS.manifestMatches,
+        `模块 ${moduleKey} 为后端服务，不经 gateway manifest 供数，跳过 manifest 比对`,
+      );
+    }
+    const base = this.gatewayCache.urlFor(env);
+    if (!base) {
+      return skippedCheck(
+        VERIFY_CHECK_KEYS.manifestMatches,
+        `未配置 GATEWAY_INTERNAL_URL_${env.toUpperCase()} / GATEWAY_INTERNAL_URL，无 manifest 供数面可比对`,
+      );
+    }
+    if (!expected) {
+      return unknownCheck(
+        VERIFY_CHECK_KEYS.manifestMatches,
+        true,
+        new Error('无期望版本（入参/流水线/当前指针均无），无法比对 manifest'),
+      );
+    }
+    const manifest = await this.probe.fetchGatewayManifest(base);
+    if (!manifest) {
+      return unknownCheck(
+        VERIFY_CHECK_KEYS.manifestMatches,
+        true,
+        new Error('gateway manifest 取不到（网络失败或非 2xx）'),
+      );
+    }
+    const actual = manifestVersionOf(manifest, env, moduleKey);
+    // 双侧归一后交给 compareCheck 判定（它内部是裸字符串比较，拼写差必须先归一）
+    const normExpected = toCommitId(expected) ?? expected;
+    const normActual = actual ? (toCommitId(actual) ?? actual) : null;
+    return compareCheck({
+      key: VERIFY_CHECK_KEYS.manifestMatches,
+      core: true,
+      expected: normExpected,
+      actual: normActual,
+      passDetail: `manifest 实供版本 ${actual} 与目标版本一致（byEnv[${env}][${moduleKey}]）`,
+      failDetail:
+        `manifest 实供版本为 ${actual ?? '（取不到）'}，目标版本为 ${expected} —— ` +
+        '疑似半发布（盘/表/manifest 撕裂），查 GET /api/reconcile/pointers 对账报告',
+      evidence: { gateway: base, env, moduleKey, rawExpected: expected, rawActual: actual },
     });
   }
 
