@@ -238,6 +238,11 @@ jobs:
           bash scripts/redline/test-r16-sse.sh
           bash scripts/ci/test-changed-packages.sh
 
+      # 五层闸门健康自检（规范 §4 P0）：hooks 接线 / 脚本可执行 / CI job 存在性，
+      # 任一失效 exit 1。验「闸门还在生效」，与用例（验判据可信）互补。
+      - name: 闸门健康自检（五层载体存在性）
+        run: bash scripts/redline/check-gate-health.sh
+
       # S5（2026-11-11）：影子比对（bash ↔ gate.ts）随 legacy bash 一起删除。
       # 为什么删：留在 CI 里也是拿 gate.ts 跟自己比 —— 恒等、恒绿，等于没这一步。
       # 丢掉什么：bash 曾是**独立实现**，能发现「gate.ts 被改坏」。现在这层没有了，
