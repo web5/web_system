@@ -23,7 +23,22 @@
  * ======================================================================
  *
  * key 用于映射图标样式类（.tb-ic-<key>），见 index.wxss。
+ *
+ * 暗门（PRD v0.2 §4）：双击「发现」tab（间隔 ≤500ms）常驻生效、无任何前置条件 ——
+ * 未解锁：震动 + 写 labs_unlocked（发现页「功能设置」入口卡常驻）；
+ * 已解锁：直接进功能设置页（快捷方式）。单击行为不受影响（正常 switchTab）。
  */
+
+import { isLabsUnlocked, unlockLabs } from '../utils/feature-flags';
+
+/** 双击判定窗口（毫秒）：两次点击「发现」tab 间隔 ≤ 该值记为一次双击 */
+const DOUBLE_TAP_MS = 500;
+
+/** 功能设置页路径（暗门解锁后的落地页） */
+const LABS_SETTINGS_PATH = '/pages/discover/settings/settings';
+
+/** 上一次点击「发现」tab 的时间戳（模块级单例：tabBar 组件每页独立实例，跨实例也要续判） */
+let lastDiscoverTapAt = 0;
 
 Component({
   data: {
@@ -97,9 +112,11 @@ Component({
     },
 
     onSwitch(e: WechatMiniprogram.TouchEvent) {
-      const { path, index, istab } = e.currentTarget.dataset;
+      const { path, index, istab, key } = e.currentTarget.dataset;
       if (!path) return;
       const idx = Number(index);
+      // 暗门：仅「发现」tab 参与双击判定；任何状态都响应，单击行为不受影响
+      if (key === 'discover') this.trackDiscoverDoubleTap();
       // ⚠️ data- 属性经 dataset 后一律是字符串：直接 if(istab) 会让 'false' 也 truthy
       // （10-13 实测：点「对话」误走 switchTab，而 chat 不在 tabBar.list → 失败不跳转，
       // 但 selected 已置 0 → 高亮与当前页错位）。统一数值化后比较。
@@ -114,6 +131,32 @@ Component({
         // getApp 不可用：仅乐观高亮，onShow 仍会兜底登记
       }
       if (isTab) wx.switchTab({ url: path });
+    },
+
+    /**
+     * 双击「发现」tab 暗门（PRD v0.2 §4，常驻手势、无前置条件）：
+     * - 间隔 ≤500ms 记一次双击，> 500ms 重置计数；
+     * - 未解锁：震动反馈 + 写 labs_unlocked（发现页入口卡经 flags:updated 广播常驻）；
+     * - 已解锁：重复双击直接 navigateTo 进功能设置页（快捷方式）。
+     */
+    trackDiscoverDoubleTap() {
+      const now = Date.now();
+      if (now - lastDiscoverTapAt > DOUBLE_TAP_MS) {
+        lastDiscoverTapAt = now;
+        return;
+      }
+      // 记为一次双击后重置：避免「三击」被判成两次双击
+      lastDiscoverTapAt = 0;
+      try {
+        wx.vibrateShort({ type: 'light' });
+      } catch {
+        // 震动不可用（旧基础库/模拟器）不阻断解锁
+      }
+      if (isLabsUnlocked()) {
+        wx.navigateTo({ url: LABS_SETTINGS_PATH });
+      } else {
+        unlockLabs();
+      }
     },
   },
 });

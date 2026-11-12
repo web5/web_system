@@ -14,6 +14,7 @@ import { isLoggedIn } from '../../../services/auth';
 import { fetchProfile, isNicknameUnset, resolveAvatarUrl, readLocalAvatar, readLocalNickname } from '../../../services/account';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { TRANSLATE_HISTORY_KEY } from '../../../utils/translate-keys';
+import { readFlags, FLAGS_UPDATED_EVENT, FlagsState } from '../../../utils/feature-flags';
 
 /** 翻译记录条数：读本地历史（写入方 = packageTranslate result 页，key 与 history 页一致） */
 function readTrCount(): string {
@@ -45,6 +46,8 @@ Page({
     glossarySummary: '0 条',
     /** 课文学习进度：暂无进度落库接口，先显示「未开始」（不编造数字） */
     nceSummary: '未开始',
+    /** 本地功能开关：flags.translate 控制「我的翻译记录 / 翻译设置」两行（默认关，安全侧） */
+    flags: { chat: false, translate: false, labsUnlocked: false } as FlagsState,
   },
 
   /**
@@ -56,6 +59,8 @@ Page({
   _offAuthLogged: null as (() => void) | null,
   /** 「资料已更新」广播退订函数（onUnload 调用） */
   _offProfileUpdated: null as (() => void) | null,
+  /** 功能开关变更广播退订函数（onUnload 调用） */
+  _offFlagsUpdated: null as (() => void) | null,
 
   /**
    * 账号信息脏标记：上一次 fetchProfile 失败置 true，收敛成功后清 false。
@@ -91,6 +96,9 @@ Page({
         if (Object.keys(patch).length) this.setData(patch);
       };
       __bus.on('profile:updated', this._offProfileUpdated);
+      // 功能开关变更广播：设置页拨开关后本页即时重渲染（翻译两行出现/消失）
+      this._offFlagsUpdated = () => this.setData({ flags: readFlags() });
+      __bus.on(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
     }
   },
 
@@ -111,6 +119,10 @@ Page({
         __bus.off('profile:updated', this._offProfileUpdated);
         this._offProfileUpdated = null;
       }
+      if (this._offFlagsUpdated) {
+        __bus.off(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
+        this._offFlagsUpdated = null;
+      }
     }
   },
 
@@ -123,7 +135,8 @@ Page({
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
 
     const loggedIn = isLoggedIn();
-    this.setData({ loggedIn });
+    // 开关状态每次进页以 storage 为准刷新
+    this.setData({ loggedIn, flags: readFlags() });
     // 未登录：只渲染登录卡，不发起任何业务请求（判据第 8 条）
     if (!loggedIn) return;
 

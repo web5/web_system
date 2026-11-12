@@ -2,6 +2,7 @@
   "pages": [
     "pages/home/index/index",
     "pages/discover/index/index",
+    "pages/discover/settings/settings",
     "pages/mine/index/index",
     "pages/mine/profile/profile",
     "pages/mine/bind-email/bind-email",
@@ -38,7 +39,7 @@
     "backgroundTextStyle": "light",
     "backgroundColor": "#F5F8FF",
     "navigationBarBackgroundColor": "#FFFFFF",
-    "navigationBarTitleText": "大橙子个人助理",
+    "navigationBarTitleText": "大橙子英语",
     "navigationBarTextStyle": "black"
   },
   "tabBar": {
