@@ -1,10 +1,12 @@
 <view class="page {{radiusClass}}">
   <view class="profile">
-    <!-- 头像：微信原生 chooseAvatar（必须是 button），无头像时回退「橙」占位 -->
-    <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar" hover-class="none">
+    <!-- 头像：视觉层用纯 view 画正圆（与「我的」页同口径），chooseAvatar 按钮透明覆盖只负责接点击。
+         button 直接当圆形容器：默认 min-width/min-height 会撑成椭圆，且部分机型 border-radius+overflow 裁剪失效 -->
+    <view class="avatar-wrap">
       <image wx:if="{{avatarUrl}}" class="avatar-img" src="{{avatarUrl}}" mode="aspectFill" />
       <view wx:else class="avatar-fallback">橙</view>
-    </button>
+      <button class="avatar-hit" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar" hover-class="none" aria-label="更换头像"></button>
+    </view>
     <view class="info">
       <input class="n-input" type="nickname" value="{{nickname}}" placeholder="未设置昵称" bindinput="onNickInput" bindblur="onNickBlur" bindconfirm="onNickConfirm" />
       <view class="d" wx:if="{{uid}}">ID: {{uid}}</view>

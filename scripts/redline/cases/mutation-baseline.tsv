@@ -3,41 +3,12 @@
 # 每行 = 一个「判据改坏了但用例没发现」的组合：<门条目>	<变异器名>
 # 这不是许可清单：补了用例就从这里删掉，mutation-gen 会提示哪些行已经可移除。
 # 重新生成：node scripts/redline/mutation-gen.ts --write-baseline
-R1	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R1	trigger.skip_comment_line 反转
-R10	credential.trailer 改名（凭证读不到）
-R10	exempt: true → false
-R10	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R10	trigger.status 换成不存在的状态字母
-R11	credential.accept 去掉 path 分支
-R11	credential.checks 路径存在性改 false
-R11	credential.checks 阻塞归零改 false
-R11	credential.trailer 改名（凭证读不到）
-R11	exempt: true → false
-R11	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R13	credential.checks 阻塞归零改 false
-R13	exempt: true → false
-R14	credential.accept 去掉 path 分支
-R14	credential.checks 路径存在性改 false
-R14	credential.checks 阻塞归零改 false
-R14	credential.trailer 改名（凭证读不到）
-R14	exempt: true → false
-R15	credential.accept 去掉 path 分支
-R15	credential.checks 路径存在性改 false
-R15	credential.checks 阻塞归零改 false
-R15	credential.trailer 改名（凭证读不到）
-R15	exempt: true → false
-R17	exempt: true → false
-R18	credential.accept 去掉 path 分支
-R18	credential.checks 路径存在性改 false
-R18	credential.checks 阻塞归零改 false
-R18	credential.trailer 改名（凭证读不到）
-R18	exempt: true → false
-R2.cred	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R2.cred	trigger.skip_comment_line 反转
-R23	credential.checks 阻塞归零改 false
-R23	exempt: true → false
-R3.placeholder	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R4.any	trigger.scope 换成另一个合法 scope（匹配面变窄）
-R4.any	trigger.skip_comment_line 反转
-R5.enable-cors	trigger.skip_comment_line 反转
+#
+# 2026-11-11 #8722 大清理：38 → 2。消掉的 36 条去向（详见 PR 描述）：
+#   · 8 条 R10/R11 假缺口 —— 死在定制实现的硬编码里，DECLARATIVE_PER_GATE 门级登记后不再生成；
+#   · 24 条真缺口 —— 八仙豁免（commit-exempt-all）+ 凭证三件套（R13-R18/R23 valid/fake/blocking）
+#     + R9/R9b/R12 新用例 + line 组 scope/skip 边界用例补捕获；exempt 字段引擎活化是前提。
+# 剩 2 条 R12：判据是真读的，但观测它需要「双源漂移」阳性夹具 —— 漂移是 fixture 仓库的
+# 全局状态，会污染全部 60+ 场景的基线（见 gates.yaml uncovered R12 条）。登记留债。
+R12	trigger.compare_pair.src 改成不存在目录（门静默通过）
+R12	trigger.exclude 置为 [""]（空串匹配一切，排除面=全量）

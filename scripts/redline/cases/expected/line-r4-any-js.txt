@@ -1,0 +1,5 @@
+exit=0
+errors=0
+warnings=0
+--- stdout ---
+✓ 红线扫描通过（0 error / 0 warning）

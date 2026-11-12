@@ -173,7 +173,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["line-r1-console-log", "line-r1-script-whitelist"]
+    evidence: ["line-r1-console-log", "line-r1-script-whitelist", "line-r1-console-log-js"]
 
   - id: R2
     sub: R2.secret-file
@@ -218,7 +218,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["line-r2-cred"]
+    evidence: ["line-r2-cred", "line-r2-cred-js"]
 
   - id: R3
     sub: R3.placeholder
@@ -237,7 +237,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["line-r3-todo"]
+    evidence: ["line-r3-todo", "line-r3-todo-js"]
 
   - id: R3
     sub: R3.weak
@@ -256,7 +256,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["line-r3-weak", "line-r3-weak-js"]
 
   - id: R4
     sub: R4.ts-ignore
@@ -275,7 +275,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["line-r4-tsignore", "line-r4-tsignore-js"]
 
   - id: R4
     sub: R4.any
@@ -297,7 +297,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["line-r4-any", "line-r4-any-spec"]
+    evidence: ["line-r4-any", "line-r4-any-spec", "line-r4-any-js"]
 
   - id: R5
     sub: R5.main-cors
@@ -354,7 +354,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["line-r5-wildcard", "line-r5-wildcard-comment"]
 
   - id: R8
     sub: null
@@ -401,7 +401,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["commit-r9-page", "commit-r9-passport", "commit-r9-ia", "commit-r9-ia-passport"]
 
   - id: R9b
     sub: null
@@ -428,7 +428,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["commit-r9b-mod", "commit-r9b-passport", "commit-r9b-exempt"]
 
   # ---------------- commit 级凭证门（batch 1：8 道，重复骨架集中地） ----------------
   - id: R10
@@ -455,7 +455,7 @@ gates:
     validity:
       status: unmeasured
       note: 与 R11 同源（UI 改动），豁免时通常一起豁免
-    evidence: ["commit-r10-ui-no-proto"]
+    evidence: ["commit-r10-ui-no-proto", "commit-exempt-all"]
 
   - id: R11
     sub: null
@@ -490,7 +490,7 @@ gates:
       status: unmeasured
       note: error 级 —— 唯一阻断的 commit 门，2026-09-22 拍板不设观察期
       branches_note: 四个输出分支各自有用例（非 pass / 报告不存在 / 阻塞未清零 / 阻塞为 0 的阴性）。②③④ 必须用非 UI 的 spec commit —— 在 UI commit 上写报告路径命中的是「凭证非 pass」，永远走不到「报告不存在」
-    evidence: ["commit-r11-nonpass", "commit-r11-spec-missing", "commit-r11-spec-blocking", "commit-r11-spec-ok", "commit-r10-ui-no-proto"]
+    evidence: ["commit-r11-nonpass", "commit-r11-spec-missing", "commit-r11-spec-blocking", "commit-r11-spec-ok", "commit-r10-ui-no-proto", "commit-exempt-all"]
 
   - id: R11b
     sub: null
@@ -529,6 +529,9 @@ gates:
     message: 原型锚点漂移
     spec_ref: specs/design-reviewer/design.md
     owner: 研发部
+    # 覆盖在专用测试（scenarios.tsv 无环境变量列，档位矩阵表达不了；临时仓需复制 python 脚本）：
+    # test-r11b-anchors.sh A-E 六节含变异用例，已接入 CI gate-cases job。
+    evidence_external: ["scripts/redline/test-r11b-anchors.sh"]
     validity:
       status: unmeasured
       note: 未回填不等于已漂移 —— 原型侧无 data-dr 时扫描器输出 SKIP，此处不判违规。档位由 level_switch 求值（两个引擎同读），非法取值 exit 2；双引擎一致性由 test-r11b-anchors.sh E 节守（不在 scenarios.tsv，因该表没有环境变量列）
@@ -560,7 +563,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-r13-migration", "commit-r13-migration-small", "commit-r13-controller-shallow", "commit-r13-fake-path"]
+    evidence: ["commit-r13-migration", "commit-r13-migration-small", "commit-r13-controller-shallow", "commit-r13-fake-path", "commit-r13-blocking", "commit-exempt-all"]
     evidence_note: commit-r13-fake-path 覆盖「有凭证但路径不存在」分支 —— 前两条走的是「缺凭证」分支，改 accept / path_exists 判据对它们毫无影响（2026-11-11 变异测试反推出的覆盖缺口）
 
   - id: R14
@@ -587,7 +590,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-release"]
+    evidence: ["commit-release", "commit-r14-valid", "commit-r14-fake", "commit-r14-blocking", "commit-exempt-all"]
 
   - id: R15
     sub: null
@@ -617,7 +620,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-new-api", "commit-r13-controller-shallow"]
+    evidence: ["commit-new-api", "commit-r13-controller-shallow", "commit-r15-valid", "commit-r15-fake", "commit-r15-blocking", "commit-exempt-all"]
 
   - id: R17
     sub: null
@@ -646,7 +649,7 @@ gates:
     validity:
       status: unmeasured
       note: '2026-10-30 实测触发率约 45% 而 Test: 真实使用 0 次 —— 观察 2 周，出现 ≥5 次真实填写再升 error'
-    evidence: ["commit-r17-fake-path", "commit-r17-pass", "commit-r17-real-path", "commit-new-api"]
+    evidence: ["commit-r17-fake-path", "commit-r17-pass", "commit-r17-real-path", "commit-new-api", "commit-exempt-all"]
 
   - id: R18
     sub: null
@@ -672,7 +675,7 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: ["commit-new-api", "commit-r13-controller-shallow"]
+    evidence: ["commit-new-api", "commit-r13-controller-shallow", "commit-r18-valid", "commit-r18-fake", "commit-r18-blocking", "commit-exempt-all"]
 
   - id: R19
     sub: null
@@ -763,7 +766,7 @@ gates:
     validity:
       status: unmeasured
       note: '新增门（2026-11-06）先 warning 观察：清单内 ≥5 条、未覆盖范围这两项机器判不了，仍靠人审。观察期 ≥2 周且零误报 → 走 02b §升级路径 升 error'
-    evidence: ["commit-r23-missing", "commit-r23-pass", "commit-r23-sample-missing", "commit-r23-sample"]
+    evidence: ["commit-r23-missing", "commit-r23-pass", "commit-r23-sample-missing", "commit-r23-sample", "commit-r23-blocking", "commit-exempt-all"]
 
   # ---------------- 仓库级 ----------------
   - id: R12
@@ -786,7 +789,8 @@ gates:
     owner: 研发部
     validity:
       status: unmeasured
-    evidence: []
+    evidence: ["commit-r12-clean"]
+    evidence_note: 阳性（双源漂移）夹具会污染 fixture 仓库全局状态、带翻全部场景基线 —— 该判据分支的缺口登记在 cases/mutation-baseline.tsv（2 条），不在 uncovered（2026-11-12 起 uncovered 只收「连阴性都没有」的门）
 
   - id: R16
     sub: null
@@ -803,6 +807,9 @@ gates:
     hint: 契约真相源：packages/agent-core 的 StreamEventType（docs/api/contracts.md C2）
     spec_ref: docs/api/contracts.md
     owner: 研发部
+    # 覆盖在专用测试（临时仓需复制 python 脚本 + 造四份契约文件，cases 夹具驱动不了）：
+    # test-r16-sse.sh 7 例（接线自证 / MISSING / EXTRA / LOOSE / 死 case / fail-open / 定位）。
+    evidence_external: ["scripts/redline/test-r16-sse.sh"]
     validity:
       status: unmeasured
     evidence: []
@@ -825,6 +832,9 @@ gates:
     validity:
       status: unmeasured
     evidence: []
+    # 覆盖在专用测试（stage=external，门禁扫描碰不到它，反过来它才是真实现）：
+    # 选择映射 / docs-only 短路 / 依赖预构建过滤器 / 失败传播 / --lint 选路，pnpm 全桩。
+    evidence_external: ["scripts/ci/test-changed-packages.sh"]
 
 # ============================================================
 # 观察期指标（collect-gate-observations.sh 的唯一配置来源）
@@ -887,37 +897,7 @@ known_divergences:
 # 覆盖缺口（如实列，不写"基本覆盖"）
 # 每条：哪个门 / 缺什么 / 补齐顺序理由
 # ============================================================
-uncovered:
-  - gate: R3
-    sub: R3.weak
-    missing: TEMP/TBD 弱占位阳性
-    reason: 与 R3.placeholder 同一路径，优先级低
-  - gate: R4
-    sub: R4.ts-ignore
-    missing: @ts-ignore 阳性
-    reason: 优先级低（判据与 R4.any 同为字符串匹配）
-  - gate: R5
-    sub: R5.wildcard-origin
-    missing: origin:'*' 阳性
-    reason: 与 R5.enable-cors 同场景触发，单独隔离需再造夹具
-  - gate: R9b
-    missing: 全部（这是 batch 1 里唯一没有用例的门，也是最容易被误报的门）
-    reason: 需造「修改既有 UI 文件 ≥5 行且同 range 无 passport」的夹具；补齐优先级最高
-  - gate: R6
-    missing: 全部
-    reason: 实现不在门禁引擎里（在 scripts/ci/changed-packages.sh），门禁扫描碰不到
-  - gate: R9
-    missing: 新增页面 / app.json IA 变化
-    reason: 需构造 app.json 的 pages 段 diff
-  - gate: R11b
-    missing: 全部
-    reason: 依赖 python 扫描器 + 原型 data-dr 属性
-  - gate: R12
-    missing: 全部
-    reason: 需造 .codebuddy 双源漂移夹具，体积大
-  - gate: R16
-    missing: 全部
-    reason: 依赖 python 辅助脚本与真实 StreamEventType
+uncovered: []
 
 # 夹具级（不属于任何一道门的校验，防止 scan 本身回归）
 harness_evidence:
@@ -927,3 +907,7 @@ harness_evidence:
     protects: 一个 range 内多门同时命中时的汇总口径
   - id: commit-exempt-scoped
     protects: 分类豁免只放行列出的门（R17 放行，R13/R15/R18 仍判）—— 卡 2.8 的核心断言，不属于单一门
+  - id: commit-exempt-all
+    protects: '八仙豁免 —— 8 门 eligible 全列后输出为零；任何一门 exempt 字段/豁免通路改坏立刻翻红（2026-11-11 #8722，exempt 字段活化后的主干断言）'
+  - id: commit-r12-clean
+    protects: R12 阴性基线 —— kit 双源一致时全量场景零 R12 输出；阳性漂移会破坏所有场景基线，故只做阴性

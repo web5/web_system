@@ -7,6 +7,7 @@
     "dev": "echo 'Mini app development'",
     "build": "echo 'Mini app build'",
     "preview": "node scripts/preview.js",
+    "preview:push": "node scripts/preview-push.js",
     "upload": "node scripts/upload.js",
     "publish": "node scripts/publish.js",
     "test": "jest tests --config tests/jest.config.js",

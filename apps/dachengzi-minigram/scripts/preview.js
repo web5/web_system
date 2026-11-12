@@ -14,6 +14,7 @@
  *   QRCODE_FORMAT   terminal | image | base64，默认 image
  *   QRCODE_DEST     二维码输出路径，默认 .ci-output/preview-qr.png
  *   PREVIEW_VERSION 覆盖版本号，默认取 package.json 的 version
+ *   PREVIEW_GIT_SHA 覆盖 gitSha（dev 出码目录是 rsync 副本无 .git，由外层脚本注入源码 sha）
  *   PREVIEW_TTL_MIN 预览码有效期（分钟），默认 25
  *
  * 说明: miniprogram-ci 直连微信后台，**不需要**打开微信开发者工具。
@@ -58,8 +59,10 @@ if (!fs.existsSync(privateKeyPath)) {
   process.exit(1);
 }
 
-/** git 短 sha，用于 desc 区分每次预览；非 git 环境降级 */
+/** git 短 sha，用于 desc 区分每次预览；PREVIEW_GIT_SHA 优先（rsync 副本无 .git 时由外层注入），非 git 环境降级 */
 function gitHead() {
+  const envSha = (process.env.PREVIEW_GIT_SHA || '').trim();
+  if (envSha) return envSha;
   try {
     return execSync('git rev-parse --short HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()

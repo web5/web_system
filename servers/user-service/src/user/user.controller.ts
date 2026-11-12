@@ -71,7 +71,10 @@ export class UserController {
   @ApiOperation({ summary: '获取当前登录用户信息' })
   async getMe(@Req() req: AuthedRequest) {
     const user = await this.userService.findById(String(req.user?.id));
-    return { code: 0, data: user ? { ...user, avatar: await this.resolveAvatarUrl(user.avatar) } : user };
+    if (!user) return { code: 0, data: user };
+    // 响应脱敏（2026-11-12 P1 安全修复）：实体含 password 哈希，绝不进响应体
+    const { password: _pwd, ...safeUser } = user;
+    return { code: 0, data: { ...safeUser, avatar: await this.resolveAvatarUrl(user.avatar) } };
   }
 
   @Put('me')
@@ -79,8 +82,9 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新当前用户资料' })
   async updateMe(@Req() req: AuthedRequest, @Body() userData: UpdateUserDto) {
+    // userService.update 返回值已剥 password（见 service.stripPassword）
     const user = await this.userService.update(String(req.user?.id), userData);
-    return { code: 0, data: user ? { ...user, avatar: await this.resolveAvatarUrl(user.avatar) } : user };
+    return { code: 0, data: { ...user, avatar: await this.resolveAvatarUrl(user.avatar) } };
   }
 
   @Put('me/password')
