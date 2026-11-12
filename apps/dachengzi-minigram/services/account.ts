@@ -212,18 +212,13 @@ export function bindEmail(email: string, code: string, confirmMerge = false): Pr
   return post<BindResult>('/api/auth/bind-email', { email, code, confirmMerge });
 }
 
-/** user-service 全局信封 { code, data, message: 'success' }：业务文案在 data.message，不解包会把英文 success 透到 toast */
-function unwrapMessage(res: unknown): { message: string } {
-  const obj = res as { data?: unknown } | null;
-  if (obj && typeof obj === 'object' && obj.data && typeof obj.data === 'object') {
-    return obj.data as { message: string };
-  }
-  return res as { message: string };
-}
-
-/** 发送邮箱验证码（限频与 503 由服务端返回，文案直接透出） */
-export function sendEmailCode(email: string): Promise<{ message: string }> {
-  return post<unknown>('/api/users/email/code', { email }).then(unwrapMessage);
+/**
+ * 发送邮箱验证码（限频与 503 由服务端返回，错误路径由 request 层 toast+reject，页面 catch 展示）。
+ * 成功提示由页面使用固定文案「验证码已发送，请查收」，不依赖后端 message ——
+ * user-service 全局信封 { code, data, message: 'success' }，若解包/透出会把英文 success 带上 toast。
+ */
+export function sendEmailCode(email: string): Promise<void> {
+  return post<unknown>('/api/users/email/code', { email }).then(() => undefined);
 }
 
 /** 合并成功后落新凭证（sub 已切到目标账号） */
