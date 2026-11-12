@@ -1,6 +1,6 @@
 {
   "name": "@web-system/dachengzi-minigram",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "大橙子个人助理小程序（dachengzi-minigram · WeChat Mini Program）",
   "main": "app.ts",
   "scripts": {

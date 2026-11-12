@@ -47,7 +47,9 @@ beforeEach(() => {
   agentApiMock.listConversations.mockReset();
   agentApiMock.getConversation.mockReset();
   wxMock.getStorageSync.mockReset();
-  wxMock.getStorageSync.mockReturnValue(undefined);
+  // 本文件钉的是「对话练习」开关开启后的链路（loadRecent 在开关关闭时直接收敛不发请求）：
+  // feature_chat 恒为 '1'，其余 key 按无缓存处理。
+  wxMock.getStorageSync.mockImplementation((k: string) => (k === 'feature_chat' ? '1' : undefined));
   wxMock.setStorageSync.mockReset();
   wxMock.removeStorageSync.mockReset();
   wxMock.navigateTo.mockReset();
@@ -76,12 +78,15 @@ describe('loadRecent（最近对话 stale-while-revalidate）', () => {
   });
 
   it('有缓存：先秒显缓存（recentLoading=false），再后台刷新', async () => {
-    wxMock.getStorageSync.mockReturnValue({
+    const cached = {
       id: 'cached-1',
       title: '缓存标题',
       preview: '缓存预览',
       timeText: '09:00',
-    });
+    };
+    wxMock.getStorageSync.mockImplementation((k: string) =>
+      k === 'feature_chat' ? '1' : k === 'welcome_recent_cache' ? cached : undefined,
+    );
     agentApiMock.listConversations.mockResolvedValue({ list: [], total: 0 });
     const ctx = makeThis();
     await pageConfig.loadRecent.call(ctx);
@@ -159,6 +164,20 @@ describe('loadRecent（最近对话 stale-while-revalidate）', () => {
     expect(ctx.data.recent).toBeNull();
     expect(ctx.data.recentLoading).toBe(false);
     expect(wxMock.setStorageSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('功能开关关闭（默认审核态，PRD v0.2 V11）', () => {
+  it('loadRecent 直接收敛：不发任何请求、不留骨架', async () => {
+    // 无任何本地存储 = 全关安全侧
+    wxMock.getStorageSync.mockImplementation(() => undefined);
+    const ctx = makeThis();
+    await pageConfig.loadRecent.call(ctx);
+    expect(ctx.data.recent).toBeNull();
+    expect(ctx.data.recentLoading).toBe(false);
+    expect(ctx.data.recentError).toBe(false);
+    expect(createAgentApiMock).not.toHaveBeenCalled();
+    expect(agentApiMock.listConversations).not.toHaveBeenCalled();
   });
 });
 

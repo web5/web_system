@@ -3,9 +3,9 @@ import { currentClass, applyFromServer } from './utils/appearance';
 
 /**
  * 后端地址按运行环境切换（wx.getAccountInfoSync().miniProgram.envVersion）：
- * - 开发者工具：dev 环境公网网关 https://dev.kedouai.com（与 develop/trial 一致，本地 gateway 链路已弃用）
- * - develop 开发版 / trial 体验版：dev 环境公网网关 https://dev.kedouai.com
- * - release 正式版：生产域名 https://kedouai.com
+ * - 开发者工具：dev 环境公网网关 https://dev.kedouai.com（与 develop 一致，本地 gateway 链路已弃用）
+ * - develop 开发版（预览码）：dev 环境公网网关 https://dev.kedouai.com（dev 出码链路不能断）
+ * - trial 体验版 / release 正式版：生产域名 https://kedouai.com（提审/体验须连 prod）
  * 老基础库不支持 getAccountInfoSync 时兜底 dev（宁可连错环境也不白屏）。
  *
  * 合法域名：dev.kedouai.com 与 kedouai.com 均需在公众平台「request 合法域名」中登记。
@@ -22,8 +22,8 @@ function resolveApiBase(): string {
   if (IS_DEVTOOLS) return 'https://dev.kedouai.com';
   try {
     const env = wx.getAccountInfoSync()?.miniProgram?.envVersion;
-    if (env === 'release') return 'https://kedouai.com';
-    // 'develop' | 'trial' 一律连 dev
+    // 体验版/正式版连 prod；'develop'（预览码）连 dev
+    if (env === 'trial' || env === 'release') return 'https://kedouai.com';
   } catch {
     // 老基础库无该 API，走下面兜底
   }

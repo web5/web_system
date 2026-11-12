@@ -58,6 +58,8 @@ page {
 .ic.t { background: var(--brand-soft); color: var(--brand-txt); }
 /* 新概念英语：青色点缀，与阅读页 #0EA5A4 呼应 */
 .ic.n { background: rgba(14, 165, 164, .10); color: #0EA5A4; }
+/* 对话练习：品牌色（与翻译卡同族） */
+.ic.c { background: var(--brand-soft); color: var(--brand-txt); }
 
 .tx { flex: 1; min-width: 0; }
 .tx .b {
