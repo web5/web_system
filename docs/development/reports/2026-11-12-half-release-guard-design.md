@@ -221,3 +221,16 @@ TestScope: 定向=`pipeline-orchestration/orchestration-schema.spec.ts`（自写
 | P1 | manifest 门禁失败的收尾行为：判 failed 不回滚 vs 自动回滚指针 | **判 failed + 告警，不自动回滚**（指针已是新值且大概率已生效，自动回滚会把「判据发现滞后」变成二次变更） |
 | P2 | site-version shell 是否一并收敛进 switchVersion 原子步 | **本期只收敛 env-dir**（shell 无磁盘指针，setPointer 双写+镜像已完备；改动面最小） |
 | P3 | 直写库检测的存量基线：全量上报 vs 提供「基线确认」白名单 | **全量上报 + 报告内标记 `knownLegacy` 需人工逐条确认**（不建白名单机制，避免白名单成为新的绕过通道；存量消化靠人工补审计或走正规通道重写一次） |
+
+## 10. 执行闭环：本地写失败→抛出（PR #657，2026-11-13）
+
+本设计 §1.2 指出的缺口——「第 1 条（本地写失败）被旧注释『只告警（2026-10-08）』挡住」——已由独立修复方案落地，现记录闭环：
+
+- **修复方案实例（本文子项）**：`docs/development/reports/2026-11-13-release-registry-throw-on-write-failure.md`（rd-dept 出具方案、rd-engineer 编码 + TDD 红转绿）
+- **合入**：PR #657（merge `58d549bf`，commit `de73269d`）已由 auto-merge 入 master（2026-11-13）
+- **改动**：`servers/deploy-console/src/registry/release-registry.service.ts` 的 `syncAppEnvPointerInner` catch 由 `warn + return` 改为 `warn + throw e`；保留 warn 日志、不改写错误信息（保住 spec 的 `'db down'` 断言）；三处注释记录 2026-11-13 决策翻转。
+- **调用方影响面**：`pointer.executor` / `pipeline.service` 编排收尾兜底 / `internal-release.controller` 均直接 `await` 在开放处（controller 经 `InternalGuardService.run`，其 catch 审计失败后仍 re-throw），无外层 catch 把新抛错再吞掉 → 抛出正确上抛为发布失败。
+- **验证**：单 spec 33/33 全绿；真实 CI「改动包 build/test」全绿触发 auto-merge（`gc-runtime.executor.spec.ts` 在本地沙箱的环境相关失败已证为预存、与本次无关）。
+- **风险**：R1 新表写失败发布判 failed 比例上升（仅影响本就不该成功的发布，符合半发布治理意图）；R2 瞬时 DB 抖动被放大为发布失败（保留 warn 供排障，与云库镜像失败既有语义一致）。详见修复方案实例文档 §7。
+
+> 本设计其余子项（F1 唯一原子步 / F2 三方对账 / F3 直写库治理）仍待按 §9 拍板后实施，不在 PR #657 修复范围。
