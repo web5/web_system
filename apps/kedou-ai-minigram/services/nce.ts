@@ -81,12 +81,10 @@ export async function listNceLessons(
   keyword = '',
   book?: string,
 ): Promise<{ total: number; items: NceLessonSummary[] }> {
-  const params = new URLSearchParams();
-  params.set('page', String(page));
-  params.set('pageSize', String(pageSize));
-  if (keyword) params.set('keyword', keyword);
-  if (book) params.set('book', book);
-  const res = await get<Wrapped<{ total: number; items: NceLessonSummary[] }>>(`${BASE}/lessons?${params.toString()}`);
+  const params = [`page=${page}`, `pageSize=${pageSize}`];
+  if (keyword) params.push(`keyword=${encodeURIComponent(keyword)}`);
+  if (book) params.push(`book=${encodeURIComponent(book)}`);
+  const res = await get<Wrapped<{ total: number; items: NceLessonSummary[] }>>(`${BASE}/lessons?${params.join('&')}`);
   return res?.data ?? { total: 0, items: [] };
 }
 
