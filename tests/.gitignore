@@ -1,0 +1,6 @@
+# Playwright 运行产物（playwright.config.ts 已把目录钉在 tests/ 下）
+playwright-report/
+test-results/
+
+# 测试账号机密（模板见 fixtures/test-accounts.md）
+fixtures/.env.test
