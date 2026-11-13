@@ -127,8 +127,8 @@ export const OUT_OF_SCOPE_PROTOS = {
     '当前有效稿（README §一）：记忆画像页（/profile/memory，Memory.vue）。宿主是 portal（C 端工作台，台账 #8229 批次 2.1），不并入 admin 整合稿。',
   'console-wecom-approval-mobile.html':
     '当前有效稿（README §一）：企微移动端发布审批 H5（views/m/ApproveMobile.vue，S1–S5 五屏）。宿主是 deploy-console 的独立移动路由 /console/m/approve/:id —— 刻意独立于 MainLayout（现有布局无响应式），既不并入 admin 整合稿，也不进 deploy-console 桌面壳。',
-  'dachengzi-3tab-2026-11-09.html':
-    '大橙子个人助理小程序 3-Tab 骨架原型（首页 / 翻译 / 我的）。宿主是微信小程序 apps/dachengzi-minigram，不是 admin 后台，不并入 Agents 整合稿。',
+  'dachengzi-3tab-remove-ai-2026-11-13.html':
+    '大橙子英语小程序 3-Tab 去 AI 整改原型（首页=常用功能 / 发现=全部功能+添加常用 / 我的=无 AI 设置；NCE 只留逐句朗读+逐句收藏）。宿主是微信小程序 apps/dachengzi-minigram，不是 admin 后台，不并入 Agents 整合稿。旧稿 dachengzi-3tab-2026-11-09.html 已归档至 _archive/。',
   '12-chat-prototype.html':
     '大橙子个人助理小程序「AI 气泡对话」页原型（主对话页 / 翻译会话 / 首页入口）。宿主是微信小程序 apps/dachengzi-minigram，不是 admin 后台，不并入 Agents 整合稿。',
 };

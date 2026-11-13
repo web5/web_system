@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-demo-role="guest">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大橙子英语 · 微信小程序原型（去 AI 整改版）· 2026-11-13</title>
+<!--
+  大橙子英语 · 去 AI 整改原型（ux-prototype-designer 流水线产出）
+  ─────────────────────────────────────────────────────────────
+  · 目标端：微信小程序（HTML 模拟壳：状态栏 + 导航栏(标题居中 + 右上胶囊占位) + TabBar）
+  · 整改对齐：specs/dachengzi-minigram/review-remove-ai-2026-11-13.md
+    —— 删 AI 对话 / 翻译闭环 / 三种模式 / 点句译文 / 生词查词 / 参考译文 / 习题 / 导读
+      只留「新概念英语逐句朗读 + 逐句收藏」，三 tab = 首页(常用功能) / 发现(全部功能) / 我的(无 AI 设置)
+  · token：沿用现行稿蓝色系 --brand:#2563EB / --brand-mid:#3B82F6 / --brand-tint:#EFF6FF（不混端、不引橙系）
+  · 演示控件：L1 完整（稿头 / 场景包 ≥3 / 角色 / 数据态 / 屏直达 / 标注层 / 复位 / 收起），移动端控件在壳外画布
+  · 机检：node /Users/geekwen/.workbuddy/skills/ux-prototype-designer/scripts/check-demo-panel.mjs <本文件>
+-->
+<style>
+:root{
+  --bg:#FFFFFF;
+  --page:#F5F8FF;
+  --card:#FFFFFF;
+  --border:rgba(37,99,235,.10);
+  --text:#1A1A1F;
+  --text-2:#6B7280;
+  --brand:#2563EB;
+  --brand-deep:#1D4ED8;
+  --brand-mid:#3B82F6;
+  --brand-tint:#EFF6FF;
+  --brand-tint2:#DBEAFE;
+  --accent:#0EA5A4;
+  --tab-idle:#8A90A0;
+  --shadow:0 1px 3px rgba(0,0,0,.06);
+  --shadow-pop:0 8px 28px rgba(23,50,110,.18);
+  --ok:#2E9E5B; --ok-soft:#E7F5EC;
+  --danger:#E5484D; --danger-soft:#FDEBEC;
+  --r-card:16px; --r-btn:12px; --r-tag:999px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:#EDF1F8;color:var(--text);padding:30px 26px 70px;-webkit-font-smoothing:antialiased;
+}
+
+/* ---------- 壳外画布（手机壳在左，演示控件固定右下浮层） ---------- */
+.stage{max-width:1280px;margin:0 auto;display:flex;gap:40px;align-items:flex-start;justify-content:center;}
+.doc-head{max-width:1280px;margin:0 auto 22px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px 24px;box-shadow:var(--shadow);}
+.doc-title{font-size:20px;font-weight:700;letter-spacing:.2px;}
+.doc-title span{color:var(--brand);}
+.doc-meta{margin-top:8px;font-size:12.5px;color:var(--text-2);line-height:1.85;}
+.doc-meta b{color:var(--text);font-weight:600;}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.pill{font-size:11.5px;padding:4px 11px;border-radius:var(--r-tag);background:var(--brand-tint);color:var(--brand-deep);border:1px solid var(--brand-tint2);}
+.pill.g{background:#F2FBFA;color:#0B7C7B;border-color:#CFF0EE;}
+.pill.n{background:#F6F7FB;color:var(--text-2);border-color:rgba(37,99,235,.08);}
+
+/* ---------- 手机外壳（小程序宿主元素） ---------- */
+.phone-wrap{flex:0 0 375px;}
+.frame{
+  width:375px;height:812px;background:var(--page);border-radius:40px;overflow:hidden;position:relative;
+  border:1px solid rgba(37,99,235,.14);box-shadow:0 10px 30px rgba(23,50,110,.10);
+  display:flex;flex-direction:column;
+}
+.statusbar{height:24px;flex:0 0 24px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#fff;font-size:11px;font-weight:600;color:var(--text);}
+.sb-r{display:flex;align-items:center;gap:5px;}
+.sb-bars{display:flex;align-items:flex-end;gap:1.5px;}
+.sb-bars i{width:2.5px;background:var(--text);border-radius:1px;display:block;}
+.sb-bars i:nth-child(1){height:3px;} .sb-bars i:nth-child(2){height:5px;} .sb-bars i:nth-child(3){height:7px;} .sb-bars i:nth-child(4){height:9px;}
+.sb-batt{width:19px;height:9px;border:1px solid var(--text);border-radius:2.5px;position:relative;opacity:.85;}
+.sb-batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:11px;background:var(--text);border-radius:1px;}
+
+.navbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:center;position:relative;background:#fff;border-bottom:1px solid var(--border);}
+.navbar .title{font-size:15.5px;font-weight:600;color:var(--text);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.navbar .back{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:26px;height:26px;display:none;place-items:center;color:var(--text);cursor:pointer;}
+.navbar .back .ic{width:20px;height:20px;}
+.navbar .capsule{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:54px;height:26px;border:1px solid #E4E7EE;border-radius:999px;display:flex;align-items:center;justify-content:space-around;}
+
+.body{flex:1;min-height:0;overflow:hidden;background:var(--page);padding:13px 14px;display:flex;flex-direction:column;}
+
+/* ---------- 屏幕（.screen 注册表锚点） ---------- */
+.screen{display:none;flex:1;min-height:0;overflow:hidden;}
+.screen.on{display:flex;flex-direction:column;}
+
+/* 分支块：由 data-demo-state 驱动（demo-control-panel §5.2 契约） */
+.only-normal{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;overflow:hidden;}
+.only-empty{display:none;}
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal{display:none;}
+[data-demo-state="empty"] .only-empty{display:flex;flex-direction:column;flex:1;gap:10px;}
+
+/* ---------- tabBar ---------- */
+.tabbar{flex:0 0 58px;height:58px;background:#fff;border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;position:relative;padding-top:7px;}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--tab-idle);width:56px;letter-spacing:.2px;cursor:pointer;}
+.tab .ic{width:22px;height:22px;}
+.tab.active{color:var(--brand);font-weight:600;}
+
+/* ---------- 通用组件 ---------- */
+.ic{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);}
+.pad{padding:13px 14px;}
+.sect-h{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:600;color:var(--text);padding:1px 2px;}
+.sect-h em{font-style:normal;font-size:11px;font-weight:400;color:var(--text-2);}
+.hint{font-size:11px;color:var(--text-2);line-height:1.7;background:var(--brand-tint);border:1px dashed var(--brand-tint2);border-radius:var(--r-btn);padding:9px 11px;}
+.foot-note{margin-top:auto;font-size:10.5px;color:#98A0AE;line-height:1.7;text-align:center;}
+.tag{display:inline-flex;align-items:center;font-size:10.5px;padding:2px 9px;border-radius:var(--r-tag);background:#F4F6FA;color:var(--text-2);border:1px solid rgba(37,99,235,.07);white-space:nowrap;}
+.tag.b{background:var(--brand-tint);color:var(--brand-deep);border-color:var(--brand-tint2);font-weight:600;}
+.tag.a{background:#F0FBFA;color:#0B7C7B;border-color:#CFF0EE;font-weight:600;}
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;height:46px;border-radius:var(--r-btn);font-size:14.5px;font-weight:600;background:var(--brand);color:#fff;border:0;box-shadow:0 2px 8px rgba(37,99,235,.22);cursor:pointer;}
+.btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand-tint2);box-shadow:none;}
+.btn.sm{height:34px;font-size:12.5px;padding:0 14px;border-radius:10px;width:auto;display:inline-flex;box-shadow:none;}
+.btn.ghost.sm{background:#fff;}
+
+.avatar{width:44px;height:44px;flex:0 0 44px;border-radius:50%;background:var(--brand-tint);color:var(--brand-deep);display:grid;place-items:center;font-size:15px;font-weight:700;border:1.5px solid var(--brand-tint2);}
+.profile{display:flex;align-items:center;gap:12px;padding:13px 14px;}
+.profile .pt{display:flex;flex-direction:column;gap:3px;}
+.profile .pt b{font-size:14.5px;font-weight:600;}
+.profile .pt small{font-size:11px;color:var(--text-2);line-height:1.5;}
+
+.li{display:flex;align-items:center;gap:10px;padding:13px 14px;font-size:13.5px;color:var(--text);border-bottom:1px solid rgba(37,99,235,.06);cursor:pointer;}
+.li:last-child{border-bottom:0;}
+.li .ic{width:19px;height:19px;color:var(--brand-mid);flex:0 0 19px;}
+.li em{margin-left:auto;font-style:normal;font-size:11.5px;color:var(--text-2);}
+.li .chev{width:15px;height:15px;color:#C2C9D6;flex:0 0 15px;}
+
+/* 首页 */
+.hero{background:var(--brand-tint);border:1px solid var(--brand-tint2);border-radius:var(--r-card);padding:15px;display:flex;align-items:center;gap:12px;}
+.logo-o{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:var(--brand);color:#fff;display:grid;place-items:center;box-shadow:0 3px 10px rgba(37,99,235,.25);font-size:18px;font-weight:700;line-height:1;}
+.hero .ht{display:flex;flex-direction:column;gap:3px;}
+.hero .ht b{font-size:18px;font-weight:700;letter-spacing:.2px;}
+.hero .ht small{font-size:11.5px;color:var(--text-2);}
+.daily{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:13px 14px;}
+.daily .dt{font-size:11px;color:var(--text-2);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
+.daily .dt b{color:var(--brand-deep);font-weight:600;font-size:11.5px;}
+.daily .dc{font-size:13.5px;line-height:1.7;color:var(--text);}
+.daily .dc em{font-style:normal;color:var(--text-2);font-size:12px;display:block;margin-top:3px;}
+.more{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;color:var(--brand);font-weight:500;padding:8px;cursor:pointer;}
+.more .ic{width:15px;height:15px;}
+
+/* 功能卡（首页 + 发现共用） */
+.feature-card{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:13px 14px;cursor:pointer;}
+.f-ico{width:40px;height:40px;flex:0 0 40px;border-radius:12px;display:grid;place-items:center;font-size:16px;font-weight:700;}
+.feature-card.n .f-ico{background:var(--brand-tint);color:var(--brand-deep);}
+.feature-card.g .f-ico{background:#F0FBFA;color:#0B7C7B;}
+.f-txt{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.f-txt b{font-size:14.5px;font-weight:600;}
+.f-txt small{font-size:11.5px;color:var(--text-2);line-height:1.45;}
+.feature-card .chev{width:16px;height:16px;color:#B9C1CF;flex:0 0 16px;}
+.f-toggle{flex:0 0 auto;font-size:11px;font-weight:600;padding:5px 11px;border-radius:var(--r-tag);border:1px solid var(--brand-tint2);background:var(--brand-tint);color:var(--brand-deep);cursor:pointer;}
+.f-toggle.on{background:var(--brand);border-color:var(--brand);color:#fff;}
+
+/* 空态 */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding-bottom:30px;}
+.empty .et{font-size:14px;font-weight:600;color:var(--text);}
+.empty .es{font-size:11.5px;color:var(--text-2);text-align:center;line-height:1.75;max-width:250px;}
+.empty-ill{width:132px;height:112px;flex:0 0 auto;}
+
+/* NCE 目录 */
+.ovcard{display:flex;align-items:center;gap:14px;padding:13px 14px;}
+.ovcard .ovn{display:flex;flex-direction:column;gap:2px;}
+.ovcard .ovn b{font-size:18px;font-weight:700;color:var(--brand-deep);letter-spacing:.2px;}
+.ovcard .ovn b i{font-style:normal;font-size:11.5px;color:var(--text-2);font-weight:500;margin-left:3px;}
+.ovcard .ovn small{font-size:10.5px;color:var(--text-2);}
+.pbar{height:6px;border-radius:3px;background:var(--brand-tint2);overflow:hidden;flex:1;}
+.pbar i{display:block;height:100%;border-radius:3px;background:var(--brand-mid);}
+.lesson{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid rgba(37,99,235,.06);cursor:pointer;}
+.lesson:last-child{border-bottom:0;}
+.lno{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:var(--page);color:var(--text-2);display:grid;place-items:center;font-size:11.5px;font-weight:700;border:1px solid var(--border);}
+.lno.done{background:#F0FBFA;color:#0B7C7B;border-color:#CFF0EE;}
+.lno.now{background:var(--brand);color:#fff;border-color:var(--brand);}
+.lesson .lt{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.lesson .lt b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lesson .lt small{font-size:10.5px;color:var(--text-2);}
+.lesson .chev{width:14px;height:14px;color:#C2C9D6;flex:0 0 14px;}
+
+/* NCE 详情 */
+.fontbar{display:flex;align-items:center;justify-content:flex-end;gap:5px;}
+.fontbar span.lb{font-size:11px;color:var(--text-2);margin-right:auto;}
+.fz{font-size:11px;padding:4px 10px;border-radius:var(--r-tag);background:var(--page);color:var(--text-2);border:1px solid var(--border);cursor:pointer;}
+.fz.on{background:var(--brand-tint);color:var(--brand-deep);border-color:var(--brand-tint2);font-weight:700;}
+.sent{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:10px;font-size:14.5px;line-height:1.7;color:var(--text);border-left:2.5px solid transparent;cursor:pointer;}
+.sent .sn{font-size:10px;color:#A2AAB8;flex:0 0 14px;line-height:2.4;}
+.sent .stx{flex:1;min-width:0;}
+.sent .sacts{display:flex;gap:5px;flex:0 0 auto;align-items:center;}
+.sbtn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--brand-tint);color:var(--brand-deep);border:1px solid var(--brand-tint2);cursor:pointer;}
+.sbtn .ic{width:13px;height:13px;}
+.sbtn.star{background:transparent;border-color:transparent;color:#B9C1CF;}
+.sent.playing{background:var(--brand-tint);border-left-color:var(--brand);font-weight:600;}
+.sent.playing .sbtn.splay{background:var(--brand);color:#fff;border-color:var(--brand);}
+.sent.playing .sn{color:var(--brand-deep);}
+.lesson-nav{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:9px 12px;}
+.lnav{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--brand-deep);cursor:pointer;}
+.lnav .ic{width:14px;height:14px;}
+#screen-ncedetail[data-font="s"] .stx{font-size:12.5px;}
+#screen-ncedetail[data-font="m"] .stx{font-size:14.5px;}
+#screen-ncedetail[data-font="l"] .stx{font-size:16.5px;}
+
+/* 收藏 */
+.col-item{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border-bottom:1px solid rgba(37,99,235,.06);}
+.col-item:last-child{border-bottom:0;}
+.col-txt{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+.col-txt b{font-size:13px;font-weight:600;line-height:1.6;}
+.col-txt small{font-size:10.5px;color:var(--brand-deep);}
+.col-txt em{font-style:normal;font-size:11.5px;color:var(--text-2);}
+.sbtn.del{background:transparent;border-color:transparent;color:#B9C1CF;flex:0 0 26px;}
+.sbtn.del:hover{color:var(--danger);}
+
+/* 关于页 */
+.brandblk{display:flex;align-items:center;gap:12px;padding:15px 14px;}
+.brandblk .bt{display:flex;flex-direction:column;gap:3px;}
+.brandblk .bt b{font-size:15px;font-weight:700;letter-spacing:.2px;}
+.brandblk .bt small{font-size:10.5px;color:var(--text-2);}
+.legal{padding:14px;font-size:11.5px;line-height:1.95;color:#3A4152;}
+.legal p+p{margin-top:9px;}
+.legal b{font-weight:600;color:var(--text);}
+.legal .sig{color:var(--brand-deep);font-weight:600;}
+
+/* ---------- 角色可见性（demo-control-panel §5.3） ---------- */
+html[data-demo-role="guest"] [data-need-role="member"]{display:none}
+html[data-demo-role="member"] [data-need-role="guest"]{display:none}
+
+/* ---------- 标注层（§5.5） ---------- */
+[data-demo-anno="on"] [data-anno]{outline:1px dashed var(--brand);position:relative;}
+[data-demo-anno="on"] [data-anno]::after{content:attr(data-anno);position:absolute;top:-9px;left:-3px;
+  font-size:10px;line-height:14px;padding:0 5px;background:var(--brand);color:#fff;border-radius:4px;z-index:5;}
+
+/* ---------- 弹层 / Toast ---------- */
+.modal{position:fixed;inset:0;background:rgba(23,32,50,.38);display:none;align-items:center;justify-content:center;z-index:80;}
+.modal.on{display:flex;}
+.modal .box{background:var(--card);border-radius:var(--r-card);width:320px;padding:20px;box-shadow:var(--shadow-pop);}
+.modal h3{margin:0 0 8px;font-size:15px;}
+.modal p{margin:0 0 16px;color:var(--text-2);font-size:13px;line-height:1.7;}
+.modal .acts{display:flex;justify-content:flex-end;gap:8px;}
+.toast{position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:#1F2937;color:#fff;border-radius:14px;padding:10px 16px;font-size:12px;box-shadow:0 8px 22px rgba(15,23,42,.28);z-index:90;opacity:0;pointer-events:none;transition:opacity .2s;max-width:80%;}
+.toast.on{opacity:1;}
+
+/* ---------- 原型演示控件（壳外画布右下，宽度 ≤240px） ---------- */
+.demo-ctl{position:fixed;right:16px;bottom:16px;width:240px;background:var(--card);
+  border:1px dashed var(--brand);border-radius:12px;box-shadow:var(--shadow-pop);z-index:70;
+  font-size:12px;transition:opacity .2s;max-height:calc(100vh - 32px);overflow:auto;}
+.demo-ctl[data-open="false"]{width:auto;}
+.demo-ctl[data-open="false"] .dc-body{display:none;}
+body.modal-open .demo-ctl{opacity:.35;}
+body.modal-open .demo-ctl:hover{opacity:1;}
+.dc-head{display:flex;align-items:center;gap:6px;width:100%;padding:9px 12px;background:none;border:none;
+  cursor:pointer;font-size:12px;font-weight:600;color:var(--brand-deep);text-align:left;}
+.dc-head .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);}
+.dc-head .cnt{margin-left:auto;font-weight:400;color:var(--text-2);}
+.dc-body{border-top:1px dashed var(--border);padding:10px 12px;}
+.dc-meta{color:var(--text-2);line-height:1.55;margin-bottom:8px;font-size:11px;}
+.dc-meta b{color:var(--text);font-weight:600;}
+.dc-grp{margin-top:10px;}
+.dc-grp .lb{color:var(--text-2);margin-bottom:4px;font-size:11px;display:flex;align-items:center;justify-content:space-between;}
+.dc-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.chip{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:20px;
+  padding:2px 9px;font-size:11px;cursor:pointer;}
+.chip:hover{border-color:var(--brand);}
+.chip.on{background:var(--brand-tint);border-color:var(--brand);color:var(--brand-deep);font-weight:500;}
+.dc-presets{display:flex;flex-direction:column;gap:3px;}
+.preset{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:8px;
+  padding:4px 8px;font-size:11px;text-align:left;cursor:pointer;}
+.preset:hover{border-color:var(--brand);}
+.preset.on{background:var(--brand-tint);border-color:var(--brand);color:var(--brand-deep);}
+.dc-foot{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);flex-wrap:wrap;}
+.dc-foot .k{margin-left:auto;color:var(--text-2);font-size:10px;}
+@media print { .demo-ctl{display:none} }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.2 10.6 12 3.4l8.8 7.2"/><path d="M5.6 9.4V20.2h12.8V9.4"/><path d="M9.8 20.2v-5.4h4.4v5.4"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M15.4 8.6 13.6 13.6 8.6 15.4l1.8-5z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20.2c.6-3.9 3.6-6 7.2-6s6.6 2.1 7.2 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.8 5.6 8.2 12l6.6 6.4"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.4 5.6 16 12l-6.6 6.4"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4.2 5.2c2.6-1 5.2-1 7.8.5 2.6-1.5 5.2-1.5 7.8-.5v13c-2.6-1-5.2-1-7.8.5-2.6-1.5-5.2-1.5-7.8-.5z"/><path d="M12 5.7v12.5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4.2 2.5 5.1 5.6.8-4.1 3.9 1 5.5-5-2.7-5 2.7 1-5.5L3.9 10l5.6-.8z"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4.6 9.4h3.2L12.6 5.6v12.8L7.8 14.6H4.6z"/><path d="M16 9.2a4 4 0 0 1 0 5.6"/><path d="M18.6 6.8a7.4 7.4 0 0 1 0 10.4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 11v5.4"/><path d="M12 8.2v.1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5.6 12.6 4.2 4.2 8.6-9.6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M10.17 2.58 L13.83 2.58 L13.97 4.66 L15.8 5.42 L17.37 4.04 L19.96 6.63 L18.58 8.2 L19.34 10.03 L21.42 10.17 L21.42 13.83 L19.34 13.97 L18.58 15.8 L19.96 17.37 L17.37 19.96 L15.8 18.58 L13.97 19.34 L13.83 21.42 L10.17 21.42 L10.03 19.34 L8.2 18.58 L6.63 19.96 L4.04 17.37 L5.42 15.8 L4.66 13.97 L2.58 13.83 L2.58 10.17 L4.66 10.03 L5.42 8.2 L4.04 6.63 L6.63 4.04 L8.2 5.42 L10.03 4.66 Z"/><circle cx="12" cy="12" r="3.2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5.4" y="10.4" width="13.2" height="9" rx="2.4"/><path d="M8.6 10.4V8a3.4 3.4 0 0 1 6.8 0v2.4"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15.4 6.4 9 12l6.4 5.6"/><path d="M6.6 6.4v11.2"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M8.6 6.4 15 12l-6.4 5.6"/><path d="M17.4 6.4v11.2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.2v13.6"/><path d="M5.2 12h13.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.4 6.4l11.2 11.2"/><path d="M17.6 6.4 6.4 17.6"/></symbol>
+</svg>
+
+<div class="doc-head">
+  <div class="doc-title">大橙子英语 · 微信小程序原型 <span>（去 AI 整改版 · 2026-11-13）</span></div>
+  <div class="doc-meta">
+    范围：底部 <b>3 个真 tab</b> —— 首页 / 发现 / 我的。整改对齐 <b>review-remove-ai-2026-11-13.md</b>：
+    <b>彻底删除</b> AI 对话 / 翻译闭环 / 三种显示模式 / 点句译文 / 生词查词 / 参考译文 / 习题 / 导读，
+    只保留「新概念英语 <b>逐句朗读</b> + <b>逐句收藏</b>」这一纯学习能力；文案全量中性化，品牌统一「大橙子英语」。
+  </div>
+  <div class="pills">
+    <span class="pill">主题：蓝色系 · 浅色白底（--brand:#2563EB）</span>
+    <span class="pill">品牌名：大橙子英语</span>
+    <span class="pill g">三 tab：首页 / 发现 / 我的</span>
+    <span class="pill n">演示控件 L1 · 9 屏可直达 · 6 场景包</span>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="phone-wrap">
+    <div class="frame">
+      <div class="statusbar"><span>9:41</span><div class="sb-r"><span class="sb-bars"><i></i><i></i><i></i><i></i></span><span class="sb-batt"></span></div></div>
+      <div class="navbar">
+        <span class="back" id="nav-back" data-go-back><svg class="ic"><use href="#i-back"/></svg></span>
+        <span class="title" id="nav-title">大橙子英语</span>
+        <span class="capsule" id="nav-capsule"><svg class="ic" style="width:14px;height:14px;color:#8A90A0"><use href="#i-user"/></svg><svg class="ic" style="width:14px;height:14px;color:#8A90A0"><use href="#i-chev-r"/></svg></span>
+      </div>
+
+      <div class="body" id="body">
+
+        <!-- ════════ 首页（tab 1） ════════ -->
+        <section class="screen on" id="screen-home" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="hero">
+              <span class="logo-o">橙</span>
+              <span class="ht">
+                <b data-need-role="guest">下午好</b>
+                <b data-need-role="member">橙友，下午好</b>
+                <small>今天想学哪一课？</small>
+              </span>
+            </div>
+
+            <div class="daily">
+              <div class="dt"><b>今日一句</b><span>每天一句，稳步进阶。</span></div>
+              <div class="dc">「慢慢来，比较快。」<em>Slow is smooth, smooth is fast.</em></div>
+            </div>
+
+            <div class="sect-h"><span>常用功能</span><em>在发现页添加</em></div>
+            <div id="home-features"></div>
+
+            <div class="more" data-go="discover">更多功能 <svg class="ic"><use href="#i-chev-r"/></svg></div>
+            <div class="hint">每天一句，稳步进阶。</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty">
+              <div class="et">还没有常用功能</div>
+              <div class="es">去发现页把功能添加为常用，首页即可直达。</div>
+              <button class="btn ghost sm" data-go="discover">去发现</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ 发现（tab 2） ════════ -->
+        <section class="screen" id="screen-discover" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>全部功能</span><em>添加为常用 · 首页直达</em></div>
+            <div id="discover-features"></div>
+            <div class="foot-note">更多内容持续更新中</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty">
+              <div class="et">暂无功能</div>
+              <div class="es">功能列表为空（正常情况不应出现）。</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ 我的（tab 3） ════════ -->
+        <section class="screen" id="screen-mine" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card profile">
+              <span class="avatar" data-anno="D5">橙</span>
+              <span class="pt">
+                <b data-need-role="member">橙友</b>
+                <b data-need-role="guest">点击登录</b>
+                <small data-need-role="member">已登录 · 学习进度与收藏已同步</small>
+                <small data-need-role="guest">登录后学习进度与收藏跟着账号走</small>
+              </span>
+              <span class="tag a" data-need-role="member" style="margin-left:auto">已登录</span>
+            </div>
+
+            <div class="card">
+              <div class="li" data-go="nce"><svg class="ic"><use href="#i-book"/></svg><span>课文学习进度</span><em>3 / 96</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="collection" data-anno="D2"><svg class="ic"><use href="#i-star"/></svg><span>收藏</span><em id="mine-col-count">3 条</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="settings"><svg class="ic"><use href="#i-gear"/></svg><span>设置</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="agreement"><svg class="ic"><use href="#i-info"/></svg><span>用户协议与隐私政策</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="about"><svg class="ic"><use href="#i-info"/></svg><span>关于与免责</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+
+            <div class="foot-note">大橙子英语 · 学习进度与收藏都跟着账号走</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ NCE 课文目录（二级页） ════════ -->
+        <section class="screen" id="screen-nce" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card ovcard">
+              <span class="ovn"><b>3<i>/ 96 课</i></b><small>已学完 3 课 · 正在学第 4 课</small></span>
+              <span class="pbar"><i style="width:3.1%"></i></span>
+            </div>
+
+            <div class="sect-h"><span>课文</span><em>点一课开始</em></div>
+
+            <div class="card" data-anno="D4">
+              <div class="lesson" data-go="ncedetail"><span class="lno done">1</span><span class="lt"><b>A Private Conversation</b><small>私人谈话 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno done">2</span><span class="lt"><b>Breakfast or Lunch?</b><small>早餐还是午餐 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno done">3</span><span class="lt"><b>Please Send Me a Card</b><small>请给我寄一张明信片 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail" style="background:var(--brand-tint)"><span class="lno now">4</span><span class="lt"><b>An Exciting Trip</b><small>激动人心的旅行 · 进行中 40%</small></span><span class="pbar" style="max-width:38px"><i style="width:40%"></i></span></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno">5</span><span class="lt"><b>No Wrong Numbers</b><small>无错号之虞 · 未开始</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno">6</span><span class="lt"><b>Percy Buttons</b><small>珀西·巴顿斯 · 未开始</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+
+            <div class="foot-note">课文内容仅供学习参考</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">暂无课文</div><div class="es">课文目录为空。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ NCE 课文学习（二级页，只留英文课文 + 逐句朗读 + 逐句收藏） ════════ -->
+        <section class="screen" id="screen-ncedetail" data-demo-state="normal" data-font="m">
+          <div class="only-normal">
+            <div class="fontbar" data-anno="D1">
+              <span class="lb">字号</span>
+              <span class="fz" data-font="s">A-</span>
+              <span class="fz on" data-font="m">A</span>
+              <span class="fz" data-font="l">A+</span>
+            </div>
+
+            <div class="card" style="padding:8px 6px">
+              <div class="sent" data-line="0">
+                <span class="sn">1</span><span class="stx">I have just received a letter from my brother, Tim.</span>
+                <span class="sacts"><span class="sbtn splay" data-play="0"><svg class="ic"><use href="#i-sound"/></svg></span><span class="sbtn star" data-star="0" data-anno="D3"><svg class="ic"><use href="#i-star"/></svg></span></span>
+              </div>
+              <div class="sent" data-line="1">
+                <span class="sn">2</span><span class="stx">He is in Australia.</span>
+                <span class="sacts"><span class="sbtn splay" data-play="1"><svg class="ic"><use href="#i-sound"/></svg></span><span class="sbtn star" data-star="1"><svg class="ic"><use href="#i-star"/></svg></span></span>
+              </div>
+              <div class="sent" data-line="2">
+                <span class="sn">3</span><span class="stx">He has been there for six months.</span>
+                <span class="sacts"><span class="sbtn splay" data-play="2"><svg class="ic"><use href="#i-sound"/></svg></span><span class="sbtn star" data-star="2"><svg class="ic"><use href="#i-star"/></svg></span></span>
+              </div>
+              <div class="sent" data-line="3">
+                <span class="sn">4</span><span class="stx">Tim is an engineer.</span>
+                <span class="sacts"><span class="sbtn splay" data-play="3"><svg class="ic"><use href="#i-sound"/></svg></span><span class="sbtn star" data-star="3"><svg class="ic"><use href="#i-star"/></svg></span></span>
+              </div>
+              <div class="sent" data-line="4">
+                <span class="sn">5</span><span class="stx">He is working for a big firm and he has already visited a great number of different places in Australia.</span>
+                <span class="sacts"><span class="sbtn splay" data-play="4"><svg class="ic"><use href="#i-sound"/></svg></span><span class="sbtn star" data-star="4"><svg class="ic"><use href="#i-star"/></svg></span></span>
+              </div>
+            </div>
+
+            <div class="hint">点哪句读哪句；点同一句停止，点他句切换；点句末 ☆ 收藏该句。</div>
+
+            <div class="lesson-nav" style="margin-top:auto">
+              <span class="lnav" data-go="ncedetail"><svg class="ic"><use href="#i-prev"/></svg>上一课</span>
+              <span class="lnav" data-go="ncedetail"><svg class="ic"><use href="#i-next"/></svg>下一课</span>
+            </div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">课文内容为空</div><div class="es">该课暂无课文内容。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 收藏（二级页） ════════ -->
+        <section class="screen" id="screen-collection" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>你收藏的句子会一直保留在这里</span><em id="col-count">3 条</em></div>
+            <div class="card" id="collection-list">
+              <div class="col-item">
+                <span class="col-txt"><b>He is in Australia.</b><small>Lesson 4 · An Exciting Trip</small><em>他现在在澳大利亚。</em></span>
+                <span class="sbtn del" data-del="0"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+              <div class="col-item">
+                <span class="col-txt"><b>I had a very good seat.</b><small>Lesson 12 · A private conversation</small><em>我坐的座位很好。</em></span>
+                <span class="sbtn del" data-del="1"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+              <div class="col-item">
+                <span class="col-txt"><b>Tim is an engineer.</b><small>Lesson 4 · An Exciting Trip</small><em>蒂姆是一名工程师。</em></span>
+                <span class="sbtn del" data-del="2"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+            </div>
+            <div class="hint">点右上角 × 删除收藏</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty">
+              <svg class="empty-ill" viewBox="0 0 132 112" aria-hidden="true">
+                <rect x="20" y="18" width="66" height="82" rx="10" fill="#FFFFFF" stroke="#DBEAFE" stroke-width="1.6"/>
+                <path d="M32 38h42M32 50h42M32 62h28" stroke="#DBEAFE" stroke-width="3.2" stroke-linecap="round"/>
+                <path d="M70 64h30M70 74h18" stroke="#93B4F5" stroke-width="3.2" stroke-linecap="round"/>
+                <path d="M66 92l-2 10 10-6z" fill="#BFDBFE"/>
+              </svg>
+              <div class="et">还没有收藏</div>
+              <div class="es">在课文中点句子旁的「收藏」，<br>收藏的句子会一直保留在这里。</div>
+              <button class="btn sm" data-go="nce" style="margin-top:2px">去学课文</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ 设置（二级页） ════════ -->
+        <section class="screen" id="screen-settings" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>外观</span></div>
+            <div class="card"><div class="li" data-setting="radius"><span>圆角风格</span><em>柔和</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+
+            <div class="sect-h"><span>存储</span></div>
+            <div class="card"><div class="li" data-setting="cache"><span>清除缓存</span><em>运行时统计</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+
+            <div class="sect-h"><span>关于</span></div>
+            <div class="card">
+              <div class="li" data-go="agreement"><span>用户协议与隐私政策</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="about"><span>关于与免责</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+
+            <div class="sect-h"><span>账号</span></div>
+            <div class="card"><div class="li" data-setting="logout"><span>退出登录</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+
+            <div class="foot-note">这里的设置影响整个小程序</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 关于与免责（二级页） ════════ -->
+        <section class="screen" id="screen-about" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card brandblk">
+              <span class="logo-o">橙</span>
+              <span class="bt"><b>大橙子英语</b><small>版本 v1.0.0</small></span>
+            </div>
+
+            <div class="card legal">
+              <p><b>关于</b></p>
+              <p>本小程序由 <span class="sig">大橙子英语</span> 提供并维护。</p>
+              <p>提供新概念英语课文学习辅助：逐句朗读与句子收藏。</p>
+              <p><b>免责声明</b></p>
+              <p>仅用于新概念英语课文学习辅助。课文与朗读内容可能存在偏差，重要场景请自行核实。</p>
+            </div>
+
+            <div class="card">
+              <div class="li" data-go="agreement"><svg class="ic"><use href="#i-info"/></svg><span>用户协议</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="agreement"><svg class="ic"><use href="#i-info"/></svg><span>隐私政策</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li"><svg class="ic"><use href="#i-check"/></svg><span>检查更新</span><em>已是最新</em></div>
+            </div>
+
+            <div class="foot-note">大橙子英语 · 保留所有权利</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 用户协议与隐私政策（二级页） ════════ -->
+        <section class="screen" id="screen-agreement" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card legal">
+              <p><b>用户协议与隐私政策</b></p>
+              <p>学习数据：课文学习进度、收藏。</p>
+              <p>我们仅在提供新概念英语课文学习辅助所必需的范围内处理上述数据，不用于其他用途。</p>
+              <p>你可以在「设置 → 清除缓存」中清除本地缓存；退出登录后，本地学习数据将不再与账号关联。</p>
+            </div>
+            <div class="foot-note">大橙子英语</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+      </div><!-- /body -->
+
+      <div class="tabbar" id="tabbar">
+        <div class="tab active" data-tab="home"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+        <div class="tab" data-tab="discover"><svg class="ic"><use href="#i-compass"/></svg><span>发现</span></div>
+        <div class="tab" data-tab="mine"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+      </div>
+    </div><!-- /frame -->
+  </div><!-- /phone-wrap -->
+
+  <!-- ══ 原型演示控件（① 稿头 ② 场景 ③ 导航 ④ 辅助） ══ -->
+  <aside class="demo-ctl" data-demo-ctl data-open="true" aria-label="原型演示控件">
+    <button class="dc-head" data-dc-toggle aria-expanded="true">
+      <span class="dot"></span>原型演示控件<span class="cnt" id="dc-cnt">待确认 5</span>
+    </button>
+    <div class="dc-body">
+      <div class="dc-meta">
+        <b>大橙子英语 · 去 AI 整改原型</b><br>
+        目标端 微信小程序 · 2026-11-13 · 数据全为 mock<br>
+        待确认见《设计决策记录》D1–D5
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb"><span>演示场景（点一下到那儿）</span><button class="chip" data-dc-next>下一步 →</button></div>
+        <div class="dc-presets">
+          <button class="preset" data-dc-preset="p1">1. S1 新用户首次进入 · 首页默认</button>
+          <button class="preset" data-dc-preset="p2">2. S2 发现页 · 添加收藏为常用</button>
+          <button class="preset" data-dc-preset="p3">3. S3 NCE 详情 · 点句朗读</button>
+          <button class="preset" data-dc-preset="p4">4. S4 收藏 · 空态</button>
+          <button class="preset" data-dc-preset="p5">5. S5 收藏 · 已有句子</button>
+          <button class="preset" data-dc-preset="p6">6. S6 登录守卫 · 匿名点收藏</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">角色</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-role="guest">未登录</button>
+          <button class="chip" data-dc-role="member">已登录</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">数据态（当前屏）</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-state="normal">正常</button>
+          <button class="chip" data-dc-state="empty">空态</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">屏幕直达</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-screen="home">首页</button>
+          <button class="chip" data-dc-screen="discover">发现</button>
+          <button class="chip" data-dc-screen="mine">我的</button>
+          <button class="chip" data-dc-screen="nce">NCE 目录</button>
+          <button class="chip" data-dc-screen="ncedetail">NCE 详情</button>
+          <button class="chip" data-dc-screen="collection">收藏</button>
+          <button class="chip" data-dc-screen="settings">设置</button>
+          <button class="chip" data-dc-screen="about">关于</button>
+          <button class="chip" data-dc-screen="agreement">协议</button>
+        </div>
+      </div>
+
+      <div class="dc-foot">
+        <button class="chip" data-dc-anno>标注层</button>
+        <button class="chip" data-dc-reset>复位</button>
+        <span class="k">H 收起 · [ ] 上下屏 · 1-9 场景</span>
+      </div>
+    </div>
+  </aside>
+</div><!-- /stage -->
+
+<div class="modal" id="modal-login">
+  <div class="box">
+    <h3>请先登录</h3>
+    <p>登录后学习进度与收藏跟着账号走。<br>登录由小程序静默完成，无需额外授权。</p>
+    <div class="acts"><button class="btn ghost sm" data-close>取消</button><button class="btn sm" data-close>去登录</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ══════════ DEMO 注册表（做新稿只改这一段） ══════════ */
+const DEMO = {
+  screens: {
+    home:       { el:'screen-home',       title:'大橙子英语',              label:'首页',          group:'Tab 页' },
+    discover:   { el:'screen-discover',   title:'发现',                    label:'发现',          group:'Tab 页' },
+    mine:       { el:'screen-mine',       title:'我的',                    label:'我的',          group:'Tab 页' },
+    nce:        { el:'screen-nce',        title:'新概念英语',              label:'NCE 课文目录',  group:'学习' },
+    ncedetail:  { el:'screen-ncedetail',  title:'Lesson 4 · An Exciting Trip', label:'NCE 课文学习', group:'学习' },
+    collection: { el:'screen-collection', title:'收藏',                    label:'收藏',          group:'学习' },
+    settings:   { el:'screen-settings',   title:'设置',                    label:'设置',          group:'我的' },
+    about:      { el:'screen-about',      title:'关于与免责',              label:'关于与免责',    group:'我的' },
+    agreement:  { el:'screen-agreement',  title:'用户协议与隐私政策',      label:'协议',          group:'我的' },
+  },
+  roles:  { guest:'未登录', member:'已登录' },
+  states: { normal:'正常', empty:'空态' },
+  presets: [
+    { id:'p1', label:'S1 新用户首次进入 · 首页默认', role:'guest', screen:'home', state:'normal', default:true, why:'未登录用户打开看到什么：常用功能只有 NCE 一项 + 今日一句' },
+    { id:'p2', label:'S2 发现页 · 添加收藏为常用', role:'member', screen:'discover', state:'normal', why:'点「+ 添加」后首页联动出现收藏卡（features:updated 广播语义）' },
+    { id:'p3', label:'S3 NCE 详情 · 点句朗读', role:'member', screen:'ncedetail', state:'normal', why:'点哪句读哪句、句级高亮、点句末 ☆ 收藏' },
+    { id:'p4', label:'S4 收藏 · 空态', role:'member', screen:'collection', state:'empty', why:'还没有收藏时的唯一恢复入口「去学课文」' },
+    { id:'p5', label:'S5 收藏 · 已有句子', role:'member', screen:'collection', state:'normal', why:'收藏列表：英文 + Lesson 出处 + 译文 + 删除' },
+    { id:'p6', label:'S6 登录守卫 · 匿名点收藏', role:'guest', screen:'ncedetail', state:'normal', modal:'login', why:'未登录点 ☆ 收藏 → 弹「请先登录」' },
+  ],
+};
+
+/* ══════════ 功能注册表（对齐 utils/features.ts 语义） ══════════ */
+const FEATURES = [
+  { id:'nce', title:'新概念英语', desc:'NCE 逐句精读 · 点句朗读', icon:'英', iconClass:'n', screen:'nce', needLogin:false, defaultPinned:true },
+  { id:'glossary', title:'收藏', desc:'收藏的句子，随时回看', icon:'藏', iconClass:'g', screen:'collection', needLogin:true, defaultPinned:false },
+];
+let pinned = new Set(FEATURES.filter((f) => f.defaultPinned).map((f) => f.id));
+
+/* ══════════ 控件逻辑（照抄 + 静态渲染适配） ══════════ */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const KEY = 'dc:' + location.pathname;   // file:// 同源，key 必须带文件标识（§5.6）
+const TABS = ['home', 'discover', 'mine'];
+const PARENT = { nce:'home', ncedetail:'nce', collection:'mine', settings:'mine', about:'mine', agreement:'settings' };
+let cur = { role:'guest', screen:'home', preset:null, anno:false };
+const stateOf = {};
+let playingIdx = -1;
+let collected = 3;
+
+function render() {
+  $$('.preset').forEach((b) => b.classList.toggle('on', b.dataset.dcPreset === cur.preset));
+  $$('[data-dc-role]').forEach((b) => b.classList.toggle('on', b.dataset.dcRole === cur.role));
+  const st = stateOf[cur.screen] || 'normal';
+  $$('[data-dc-state]').forEach((b) => b.classList.toggle('on', b.dataset.dcState === st));
+  $$('[data-dc-screen]').forEach((b) => b.classList.toggle('on', b.dataset.dcScreen === cur.screen));
+  $('#dc-cnt').textContent = '待确认 ' + $$('[data-anno]').length;
+}
+
+function go(key, opts = {}) {
+  if (!DEMO.screens[key]) return;
+  cur.screen = key;
+  $$('.screen').forEach((s) => s.classList.remove('on'));
+  document.getElementById(DEMO.screens[key].el).classList.add('on');
+  // 导航栏 + tabBar 随屏切换
+  const isTab = TABS.includes(key);
+  $('#nav-title').textContent = DEMO.screens[key].title;
+  $('#nav-back').style.display = isTab ? 'none' : 'grid';
+  $('#nav-capsule').style.display = isTab ? 'flex' : 'none';
+  $('#tabbar').style.display = isTab ? 'flex' : 'none';
+  $$('#tabbar .tab').forEach((t, i) => t.classList.toggle('active', TABS[i] === key));
+  applyState(stateOf[key] || 'normal');
+  if (opts.hash !== false && location.hash !== '#s=' + key) location.hash = '#s=' + key;
+  render();
+}
+
+function back() {
+  go(PARENT[cur.screen] || 'home');
+}
+
+function setRole(role) {
+  cur.role = role;
+  document.documentElement.dataset.demoRole = role;
+  render();
+}
+
+function applyState(state) {
+  stateOf[cur.screen] = state;
+  const el = document.getElementById(DEMO.screens[cur.screen].el);
+  el.dataset.demoState = state;
+  render();
+}
+
+function openModal(id) {
+  const m = document.getElementById('modal-' + id);
+  if (m) m.classList.add('on');
+  document.body.classList.add('modal-open');
+}
+function closeModal() {
+  $$('.modal').forEach((m) => m.classList.remove('on'));
+  document.body.classList.remove('modal-open');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 1600);
+}
+
+function applyPreset(id) {
+  const p = DEMO.presets.find((x) => x.id === id);
+  if (!p) return;
+  cur.preset = id;
+  resetPinned();
+  setRole(p.role);
+  go(p.screen, { hash:false });
+  applyState(p.state);
+  closeModal();
+  if (p.modal) openModal(p.modal);
+  render();
+}
+
+function resetStates() {
+  Object.keys(DEMO.screens).forEach((k) => {
+    stateOf[k] = 'normal';
+    const el = document.getElementById(DEMO.screens[k].el);
+    if (el) el.dataset.demoState = 'normal';
+  });
+}
+
+/* ══════════ 产品逻辑（开关真生效 / 联动 / 逐句朗读 / 收藏） ══════════ */
+function resetPinned() {
+  pinned = new Set(FEATURES.filter((f) => f.defaultPinned).map((f) => f.id));
+  renderFeatures();
+}
+
+function featureCardHome(f) {
+  return `<div class="feature-card ${f.iconClass}" data-go-feature="${f.screen}">
+    <span class="f-ico">${f.icon}</span>
+    <span class="f-txt"><b>${f.title}</b><small>${f.desc}</small></span>
+    <svg class="ic chev"><use href="#i-chev-r"/></svg>
+  </div>`;
+}
+function featureCardDiscover(f) {
+  const p = pinned.has(f.id);
+  return `<div class="feature-card ${f.iconClass}">
+    <span class="f-ico">${f.icon}</span>
+    <span class="f-txt" data-go-feature="${f.screen}"><b>${f.title}</b><small>${f.desc}</small></span>
+    <button class="f-toggle${p ? ' on' : ''}" data-toggle-pin="${f.id}">${p ? '已添加' : '+ 添加'}</button>
+  </div>`;
+}
+function renderFeatures() {
+  const homePinned = FEATURES.filter((f) => pinned.has(f.id));
+  const hf = $('#home-features');
+  if (hf) hf.innerHTML = homePinned.map(featureCardHome).join('');
+  const df = $('#discover-features');
+  if (df) df.innerHTML = FEATURES.map(featureCardDiscover).join('');
+}
+
+function togglePinned(id) {
+  if (pinned.has(id)) pinned.delete(id); else pinned.add(id);
+  renderFeatures();
+  const f = FEATURES.find((x) => x.id === id);
+  toast(pinned.has(id) ? '已添加「' + f.title + '」为常用' : '已从常用移除「' + f.title + '」');
+}
+
+function openFeature(screen) {
+  const f = FEATURES.find((x) => x.screen === screen);
+  if (f && f.needLogin && cur.role === 'guest') { openModal('login'); return; }
+  go(screen);
+}
+
+function playLine(i) {
+  playingIdx = (playingIdx === i) ? -1 : i;
+  $$('#screen-ncedetail .sent').forEach((el, idx) => el.classList.toggle('playing', idx === playingIdx));
+}
+
+function collectLine(i) {
+  if (cur.role === 'guest') { openModal('login'); return; }
+  const sent = $$('#screen-ncedetail .sent')[i];
+  const txt = sent ? sent.querySelector('.stx').textContent : '';
+  toast('已收藏 · 「' + txt.slice(0, 16) + '…」');
+}
+
+function setFont(l) {
+  const el = $('#screen-ncedetail');
+  el.dataset.font = l;
+  $$('#screen-ncedetail .fz').forEach((b) => b.classList.toggle('on', b.dataset.font === l));
+}
+
+function removeCollected() {
+  collected = Math.max(0, collected - 1);
+  $('#col-count').textContent = collected + ' 条';
+  $('#mine-col-count').textContent = collected + ' 条';
+  const list = $('#collection-list');
+  const items = $$('#collection-list .col-item');
+  if (items.length) items[items.length - 1].remove();
+  if (collected === 0) {
+    stateOf.collection = 'empty';
+    const el = $('#screen-collection');
+    el.dataset.demoState = 'empty';
+    render();
+  }
+}
+
+/* 统一事件委托：先控件，后产品 */
+document.addEventListener('click', (e) => {
+  const ctl = e.target.closest('[data-dc-preset],[data-dc-role],[data-dc-state],[data-dc-screen],[data-dc-anno],[data-dc-reset],[data-dc-next],[data-dc-toggle],[data-close]');
+  if (ctl) {
+    if (ctl.dataset.dcPreset) return applyPreset(ctl.dataset.dcPreset);
+    if (ctl.hasAttribute('data-dc-next')) {
+      const i = DEMO.presets.findIndex((p) => p.id === cur.preset);
+      return applyPreset(DEMO.presets[(i + 1) % DEMO.presets.length].id);
+    }
+    if (ctl.dataset.dcRole) return setRole(ctl.dataset.dcRole);
+    if (ctl.dataset.dcState) return applyState(ctl.dataset.dcState);
+    if (ctl.dataset.dcScreen) return go(ctl.dataset.dcScreen);
+    if (ctl.hasAttribute('data-dc-anno')) {
+      cur.anno = !cur.anno;
+      document.documentElement.dataset.demoAnno = cur.anno ? 'on' : 'off';
+      ctl.classList.toggle('on', cur.anno);
+      return;
+    }
+    if (ctl.hasAttribute('data-dc-reset')) {
+      cur.anno = false; document.documentElement.dataset.demoAnno = 'off';
+      $$('[data-dc-anno]').forEach((b) => b.classList.remove('on'));
+      resetStates();
+      return applyPreset(DEMO.presets.find((p) => p.default).id);
+    }
+    if (ctl.hasAttribute('data-dc-toggle')) {
+      const box = $('[data-demo-ctl]'), open = box.dataset.open !== 'true';
+      box.dataset.open = String(open);
+      $('[data-dc-toggle]').setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (_) {}
+      return;
+    }
+    if (ctl.hasAttribute('data-close')) return closeModal();
+  }
+
+  const goEl = e.target.closest('[data-go]');
+  if (goEl) return go(goEl.dataset.go);
+  const backEl = e.target.closest('[data-go-back]');
+  if (backEl) return back();
+  const tabEl = e.target.closest('[data-tab]');
+  if (tabEl) return go(tabEl.dataset.tab);
+  const gf = e.target.closest('[data-go-feature]');
+  if (gf) return openFeature(gf.dataset.goFeature);
+  const tp = e.target.closest('[data-toggle-pin]');
+  if (tp) return togglePinned(tp.dataset.togglePin);
+  const st = e.target.closest('[data-star]');
+  if (st) return collectLine(+st.dataset.star);
+  const pl = e.target.closest('[data-play]');
+  if (pl) return playLine(+pl.dataset.play);
+  const line = e.target.closest('[data-line]');
+  if (line) return playLine(+line.dataset.line);
+  const fz = e.target.closest('[data-font]');
+  if (fz) return setFont(fz.dataset.font);
+  const del = e.target.closest('[data-del]');
+  if (del) return removeCollected();
+  const set = e.target.closest('[data-setting]');
+  if (set) return toast('「' + set.querySelector('span').textContent + '」落地以小程序真机为准');
+});
+
+/* 键盘（§七；输入框内让行） */
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input,textarea,select,[contenteditable]')) return;
+  const keys = Object.keys(DEMO.screens);
+  if (e.key === '[') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) - 1 + keys.length) % keys.length]); }
+  else if (e.key === ']') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) + 1) % keys.length]); }
+  else if (e.key === 'h' || e.key === 'H') { $('[data-dc-toggle]').click(); }
+  else if (e.key === 'a' || e.key === 'A') { $('[data-dc-anno]').click(); }
+  else if (e.key === '?') { $('[data-demo-ctl]').dataset.open = 'true'; $('[data-dc-toggle]').setAttribute('aria-expanded', 'true'); }
+  else if (e.key === 'Escape') { closeModal(); }
+  else if (/^[1-9]$/.test(e.key)) { const p = DEMO.presets[+e.key - 1]; if (p) applyPreset(p.id); }
+});
+
+/* hash 路由回灌（§5.4 单一入口的另一半） */
+addEventListener('hashchange', () => {
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  if (k && k !== cur.screen) go(k, { hash:false });
+});
+
+/* 初始化：折叠态恢复 + 默认场景 + 渲染功能卡 */
+try { const o = localStorage.getItem(KEY); if (o !== null) $('[data-demo-ctl]').dataset.open = o === '1' ? 'true' : 'false'; } catch (_) {}
+if (innerWidth < 1200) $('[data-demo-ctl]').dataset.open = 'false';
+renderFeatures();
+(function init() {
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  applyPreset(DEMO.presets.find((p) => p.default).id);
+  if (k) go(k, { hash:false });
+})();
+</script>
+</body>
+</html>
