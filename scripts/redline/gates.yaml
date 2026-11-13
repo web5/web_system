@@ -163,7 +163,7 @@ gates:
     trigger:
       scope: code_file
       skip_comment_line: true
-      exclude_paths: ["scripts/*.mjs", "scripts/*.cjs", "apps/*/scripts/*.js", "apps/*/scripts/*.mjs", "apps/*/scripts/*.cjs", "archive/migrations/*.mjs", "archive/migrations/*.cjs", ".codebuddy/skills/*/scripts/*.js", ".codebuddy/skills/*/scripts/*.mjs", ".codebuddy/skills/*/scripts/*.cjs", ".codebuddy/agent-kit/skills/*/scripts/*.js", ".codebuddy/agent-kit/skills/*/scripts/*.mjs", ".codebuddy/agent-kit/skills/*/scripts/*.cjs"]
+      exclude_paths: ["scripts/*.mjs", "scripts/*.cjs", "apps/*/scripts/*.js", "apps/*/scripts/*.mjs", "apps/*/scripts/*.cjs", "archive/migrations/*.mjs", "archive/migrations/*.cjs", ".codebuddy/skills/*/scripts/*.js", ".codebuddy/skills/*/scripts/*.mjs", ".codebuddy/skills/*/scripts/*.cjs", ".codebuddy/agent-kit/skills/*/scripts/*.js", ".codebuddy/agent-kit/skills/*/scripts/*.mjs", ".codebuddy/agent-kit/skills/*/scripts/*.cjs", "packages/mp-e2e/bin/*.js", "packages/mp-e2e/src/runner.js"]
       exclude_reason: CLI 脚本的 stdout 是产品行为（进度/结论日志），不是调试残留。2026-09-29 / 2026-10-10 / 2026-10-21 / 2026-10-22 四次 CI 实测误报累积而成
       match: '(^|[^0-9A-Za-z_])(console\.(log|debug)\(|debugger([^0-9A-Za-z_]|$))'
     credential: null
