@@ -211,7 +211,7 @@ export class ReleaseRegistryService {
    * 停用 legacy 后从本表读版本（目录 `static/modules/<key>/<envId>/<version>/`）。
    *
    * **失败语义（分两段，2026-10-08 修正）**：
-   * 1. 本地库写失败 → **只告警**（沿用原语义：legacy 已写成功，运维可从告警发现两轨不一致）
+   * 1. 本地库写失败 → **抛出**（2026-11-13 翻转，取代 2026-10-08 的只告警：deploy_app_env_versions 已是 gateway 前端唯一读取源，静默成功=半发布事故放大器，宁可任务红）
    * 2. 本地成功、但 **prod 云库镜像失败** → **抛出**（见 EnvSplitWriterService）
    *
    * ⚠️ 第 2 条是本次修正的核心。原注释「失败只告警不抛出」在单库时代是合理止损，
@@ -251,7 +251,7 @@ export class ReleaseRegistryService {
       this.logger.warn(
         `同步 deploy_app_env_versions 失败（legacy 已写成功，两轨可能不一致）：${(e as Error).message}`,
       );
-      return; // 本地都没写成功，没有可信数据可镜像
+      throw e; // 本地新表写失败 → 抛出（2026-11-13 翻转）：不会走到镜像，天然没有可信数据可镜像，上抛让 setPointer 判 failed，不留「半发布」
     }
 
     if (!written) return;
@@ -270,8 +270,7 @@ export class ReleaseRegistryService {
    * 与 `syncAppEnvPointer` 的分工：
    * - 本方法用于**用户/脚本主动切版本**：本地写失败即抛（不留半成功），
    *   prod 云库镜像按严格语义抛（见 `EnvSplitWriterService`）
-   * - `syncAppEnvPointer` 用于 `setPointer` 的**附赠同步**：本地失败只告警
-   *   （legacy 已写成功，运维可从告警发现两轨不一致）
+   * - `syncAppEnvPointer` 用于 `setPointer` 的**附赠同步**：本地失败抛出（2026-11-13 翻转，不留半发布）
    *
    * 幂等：目标版本 == 当前版本时**不写库也不镜像**。
    * （否则同值推进会让两库 `deployed_by/deployed_at` 持续漂移，见 design §13 P2）
