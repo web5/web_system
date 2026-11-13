@@ -41,6 +41,7 @@ import { MusicModule } from '../music/music.module';
 import { ListMusicProvidersTool } from '../music/tools/list-music-providers.tool';
 import { PresentMusicCardTool } from '../music/tools/present-music-card.tool';
 import { SaveMusicTasteTool } from '../music/tools/save-music-taste.tool';
+import { PresentWidgetTool } from './tools/present-widget.tool';
 import { UserMemoryUpdateHook } from './user-memory-update.hook';
 import { LlmInternalController } from './memory/llm-internal.controller';
 import { AiAgentServiceKeyGuard } from './memory/ai-agent-service-key.guard';
@@ -199,6 +200,8 @@ const postRunHooksProvider: Provider = {
     ContractConversationService,
     // 生图（变变创作助手 / 科豆学习助手声明了 image-gen，缺注册会运行时报「工具未注册」）
     ImageGenTool,
+    // SSE 流式 Markdown demo：交互组件指令工具（DB 定义 widget-demo 挂载）
+    PresentWidgetTool,
     AgentConversationQueryService,
     IntentService,
     UserMemoryUpdateHook,
@@ -226,6 +229,7 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     private readonly presentMusicCardTool: PresentMusicCardTool,
     private readonly saveMusicTasteTool: SaveMusicTasteTool,
     private readonly imageGenTool: ImageGenTool,
+    private readonly presentWidgetTool: PresentWidgetTool,
   ) {}
 
   onModuleInit(): void {
@@ -243,6 +247,10 @@ export class AgentModule implements OnModuleInit, OnModuleDestroy {
     this.toolRegistry.register(this.listMusicProvidersTool);
     this.toolRegistry.register(this.presentMusicCardTool);
     this.toolRegistry.register(this.saveMusicTasteTool);
+
+    // SSE 流式 Markdown demo：present-widget 产出 {app, props} 载荷，由 demo-backend
+    // 转译层收口成正文流 widget fence（controller 零改；app 白名单在工具内强制）
+    this.toolRegistry.register(this.presentWidgetTool);
 
     // Agent 定义（含 contract-risk / deploy）由 DB 唯一事实源提供：AgentDefSyncService
     // 启动即拉取 ai-service 的 published 定义 upsert 到注册表，并按其 capabilities 懒注册
