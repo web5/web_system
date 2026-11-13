@@ -226,7 +226,7 @@ TestScope: 定向=`pipeline-orchestration/orchestration-schema.spec.ts`（自写
 
 本设计 §1.2 指出的缺口——「第 1 条（本地写失败）被旧注释『只告警（2026-10-08）』挡住」——已由独立修复方案落地，现记录闭环：
 
-- **修复方案实例（本文子项）**：`docs/development/reports/2026-11-13-release-registry-throw-on-write-failure.md`（rd-dept 出具方案、rd-engineer 编码 + TDD 红转绿）
+- **修复方案实例（本文子项）**：`docs/development/reports/release-registry-throw-on-write-failure.md`（rd-dept 出具方案、rd-engineer 编码 + TDD 红转绿）
 - **合入**：PR #657（merge `58d549bf`，commit `de73269d`）已由 auto-merge 入 master（2026-11-13）
 - **改动**：`servers/deploy-console/src/registry/release-registry.service.ts` 的 `syncAppEnvPointerInner` catch 由 `warn + return` 改为 `warn + throw e`；保留 warn 日志、不改写错误信息（保住 spec 的 `'db down'` 断言）；三处注释记录 2026-11-13 决策翻转。
 - **调用方影响面**：`pointer.executor` / `pipeline.service` 编排收尾兜底 / `internal-release.controller` 均直接 `await` 在开放处（controller 经 `InternalGuardService.run`，其 catch 审计失败后仍 re-throw），无外层 catch 把新抛错再吞掉 → 抛出正确上抛为发布失败。

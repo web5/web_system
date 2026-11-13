@@ -1,10 +1,10 @@
 # 修复 release-registry 新表写失败「只告警」→「抛出」（不留半发布）
 
 > 类型：缺陷修复（后端 deploy-console）
-> 关联设计：`docs/development/reports/2026-11-12-half-release-guard-design.md`（半发布治理三合一，哲学基准）
+> 关联设计：`docs/development/reports/half-release-guard-design.md`（半发布治理三合一，哲学基准）
 > 负责人：rd-engineer（编码 + TDD 红转绿）· 方案由 rd-dept 出具
 > 方案真源：`~/AiWorkspace/20-私域资产/研发方案与发布规范-v2.md`（技术方案九子项）
-> 门禁凭证：`Plan: docs/development/reports/2026-11-13-release-registry-throw-on-write-failure.md`
+> 门禁凭证：`Plan: docs/development/reports/release-registry-throw-on-write-failure.md`
 > 用户拍板：2026-11-13「按默认来」= 方向①（改抛出）
 
 ---
@@ -28,7 +28,7 @@
 
 `servers/deploy-console/src/registry/release-registry.service.ts` 的 `syncAppEnvPointerInner`（约 227-261 行）在当前实现里，本地库 `deploy_app_env_versions` 写失败时只 `logger.warn` 后 `return`，把失败吞掉。其上层 `setPointer` 因此 `resolves` 成功 → 调用方（流水线 `pointer` 步骤、编排收尾兜底）认为发布成功，但实际 `deploy_app_env_versions`（**gateway 前端唯一读取源**）没写上新版本 = 静默「半发布」。
 
-这直接违反 `2026-11-12-half-release-guard-design.md` 确立的底线：「本地成功 + 云库失败 = 流水线显示成功、prod 实际仍跑旧版本…宁可让任务红掉，也不要静默不一致」。该设计稿第 2 条（云库镜像失败 → 抛出）已落地；**第 1 条（本地写失败）却被旧注释「只告警（2026-10-08）」挡住**，本次补齐。
+这直接违反 `half-release-guard-design.md` 确立的底线：「本地成功 + 云库失败 = 流水线显示成功、prod 实际仍跑旧版本…宁可让任务红掉，也不要静默不一致」。该设计稿第 2 条（云库镜像失败 → 抛出）已落地；**第 1 条（本地写失败）却被旧注释「只告警（2026-10-08）」挡住**，本次补齐。
 
 ### 1.2 目标用户与场景
 
