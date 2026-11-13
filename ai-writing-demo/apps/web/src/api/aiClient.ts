@@ -29,13 +29,16 @@ export async function* streamAi(body: StreamReq): AsyncGenerator<string> {
       if (!t.startsWith('data:')) continue
       const data = t.slice(5).trim()
       if (data === '[DONE]') return
+      let json: { error?: string; token?: string }
       try {
-        const json = JSON.parse(data)
-        if (json.error) throw new Error(json.error)
-        if (json.token) yield json.token
+        json = JSON.parse(data)
       } catch {
-        /* 跳过非 JSON / 心跳 */
+        continue // 跳过非 JSON / 心跳
       }
+      // 错误帧必须抛给调用方：放在 try 外，避免被上面的 catch 静默吞掉
+      // （吞掉会让调用方把已累积的半截文本当成完整结果落地）
+      if (json.error) throw new Error(json.error)
+      if (json.token) yield json.token
     }
   }
 }
