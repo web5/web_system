@@ -1,21 +1,35 @@
-<!-- 科豆 AI · 发现（tab 2）：能力市场 —— 只放翻译与新概念英语两个能力 -->
+<!-- 大橙子英语 · 发现（tab 2）：默认态只呈现新概念英语（纯学习工具）；
+     「对话练习」「文本翻译」卡由本地开关控制（utils/feature-flags.ts）；
+     功能开关入口在「我的 → 设置 → 发现设置」（PRD v0.4 §4），本页不放设置入口卡。
+     备案文案已按 P0 从代码中删除（非条件隐藏）。 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不发起任何业务请求 -->
   <login-gate wx:if="{{!loggedIn}}" desc="发现页的能力与记录都关联你的账号" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <view class="sec-t">AI 能力<text class="em">点开即用</text></view>
+  <view class="sec-t">{{(flags.chat || flags.translate) ? '扩展功能' : '英语学习'}}</view>
 
-  <view class="cap" bindtap="openTranslate">
-    <view class="ic t">译</view>
+  <!-- 对话练习：flags.chat 开启时出现（文案恒定中性） -->
+  <view wx:if="{{flags.chat}}" class="cap" bindtap="openChat">
+    <view class="ic c">话</view>
     <view class="tx">
-      <view class="b">语言翻译官</view>
-      <view class="e">中英日德互译 · 语气风格可选 · 译完可追问</view>
+      <view class="b">对话练习</view>
+      <view class="e">和伙伴自由对话 · 随时追问</view>
     </view>
     <text class="go">›</text>
   </view>
 
-  <!-- 新概念英语：NCE 逐句精读，入口与 PC portal「发现」对齐 -->
+  <!-- 文本翻译：flags.translate 开启时出现（恒定中性改名版） -->
+  <view wx:if="{{flags.translate}}" class="cap" bindtap="openTranslate">
+    <view class="ic t">译</view>
+    <view class="tx">
+      <view class="b">文本翻译</view>
+      <view class="e">多语种互译 · 语气风格可选</view>
+    </view>
+    <text class="go">›</text>
+  </view>
+
+  <!-- 新概念英语：NCE 逐句精读，常驻入口（与 PC portal「发现」对齐） -->
   <view class="cap" bindtap="openNce">
     <view class="ic n">英</view>
     <view class="tx">
@@ -25,8 +39,6 @@
     <text class="go">›</text>
   </view>
 
-  <view class="foot">两个能力，点开即用</view>
-  <view class="claim">内容由 AI 生成，仅供参考，不构成法律意见
-已依法完成大模型与算法备案</view>
+  <view class="foot">更多内容持续更新中</view>
   </block>
 </view>

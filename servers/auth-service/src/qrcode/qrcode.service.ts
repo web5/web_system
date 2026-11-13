@@ -117,6 +117,10 @@ export class QrcodeService {
       if (resp.data.errcode) {
         throw new Error(resp.data.errmsg);
       }
+      // 安全闸：空 openid 进 findByMpOpenid 会触发 TypeORM undefined-where 静默忽略
+      if (!resp.data.openid) {
+        throw new Error('openid missing');
+      }
       openid = resp.data.openid;
     } catch (err) {
       this.logger.error('jscode2session failed', err.message);

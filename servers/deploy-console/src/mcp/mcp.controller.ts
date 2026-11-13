@@ -23,6 +23,7 @@ import { ReleasePlanDto } from '../release-plan/dto/release-plan.dto';
 import { ReleaseVerifyService } from '../release-verify/release-verify.service';
 import { ReleaseVerifyDto } from '../release-verify/dto/release-verify.dto';
 import { ModuleRollbackDto } from './dto/module-rollback.dto';
+import { RestartServiceDto } from './dto/restart-service.dto';
 import {
   assertTriggerSource,
   composeMcpTriggerSource,
@@ -398,6 +399,47 @@ export class McpController {
       body.component,
     );
     return { taskId, status: 'started', env, versionTag: body?.versionTag };
+  }
+
+  /**
+   * 干净重启后端服务到**当前指针版本**（设计 §3.3/§3.9）。
+   *
+   * 与 rollback / publish 的本质区别：restart 不改版本（恒等于 registry 当前指针）、
+   * 不改配置、不动 dist —— 只把进程环境重建为白名单键（PATH/HOME/PORT），
+   * 用于「进程环境污染 / 配置已修但进程不生效」的受控恢复。
+   *
+   * 安全门（对齐 rollback 先例）：prod 必须 confirm:true + reason 必填（进审计）；
+   * dryRun=true 只跑只读断言返回计划，不碰进程。
+   * ⚠️ env/moduleKey 在控制器层手校验（直调绕过 ValidationPipe 时行为一致，与既有路由同风格）。
+   */
+  @Post('restart')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({ summary: '干净重启后端服务到当前指针版本（不改版本/配置/dist）' })
+  async restart(@Body() body: RestartServiceDto, @Req() req: McpRequest) {
+    const env = String(body?.env || '');
+    if (!['dev', 'prod'].includes(env)) {
+      throw new BadRequestException('env 仅支持 dev/prod');
+    }
+    if (env === 'prod' && body?.confirm !== true) {
+      throw new BadRequestException('Prod operations require confirm=true');
+    }
+    if (env === 'prod' && !String(body?.reason || '').trim()) {
+      throw new BadRequestException('prod 重启必须填写 reason（写审计）');
+    }
+    // moduleKey 为规范字段；component 是 mcp-gateway 工具面的命名别名
+    const moduleKey = String(body?.moduleKey || body?.component || '').trim();
+    if (!moduleKey) {
+      throw new BadRequestException('moduleKey 必填（或工具面别名 component）');
+    }
+    return this.deployService.restartService({
+      env,
+      moduleKey,
+      operator: this.operator(req),
+      // 审计归因与发布流水线同一套语言：mcp:<keyName>（不可被调用方抹掉）
+      triggerSource: composeMcpTriggerSource(undefined, this.keyName(req)),
+      dryRun: body?.dryRun === true || body?.dry_run === true,
+      reason: body?.reason,
+    });
   }
 
   // ── 查询类 ──

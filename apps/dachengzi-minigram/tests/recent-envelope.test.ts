@@ -114,7 +114,8 @@ beforeEach(() => {
   agentApiMock.getConversation.mockReset();
   agentApiMock.getConversation.mockResolvedValue({ messages: [] });
   wxMock.getStorageSync.mockReset();
-  wxMock.getStorageSync.mockReturnValue(undefined);
+  // 钉「对话练习」开关开启后的链路：feature_chat 恒为 '1'，其余 key 按无缓存处理
+  wxMock.getStorageSync.mockImplementation((k: string) => (k === 'feature_chat' ? '1' : undefined));
   wxMock.setStorageSync.mockReset();
   wxMock.removeStorageSync.mockReset();
 });

@@ -67,7 +67,7 @@ function isRadius(v: unknown): v is RadiusStyle {
 function pushToServer(style: RadiusStyle): void {
   // silent：本地乐观应用 + 后台同步，失败只记日志、不弹 toast、不回滚（规格 §5 / AC7）
   request<WrappedMe>({
-    url: '/users/me',
+    url: '/api/users/me',
     method: 'PUT',
     data: { preferences: { radiusStyle: style } },
     silent: true,
@@ -82,7 +82,7 @@ function pushToServer(style: RadiusStyle): void {
  */
 export async function applyFromServer(): Promise<void> {
   try {
-    const res = await get<WrappedMe>('/users/me');
+    const res = await get<WrappedMe>('/api/users/me');
     const server = res?.data?.preferences?.radiusStyle;
     if (!isRadius(server) || server === currentStyle()) return;
     setStyle(server, { silent: true });

@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   BadGatewayException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -17,7 +18,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
 import { Client } from 'ssh2';
-import { backendRuntimeActivationCommand } from './backend-runtime';
+import { backendRuntimeActivationCommand, backendRuntimeRestartCommand } from './backend-runtime';
 import { resolveRuntimeRoot } from './runtime-root';
 import { runtimeTargetGuardCommand } from './runtime-target';
 import { DeployTaskEntity } from '../entities/deploy-task.entity';
@@ -1210,6 +1211,169 @@ export class DeployService {
       this.logger.log(`已回滚: ${input.env}/${input.moduleKey} ${cur.currentVersion} -> ${target}`);
       return { moduleKey: input.moduleKey, env: input.env, from: cur.currentVersion, to: target };
     });
+  }
+
+  /**
+   * 「干净重启当前指针版本」的唯一服务端入口（设计 §3.3/§3.9）。
+   *
+   * 语义边界（构造上杜绝「重启变切版本」）：
+   * - **不接受 versionTag 入参**：目标版本恒等于 registry 当前指针，且远端返回后
+   *   再自校验一次（不一致即报错——并发发布不能把重启变成隐式切版本）；
+   * - 不改指针、不改配置、不动 dist、不写 deploy_versions；
+   * - dryRun 只跑只读前置断言并返回执行计划（同样下投到目标机跑断言，保证
+   *   dry-run 与真实执行的判据是同一份代码）。
+   *
+   * 前置断言失败（无指针 / dist 与指针撕裂 / 进程归属≠1 / 端口未知）→ 400；
+   * 模块未登记或非 backend → 404（对齐 ownedPipeline：不泄露归属信息之外的细节）。
+   */
+  async restartService(input: {
+    env: string;
+    moduleKey: string;
+    operator?: string;
+    /** 审计归因（MCP 通道 = mcp:<keyName>） */
+    triggerSource?: string;
+    dryRun?: boolean;
+    /** prod 必填（控制器层硬校验），写审计 */
+    reason?: string;
+  }): Promise<{
+    env: string;
+    moduleKey: string;
+    versionTag: string;
+    process?: string;
+    pid?: number;
+    pidBefore?: number;
+    port?: number;
+    residueKeys: string[];
+    durationMs?: number;
+    dryRun: boolean;
+    plan?: string[];
+    envKeys?: string[];
+    triggerSource?: string;
+  }> {
+    if (!input?.env?.trim()) throw new BadRequestException('重启失败: env 必填');
+    if (!input?.moduleKey?.trim()) throw new BadRequestException('重启失败: moduleKey 必填');
+    if (!['dev', 'prod'].includes(input.env)) {
+      throw new BadRequestException(`重启失败: env 仅支持 dev/prod（restart 走远程隔离运行时，不覆盖 ${input.env}）`);
+    }
+
+    // 校验模块登记且 type=backend（未登记/非 backend → 404，不泄露更多归属信息）
+    let mod: { type?: string; dir?: string; pm2?: string } | null = null;
+    try {
+      mod = (await this.moduleRegistry.get(input.moduleKey)) as any;
+    } catch {
+      mod = null;
+    }
+    if (!mod || mod.type !== 'backend') {
+      throw new NotFoundException(`模块不可重启: ${input.moduleKey}`);
+    }
+
+    // 发布锁复用 registry lock（owner=restart:<moduleKey>）：与进行中的发布互斥
+    return this.registry.withReleaseLock({ env: input.env, moduleKey: input.moduleKey, owner: 'restart:' + input.moduleKey }, async () => {
+      // 服务端先解析当前指针（设计 §3.3-1）：无指针 → 拒绝（restart 不接受 versionTag 入参）
+      const pointer = await this.registry.currentVersion(input.env, input.moduleKey);
+      if (!pointer) {
+        throw new BadRequestException(
+          `重启失败: ${input.moduleKey}@${input.env} 没有当前版本指针，无从判定「重启到哪个版本」——请先走发布/回滚确立版本`,
+        );
+      }
+
+      const dir = mod!.dir || input.moduleKey;
+      const sshConfig = await this.getSshConfig(input.env);
+      const remoteDir = `${this.getWebSystemDir(input.env)}/servers/${dir}`;
+      const command = backendRuntimeRestartCommand({
+        moduleKey: input.moduleKey,
+        versionTag: pointer,
+        serviceDirectory: remoteDir,
+        processName: mod!.pm2,
+        runtimeStorageRoot: this.configService.get<string>('BACKEND_RUNTIME_ROOT_' + input.env.toUpperCase()),
+        dryRun: input.dryRun,
+      });
+
+      let output: string;
+      try {
+        output = await this.sshRun(sshConfig, command, input.env, Math.max(this.sshTimeoutMs('exec'), 120000));
+      } catch (error) {
+        const message = (error as Error).message;
+        await this.audit.log({
+          action: 'deploy.restart',
+          env: input.env,
+          component: input.moduleKey,
+          status: 'failed',
+          detail: JSON.stringify({
+            operator: input.operator,
+            triggerSource: input.triggerSource,
+            versionTag: pointer,
+            dryRun: !!input.dryRun,
+            reason: input.reason,
+            error: message.slice(0, 500),
+          }),
+        });
+        // 前置断言失败 → 400（调用方可修的状态类错误）；其余（ssh/执行故障）保持 5xx
+        if (/restart 前置断言失败/.test(message)) throw new BadRequestException(message);
+        throw error;
+      }
+
+      const result = this.parseBackendRuntimeResult(output);
+      // 设计 §3.9：restart 成功响应 versionTag 必须等于调用前指针（服务端自校验，
+      // 不一致即报错——防止并发发布把「重启」变成「隐式切版本」）
+      if (result.versionTag !== pointer) {
+        throw new Error(
+          `重启结果被拒绝采信：调用前指针 ${pointer}，远端返回 ${result.versionTag} —— 疑似并发发布，请刷新后重试`,
+        );
+      }
+
+      // 审计（operator、triggerSource、versionTag、pid 前后、residue 计数；绝不含任何 env 值）
+      await this.audit.log({
+        action: 'deploy.restart',
+        env: input.env,
+        component: input.moduleKey,
+        status: input.dryRun ? 'dry-run' : 'success',
+        detail: JSON.stringify({
+          operator: input.operator,
+          triggerSource: input.triggerSource,
+          versionTag: pointer,
+          dryRun: !!input.dryRun,
+          reason: input.reason,
+          pidBefore: result.pidBefore ?? result.pid,
+          pidAfter: result.pid,
+          residueCount: Array.isArray(result.residueKeys) ? result.residueKeys.length : 0,
+          durationMs: result.durationMs,
+        }),
+      });
+      this.logger.log(
+        `干净重启${input.dryRun ? '（dryRun）' : ''}完成: ${input.moduleKey}@${input.env}（${pointer}）` +
+          `残留键 ${Array.isArray(result.residueKeys) ? result.residueKeys.length : 0} 个`,
+      );
+
+      return {
+        env: input.env,
+        moduleKey: input.moduleKey,
+        versionTag: pointer,
+        process: result.process,
+        pid: result.pid,
+        pidBefore: result.pidBefore ?? result.pid,
+        port: result.port,
+        residueKeys: Array.isArray(result.residueKeys) ? result.residueKeys : [],
+        durationMs: result.durationMs,
+        dryRun: result.dryRun === true,
+        plan: result.plan,
+        envKeys: result.envKeys,
+        triggerSource: input.triggerSource,
+      };
+    });
+  }
+
+  /**
+   * 解析 backend-runtime 序列化程序的远端返回（stdout 末行 JSON）。
+   * 解析失败 = 远端程序异常（半执行状态），必须显式报错，不静默吞掉。
+   */
+  private parseBackendRuntimeResult(output: string): Record<string, any> {
+    const line = (output || '').trim().split('\n').filter(Boolean).pop() || '';
+    try {
+      return JSON.parse(line);
+    } catch {
+      throw new Error(`restart 远端返回不可解析（期望末行 JSON）: ${line.slice(0, 300)}`);
+    }
   }
 
   /**

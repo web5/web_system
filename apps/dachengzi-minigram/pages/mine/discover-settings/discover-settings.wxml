@@ -1,0 +1,25 @@
+<!-- 发现设置（我的 → 设置 →「发现设置 ›」常驻进入）：两个本地开关，恒定中性命名，任何状态不出现 AI 字样。
+     设计凭证：PRD v0.4 §4.3（01-PRD-功能隐藏与远端开关.md）。
+     直访 URL 不做拦截：页面本身全中性文案、开关默认关，直访不构成露出。 -->
+<view class="page {{radiusClass}}">
+  <view class="intro">选择你想开放的功能，开启后入口会出现在发现页。</view>
+
+  <view class="list">
+    <view class="r">
+      <view class="r-tx">
+        <view class="r-b">对话练习</view>
+        <view class="r-e">和伙伴自由对话，随时追问</view>
+      </view>
+      <switch checked="{{chat}}" color="#2563EB" bindchange="onToggleChat" />
+    </view>
+    <view class="r">
+      <view class="r-tx">
+        <view class="r-b">文本翻译</view>
+        <view class="r-e">多语种互译，语气风格可选</view>
+      </view>
+      <switch checked="{{translate}}" color="#2563EB" bindchange="onToggleTranslate" />
+    </view>
+  </view>
+
+  <view class="foot">关闭后入口隐藏，已有记录保留不受影响。</view>
+</view>

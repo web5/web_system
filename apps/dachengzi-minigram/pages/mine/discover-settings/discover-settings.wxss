@@ -1,0 +1,42 @@
+/* 发现设置页（我的 → 设置 →「发现设置 ›」进入）。色值一律走 app.wxss 的设计 token。 */
+.page {
+  min-height: 100vh;
+  background: var(--page-bg);
+  padding: 24rpx 32rpx 40rpx;
+  box-sizing: border-box;
+}
+
+.intro {
+  font-size: 25rpx;
+  color: var(--t2);
+  line-height: 1.7;
+  margin: 8rpx 4rpx 24rpx;
+}
+
+.list {
+  background: var(--card);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  margin-bottom: 32rpx;
+}
+
+.r {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+.r:last-child { border-bottom: none; }
+
+.r-tx { flex: 1; min-width: 0; margin-right: 24rpx; }
+.r-b { font-size: 28rpx; color: var(--t1); font-weight: 600; }
+.r-e { font-size: 23rpx; color: var(--t3); margin-top: 6rpx; }
+
+.foot {
+  font-size: 22rpx;
+  color: var(--t3);
+  text-align: center;
+  margin-top: 20rpx;
+  line-height: 1.8;
+}

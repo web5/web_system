@@ -1,4 +1,5 @@
 import { ToolCatalogService } from '../tool-catalog/tool-catalog.service';
+import { ReleaseFinalizerService } from './release-finalizer.service';
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -213,6 +214,18 @@ async function setup(
     providers: [
       // 工具目录（干净重启 shell 正文）：本套件不提供正文 → restartClean 回落旧 pm2 restart
       { provide: ToolCatalogService, useValue: { get: jest.fn().mockRejectedValue(new Error('工具不存在: restart-clean')) } },
+      // 半发布治理 F1-②/③：收尾器桩（本 spec 关注审批挂起/恢复，不做指针与门禁断言）
+      {
+        provide: ReleaseFinalizerService,
+        useValue: {
+          finalizeFrontendPointer: jest.fn(async (p: { versionTag?: string }) => ({
+            finalVersion: p.versionTag ?? '',
+            via: 'setPointer',
+            gate: 'skipped',
+          })),
+          assertManifestMatches: jest.fn(async () => 'skipped'),
+        },
+      },
       PipelineService,
       { provide: ConfigService, useValue: { get: cfgGet } },
       { provide: getRepositoryToken(DeployPipelineEntity), useValue: pipelineRepo },

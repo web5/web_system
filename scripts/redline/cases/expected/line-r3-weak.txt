@@ -1,0 +1,9 @@
+exit=0
+errors=0
+warnings=1
+--- stdout ---
+══ 红线提示（warning）══
+  [R3] 弱占位(TEMP/TBD/HACK/XXX)
+       servers/api/src/weak.ts:1
+       export const w = 1; // HACK: 临时代替
+✓ 红线扫描通过（0 error / 1 warning）

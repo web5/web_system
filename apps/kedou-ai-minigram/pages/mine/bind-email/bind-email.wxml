@@ -5,8 +5,8 @@
   <view class="list">
     <view class="row">
       <input class="ipt" type="text" placeholder="you@example.com" value="{{email}}" bindinput="onEmailInput" />
-      <view class="sbtn {{countdown > 0 ? 'off' : ''}}" bindtap="onSendCode">
-        {{countdown > 0 ? countdown + 's 后重发' : '获取验证码'}}
+      <view class="sbtn {{countdown > 0 || busy ? 'off' : ''}}" bindtap="onSendCode">
+        {{busy && countdown === 0 ? '发送中…' : (countdown > 0 ? countdown + 's 后重发' : '获取验证码')}}
       </view>
     </view>
   </view>

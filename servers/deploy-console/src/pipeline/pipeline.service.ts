@@ -101,6 +101,9 @@ import { runOrchestration, type EngineStep } from '../pipeline-orchestration/orc
 import type { ConditionVars } from './steps/condition';
 // 节点内多操作顺序执行（纯编排，shell 执行由注入的通道完成，便于单测）
 import { ActionFailedError, runActionSequence } from './steps/action-sequence';
+// 发布收尾器（半发布治理 F1-②/③）：env-dir 指针收敛原子步 + manifest 硬门禁
+import { ReleaseFinalizerService } from './release-finalizer.service';
+import { ManifestGateError } from './release-final-guard';
 // 工作区文件锁（方案 B）：git→package 临界区跨 run/跨模块互斥（2026-10-27 并发抢包根因）
 import { acquireWorkspaceLock, WorkspaceLockTimeoutError, type WorkspaceLockRelease } from './workspace-lock';
 // service action 的 tool 名 → 平台内置能力（design §3：平台能力不再是节点类型）
@@ -700,6 +703,8 @@ export class PipelineService {
     private readonly sshExec: SshExecService,
     // 工具目录（能力单元）：编排只写 tool code，正文在这里取（松耦合，实现只有一份）
     private readonly toolCatalog: ToolCatalogService,
+    // 发布收尾器（半发布治理 F1-②/③）：前端指针收敛原子步 + manifest 硬门禁
+    private readonly releaseFinalizer: ReleaseFinalizerService,
   ) {}
 
   /**
@@ -1901,6 +1906,19 @@ export class PipelineService {
         await this.executeStage(p, stage, uploadTarget, nodeByKey.get(stage) ?? null);
       }
 
+      // 半发布治理 F1-③（2026-11-12）：前端模块收尾 manifest==versionTag 硬门禁。
+      // 不一致即抛 → 走下方统一失败出口判 failed（p.stage 置为非回滚锚点：
+      // 门禁失败不是「新版本不健康」，不触发 watchdog/verify 的自动回滚语义）。
+      if (p.moduleType && p.moduleType !== 'backend') {
+        p.stage = 'manifest-gate';
+        await this.releaseFinalizer.assertManifestMatches({
+          env: p.env,
+          moduleKey: p.moduleKey,
+          expectVersion: toCommitId(p.versionTag) || p.versionTag!,
+        });
+        p.logs = [...(p.logs ?? []), '[manifest-gate] 线上 manifest 实供版本与本次发布一致'];
+      }
+
       p.status = 'succeeded';
       p.progress = { ...p.progress!, message: '发布完成' };
       p.endTime = Date.now();
@@ -2233,19 +2251,45 @@ export class PipelineService {
       //   （服务详情「部署」Tab 选版本 → deployVersion 落 dist+重启+探活），
       //   让「已上传但未重启」成为可见中间态（ServiceDetail 部署 Tab 的设计约定）。
       if (p.moduleType !== 'backend') {
-        // 实例 versionTag 形如 <流水线key>/<commit>（RELEASE_TAG 口径）；env-dir 指针
-        // 与产物目录都以**纯 commit** 为准（release-paths.toCommitId 契约）。此前直接
-        // 透传会把带前缀的值写进 deploy_app_env_versions → gateway 拼出 <env>/<key>/<commit>
-        // 路径 → 入口 404（2026-09-29 实测）。动作里的激活脚本已写对，这里归一化兜底。
-        const finalVersion = toCommitId(p.versionTag) || p.versionTag!;
-        await this.registry.setPointer({
-          env: p.env,
-          moduleKey: p.moduleKey,
-          currentVersion: finalVersion,
-          deployedBy: p.operator || 'unknown',
-          taskId: p.id,
-        });
-        p.logs = [...(p.logs ?? []), `[orchestration] 版本指针已指向 ${finalVersion}`];
+        // 半发布治理 F1-②/③（2026-11-12）：收尾收敛到 ReleaseFinalizerService ——
+        // env-dir 应用走唯一原子步（表→盘→镜像，此前这里直连 setPointer 只写表不写盘，
+        // 与 11-09 半发布同形态）；收尾带 manifest==versionTag 硬门禁，不一致判 failed。
+        // 纯 commit 归一化（toCommitId 契约）在 finalizer 内完成。
+        try {
+          const fin = await this.releaseFinalizer.finalizeFrontendPointer({
+            id: p.id,
+            env: p.env,
+            moduleKey: p.moduleKey,
+            versionTag: p.versionTag!,
+            operator: p.operator || 'unknown',
+          });
+          p.logs = [
+            ...(p.logs ?? []),
+            `[orchestration] 版本指针已指向 ${fin.finalVersion}（${fin.via === 'atomic-step' ? '原子步: 表→盘→镜像' : 'setPointer'}；manifest 门禁: ${fin.gate}）`,
+          ];
+        } catch (e) {
+          // 门禁失败 = 半发布嫌疑：判 failed 并留证据，**不自动回滚指针**
+          // （指针已是新值且大概率已生效，回滚会把「判据发现滞后」变成二次变更）
+          if (e instanceof ManifestGateError) {
+            p.status = 'failed';
+            p.error = e.message;
+            p.progress.message = `失败: ${e.message}`;
+            p.endTime = Date.now();
+            p.logs = [...(p.logs ?? []), `[orchestration] ${e.message}`];
+            await this.auditService.log({
+              user: p.operator || 'unknown',
+              action: 'pipeline.finish',
+              env: p.env,
+              component: p.moduleKey,
+              status: 'failed',
+              detail: `发布收尾 manifest 门禁失败: ${p.env}/${p.moduleKey} → ${p.versionTag}: ${e.message}`,
+            });
+            await this.releaseProdRolloutGate(p);
+            await this.save(p);
+            return;
+          }
+          throw e;
+        }
       } else {
         p.logs = [
           ...(p.logs ?? []),

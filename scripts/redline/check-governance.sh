@@ -3,7 +3,7 @@
 # check-governance.sh — 五层闸门健康检查（薄编排 / A6 / #8577）
 #
 # 形态：不重写体检逻辑。复用 scripts/redline/ 下已有 741 行三脚本
-#       （selfcheck-ui-gate.sh / test-gate-hardening.sh / mutation-test.sh），
+#       （selfcheck-ui-gate.sh / test-gate-hardening.sh），
 #       本文件只做「挂载关系 + 生效判定 + 分层汇总 + 退出码契约」。
 # 规格：30-任务产物/2026-11-09-五层治理SOP落地跟进/03-五层闸门自检-规格与派单.md
 #       §2 三条硬约束 / §3 五层检查项 / §4 退出码与输出契约
@@ -14,7 +14,7 @@
 #   npm run check:governance -- --full      # 手动/验收档：追加三脚本 + 黄金用例实跑
 #
 # 分档理由（2026-11-09 实测）：三脚本单跑 selfcheck 18s / test-gate-hardening 86s，
-#   全套 >2min；mutation-test.sh 会临时改写 scan-rules.sh 再还原，被强杀会留下
+#   全套 >2min；变异测试会临时改写 gates.yaml 再还原，被强杀会留下
 #   未还原的实现改动。默认档必须保持只读且秒级，否则每日 16:00 巡检会污染工作树。
 #
 # 硬约束：
@@ -360,7 +360,7 @@ need_job 'gate-cases'
 need "$TOP/scripts/ci/changed-packages.sh" "改动包选择器" \
      "chmod +x scripts/ci/changed-packages.sh" exec
 need "$BIN/cases/run.sh" "黄金用例集 run.sh" "chmod +x scripts/redline/cases/run.sh" exec
-need "$BIN/cases/shadow.sh" "黄金用例集 shadow.sh" "chmod +x scripts/redline/cases/shadow.sh" exec
+# S5：cases/shadow.sh 已随 legacy bash 删除（只剩 gate.ts，没有第二实现可对拍）
 SPEC_N=$(find . -path ./.git -prune -o -path ./node_modules -prune -o -name '*.spec.ts' -type f -print 2>/dev/null | wc -l | tr -d ' ')
 add "harness fixtures=$FIX_N / spec=${SPEC_N}（仅信息）"
 
@@ -429,7 +429,9 @@ if [ "$HP" = ".githooks" ]; then add "hooksPath=.githooks"; else
   fail "core.hooksPath='${HP:-<空>}'（应为 .githooks）" "git config core.hooksPath .githooks"
 fi
 need "$TOP/.githooks/pre-commit" "pre-commit hook" "chmod +x .githooks/pre-commit 并恢复文件" exec
-need "$BIN/scan-rules.sh" "红线扫描器" "恢复 scripts/redline/scan-rules.sh" file
+# S5（2026-11-11）：scan-rules.sh 已删除，红线扫描器即下一项的 gate.ts；
+# 这里改为确认 commit-msg 钩子仍存在（它现在调 gate.ts commit-msg）。
+need "$TOP/.githooks/commit-msg" "commit-msg hook" "恢复 .githooks/commit-msg 并 chmod +x" exec
 need_gates_lint && add "gates-lint 实跑通过"
 need "$BIN/gate.ts" "gate.ts" "恢复 scripts/redline/gate.ts" file
 need "$BIN/gates-lint.ts" "gates-lint.ts" "恢复 scripts/redline/gates-lint.ts" file
@@ -494,14 +496,14 @@ if [ "$FULL" -eq 1 ] && [ -f "$PROTECT" ]; then
          "同步 check-governance.sh 的保护口径与 ~/AiWorkspace/90-工具/保护.sh 的 list_files/status"
 fi
 # 薄编排接线：三脚本存在 + 可执行位 + npm 入口挂载（实跑放 --full）
-SELFTESTS='selfcheck-ui-gate.sh test-gate-hardening.sh mutation-test.sh'
+SELFTESTS='selfcheck-ui-gate.sh test-gate-hardening.sh'
 for s in $SELFTESTS; do
   need "$BIN/$s" "自检脚本 $s" "chmod +x scripts/redline/$s" exec
 done
 need_pkg_script 'check:governance'
 if [ "$FULL" -eq 1 ]; then
-  # 工作树守护：mutation-test.sh 靠 trap 还原被它故意改坏的实现；若进程被强杀，
-  #   trap 不执行就会留下变异态实现（2026-11-09 实测两次：scan-rules.sh / gate-shared.sh）。
+  # 工作树守护：变异测试靠 trap/finally 还原被它故意改坏的判据；若进程被强杀，
+  #   trap 不执行就会留下变异态的 gates.yaml（2026-11-09 实测两次，当时改的是 bash）。
   #   跑前记下所有已有改动，跑后凡是「新增」的已跟踪文件改动一律还原并判 FAIL。
   SNAP="$TMP/tracked-before.txt"
   git diff --name-only HEAD > "$SNAP" 2>/dev/null || : > "$SNAP"
@@ -521,8 +523,9 @@ if [ "$FULL" -eq 1 ]; then
   if bash "$BIN/cases/run.sh" >"$TMP/cases-run.log" 2>&1; then :; else
     fail "--full 实跑 cases/run.sh 非零" "bash scripts/redline/cases/run.sh 查看失败用例"
   fi
-  if bash "$BIN/cases/shadow.sh" >"$TMP/cases-shadow.log" 2>&1; then :; else
-    fail "--full 实跑 cases/shadow.sh 非零" "bash scripts/redline/cases/shadow.sh 查看失败用例"
+  # S5：影子比对已删；补上生成式判据变异（它会临时改写 gates.yaml，靠 finally 还原）
+  if node "$BIN/mutation-gen.ts" >"$TMP/mutation.log" 2>&1; then :; else
+    fail "--full 实跑 mutation-gen.ts 非零" "node scripts/redline/mutation-gen.ts 查看未捕获的判据"
   fi
   LEFTOVER=""
   for f in $(git diff --name-only HEAD 2>/dev/null); do
@@ -530,12 +533,12 @@ if [ "$FULL" -eq 1 ]; then
   done
   if [ -n "$LEFTOVER" ]; then
     fail "--full 后工作树出现预期外改动:$LEFTOVER（变异脚本未还原，已自动还原）" \
-         "排查 scripts/redline/mutation-test.sh 的 restore_all；被强杀会漏还原，须在隔离 worktree 跑"
+         "排查 mutation-gen.ts 的 finally 还原；被强杀会漏还原，须在隔离 worktree 跑"
     gov_restore_guard
   fi
-  add "--full 自检 $FULL_OK/3 通过"
+  add "--full 自检 $FULL_OK/2 通过"
 else
-  add "三脚本接线 3/3（实跑用 --full）"
+  add "两脚本接线 2/2（实跑用 --full）"
 fi
 
 # ============================ ⑤ 人机协作层 ============================

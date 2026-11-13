@@ -24,7 +24,17 @@ describe('MCP 验证与模块回滚 HTTP 契约', () => {
 
   beforeAll(async () => {
     const registry = new ModuleRegistryService(moduleRepo as never, appRepo as never, serviceRepo as never);
-    const verify = new ReleaseVerifyService(registry, {} as never, pipelines as never, facts as unknown as FactCollectService);
+    // F1-③ 新增依赖桩：未配置 gateway 地址 → manifest 检查 skipped（不影响既有断言）
+    const gatewayCache = { urlFor: jest.fn(() => ''), notifyVersionChange: jest.fn() };
+    const probe = { fetchGatewayManifest: jest.fn(async () => null) };
+    const verify = new ReleaseVerifyService(
+      registry,
+      {} as never,
+      pipelines as never,
+      facts as unknown as FactCollectService,
+      gatewayCache as never,
+      probe as never,
+    );
     const moduleRef = await Test.createTestingModule({
       controllers: [McpController],
       providers: [

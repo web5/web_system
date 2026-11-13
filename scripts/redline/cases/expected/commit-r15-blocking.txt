@@ -1,0 +1,9 @@
+exit=0
+errors=0
+warnings=1
+--- stdout ---
+══ 红线提示（warning）══
+  [R15] 新增对外接口评审阻塞项未清零
+       docs/reviews/c15b.md（阻塞: 1）
+       报告头部 阻塞: N 且 N>0 不得放行
+✓ 红线扫描通过（0 error / 1 warning）

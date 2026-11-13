@@ -1,4 +1,4 @@
-// 小程序「设置」页：外观 / 存储 / 关于 / 账号 四段共 5 项，每项都真生效。
+// 小程序「设置」页：外观 / 存储 / 功能 / 关于 / 账号 五段共 6 项，每项都真生效。
 //
 // 历史项「深色模式 / 字体大小 / 消息通知 / 个性化推荐 / 隐私设置 / 回上一版入口页」已整项移除：
 // app.json 无 darkmode 且无 theme/ 目录（做不了跟随系统）、无字号缩放通道、
@@ -153,6 +153,11 @@ Page({
   /** 用户协议与隐私政策 */
   goAgreement() {
     wx.navigateTo({ url: '/pages/mine/agreement/agreement' });
+  },
+
+  /** 发现设置（本地功能开关页：对话练习 / 文本翻译，PRD v0.4 §4） */
+  goDiscoverSettings() {
+    wx.navigateTo({ url: '/pages/mine/discover-settings/discover-settings' });
   },
 
   /** 关于与免责（品牌、免责正文、AI 生成内容提示） */

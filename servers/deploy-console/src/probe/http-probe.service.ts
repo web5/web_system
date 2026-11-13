@@ -90,16 +90,23 @@ export class HttpProbeService {
   /**
    * 查询 gateway 模块清单（verify 阶段断言版本是否生效）。
    * 兼容两种响应：裸 {modules:[...]} 与全局拦截器包装 {code,data:{modules:[...]}}
+   * `byEnv` 为按环境的完整供数面（半发布治理 F1-③ 门禁读它）。
    */
   async fetchGatewayManifest(
     gatewayBaseUrl: string,
-  ): Promise<{ modules?: Array<{ name?: string; key?: string; version?: string }> } | null> {
+  ): Promise<{
+    modules?: Array<{ name?: string; key?: string; version?: string }>;
+    byEnv?: Record<string, Record<string, { entry?: string; css?: string | null; version?: string }>>;
+  } | null> {
     const res = await this.request(`${gatewayBaseUrl}/__manifest__`, 'GET');
     if (!res.ok || !res.json) {
       this.logger.warn(`查询 manifest 失败: HTTP ${res.status}`);
       return null;
     }
     const data = (res.json as { data?: unknown })?.data ?? res.json;
-    return (data ?? null) as { modules?: Array<{ name?: string; key?: string; version?: string }> } | null;
+    return (data ?? null) as {
+      modules?: Array<{ name?: string; key?: string; version?: string }>;
+      byEnv?: Record<string, Record<string, { entry?: string; css?: string | null; version?: string }>>;
+    } | null;
   }
 }
