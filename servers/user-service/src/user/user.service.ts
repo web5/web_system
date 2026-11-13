@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { hasSystem, isAppSystem } from '@web-system/shared';
+import { hasSystem, isAppSystem, stripPublicBaseUrl, PublicBaseUrlService } from '@web-system/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike, QueryFailedError } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -48,7 +48,18 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly publicBaseUrl: PublicBaseUrlService,
   ) {}
+
+  /**
+   * 写侧净化（2026-11-11 写侧污染修复）：avatar 在 DB 恒定存相对路径，
+   * 但小程序会把 upload-service 返回的完整 URL 原样 PUT 回来。落库前统一剥掉
+   * 公网 origin；第三方 URL（微信头像等）与已是相对路径的值原样保留。
+   */
+  private async sanitizeAvatar<T extends { avatar?: string | null }>(data: T): Promise<T> {
+    if (data.avatar === undefined || data.avatar === null) return data;
+    return { ...data, avatar: stripPublicBaseUrl(data.avatar, await this.publicBaseUrl.resolve()) };
+  }
 
   /**
    * 用户列表。
@@ -112,8 +123,17 @@ export class UserService {
     return this.userRepository.findOne({ where: { username } });
   }
 
-  async create(userData: Partial<User>): Promise<User> {
-    const data = { ...userData };
+  /**
+   * 响应脱敏：任何流出本 service、最终进入 HTTP 响应体的用户对象都不含 password。
+   * 与 findAll/findOne 同一写法（JSON 往返剥键），2026-11-12 P1 安全修复。
+   */
+  private stripPassword(user: User): Omit<User, 'password'> {
+    const { password: _pwd, ...safeUser } = JSON.parse(JSON.stringify(user));
+    return safeUser;
+  }
+
+  async create(userData: Partial<User>): Promise<Omit<User, 'password'>> {
+    const data = { ...(await this.sanitizeAvatar(userData)) };
     // 统一哈希：admin 用户管理「新增用户」若带密码，落库前必须 bcrypt 哈希，
     // 否则登录端 bcrypt.compare 永远失败（历史隐患：此处曾直接存明文）。
     if (data.password) {
@@ -121,13 +141,13 @@ export class UserService {
     }
     const user = this.userRepository.create(data);
     try {
-      return await this.userRepository.save(user);
+      return this.stripPassword(await this.userRepository.save(user));
     } catch (e) {
       throw toDupError(e);
     }
   }
 
-  async update(id: string, userData: Partial<User>): Promise<User> {
+  async update(id: string, userData: Partial<User>): Promise<Omit<User, 'password'>> {
     const user = await this.findById(id);
     // 防剥权（2026-10-29）：前端下拉曾不认识 super_admin，编辑保存会把超管静默降级。
     // 这里是最后一道门：超管角色只能保留；真要摘除由其他超管在数据库层面操作。
@@ -138,7 +158,7 @@ export class UserService {
     ) {
       throw new BadRequestException('不允许移除用户的 super_admin 角色：请先由其他超级管理员在数据库层面操作');
     }
-    const { preferences, password, ...rest } = userData;
+    const { preferences, password, ...rest } = await this.sanitizeAvatar(userData);
     Object.assign(user, rest);
     if (password) {
       // 改密：哈希 + 令牌版本 +1，作废该用户所有旧会话（token_version 机制）
@@ -151,7 +171,7 @@ export class UserService {
       user.preferences = { ...(user.preferences ?? {}), ...preferences };
     }
     try {
-      return await this.userRepository.save(user);
+      return this.stripPassword(await this.userRepository.save(user));
     } catch (e) {
       throw toDupError(e);
     }

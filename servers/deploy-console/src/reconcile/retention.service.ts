@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { InjectDataSource } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { EnvArtifactService } from '../apps/env-artifact.service';
+import { toCommitId } from '../pipeline/release-paths';
 
 /**
  * 数据保留策略（诊断 #18）。
@@ -91,6 +93,7 @@ export class RetentionService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly cfg: ConfigService,
     @InjectDataSource() private readonly local: DataSource,
+    private readonly artifacts: EnvArtifactService,
   ) {}
 
   onModuleInit(): void {
@@ -174,6 +177,36 @@ export class RetentionService implements OnModuleInit, OnModuleDestroy {
           version: String(r.current_version),
         });
       }
+    }
+    // 半发布治理 F2（2026-11-12，05a 专项 P0-2）：磁盘入口指针解析值并入保护名单。
+    // 半发布期间表无行的 (app,env)，磁盘指针指向的版本不在任何 DB 指针里 ——
+    // 不保护就会被 GC 清掉 → 第二跳 404 → 白屏（错位升级为事故）。
+    // 原始值与 toCommitId 归一值都进集合（版本串存在两种拼写，防拼写差被误删）。
+    // CDN 模式无盘指针：readPointer 返回 null，天然空转。
+    try {
+      const pairs = (await this.local.query(
+        `SELECT a.\`key\` AS app, e.env_id AS env
+         FROM deploy_apps a CROSS JOIN deploy_envs e
+         WHERE a.deploy_mode = 'env-dir' AND e.enabled = 1`,
+      )) as Array<{ app: string; env: string }>;
+      for (const p of pairs) {
+        try {
+          const v = await this.artifacts.readPointer(String(p.env), String(p.app));
+          if (!v) continue;
+          out.push({ env: String(p.env), component: String(p.app), version: v });
+          const commit = toCommitId(v);
+          if (commit && commit !== v) {
+            out.push({ env: String(p.env), component: String(p.app), version: commit });
+          }
+        } catch (e) {
+          // 宁可少保护一条也不让 GC 整体崩；该对的撕裂由三方对账巡检（F2）兜底发现
+          this.logger.warn(
+            `读磁盘指针失败（${p.app}@${p.env}），该对保护名单按 DB 侧为准：${(e as Error).message}`,
+          );
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`枚举 env-dir 应用失败，磁盘指针保护本轮缺席：${(e as Error).message}`);
     }
     return out;
   }

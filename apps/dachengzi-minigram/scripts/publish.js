@@ -51,7 +51,7 @@ function NOTIFY_UPLOAD(version) {
     `**小程序已上传开发版本** v${version}`,
     '> 脚本到此为止。设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，脚本不代做。',
     '',
-    `**体验版**（可选，连 dev）：公众平台 → 管理 → 版本管理 → 开发版本 → 选 v${version} → 设为体验版；体验成员在「成员管理 → 体验成员」添加；体验版二维码请用系统标准码，勿手填 path。`,
+    `**体验版**（可选，连 prod）：公众平台 → 管理 → 版本管理 → 开发版本 → 选 v${version} → 设为体验版；体验成员在「成员管理 → 体验成员」添加；体验版二维码请用系统标准码，勿手填 path。`,
     '**正式版**（连 prod）：公众平台 → 管理 → 版本管理 → 开发版本 → 提交审核（填类目 / 测试账号 / 备注）→ 审核通过 → 点击发布（全量或分阶段）。',
     '',
     '分步指引：npm run publish -- trial ｜ npm run publish -- release',
@@ -68,7 +68,7 @@ function GUIDE_TRIAL(version) {
     `  · package.json 版本已递增（当前 v${version}；微信要求递增，重复会被拒）`,
     '  · 开发版本已上传：若未上传，先跑 npm run publish -- upload',
     '  · 体验成员已添加：公众平台 → 管理 → 成员管理 → 体验成员',
-    '  · 体验版连 https://dev.kedouai.com（dev），请在 request 合法域名登记',
+    '  · 体验版连 https://kedouai.com（prod），请在 request 合法域名登记',
     '',
     '【人工步骤】',
     '  1. 登录 https://mp.weixin.qq.com/ → 管理 → 版本管理 → 开发版本',
@@ -103,7 +103,7 @@ function GUIDE_RELEASE(version) {
     '',
     '【回滚】公众平台 → 管理 → 版本管理 → 线上版本 → 版本回退（回到上一线上版本）；',
     '        审核中可在「审核版本」区撤回审核。',
-    '【环境】正式版连 https://kedouai.com（prod）；体验版/开发版连 dev。',
+    '【环境】正式版/体验版连 https://kedouai.com（prod）；开发版连 dev。',
   ].join('\n');
 }
 
@@ -337,7 +337,7 @@ function buildCliMeta(pagePath, opts = {}) {
     expireAtText: fmt(expireAt),
     expireAtMs,
     ttlMinutes,
-    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload 上传开发版本，再人工在公众平台「设为体验版」（体验版连 dev、体验成员可扫、体验版二维码官方口径 7 天）',
+    hint: '预览码过期后必须重新生成；需要长期可用的码请走 upload 上传开发版本，再人工在公众平台「设为体验版」（体验版连 prod、体验成员可扫、体验版二维码官方口径 7 天）',
   };
 }
 

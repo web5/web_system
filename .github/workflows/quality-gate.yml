@@ -277,29 +277,44 @@ jobs:
       #
       # 🔴 它测的是「断言有没有真的管着判据」，这是黄金集自己做不到的 ——
       #   判据写错、expected 也照着错的一起更新时，run.sh 永远绿。
-      # 切主（S3）后判据全在 gates.yaml，所以变异目标换成 YAML 字段；
+      # 切主（S3）后判据全在 gates.yaml；S4（2026-11-11）把手写的 8 条精选换成
+      # 生成式：遍历「门表 × 字段类型」，新加门/新加字段不会再漏。
       # 旧 mutation-test.sh（变异 bash 源码）的 14 项已随之失效，见该脚本头部说明。
-      - name: 判据变异测试（改坏 YAML 判据，黄金集必须红）
-        run: bash scripts/redline/cases/mutation-yaml.sh
-
-      # 影子比对：gate.ts 与 legacy bash 在同一组输入上逐字节一致。
       #
-      # 🔴 切主（S3）后这一步从「守门」降为「哨兵」，故 continue-on-error：
-      #   切主前 bash 是权威，两者必须一致 → 不一致就是新引擎走样，必须阻断。
-      #   切主后 YAML 是权威、bash 停更 → 合法改判据必然让两者分叉，阻断它就等于
-      #   要求「改 YAML 同时改 bash」，S3 的「只改 1 处」直接失效。
-      #   留着它是因为：只要没人动 bash，它仍然能抓到「gate.ts 被改坏」。
-      #   gate.ts 的正确性主保仍是上面的黄金用例 + 变异测试（直接测执行结果）。
-      - name: 双引擎影子比对（bash ↔ gate.ts，切主后仅告警）
-        continue-on-error: true
-        run: bash scripts/redline/cases/shadow.sh
+      # 🔴 为什么这一步用 baseline 而不是要求 0 缺口：
+      #   首次全量跑出 38 个真缺口（用例没覆盖到的判据分支）。直接红等于把流水线钉死，
+      #   而「全红」的结果是没人看 —— 和不跑一样。baseline 只登记存量债，
+      #   新增缺口立刻阻断（这是它能长期活着的前提）。
+      - name: 判据变异测试（生成式：改坏 YAML 判据，黄金集必须红）
+        run: node scripts/redline/mutation-gen.ts
+
+      # 异构门的专用验收测试（gates.yaml evidence_external 指向的脚本必须真的跑）：
+      #   R11b 档位矩阵（scenarios.tsv 无环境变量列，表达不了）；
+      #   R16 SSE 契约（python 委派，临时仓须复制脚本才驱动得了，否则静默跳过 = 假绿）；
+      #   R6 改动包选择（实现在 scripts/ci/changed-packages.sh，门禁扫描碰不到，pnpm 全桩）。
+      # 不接 CI 的测试等于没有测试 —— test-r11b-anchors.sh 曾长期只在本地存在（2026-11-12 查明）。
+      - name: 专用验收测试（R11b 档位 / R16 SSE 契约 / R6 改动包选择）
+        run: |
+          bash scripts/redline/test-r11b-anchors.sh
+          bash scripts/redline/test-r16-sse.sh
+          bash scripts/ci/test-changed-packages.sh
+
+      # 五层闸门健康自检（规范 §4 P0）：hooks 接线 / 脚本可执行 / CI job 存在性，
+      # 任一失效 exit 1。验「闸门还在生效」，与用例（验判据可信）互补。
+      - name: 闸门健康自检（五层载体存在性）
+        run: bash scripts/redline/check-gate-health.sh
+
+      # S5（2026-11-11）：影子比对（bash ↔ gate.ts）随 legacy bash 一起删除。
+      # 为什么删：留在 CI 里也是拿 gate.ts 跟自己比 —— 恒等、恒绿，等于没这一步。
+      # 丢掉什么：bash 曾是**独立实现**，能发现「gate.ts 被改坏」。现在这层没有了，
+      #   替代物只有黄金用例（逐字节比 expected）与生成式变异（改坏判据必须红）。
+      # 要不要接受这个损失，见 PR 说明与台账 #8724 的拍板记录。
 
       - name: 失败时给出差异摘要
         if: failure()
         run: |
           echo "期望值在 scripts/redline/cases/expected/，实际差异见上一步输出"
           echo "本地复现：bash scripts/redline/cases/run.sh --keep（保留夹具仓库路径）"
-          echo "影子比对失败：bash scripts/redline/cases/shadow.sh --filter <场景id> 定位"
           echo "若 gates-lint 报漂移：切主后以 gates.yaml 为准（bash 已退场，不再反向迁就）"
 
   # 原型体系静态门禁（2026-10-22 立）：拦「零散原型稿」与「登记与源稿脱节」

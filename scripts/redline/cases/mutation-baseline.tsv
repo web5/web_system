@@ -1,0 +1,14 @@
+# 判据变异已知缺口基线（生成式变异测试的存量债）
+#
+# 每行 = 一个「判据改坏了但用例没发现」的组合：<门条目>	<变异器名>
+# 这不是许可清单：补了用例就从这里删掉，mutation-gen 会提示哪些行已经可移除。
+# 重新生成：node scripts/redline/mutation-gen.ts --write-baseline
+#
+# 2026-11-11 #8722 大清理：38 → 2。消掉的 36 条去向（详见 PR 描述）：
+#   · 8 条 R10/R11 假缺口 —— 死在定制实现的硬编码里，DECLARATIVE_PER_GATE 门级登记后不再生成；
+#   · 24 条真缺口 —— 八仙豁免（commit-exempt-all）+ 凭证三件套（R13-R18/R23 valid/fake/blocking）
+#     + R9/R9b/R12 新用例 + line 组 scope/skip 边界用例补捕获；exempt 字段引擎活化是前提。
+# 剩 2 条 R12：判据是真读的，但观测它需要「双源漂移」阳性夹具 —— 漂移是 fixture 仓库的
+# 全局状态，会污染全部 60+ 场景的基线（见 gates.yaml uncovered R12 条）。登记留债。
+R12	trigger.compare_pair.src 改成不存在目录（门静默通过）
+R12	trigger.exclude 置为 [""]（空串匹配一切，排除面=全量）

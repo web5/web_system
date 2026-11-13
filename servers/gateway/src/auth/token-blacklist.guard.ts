@@ -10,11 +10,18 @@
  * 缓存策略（决定「登出多久生效」）：
  * - 命中「已失效」：缓存 300s（废掉的 token 恒废，无需回源）
  * - 命中「有效」：缓存 5s（登出后旧 token 最长 5s 内全局失效）
- * - auth-service 不可用：放行并告警（与现有 Redis 不可用放行策略一致）
+ * - auth-service 不可用或响应无法判定：有界失败后返回 503，故障结果不缓存
  */
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SERVICE_URL_DEFAULTS } from '@web-system/shared';
+import { API_TIMEOUT, SERVICE_URL_DEFAULTS } from '@web-system/shared';
 
 interface CacheEntry {
   valid: boolean;
@@ -23,6 +30,7 @@ interface CacheEntry {
 
 const VALID_CACHE_MS = 5_000;
 const INVALID_CACHE_MS = 300_000;
+const UNAVAILABLE_MESSAGE = '认证状态暂不可用，请稍后重试';
 
 /**
  * 公开鉴权路径白名单：这些接口本身就是「用凭据换凭据」，调用方不该被要求持有有效 token。
@@ -83,27 +91,32 @@ export class TokenBlacklistGuard implements CanActivate {
       this.cache.delete(token);
     }
 
-    let valid = true;
+    let valid: boolean;
     try {
       const res = await fetch(`${this.authBaseUrl()}/internal/auth/token-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, key: this.configService.get<string>('INTERNAL_API_KEY') || '' }),
+        signal: AbortSignal.timeout(API_TIMEOUT.UPSTREAM.INTERNAL),
       });
-      if (!res.ok) {
-        valid = true; // 端点异常按放行处理（同上：不可用不阻塞业务）
-      } else {
-        const data = (await res.json()) as { valid?: boolean };
-        valid = data?.valid !== false;
-      }
-    } catch (err: any) {
+      if (res.status !== 200) throw new Error('token status returned non-200');
+
+      const data: unknown = await res.json();
+      const value =
+        data !== null && typeof data === 'object'
+          ? (data as { valid?: unknown }).valid
+          : undefined;
+      if (typeof value !== 'boolean') throw new Error('token status response is malformed');
+      valid = value;
+    } catch {
       if (!this.alerted) {
-        this.logger.warn(`token 状态校验失败，按放行处理: ${err?.message || err}`);
+        this.logger.warn('token 状态校验失败：认证状态暂不可用');
         this.alerted = true;
       }
-      valid = true;
+      throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     }
 
+    // 只有明确、合法的布尔结论才可缓存；异常在上面直接结束，不落缓存。
     this.cache.set(token, { valid, at: now });
     if (!valid) throw new UnauthorizedException('令牌已失效（已登出）');
     return true;

@@ -109,11 +109,11 @@
 
 | 编号 | 实现位置 |
 |---|---|
-| A 类行级 | `scripts/redline/scan-rules.sh` |
-| B4 双源同源 | `scripts/redline/scan-rules.sh` |
+| A 类行级 | `scripts/redline/gates.yaml` R1–R8（gate.ts 执行） |
+| B4 双源同源 | `scripts/redline/gates.yaml` R12（gate.ts 执行） |
 | B5 SSE 契约 | `scripts/redline/check-sse-contract.py` |
 | B6 原型体系 | `scripts/redline/proto-static-check`（CI job） |
-| B7 流水线体检 | `scripts/redline/scan-rules.sh` |
+| B7 流水线体检 | `scripts/redline/scan-rules.sh`（已删除）→ 现由 `scripts/pipeline-lint.mjs` 承担 |
 | D1/D2 构建测试 | `scripts/ci/changed-packages.sh` |
 | D3 ESLint | `quality-gate.yml` → `pnpm lint:ci` + `changed-packages --lint` |
 | E1 发布流水线 | `.github/workflows/release.yml` |

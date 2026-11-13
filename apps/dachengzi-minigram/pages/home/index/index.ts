@@ -18,6 +18,7 @@ import { createAgentApi } from '../../../services/agent-stream';
 import { isLoggedIn } from '../../../services/auth';
 import { getDailyQuote } from '../../../utils/daily';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
+import { featureEnabled, readFlags, FLAGS_UPDATED_EVENT, FlagsState } from '../../../utils/feature-flags';
 
 /** 未登录时的登录引导落点：「我的」页有登录入口 */
 const MINE_PATH = '/pages/mine/index/index';
@@ -101,6 +102,11 @@ Page({
     recentLoading: true,
     /** 最近对话是否处于「接口异常」态 —— true 显示「加载失败，点此重试」，false 显示真·空态 */
     recentError: false,
+    /**
+     * 本地功能开关（utils/feature-flags.ts）：flags.chat 控制「新对话」卡与「最近对话」区。
+     * 初始值全关（安全侧），onShow / flags:updated 广播时以 storage 为准刷新。
+     */
+    flags: { chat: false, translate: false } as FlagsState,
   },
 
   /**
@@ -109,6 +115,8 @@ Page({
    */
   _offAuthLogged: null as (() => void) | null,
   _offAuthExpired: null as (() => void) | null,
+  /** 功能开关变更广播退订函数（onUnload 调用） */
+  _offFlagsUpdated: null as (() => void) | null,
 
   /**
    * loadRecent 的轮次序号：每轮进入 +1。
@@ -133,6 +141,12 @@ Page({
       // 登录态过期广播：request 401 / ai-agent 4010 信封清 token 后发 auth:expired → 本页弹登录墙
       this._offAuthExpired = () => this.setData({ loggedIn: false });
       __bus.on('auth:expired', this._offAuthExpired);
+      // 功能开关变更广播：设置页拨开关后本页即时重渲染（开启时补拉最近对话）
+      this._offFlagsUpdated = () => {
+        this.setData({ flags: readFlags() });
+        this.loadRecent();
+      };
+      __bus.on(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
     }
   },
 
@@ -154,6 +168,10 @@ Page({
         __bus.off('auth:expired', this._offAuthExpired);
         this._offAuthExpired = null;
       }
+      if (this._offFlagsUpdated) {
+        __bus.off(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
+        this._offFlagsUpdated = null;
+      }
     }
   },
 
@@ -165,10 +183,10 @@ Page({
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : '';
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
 
-    // 每次回到首页先同步登录态，再决定是否拉最近对话
-    this.setData({ loggedIn: isLoggedIn() });
+    // 每次回到首页先同步登录态与功能开关，再决定是否拉最近对话
+    this.setData({ loggedIn: isLoggedIn(), flags: readFlags() });
 
-    // 最近对话：每次回到首页刷新（先缓存秒显，再后台刷新）
+    // 最近对话：每次回到首页刷新（先缓存秒显，再后台刷新；开关关闭时 loadRecent 内部直接收敛，不发请求）
     this.loadRecent();
   },
 
@@ -183,6 +201,11 @@ Page({
     openEntry('/pages/chat/index/index');
   },
 
+  /** 新概念英语：常驻卡入口（主包课文目录，与「我的」页课文学习进度同落点） */
+  goNce() {
+    wx.navigateTo({ url: '/pages/nce/index/index' });
+  },
+
   /**
    * 最近一次会话的**最近一条对话**（stale-while-revalidate）。
    *
@@ -192,6 +215,12 @@ Page({
    *  2. 再后台请求刷新，成功则写回缓存。
    */
   async loadRecent() {
+    // 功能开关关闭（默认审核态）：整段不渲染也不发任何请求（V11：默认关态无 /agent 请求）
+    if (!featureEnabled('chat')) {
+      this.setData({ recent: null, recentLoading: false, recentError: false });
+      return;
+    }
+
     // ── 轮次（seq）登记：并发/重入保护 ────────────────────────────────────
     // 每轮 +1；此后所有「异步回来的写入」（超时计时器、await 之后的迟到返回）
     // 都要先比对自己是否仍是当前轮次，不匹配即丢弃，避免互相覆盖。

@@ -14,7 +14,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
   let envsService: { getEnv: jest.Mock };
   let configService: { get: jest.Mock };
   let mirror: { mirrorRow: jest.Mock; deleteMirror: jest.Mock };
-  let registry: { setAppEnvPointer: jest.Mock; clearAppEnvPointer: jest.Mock };
+  let registry: { setAppEnvPointer: jest.Mock; clearAppEnvPointer: jest.Mock; currentAppVersion: jest.Mock };
   let artifacts: {
     hasVersion: jest.Mock;
     listVersions: jest.Mock;
@@ -74,6 +74,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     registry = {
       setAppEnvPointer: jest.fn(async () => ({ from: 'v1', previous: 'v0', unchanged: false })),
       clearAppEnvPointer: jest.fn(async () => undefined),
+      currentAppVersion: jest.fn(async () => 'v1'),
     };
     artifacts = {
       hasVersion: jest.fn(async () => true),
@@ -243,5 +244,102 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     gatewayCache.notifyVersionChange.mockRejectedValueOnce(new Error('gateway 不可达'));
     const r = await svc.switchVersion('portal', 'prod', 'v2', 'u1');
     expect(r.to).toBe('v2');
+  });
+
+  /**
+   * 半发布治理 F3：repairPointer —— 受控的盘/表收敛通道，替代人工直写库。
+   * 变异思维：旧行为下修半发布只能直写库（无审计）或 publish 换版本号兜一圈；
+   * unchanged 短路又让「再切一次同版本」自愈失效。以下用例封死这两条。
+   */
+  describe('repairPointer（半发布正规修复通道）', () => {
+    beforeEach(() => {
+      registry.currentAppVersion = jest.fn(async () => 'v1');
+      artifacts.readPointer = jest.fn(async () => 'v2');
+    });
+
+    it('盘新表旧（11-09 镜像形态）：默认收敛到表侧，盘指针重写到表值', async () => {
+      registry.currentAppVersion.mockResolvedValue('v1');
+      artifacts.readPointer.mockResolvedValueOnce('v2').mockResolvedValueOnce('v1');
+      const r = await svc.repairPointer('portal', 'prod', undefined, 'ops', '修半发布');
+      // 目标是表值 v1：表 unchanged 不动，盘强制重写
+      expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+      expect(artifacts.writePointer).toHaveBeenCalledWith('prod', 'portal', 'v1');
+      expect(r).toMatchObject({ from: { table: 'v1', disk: 'v2' }, to: 'v1', repaired: true });
+    });
+
+    it('盘有值表无行（11-09 正形态）：收敛到盘值，补表 + 重写盘', async () => {
+      registry.currentAppVersion.mockResolvedValue(undefined);
+      artifacts.readPointer.mockResolvedValue('abc1234');
+      const r = await svc.repairPointer('portal', 'prod', undefined, 'ops', '修半发布');
+      expect(registry.setAppEnvPointer).toHaveBeenCalledWith(
+        expect.objectContaining({ currentVersion: 'abc1234', env: 'prod', moduleKey: 'portal' }),
+      );
+      expect(artifacts.writePointer).toHaveBeenCalledWith('prod', 'portal', 'abc1234');
+      expect(r.to).toBe('abc1234');
+    });
+
+    it('显式 to 优先于表/盘：收敛到指定版本', async () => {
+      artifacts.readPointer.mockResolvedValueOnce('v1').mockResolvedValueOnce('v9');
+      const r = await svc.repairPointer('portal', 'prod', ' v9 ', 'ops', '指定收敛');
+      expect(registry.setAppEnvPointer).toHaveBeenCalledWith(
+        expect.objectContaining({ currentVersion: 'v9' }),
+      );
+      expect(r.to).toBe('v9');
+    });
+
+    it('unchanged 不短路：表已在目标值仍重写盘并读回校验（P1-c 局部豁免）', async () => {
+      registry.currentAppVersion.mockResolvedValue('v1');
+      artifacts.readPointer.mockResolvedValue('v1');
+      const r = await svc.repairPointer('portal', 'prod', 'v1', 'ops', '幂等重收敛');
+      expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+      expect(artifacts.writePointer).toHaveBeenCalledWith('prod', 'portal', 'v1');
+      expect(r.repaired).toBe(false);
+    });
+
+    it('读回校验失败 → 判失败（写了但没写对不能算修复）', async () => {
+      registry.currentAppVersion.mockResolvedValue('v1');
+      artifacts.readPointer.mockResolvedValueOnce('v1').mockResolvedValueOnce('corrupted');
+      await expect(svc.repairPointer('portal', 'prod', 'v1', 'ops', 'x')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('表收敛后写盘失败 → 回滚表指针（原子步补偿语义）', async () => {
+      registry.currentAppVersion.mockResolvedValue(undefined);
+      // 表原本无行（from=null）→ 补偿 = clearAppEnvPointer 清掉刚写的空指针
+      registry.setAppEnvPointer.mockResolvedValue({ from: null, previous: null, unchanged: false });
+      artifacts.readPointer.mockResolvedValue('abc1234');
+      artifacts.writePointer.mockRejectedValue(new Error('ssh timeout'));
+      await expect(svc.repairPointer('portal', 'prod', undefined, 'ops', 'x')).rejects.toThrow(
+        /已回滚版本指针表/,
+      );
+      expect(registry.clearAppEnvPointer).toHaveBeenCalledWith('portal', 'prod');
+    });
+
+    it('表盘皆空且无 to → 400 无可收敛目标', async () => {
+      registry.currentAppVersion.mockResolvedValue(undefined);
+      artifacts.readPointer.mockResolvedValue(null);
+      await expect(svc.repairPointer('portal', 'prod', undefined, 'ops', 'x')).rejects.toThrow(
+        /无可收敛目标/,
+      );
+    });
+
+    it('产物不存在 → 400 fail-fast（不修向幽灵版本）', async () => {
+      artifacts.hasVersion.mockResolvedValue(false);
+      await expect(svc.repairPointer('portal', 'prod', 'ghost', 'ops', 'x')).rejects.toThrow(
+        /版本产物不存在/,
+      );
+      expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+      expect(artifacts.writePointer).not.toHaveBeenCalled();
+    });
+
+    it('prod 缺 reason → 400（审计强制）', async () => {
+      await expect(svc.repairPointer('portal', 'prod', 'v1', 'ops')).rejects.toThrow(/reason/);
+    });
+
+    it('非 env-dir 应用 → 400', async () => {
+      appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
+      await expect(svc.repairPointer('shell', 'prod', 'v1', 'ops', 'x')).rejects.toThrow(/env-dir/);
+    });
   });
 });

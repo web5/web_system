@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   resolveUserSystems,
@@ -32,6 +33,7 @@ import type {
 
 /** refresh token 有效期（与 generateToken 里 30d 保持一致）：登出黑名单 TTL 需覆盖它 */
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+const AUTH_UNAVAILABLE_MESSAGE = '认证状态暂不可用，请稍后重试';
 
 @Injectable()
 export class AuthService {
@@ -117,7 +119,13 @@ export class AuthService {
         { params: { appid: oaConfig.appId, secret: oaConfig.secret, code: wechatDto.code, grant_type: 'authorization_code' } },
       );
 
-      const { access_token, openid } = tokenResponse.data;
+      // 安全闸：code 无效时微信返回 errcode，且 access_token/openid 缺失。
+      // 缺任一必须拒绝——openid 为 undefined 进 findByOaOpenid 会触发
+      // TypeORM undefined-where 静默忽略，退化为无条件查询返回第一行（越权）。
+      const { access_token, openid, errcode, errmsg } = tokenResponse.data;
+      if (errcode || !access_token || !openid) {
+        throw new BadRequestException(`微信登录失败：${errmsg || 'access_token/openid 缺失'}`);
+      }
 
       const userInfoResponse = await axios.get(
         'https://api.weixin.qq.com/sns/userinfo',
@@ -162,6 +170,10 @@ export class AuthService {
       }
 
       const { openid } = sessionData;
+      // 安全闸：无 errcode 不代表有 openid；空 openid 进 findByMpOpenid 同样触发 undefined-where 退化
+      if (!openid) {
+        throw new BadRequestException('微信登录失败：openid 缺失');
+      }
 
       let user = await this.userService.findByMpOpenid(openid);
       let isNewUser = false;
@@ -206,6 +218,7 @@ export class AuthService {
 
       return this.generateToken(user);
     } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
       this.logger.warn(
         `Refresh token 验证失败: ${(error as Error)?.message || error}`,
       );
@@ -254,7 +267,9 @@ export class AuthService {
         preferences: user.preferences,
       };
     } catch (error) {
-      if (error instanceof UnauthorizedException) throw error;
+      if (error instanceof UnauthorizedException || error instanceof ServiceUnavailableException) {
+        throw error;
+      }
       throw new UnauthorizedException('令牌无效或已过期');
     }
   }
@@ -280,13 +295,14 @@ export class AuthService {
         await this.redis.set(`bl:sid:${payload.sid}`, '1', 'EX', ttl);
       }
       this.logger.debug(`Token 已加入黑名单，TTL=${ttl}s${payload.sid ? ' (含 sid)' : ''}`);
-    } catch (err: any) {
-      this.logger.warn(`登出黑名单写入失败: ${err.message}`);
+    } catch {
+      this.logger.warn('登出黑名单写入失败：Redis 暂不可用');
+      throw new ServiceUnavailableException(AUTH_UNAVAILABLE_MESSAGE);
     }
   }
 
   /**
-   * 检查 token 是否在黑名单中（Redis 不可用时放行）
+   * 检查 token 是否在黑名单中；查询失败时必须保留故障语义，不得按有效放行。
    */
   async isTokenBlacklisted(token: string): Promise<boolean> {
     try {
@@ -302,9 +318,9 @@ export class AuthService {
       }
       const exists = await this.redis.exists(`bl:${hash}`);
       return exists === 1;
-    } catch (err: any) {
-      this.logger.warn(`黑名单查询失败: ${err.message}`);
-      return false;
+    } catch {
+      this.logger.warn('黑名单查询失败：Redis 暂不可用');
+      throw new ServiceUnavailableException(AUTH_UNAVAILABLE_MESSAGE);
     }
   }
 
@@ -495,6 +511,9 @@ export class AuthService {
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);
       }
+      if (!resp.data.openid) {
+        throw new BadRequestException('获取 openid 失败：openid 缺失');
+      }
       await this.userService.bindMpOpenid(userId, resp.data.openid);
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
@@ -510,6 +529,9 @@ export class AuthService {
       });
       if (resp.data.errcode) {
         throw new BadRequestException(`获取 openid 失败：${resp.data.errmsg}`);
+      }
+      if (!resp.data.openid) {
+        throw new BadRequestException('获取 openid 失败：openid 缺失');
       }
       await this.userService.bindOaOpenid(userId, resp.data.openid);
     } catch (error) {

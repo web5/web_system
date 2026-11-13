@@ -5,7 +5,7 @@
 # 用法：bash scripts/redline/test-gate-hardening.sh
 #
 # 设计：造一个**临时 git 仓库**（隔离，不碰真实仓库），在里面构造各种 commit，
-#       逐条断言 gate.ts（判据来自 gates.yaml）/ check-commit-msg.sh 是否符合预期。
+#       逐条断言 gate.ts（判据来自 gates.yaml，commit-msg 钩子也走它）是否符合预期。
 #       每个用例都有「变异测试」注释 —— 故意改坏实现时该用例会红。
 #
 # 为什么用临时仓库：真实 master 上「造一个 Micro-exempt: R11 但缺 Plan:」的 commit
@@ -15,7 +15,8 @@ set -uo pipefail
 
 TOP="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCAN="$TOP/scripts/redline/gate.ts"
-CHECK_MSG="$TOP/scripts/redline/check-commit-msg.sh"
+# S5：commit-msg 已是 gate.ts 的子命令（原 check-commit-msg.sh 已删除）
+CHECK_MSG="$TOP/scripts/redline/gate.ts"
 
 PASS=0
 FAIL=0
@@ -215,25 +216,29 @@ case " $got " in
 esac
 
 # ============================================================
-sec_head "卡 2.8 · check-commit-msg.sh 的豁免分类"
+sec_head "卡 2.8 · commit-msg 阶段的豁免分类（gate.ts commit-msg）"
 # ============================================================
 # L2 本地门：UI commit 缺 Proto → 报错；带 Micro-exempt: R11 不应豁免 R10(Proto)
-# ⚠️ check-commit-msg.sh 检的是**暂存区**（commit 还没建），所以这里改文件后 git add，
+# ⚠️ commit-msg 检的是**暂存区**（commit 还没建），所以这里改文件后 git add，
 #    不能用 newcommit（那会先 commit 掉，暂存区就空了）。
 echo "staged ui change" > apps/admin/src/views/Z.vue
 git add apps/admin/src/views/Z.vue
 MSGFILE="$WORK/msg.txt"
 printf 'feat: UI 改动待提交\nMicro-exempt: R11: 纯视觉微调，仅设计评审豁免\n' > "$MSGFILE"
-out="$(cd "$WORK" && bash "$CHECK_MSG" "$MSGFILE" 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'Proto'; then
-  ok "L2：R11 分类豁免不放行 Proto 检查"
+out="$(cd "$WORK" && node "$CHECK_MSG" --no-color commit-msg "$MSGFILE" 2>&1)"; rc=$?
+# 🔴 S5 行为变化（不是 bug，但必须写明）：R11 被分类豁免后，R10（Proto 缺失）仍会被点名，
+#   但 R10 在 gates.yaml 里是 **warning**，所以 exit=0（不阻断）。
+#   旧 check-commit-msg.sh 是硬编码 exit 1 —— 比它自己声明的级别更严，属实现与声明不一致。
+#   删 bash 后本地与 CI 口径统一为「warning」。要不要把 R10 升 error 是判据决策，见台账待拍板。
+if printf '%s' "$out" | grep -q '\[R10\]'; then
+  ok "L2：R11 分类豁免后仍点名 Proto 缺失（R10=warning，不阻断；旧 bash 会 exit 1）"
 else
-  bad "L2：R11 分类豁免不放行 Proto 检查" "rc=$rc out=$(printf '%s' "$out" | head -3 | tr '\n' ' ')"
+  bad "L2：R11 分类豁免把 Proto 检查一起吞了" "rc=$rc out=$(printf '%s' "$out" | head -3 | tr '\n' ' ')"
 fi
 
 # L2：R10 分类豁免 → 放行（Proto 被豁免，但 Design 仍须带 → 仍应拒）
 printf 'feat: UI 改动待提交\nMicro-exempt: R10: 纯视觉微调，仅原型凭证豁免\n' > "$MSGFILE"
-out="$(cd "$WORK" && bash "$CHECK_MSG" "$MSGFILE" 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$CHECK_MSG" --no-color commit-msg "$MSGFILE" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'Design'; then
   ok "L2：R10 分类豁免放行 Proto，但仍要求 Design"
 else
@@ -242,7 +247,7 @@ fi
 
 # 旧格式 → L2 全部放行
 printf 'feat: UI 改动待提交\nMicro-exempt: 纯视觉微调，本次改动不涉及任何门禁面\n' > "$MSGFILE"
-out="$(cd "$WORK" && bash "$CHECK_MSG" "$MSGFILE" 2>&1)"; rc=$?
+out="$(cd "$WORK" && node "$CHECK_MSG" --no-color commit-msg "$MSGFILE" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
   ok "L2：旧格式豁免全放行"
 else

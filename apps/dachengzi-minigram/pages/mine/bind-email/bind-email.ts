@@ -43,8 +43,8 @@ Page({
     }
     this.setData({ busy: true, err: '' });
     try {
-      const res = await sendEmailCode(email);
-      wx.showToast({ title: res?.message || '验证码已发送', icon: 'none' });
+      await sendEmailCode(email);
+      wx.showToast({ title: '验证码已发送，请查收', icon: 'none' });
       this.startCountdown();
     } catch (err: unknown) {
       this.setData({ err: readMessage(err, '发送失败，请稍后再试') });

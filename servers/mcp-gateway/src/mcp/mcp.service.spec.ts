@@ -166,3 +166,78 @@ describe('机构行为工具 description（PR #521 换源后的回归锁）', ()
     expect(toolRepo.save).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * deploy 模块第 13 个业务工具 restart_service 的声明锁（设计 §3.9）。
+ *
+ * 锁定的事：
+ * - 工具存在且 POST /api/mcp/restart（转发到 console 新端点）；
+ * - 参数命名对齐既有 component 习惯：env/component 必填，confirm/dry_run/reason 可选；
+ * - 同步工具总数 12 → 13（不重不漏）；
+ * - description 写明「不改版本」「不能用来切版本」——不写清楚，Agent 会把 restart
+ *   当成绕过发布门禁的切版本后门（设计 R6）。
+ */
+describe('deploy 模块 restart_service 工具声明（第 13 个业务工具）', () => {
+  /** mcp_modules 里 deploy 模块的形状（seed 只读这几列） */
+  const DEPLOY_MODULE = {
+    id: 5,
+    name: '发布管理',
+    module_type: 'http',
+    base_url: 'http://127.0.0.1:6200',
+    auth_type: 'pass-through',
+    auth_config: null,
+    timeout: 60,
+    enabled: true,
+  };
+
+  function makeDeployService(toolRows: ToolRow[]) {
+    const affected = async (_where: unknown, _patch: unknown) => ({ affected: 1 });
+    const moduleRepo = {
+      findOne: jest.fn(async () => ({ ...DEPLOY_MODULE })),
+      update: jest.fn(affected),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async (x: unknown) => x),
+    };
+    const toolRepo = {
+      find: jest.fn(async () => toolRows),
+      update: jest.fn(affected),
+      create: jest.fn((x: unknown) => x),
+      save: jest.fn(async (x: unknown) => x),
+    };
+    const svc = new McpService(moduleRepo as never, toolRepo as never, {} as never);
+    return { svc, toolRepo };
+  }
+
+  async function declaredDeployTools(): Promise<Array<{ name: string; description: string; method: string; path: string; params: Array<{ name: string; required: boolean }> }>> {
+    const { svc, toolRepo } = makeDeployService([]);
+    await (svc as unknown as { seedDeployModule(): Promise<void> }).seedDeployModule();
+    expect(toolRepo.save).toHaveBeenCalledTimes(1);
+    return toolRepo.save.mock.calls[0][0] as Awaited<ReturnType<typeof declaredDeployTools>>;
+  }
+
+  it('restart_service 声明存在：POST /api/mcp/restart，env/component 必填、confirm/dry_run/reason 可选', async () => {
+    const tools = await declaredDeployTools();
+    const tool = tools.find((t) => t.name === 'restart_service');
+    expect(tool).toBeDefined();
+    expect(tool!.method).toBe('POST');
+    expect(tool!.path).toBe('/api/mcp/restart');
+    expect(tool!.params.filter((p) => p.required).map((p) => p.name).sort()).toEqual(['component', 'env']);
+    expect(tool!.params.filter((p) => !p.required).map((p) => p.name).sort()).toEqual(['confirm', 'dry_run', 'reason']);
+  });
+
+  it('description 写明语义边界：不改版本 / 不能用来切版本 / prod 约束 / dry_run', async () => {
+    const tools = await declaredDeployTools();
+    const desc = tools.find((t) => t.name === 'restart_service')?.description ?? '';
+    expect(desc).toContain('当前指针版本');
+    expect(desc).toContain('不改版本');
+    expect(desc).toContain('不能用来切版本');
+    expect(desc).toContain('confirm:true');
+    expect(desc).toContain('dry_run');
+  });
+
+  it('deploy 同步工具 10 → 11（新增 restart_service 后不重不漏；含任务型/通用工具口径即第 13 个业务工具）', async () => {
+    const tools = await declaredDeployTools();
+    expect(tools).toHaveLength(11);
+    expect(new Set(tools.map((t) => t.name)).size).toBe(11);
+  });
+});

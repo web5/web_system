@@ -203,6 +203,19 @@ describe('QrcodeService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    // 安全回归：errcode 缺省但 openid 缺失/为空时，绝不能让 undefined
+    // 进入 findByMpOpenid（TypeORM 会静默忽略值为 undefined 的 where 条件）
+    it('jscode2session 无 errcode 但缺 openid 时必须拒绝且不查库', async () => {
+      const { ticketId } = service.createTicket();
+      mockedAxios.get.mockResolvedValue({ data: { session_key: 'mock_key' } });
+
+      await expect(
+        service.confirmScan(ticketId, 'fake_code'),
+      ).rejects.toThrow(BadRequestException);
+      expect(userService.findByMpOpenid).not.toHaveBeenCalled();
+      expect(userService.createMpUser).not.toHaveBeenCalled();
+    });
+
     it('被禁用的用户应抛出 BadRequestException', async () => {
       const { ticketId } = service.createTicket();
       mockedAxios.get.mockResolvedValue(jscode2sessionResponse);

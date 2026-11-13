@@ -99,7 +99,8 @@ beforeEach(() => {
   agentApiMock.getConversation.mockReset();
   agentApiMock.getConversation.mockResolvedValue({ messages: [] });
   wxMock.getStorageSync.mockReset();
-  wxMock.getStorageSync.mockReturnValue(undefined);
+  // 钉「对话练习」开关开启后的链路：feature_chat 恒为 '1'，其余 key 按无缓存处理
+  wxMock.getStorageSync.mockImplementation((k: string) => (k === 'feature_chat' ? '1' : undefined));
   wxMock.setStorageSync.mockReset();
   wxMock.removeStorageSync.mockReset();
 });
@@ -148,7 +149,9 @@ describe('loadRecent 硬超时兜底（骨架屏必在 12s 内退出）', () => 
   it('有缓存 + 两路永不返回 → 12s 后保留缓存卡片，只关 loading 不置错误态', async () => {
     jest.useFakeTimers();
     const cached = { id: 'cached-1', title: '缓存标题', preview: '缓存预览', timeText: '09:00' };
-    wxMock.getStorageSync.mockReturnValue(cached);
+    wxMock.getStorageSync.mockImplementation((k: string) =>
+      k === 'feature_chat' ? '1' : k === 'welcome_recent_cache' ? cached : undefined,
+    );
     agentApiMock.listConversations.mockImplementation(() => hang());
 
     const ctx = makeThis();

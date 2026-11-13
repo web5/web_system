@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "大橙子个人助理",
+  "navigationBarTitleText": "大橙子英语",
   "usingComponents": {
     "login-gate": "/components/login-gate/index"
   }

@@ -1,4 +1,4 @@
-<!-- 设置：4 段 5 项，全部真生效（无置灰、无占位） -->
+<!-- 设置：5 段 6 项，全部真生效（无置灰、无占位） -->
 <view class="page {{radiusClass}}">
   <view class="sec-t">外观</view>
   <view class="list">
@@ -8,6 +8,11 @@
   <view class="sec-t">存储</view>
   <view class="list">
     <view class="r" bindtap="clearCache"><text>清除缓存</text><text class="v">{{cacheText}} ›</text></view>
+  </view>
+
+  <view class="sec-t">功能</view>
+  <view class="list">
+    <view class="r" bindtap="goDiscoverSettings"><text>发现设置</text><text class="v">›</text></view>
   </view>
 
   <view class="sec-t">关于</view>

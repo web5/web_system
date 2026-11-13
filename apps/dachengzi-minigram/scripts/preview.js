@@ -14,11 +14,12 @@
  *   QRCODE_FORMAT   terminal | image | base64，默认 image
  *   QRCODE_DEST     二维码输出路径，默认 .ci-output/preview-qr.png
  *   PREVIEW_VERSION 覆盖版本号，默认取 package.json 的 version
+ *   PREVIEW_GIT_SHA 覆盖 gitSha（dev 出码目录是 rsync 副本无 .git，由外层脚本注入源码 sha）
  *   PREVIEW_TTL_MIN 预览码有效期（分钟），默认 25
  *
  * 说明: miniprogram-ci 直连微信后台，**不需要**打开微信开发者工具。
  *       本脚本出的是「开发版」预览二维码，有时效（官方口径 25 分钟），连 dev。
- *       长期可扫的码须人工在公众平台把「开发版本」设为体验版（体验版连 dev、体验成员可扫、
+ *       长期可扫的码须人工在公众平台把「开发版本」设为体验版（体验版连 prod、体验成员可扫、
  *       体验版二维码官方口径 7 天）；脚本只到「上传开发版本」为止，设为体验版 / 提交审核 /
  *       发布均为人工操作，脚本不代做（详见 npm run publish -- trial / release）。
  *
@@ -58,8 +59,10 @@ if (!fs.existsSync(privateKeyPath)) {
   process.exit(1);
 }
 
-/** git 短 sha，用于 desc 区分每次预览；非 git 环境降级 */
+/** git 短 sha，用于 desc 区分每次预览；PREVIEW_GIT_SHA 优先（rsync 副本无 .git 时由外层注入），非 git 环境降级 */
 function gitHead() {
+  const envSha = (process.env.PREVIEW_GIT_SHA || '').trim();
+  if (envSha) return envSha;
   try {
     return execSync('git rev-parse --short HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
@@ -226,7 +229,7 @@ async function previewApp() {
     expireAtText: fmt(expireAt),
     expireAtMs,
     ttlMinutes: TTL_MIN,
-    hint: '预览码过期后必须重新生成；长期可扫的码须人工在公众平台把开发版本「设为体验版」（体验版连 dev、体验成员可扫、体验版二维码官方口径 7 天），脚本不代做',
+    hint: '预览码过期后必须重新生成；长期可扫的码须人工在公众平台把开发版本「设为体验版」（体验版连 prod、体验成员可扫、体验版二维码官方口径 7 天），脚本不代做',
   };
 
   try {

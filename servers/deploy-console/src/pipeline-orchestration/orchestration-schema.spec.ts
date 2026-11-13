@@ -5,7 +5,7 @@
  * 步骤名唯一 / 任务名组内唯一 / 动作名任务内唯一 / 条件语法 /
  * 审核任务不携带动作与变量 / 脚本任务至少一个动作 / 脚本非空与语法。
  */
-import { validateTree, type StepInput } from './orchestration-schema';
+import { validateTree, findSelfPointerWrites, type StepInput } from './orchestration-schema';
 import { undeclaredVars } from './script-vars';
 
 const okScript = () => undefined; // bash -n 通过的 mock
@@ -140,5 +140,70 @@ describe('validateTree（编排树结构校验）', () => {
     // 登记后放行（基础样例里的 SRC/DST 一并登记，它们属于该断言的无关噪音）
     const declared = new Set(['CONSOLE_TOKEN_PROD', 'SRC', 'DST']);
     expect(validateTree(tree, okScript, (s) => undeclaredVars(s, declared))).toEqual([]);
+  });
+});
+
+/**
+ * 半发布治理 F1-①：编排脚本禁止自写磁盘入口指针（检出即报错）。
+ *
+ * 背景：11-09 portal 半发布 = 发布脚本自写 `static/modules/<app>/<env>/index.js`
+ * 磁盘指针却不落表，错位存活 2 天。磁盘指针的唯一写入口是平台原子步
+ * （AppsService.switchVersion / internal/release/pointer 的 env-dir 分支）。
+ */
+describe('findSelfPointerWrites（脚本自写盘指针检出）', () => {
+  it('重定向 / heredoc 写入盘指针文件被检出', () => {
+    const hits = findSelfPointerWrites(
+      [
+        'cat > /data/web_system_static/public/static/modules/portal/prod/index.js <<\'EOF\'',
+        "System.register(['./abc1234/index.js'], function () {});",
+        'EOF',
+      ].join('\n'),
+    );
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0]).toContain('static/modules/portal/prod/index.js');
+  });
+
+  it('echo 追加 / tee / cp / mv / ln -s 以盘指针为目标的写法被检出', () => {
+    const cases = [
+      'echo "x" >> static/modules/portal/prod/index.js',
+      "echo 'x' | tee static/modules/portal/prod/index.css",
+      'cp /tmp/new-pointer.js static/modules/portal/prod/index.js',
+      'mv /tmp/p.js /data/static/modules/portal/prod/index.js',
+      'ln -sf ./abc1234/index.js static/modules/portal/prod/index.js',
+    ];
+    for (const c of cases) {
+      expect(findSelfPointerWrites(c).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('node -e 直调 writeEnvEntryPointer 被检出', () => {
+    const hits = findSelfPointerWrites(
+      `node -e "require('./entry-pointer').writeEnvEntryPointer('/root','portal','prod','abc')"`,
+    );
+    expect(hits.length).toBeGreaterThan(0);
+  });
+
+  it('合法行为零误伤：调 pointer 接口 / 读指针 / 写结果文件 / 拷版本目录', () => {
+    const okCases = [
+      'curl -sf -X POST "$CONSOLE_API/internal/release/pointer" -d \'{"moduleKey":"portal"}\'',
+      'cat static/modules/portal/prod/index.js | grep System.register',
+      'test -f static/modules/portal/prod/abc1234/index.js',
+      'echo "{\"v\":\"$V\"}" > "$WS_RESULT_FILE"',
+      'cp -R static/modules/portal/prod/abc1234 /tmp/backup/',
+      'cp static/modules/portal/prod/index.js /tmp/pointer.bak',
+      'grep -o "\'\\./.*/index\\.js\'" static/modules/portal/prod/index.js',
+    ];
+    for (const c of okCases) {
+      expect(findSelfPointerWrites(c)).toEqual([]);
+    }
+  });
+
+  it('validateTree 集成：含自写盘指针的动作保存即报错，文案指明正规通道', () => {
+    const tree = validTree();
+    tree[1].tasks![0].actions![0].script =
+      'cat > /data/static/modules/portal/prod/index.js <<EOF\nx\nEOF';
+    const errs = validateTree(tree, okScript);
+    expect(errs.some((e) => e.includes('禁止脚本自写磁盘入口指针'))).toBe(true);
+    expect(errs.some((e) => e.includes('/internal/release/pointer'))).toBe(true);
   });
 });

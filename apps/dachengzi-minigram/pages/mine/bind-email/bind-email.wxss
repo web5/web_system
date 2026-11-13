@@ -1,4 +1,7 @@
 /* 绑定邮箱：自绘表单页（原生弹窗无输入框） */
+/* app.wxss 无全局 .page，本页须自带左右留白，否则 label/输入框/按钮贴边 */
+.page { min-height: 100vh; background: var(--page-bg); padding: 24rpx 32rpx 40rpx; box-sizing: border-box; }
+
 .doc {
   background: var(--card);
   border-radius: var(--r-card);
