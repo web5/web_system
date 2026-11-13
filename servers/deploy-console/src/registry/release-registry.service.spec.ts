@@ -186,12 +186,13 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(deploymentRepo.save).toHaveBeenCalled();
   });
 
-  it('setPointer 双写：新表写失败只告警，不阻断发布', async () => {
+  it('setPointer 双写：新表（deploy_app_env_versions）写失败 → 抛出，不静默「半发布」', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     appVersionRepo.save.mockRejectedValueOnce(new Error('db down'));
     await expect(
       svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('db down');
+    // legacy 已写成功，但 deploy_app_env_versions 是 gateway 前端唯一读取源，写失败必须让发布失败
     expect(deploymentRepo.save).toHaveBeenCalled();
   });
 
@@ -207,10 +208,12 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
   });
 
-  it('分流：本地写失败时**不**镜像（没有可信数据可同步）', async () => {
+  it('分流：本地 deploy_app_env_versions 写失败 → 抛出且不镜像（不留「半发布」）', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     appVersionRepo.save.mockRejectedValueOnce(new Error('db down'));
-    await svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' });
+    await expect(
+      svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' }),
+    ).rejects.toThrow('db down');
     expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
   });
 
