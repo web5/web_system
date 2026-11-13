@@ -1,13 +1,13 @@
 /**
- * 生词本 / 收藏页
+ * 收藏页（原生词本）
  *
- * 入口：我的 → 我的数据 → 生词本。
- * 收藏是用户主动行为数据（落 user-service），存译文快照，原对话删除后仍保留。
+ * 入口：我的 → 收藏。
+ * 收藏是用户主动行为数据（落 user-service），存句子快照，原课文删除后仍保留。
  */
 import { listGlossary, removeGlossary, GlossaryItem } from '../../../services/glossary';
 
 interface GlossaryViewItem extends GlossaryItem {
-  /** 语气 · 方向 拼成的 meta 展示文本 */
+  /** meta 展示文本：nce 来源「Lesson N · 第 M 句」，旧 tone/direction 兜底 */
   metaText: string;
 }
 
@@ -39,12 +39,26 @@ Page({
 
   apply(list: GlossaryItem[]) {
     const items: GlossaryViewItem[] = list.map((it) => {
-      const m = (it.meta || {}) as { tone?: string; direction?: string };
-      const parts = [
-        m.tone,
-        m.direction === 'zh2en' ? '中文→英语' : m.direction,
-      ].filter(Boolean);
-      return { ...it, metaText: parts.join(' · ') };
+      const m = (it.meta || {}) as {
+        tone?: string;
+        direction?: string;
+        book?: string;
+        lessonId?: number;
+        lineIndex?: number;
+      };
+      let metaText = '';
+      if (typeof m.lessonId === 'number') {
+        const parts = [`Lesson ${m.lessonId}`];
+        if (typeof m.lineIndex === 'number') parts.push(`第 ${m.lineIndex + 1} 句`);
+        metaText = parts.join(' · ');
+      } else {
+        const parts = [
+          m.tone,
+          m.direction === 'zh2en' ? '中文→英语' : m.direction,
+        ].filter(Boolean);
+        metaText = parts.join(' · ');
+      }
+      return { ...it, metaText };
     });
     this.setData({ items, empty: items.length === 0, loading: false });
   },
@@ -64,7 +78,7 @@ Page({
     }
   },
 
-  goTranslate() {
-    wx.navigateTo({ url: '/packageTranslate/pages/translate/index/index' });
+  goNce() {
+    wx.navigateTo({ url: '/pages/nce/index/index' });
   },
 });

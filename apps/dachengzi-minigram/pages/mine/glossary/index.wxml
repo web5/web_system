@@ -1,6 +1,6 @@
-<!-- 生词本：译文快照卡片（英文 + 原文 + 注解 + meta），点 × 删除 -->
+<!-- 收藏：句子快照卡片（英文 + 出处 + 译文 + meta），点 × 删除 -->
 <view class="page {{radiusClass}}">
-  <view class="tip">你收藏的译文会一直保留在这里，即使原对话删除。</view>
+  <view class="tip">你收藏的句子会一直保留在这里。</view>
   <view class="loading" wx:if="{{loading}}">载入中…</view>
 
   <block wx:if="{{!loading && !empty}}">
@@ -20,7 +20,7 @@
   <view class="empty" wx:if="{{!loading && empty}}">
     <view class="ico"><view class="ico-note"></view></view>
     <view class="e1">还没有收藏</view>
-    <view class="e2">在翻译卡片或翻译结果页点「收藏」</view>
-    <view class="go" bindtap="goTranslate">去翻译</view>
+    <view class="e2">在课文中点句子旁的「收藏」</view>
+    <view class="go" bindtap="goNce">去学课文</view>
   </view>
 </view>

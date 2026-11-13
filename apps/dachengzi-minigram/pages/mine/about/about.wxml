@@ -1,19 +1,19 @@
-<!-- 关于与免责：品牌 / 我们做什么 / 免责声明 / 合规信息 / 协议入口 -->
+<!-- 关于与免责：品牌 / 我们做什么 / 免责声明 / 协议入口 -->
 <view class="page {{radiusClass}}">
   <view class="brand">
     <view class="logo">橙</view>
-    <view class="name">大橙子个人助理</view>
+    <view class="name">大橙子英语</view>
     <view class="ver">v1.0.0</view>
   </view>
 
   <view class="card">
     <view class="card-t">我们做什么</view>
-    <view class="p">只提供两项能力：语言翻译，以及新概念英语课文学习辅助。没有合同评估、没有理财建议、没有内容推荐。</view>
+    <view class="p">提供新概念英语课文学习辅助：逐句朗读与句子收藏。</view>
   </view>
 
   <view class="card">
     <view class="card-t">免责声明</view>
-    <view class="p">大橙子助理仅用于语言翻译与新概念英语课文学习辅助，不提供法律 / 理财 / 投资建议，不做产品比较与购买推荐。翻译与讲解内容可能存在偏差，重要场景请自行核实。你的学习数据仅保存在本机与你的账号下，仅用于提供本服务，不用于模型训练，可随时删除。</view>
+    <view class="p">大橙子英语仅用于新概念英语课文学习辅助，不提供法律 / 理财 / 投资建议，不做产品比较与购买推荐。课文与朗读内容可能存在偏差，重要场景请自行核实。你的学习数据仅保存在本机与你的账号下，仅用于提供本服务，可随时删除。</view>
   </view>
 
   <view class="list">

@@ -19,6 +19,14 @@ page {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  /* 登录引导卡是 absolute 铺满，父级需定位上下文 */
+  position: relative;
+}
+
+/* 未登录：锁滚动，登录墙不会被滚出视野 */
+.page.locked {
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ---------- 问候 hero ---------- */
@@ -255,6 +263,46 @@ page {
   border: 1rpx dashed var(--brand-100);
   border-radius: var(--r-control);
 }
+
+/* ---------- 常用功能卡（注册表 pinned 项） ---------- */
+.fcard {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-top: 20rpx;
+  padding: 26rpx 28rpx;
+  background: var(--card);
+  border: 1rpx solid rgba(37, 99, 235, .10);
+  border-radius: var(--r-card);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
+}
+.fcard:active { opacity: .85; }
+.fc-ic {
+  flex: 0 0 60rpx;
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.fc-ic.ic-n { background: rgba(14, 165, 164, .10); color: #0EA5A4; }
+.fc-ic.ic-g { background: var(--brand-soft); color: var(--brand-txt); }
+.fc-tx { flex: 1; min-width: 0; }
+.fc-b { font-size: 29rpx; font-weight: 700; color: var(--t1); }
+.fc-e { font-size: 22rpx; color: var(--t3); margin-top: 4rpx; }
+.fc-go { color: var(--t3); font-size: 36rpx; flex: 0 0 auto; margin-left: 12rpx; }
+
+.more {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--brand-txt);
+  padding: 20rpx 0;
+}
+.more:active { opacity: .7; }
 
 /* ---------- 合规两行（复用全局 .claim：21rpx = 10.5px、居中） ---------- */
 .claim-foot {

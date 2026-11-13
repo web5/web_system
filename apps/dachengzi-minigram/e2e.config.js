@@ -9,15 +9,12 @@ module.exports = {
   entryPath: 'pages/home/index/index', // 启动落点（= app.json pages[0]）
   storageKeys: {
     // 逐 key 注释真源位置（keys-guard 会对每个值在产品源码做字面量扫描对账）：
-    history: 'kd_tr_history', // 真源: utils/translate-keys.ts TRANSLATE_HISTORY_KEY
-    params: 'kd_translate_params', // 真源: utils/translate-keys.ts TRANSLATE_PARAMS_KEY
-    settings: 'kd_tr_settings', // 真源: utils/translate-keys.ts TRANSLATE_SETTINGS_KEY
     radius: 'appearance_radius', // 真源: utils/appearance.ts STORAGE_KEY
     token: 'access_token', // 真源: utils/request.ts TOKEN_KEY（模块私有常量，未 export）
     refreshToken: 'refresh_token', // 真源: utils/request.ts REFRESH_TOKEN_KEY（模块私有常量）
     loggedOut: 'account_logged_out', // 真源: utils/request.ts LOGGED_OUT_KEY（模块私有常量）
     apiBase: 'api_base', // 真源: utils/request.ts 行内字面量（getStorageSync('api_base')）
-    nceMode: 'nce-mode', // 真源: pages/nce/detail/detail.ts 行内字面量（get/setStorageSync('nce-mode')）
+    featurePinned: 'feature_pinned', // 真源: utils/features.ts PINNED_KEY
     nceFont: 'nce-font', // 真源: pages/nce/detail/detail.ts 行内字面量（get/setStorageSync('nce-font')）
   },
 

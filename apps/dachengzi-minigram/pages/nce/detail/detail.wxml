@@ -1,11 +1,6 @@
-<!-- 新概念英语 · 课文详情（默认纯英文，中文按需揭示） -->
+<!-- 新概念英语 · 课文详情（整改后：英文课文 + 逐句朗读 + 逐句收藏） -->
 <view class="page f{{fontStep}} {{radiusClass}}">
   <view class="bar">
-    <view class="seg">
-      <view class="seg-i {{mode === 'immersion' ? 'on' : ''}}" data-mode="immersion" bindtap="setMode">沉浸</view>
-      <view class="seg-i {{mode === 'tap' ? 'on' : ''}}" data-mode="tap" bindtap="setMode">点按</view>
-      <view class="seg-i {{mode === 'bilingual' ? 'on' : ''}}" data-mode="bilingual" bindtap="setMode">对照</view>
-    </view>
     <view class="seg font">
       <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
       <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
@@ -21,45 +16,19 @@
       <view class="lno">Lesson {{detail.id}}</view>
       <view class="h1">{{detail.title}}</view>
       <view class="title-cn" wx:if="{{detail.titleCn}}">{{detail.titleCn}}</view>
-      <view class="lead" wx:if="{{detail.leadQuestionCn || detail.leadQuestion}}">
-        <view class="lead-zh">{{detail.leadQuestionCn || detail.leadQuestion}}</view>
-        <view class="lead-en" wx:if="{{detail.leadQuestionCn && detail.leadQuestion}}">{{detail.leadQuestion}}</view>
-      </view>
-      <view class="src {{detail.textSource}}">{{detail.textSource === 'xdf' ? '权威全文' : '字幕拼接版'}}</view>
-      <view wx:if="{{!readingActive}}" class="read-entry" bindtap="onReadTap">
-        <text wx:if="{{resumeLineIdx > 0}}">继续朗读 · 第 {{resumeLineIdx + 1}} 句</text>
-        <text wx:else>整体朗读</text>
-      </view>
     </view>
 
     <view class="sentences">
-      <view wx:if="{{mode === 'tap'}}" class="tap-hint">轻点任意句子看中文，再点一次收起 · 点带虚线的生词查词</view>
-      <!-- 外层 si / 内层 ti 显式命名：避免嵌套 wx:for 的默认 index 相互遮蔽，
-           否则生词上的 data-i 会拿到 token 下标，揭示错句译文。 -->
-      <view wx:for="{{linesView}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
+      <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
         id="line-{{si}}"
-        class="sent {{mode === 'tap' ? 'tappable' : ''}} {{readingLineIdx === si ? 'reading' : ''}}"
+        class="sent {{readingLineIdx === si ? 'reading' : ''}}"
         data-i="{{si}}" bindtap="toggleLine">
-        <view class="en">
-          <block wx:for="{{line.tokens}}" wx:for-item="tk" wx:key="k">
-            <text wx:if="{{tk.isWord}}" class="w" data-wi="{{tk.wi}}" data-i="{{si}}" catchtap="onWord">{{tk.text}}</text>
-            <text wx:else>{{tk.text}}</text>
-          </block>
-        </view>
-        <view wx:if="{{line.cn && (mode === 'bilingual' || line.showCn)}}" class="cn">{{line.cn}}</view>
-        <!-- 查词卡就地插在该句下方：不做固定浮层，绝不盖住后面句子的点按区域 -->
-        <view wx:if="{{activeWord && wordLineIdx === si}}" class="word-card" catchtap="closeWord">
-          <view class="wc-close">×</view>
-          <view class="wd">{{activeWord.word}} <text class="ph">{{activeWord.phonetic}}</text></view>
-          <view class="df">{{activeWord.pos}} {{activeWord.def}}</view>
-          <view wx:if="{{activeWord.example}}" class="eg">{{activeWord.example}}</view>
+        <view class="en">{{line.en}}</view>
+        <view class="acts">
+          <text class="play">{{readingLineIdx === si ? (readingPhase === 'loading' ? '…' : '■') : '♪'}}</text>
+          <text class="fav" data-i="{{si}}" catchtap="collectLine">☆</text>
         </view>
       </view>
-    </view>
-
-    <view class="trans">
-      <view class="link" bindtap="toggleTrans">{{showTranslation ? '收起参考译文' : '查看参考译文'}}</view>
-      <view wx:if="{{showTranslation}}" class="trans-body">{{detail.translation}}</view>
     </view>
 
     <view class="pager">
@@ -69,48 +38,4 @@
 
     <view class="pad" />
   </block>
-
-  <!-- 习题：吸底按钮 + 半屏浮层，读完再展开 -->
-  <view wx:if="{{!readingActive}}" class="fab" bindtap="openSheet">开始练习</view>
-
-  <!-- 整篇朗读控制条：与「开始练习」互斥，朗读态吸底占位 -->
-  <view wx:if="{{readingActive}}" class="read-bar">
-    <view wx:if="{{readingPhase === 'loading'}}" class="rb-loading">请稍候…</view>
-    <block wx:else>
-      <view class="rb-btn" bindtap="onPauseToggle">{{readingPhase === 'paused' ? '继续' : '暂停'}}</view>
-      <view class="rb-ticks">
-        <view wx:for="{{linesView}}" wx:key="idx" wx:for-index="si"
-          class="tick {{si < readingLineIdx ? 'done' : ''}} {{si === readingLineIdx ? 'cur' : ''}}"
-          data-i="{{si}}" bindtap="onTickTap"></view>
-      </view>
-      <view class="rb-label">{{readingLineIdx + 1}}/{{linesView.length}}</view>
-      <view class="rb-btn stop" bindtap="onStopRead">停止</view>
-    </block>
-  </view>
-  <view wx:if="{{exSheet}}" class="scrim" bindtap="closeSheet" />
-  <view wx:if="{{exSheet}}" class="sheet" catchtap="noop">
-    <view class="sh-head">
-      <text class="sh-t">习题</text>
-      <text class="sh-x" catchtap="closeSheet">×</text>
-    </view>
-    <scroll-view scroll-y class="sh-body">
-      <block wx:if="{{!exOpen}}">
-        <view class="gate">先读完课文，再开始练习。</view>
-        <view class="btn" bindtap="startEx">开始练习（{{detail.exercises.length}} 题）</view>
-      </block>
-      <block wx:else>
-        <view wx:for="{{detail.exercises}}" wx:key="index" wx:for-item="q" wx:for-index="qi" class="quiz">
-          <view class="q">{{qi + 1}}. {{q.q}}</view>
-          <view wx:for="{{q.options}}" wx:key="index" wx:for-item="o" wx:for-index="oi"
-            class="opt {{answers[qi] >= 0 && oi === q.answer ? 'right' : ''}} {{answers[qi] === oi && oi !== q.answer ? 'wrong' : ''}}"
-            data-qi="{{qi}}" data-oi="{{oi}}" bindtap="choose">
-            {{letters[oi]}}. {{o}}
-          </view>
-          <view wx:if="{{answers[qi] >= 0}}" class="exp {{answers[qi] === q.answer ? 'ok' : ''}}">
-            {{answers[qi] === q.answer ? '正确' : '再想想'}} · {{q.exp}}
-          </view>
-        </view>
-      </block>
-    </scroll-view>
-  </view>
 </view>

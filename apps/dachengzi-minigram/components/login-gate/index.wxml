@@ -1,5 +1,5 @@
 <view class="gate">
-  <view class="gate-ic">豆</view>
+  <view class="gate-ic">橙</view>
   <view class="gate-t">{{title}}</view>
   <view class="gate-d">{{desc}}</view>
   <view class="gate-btn" bindtap="onLogin">微信一键登录</view>
