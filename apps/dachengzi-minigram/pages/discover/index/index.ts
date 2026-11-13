@@ -1,13 +1,26 @@
 /**
- * 大橙子英语 · 发现页（tab 2）—— 能力市场
+ * 大橙子英语 · 发现页（tab 2）—— 全部功能 + 添加常用
  *
- * 默认关态（新装 = 审核态）只呈现新概念英语；「对话练习」「文本翻译」卡由本地开关
- * 控制（utils/feature-flags.ts，wx:if 分支渲染，不做两套页面）；
- * 功能开关入口在「我的 → 设置 → 发现设置」（PRD v0.4 §4），本页不放设置入口卡。
+ * 整改后（specs/dachengzi-minigram/review-remove-ai-2026-11-13.md §2/§3.2）：
+ * 渲染 `FEATURES` 全量（NCE + 收藏），每项带「添加常用 / 已添加」开关，
+ * 点击卡片进入功能。已删除：对话练习 / 文本翻译卡与 feature-flags 依赖。
  */
 import { isLoggedIn } from '../../../services/auth';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
-import { readFlags, FLAGS_UPDATED_EVENT, FlagsState } from '../../../utils/feature-flags';
+import { FEATURES, isPinned, togglePinned, FEATURES_UPDATED_EVENT, type FeatureDef } from '../../../utils/features';
+
+interface FeatureView extends FeatureDef {
+  pinned: boolean;
+}
+
+/** 渲染视图：注册表 + 是否已常驻首页 */
+function featureViews(): FeatureView[] {
+  return FEATURES.map((f) => ({ ...f, pinned: isPinned(f.id) }));
+}
+
+interface FeatureTapEvent {
+  currentTarget: { dataset: { path?: string; id?: string } };
+}
 
 Page({
   data: {
@@ -15,52 +28,37 @@ Page({
     radiusClass: '',
     /** 登录态：false 时整页只渲染登录引导卡 */
     loggedIn: true,
-    /** 本地功能开关：初始全关（安全侧），onShow / flags:updated 广播时以 storage 为准刷新 */
-    flags: { chat: false, translate: false } as FlagsState,
+    /** 全部功能视图 */
+    features: [] as FeatureView[],
   },
 
-  /**
-   * 登录态过期广播退订函数（onUnload 调用）。
-   * ⚠️ Page() 参数是对象字面量、没有类属性语法：`xxx: T = v` 会被解析成「把 T 当值用」，
-   * 真机编译 fatal（TS2693）——运行时字段初始化一律用 `null as any` 断言式。
-   */
-  _offAuthExpired: null as any,
+  _offAuthExpired: null as (() => void) | null,
   _offAuthLogged: null as (() => void) | null,
-  /** 功能开关变更广播退订函数（onUnload 调用） */
-  _offFlagsUpdated: null as (() => void) | null,
+  _offFeaturesUpdated: null as (() => void) | null,
 
   onShow() {
-    // tabBar 高亮登记：组件每页独立实例，须由页面显式登记（详见 utils/tabbar.ts）
     setTabBarSelected(this, TAB_INDEX.discover);
-
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : '';
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
-
-    const loggedIn = isLoggedIn();
-    // 开关状态每次进页以 storage 为准刷新（设置页拨开关后回本页即收敛）
-    this.setData({ loggedIn, flags: readFlags() });
+    this.setData({ loggedIn: isLoggedIn() });
+    this.refresh();
   },
 
   onLoad() {
-    // 登录态过期广播：request 401 清 token 后发 auth:expired → 本页弹登录墙。
-    // （旧方案 reLaunch 回首页会清空页面栈，致右滑返回永远回首页，已废弃）
-    const __bus = (getApp() as any)?.eventBus;
+    const __bus = getApp<IAppOption>()?.eventBus;
     if (__bus?.on) {
       this._offAuthExpired = () => this.setData({ loggedIn: false });
       __bus.on('auth:expired', this._offAuthExpired);
-      // 登录成功广播：首启静默登录成功后刷新登录态（本页无业务数据，只需收口登录态）
       this._offAuthLogged = () => this.setData({ loggedIn: isLoggedIn() });
       __bus.on('auth:logged', this._offAuthLogged);
-      // 功能开关变更广播：发现设置页拨开关后本页即时重渲染
-      this._offFlagsUpdated = () => this.setData({ flags: readFlags() });
-      __bus.on(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
+      this._offFeaturesUpdated = () => this.refresh();
+      __bus.on(FEATURES_UPDATED_EVENT, this._offFeaturesUpdated);
     }
   },
 
   onUnload() {
-    // 退订登录态广播，避免回调打到已销毁实例
-    const __bus = (getApp() as any)?.eventBus;
+    const __bus = getApp<IAppOption>()?.eventBus;
     if (__bus?.off) {
       if (this._offAuthExpired) {
         __bus.off('auth:expired', this._offAuthExpired);
@@ -70,30 +68,41 @@ Page({
         __bus.off('auth:logged', this._offAuthLogged);
         this._offAuthLogged = null;
       }
-      if (this._offFlagsUpdated) {
-        __bus.off(FLAGS_UPDATED_EVENT, this._offFlagsUpdated);
-        this._offFlagsUpdated = null;
+      if (this._offFeaturesUpdated) {
+        __bus.off(FEATURES_UPDATED_EVENT, this._offFeaturesUpdated);
+        this._offFeaturesUpdated = null;
       }
     }
+  },
+
+  refresh() {
+    this.setData({ features: featureViews() });
   },
 
   /** 登录卡登录成功后回调：刷新本页 */
   onLogged() {
     this.setData({ loggedIn: isLoggedIn() });
+    this.refresh();
   },
 
-  /** 文本翻译（专属 UI，已存在；开关开启时入口才渲染） */
-  openTranslate() {
-    wx.navigateTo({ url: '/packageTranslate/pages/translate/index/index' });
+  /** 添加/取消常用（catchtap 隔离，不触发卡片跳转） */
+  toggleFeature(e: FeatureTapEvent) {
+    const id = String((e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || '');
+    if (!id) return;
+    togglePinned(id);
+    this.refresh();
   },
 
-  /** 对话练习（对话页，已存在；开关开启时入口才渲染） */
-  openChat() {
-    wx.navigateTo({ url: '/pages/chat/index/index' });
-  },
-
-  /** 新概念英语：主包课文目录（与 PC portal / admin 同一份 nce_lessons 数据） */
-  openNce() {
-    wx.navigateTo({ url: '/pages/nce/index/index' });
+  /** 点卡片进功能（needLogin 项先判登录） */
+  openFeature(e: FeatureTapEvent) {
+    const path = String((e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.path) || '');
+    const feature = FEATURES.find((f) => f.path === path);
+    if (!feature) return;
+    if (feature.needLogin && !isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      wx.switchTab({ url: '/pages/mine/index/index' });
+      return;
+    }
+    wx.navigateTo({ url: feature.path });
   },
 });

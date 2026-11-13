@@ -1,85 +1,38 @@
 <!-- 大橙子英语 · 首页（tab 1 / 启动页）
-     结构：问候 hero → 今日一句 → [新对话卡 | 开关关闭时隐藏] → 新概念英语卡（常驻）
-           → [最近对话 | 默认关态仅提示语] 。
-     功能开关：「新对话」卡与「最近对话」区由本地开关 flags.chat 控制（utils/feature-flags.ts），
-     默认关 = 纯 NCE 英语学习工具呈现；学习进度卡本版撤下（PRD v0.4「后续迭代」）；
-     备案文案已按 P0 从代码中删除（非条件隐藏）。
-     ⚠️ 首页只保留快捷入口，能力清单统一归「发现」页。 -->
+     整改后：问候 hero → 今日一句 → 常用功能（默认 NCE）→ 更多功能跳发现。 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：整页只渲染登录引导卡（login-gate），不发任何业务请求 -->
-  <login-gate wx:if="{{!loggedIn}}" desc="{{flags.chat ? '对话记录都跟着账号走，登录后接着聊' : '学习进度和生词本都跟着账号走'}}" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+  <login-gate wx:if="{{!loggedIn}}" desc="学习进度和收藏都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <!-- 问候 hero -->
-  <view class="hero">
-    <view class="logo">橙</view>
-    <view class="hero-tx">
-      <view class="hi">下午好</view>
-      <view class="hi-sub">今天想学哪一课？</view>
+    <!-- 问候 hero -->
+    <view class="hero">
+      <view class="logo">橙</view>
+      <view class="hero-tx">
+        <view class="hi">下午好</view>
+        <view class="hi-sub">今天想学哪一课？</view>
+      </view>
     </view>
-  </view>
 
-  <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换（本轮不加「换一句」） -->
-  <view class="daily">
-    <view class="daily-k">今日一句</view>
-    <view class="daily-cn">{{quote.cn}}</view>
-    <view class="daily-en">{{quote.en}}</view>
-  </view>
-
-  <!-- 新对话：hero 区快捷入口（flags.chat 开启时显示；文案恒定中性，不出现 AI 字样） -->
-  <view wx:if="{{flags.chat}}" class="newchat" hover-class="newchat-hover" bindtap="goChat">
-    <view class="n-ic">＋</view>
-    <view class="n-tx">
-      <view class="n-b">新对话</view>
-      <view class="n-e">和伙伴自由对话 · 随时追问</view>
+    <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换 -->
+    <view class="daily">
+      <view class="daily-k">今日一句</view>
+      <view class="daily-cn">{{quote.cn}}</view>
+      <view class="daily-en">{{quote.en}}</view>
     </view>
-    <text class="n-go">›</text>
-  </view>
 
-  <!-- 新概念英语：常驻卡（默认态下占据主入口槽位，开启后保留为第二入口） -->
-  <view class="ncecard" hover-class="ncecard-hover" bindtap="goNce">
-    <view class="nc-ic">英</view>
-    <view class="nc-tx">
-      <view class="nc-b">新概念英语</view>
-      <view class="nc-e">NCE 逐句精读 · 点句出译文</view>
+    <!-- 常用功能：注册表 pinned 项（默认 NCE 常驻；收藏可在发现页「添加常用」） -->
+    <view class="sec-t">常用功能</view>
+    <view class="fcard" wx:for="{{features}}" wx:key="id" data-path="{{item.path}}" bindtap="goFeature">
+      <view class="fc-ic ic-{{item.iconClass}}">{{item.icon}}</view>
+      <view class="fc-tx">
+        <view class="fc-b">{{item.title}}</view>
+        <view class="fc-e">{{item.desc}}</view>
+      </view>
+      <text class="fc-go">›</text>
     </view>
-    <text class="nc-go">›</text>
-  </view>
+    <view class="more" bindtap="goMore">更多功能 ›</view>
 
-  <block wx:if="{{flags.chat}}">
-  <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态）+ 异常态；点卡片恢复该会话 -->
-  <view class="sec-t">最近对话<text wx:if="{{!recentLoading && !recent && !recentError}}" class="em">暂无记录</text></view>
-
-  <!-- 加载骨架：尺寸对齐真实卡片，切换不跳变 -->
-  <view wx:if="{{recentLoading}}" class="w-recent">
-    <view class="wr-item">
-      <view class="sk sk-t"></view>
-      <view class="sk sk-c1"></view>
-      <view class="sk sk-c2"></view>
-      <view class="sk sk-m"></view>
-    </view>
-  </view>
-
-  <view wx:elif="{{recent}}" class="w-recent">
-    <!-- 有会话：最近一次会话卡片（标题 + 预览 + 时间） -->
-    <view class="wr-item" data-id="{{recent.id}}" bindtap="openConv">
-      <view class="wr-q">{{recent.title}}</view>
-      <view wx:if="{{recent.preview}}" class="wr-c">{{recent.preview}}</view>
-      <view class="wr-m">{{recent.timeText}}</view>
-    </view>
-  </view>
-
-  <view wx:else class="w-recent">
-    <!-- 接口异常：可点重试（区别于真·空态） -->
-    <view wx:if="{{recentError}}" class="empty retry" bindtap="loadRecent">加载失败，点此重试</view>
-    <!-- 真·空态：保留原空态文案（中性化，不出现 AI 字样） -->
-    <view wx:else class="empty">还没有记录。和伙伴聊一次后会出现在这里；登录后换设备也能接着看。</view>
-  </view>
-
-  <view class="hint">直接对话，进来就能用 —— 不需要先学会怎么用。</view>
-  </block>
-
-  <!-- 默认关态：今日一句 + NCE 常驻卡 + 提示语（学习进度卡本版撤下，见 PRD v0.4「后续迭代」） -->
-  <view wx:else class="hint">每天一句，稳步进阶。</view>
+    <view class="hint">每天一句，稳步进阶。</view>
   </block>
 </view>

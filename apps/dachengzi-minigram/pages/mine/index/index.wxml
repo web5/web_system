@@ -1,32 +1,28 @@
-<!-- 大橙子个人助理 · 我的（tab 3）：每项都通向真实页面 -->
+<!-- 大橙子英语 · 我的（tab 3）：每项都通向真实页面 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
-  <!-- 未登录：整页只渲染登录引导卡（Q1 必须登录才可用），不发任何业务请求 -->
-  <login-gate wx:if="{{!loggedIn}}" desc="翻译记录、学习进度与生词本都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+  <!-- 未登录：整页只渲染登录引导卡，不发任何业务请求 -->
+  <login-gate wx:if="{{!loggedIn}}" desc="学习进度与收藏都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <view class="profile" bindtap="goProfile">
-    <image wx:if="{{avatar}}" class="avatar-img" src="{{avatar}}" mode="aspectFill" />
-    <view wx:else class="avatar">橙</view>
-    <view class="info">
-      <view class="n">{{nickname || '点击设置昵称'}}</view>
-      <view class="d">{{phone || email || '未绑定手机号'}}</view>
+    <view class="profile" bindtap="goProfile">
+      <image wx:if="{{avatar}}" class="avatar-img" src="{{avatar}}" mode="aspectFill" />
+      <view wx:else class="avatar">橙</view>
+      <view class="info">
+        <view class="n">{{nickname || '点击设置昵称'}}</view>
+        <view class="d">{{phone || email || '未绑定手机号'}}</view>
+      </view>
+      <text class="arw">›</text>
     </view>
-    <text class="arw">›</text>
-  </view>
 
-  <view class="list">
-    <!-- 我的翻译记录：随 translate 开关恢复（默认关态隐藏） -->
-    <view wx:if="{{flags.translate}}" class="r" bindtap="goHistory"><text>我的翻译记录</text><text class="v">{{trCount}} ›</text></view>
-    <view class="r" bindtap="goNce"><text>课文学习进度</text><text class="v">{{nceSummary}} ›</text></view>
-    <view class="r" bindtap="goGlossary"><text>生词本</text><text class="v">{{glossarySummary}} ›</text></view>
-  </view>
+    <view class="list">
+      <view class="r" bindtap="goNce"><text>课文学习进度</text><text class="v">{{nceSummary}} ›</text></view>
+      <view class="r" bindtap="goGlossary"><text>收藏</text><text class="v">{{glossarySummary}} ›</text></view>
+    </view>
 
-  <view class="list">
-    <!-- 翻译设置：随 translate 开关恢复（默认关态隐藏） -->
-    <view wx:if="{{flags.translate}}" class="r" bindtap="goTrSettings"><text>翻译设置</text><text class="v">›</text></view>
-    <view class="r" bindtap="goAppSettings"><text>设置</text><text class="v">›</text></view>
-    <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
-    <view class="r" bindtap="goAbout"><text>关于与免责</text><text class="v">›</text></view>
-  </view>
+    <view class="list">
+      <view class="r" bindtap="goAppSettings"><text>设置</text><text class="v">›</text></view>
+      <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>
+      <view class="r" bindtap="goAbout"><text>关于与免责</text><text class="v">›</text></view>
+    </view>
   </block>
 </view>

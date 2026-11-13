@@ -105,8 +105,8 @@ const sessionsJson = (sessions: unknown[]) => JSON.stringify({ sessions });
 describe('parseArgs', () => {
   it('位置参数 + --page + --to + --no-push 齐上', () => {
     expect(
-      publish.parseArgs(['q.png', '--page', 'pages/chat/index/index', '--to', '张三', '--no-push']),
-    ).toEqual({ _: ['q.png'], page: 'pages/chat/index/index', to: '张三', noPush: true });
+      publish.parseArgs(['q.png', '--page', 'pages/nce/detail/detail', '--to', '张三', '--no-push']),
+    ).toEqual({ _: ['q.png'], page: 'pages/nce/detail/detail', to: '张三', noPush: true });
   });
 
   it('--notify 与 --no-push 同时存在、互不覆盖', () => {
@@ -324,7 +324,7 @@ describe('buildCliMeta（版本 / git sha / 有效期拼装）', () => {
 
   it('不注入 version → 取 package.json.version；ttl 默认 25 分钟', () => {
     const now = Date.UTC(2026, 10, 10, 10, 0, 0);
-    const meta = publish.buildCliMeta('pages/chat/index/index', { gitSha: 'def5678', now });
+    const meta = publish.buildCliMeta('pages/nce/detail/detail', { gitSha: 'def5678', now });
     expect(meta.version).toBe(pkg.version);
     expect(meta.ttlMinutes).toBe(25);
     expect(meta.expireAtMs).toBe(now + 25 * 60 * 1000);

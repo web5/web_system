@@ -58,6 +58,8 @@ page {
 .ic.t { background: var(--brand-soft); color: var(--brand-txt); }
 /* 新概念英语：青色点缀，与阅读页 #0EA5A4 呼应 */
 .ic.n { background: rgba(14, 165, 164, .10); color: #0EA5A4; }
+/* 收藏：品牌色（与首页常用功能卡 ic-g 一致） */
+.ic.g { background: var(--brand-soft); color: var(--brand-txt); }
 /* 对话练习：品牌色（与翻译卡同族） */
 .ic.c { background: var(--brand-soft); color: var(--brand-txt); }
 
@@ -74,6 +76,24 @@ page {
 }
 
 .go { font-size: 34rpx; color: var(--t3); margin-left: 12rpx; }
+
+/* 「添加常用」开关：默认空心 + 添加，已添加实心 */
+.toggle {
+  flex: 0 0 auto;
+  margin-left: 12rpx;
+  font-size: 23rpx;
+  padding: 10rpx 22rpx;
+  border-radius: var(--r-pill);
+  border: 1rpx solid var(--brand-txt);
+  color: var(--brand-txt);
+  background: transparent;
+}
+.toggle.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--on-brand);
+}
+.toggle:active { opacity: .7; }
 
 .foot {
   margin-top: 48rpx;
