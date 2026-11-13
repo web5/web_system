@@ -33,7 +33,6 @@
           <text class="cn" wx:if="{{l.titleCn}}">{{l.titleCn}}</text>
           <text class="tag {{l.textSource}}" >{{l.textSource === 'xdf' ? '权威全文' : '字幕拼接'}}</text>
         </view>
-        <view class="lead" wx:if="{{l.leadQuestionCn || l.leadQuestion}}">{{l.leadQuestionCn || l.leadQuestion}}</view>
         <view class="meta">{{l.lineCount}} 句 · {{l.wordCount}} 词</view>
       </view>
     </block>

@@ -109,8 +109,13 @@ Page({
     this.setData({ fontStep });
   },
 
-  /** 点句朗读：同句=停，他句=切换（N1/N2/N3） */
+  /** 点句朗读：同句=停，他句=切换（N1/N2/N3）；未登录先引导到「我的」（V13） */
   toggleLine(e: NceTapEvent) {
+    if (!isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      wx.switchTab({ url: '/pages/mine/index/index' });
+      return;
+    }
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;

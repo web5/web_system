@@ -6,15 +6,11 @@
  * "module 'utils/@web-system/shared.js' is not defined"）。仅 API_TIMEOUT 一
  * 个常量被使用，直接在本地维护一份，避免引入整套共享包。
  *
- * 修改时需与 packages/shared/src/api.ts 保持同步（前端使用的 DEFAULT / AI_TASK / AI_QUERY）。
+ * 修改时需与 packages/shared/src/api.ts 保持同步（前端使用的 DEFAULT）。
  */
 
 /** 超时配置（毫秒）— 与 packages/shared/src/api.ts 的 API_TIMEOUT 前端字段对齐 */
 export const API_TIMEOUT = {
   /** 默认通用请求（CRUD） */
   DEFAULT: 10_000,
-  /** AI 异步任务（对话 / 生图 / 科豆 AI的 agent 分析） */
-  AI_TASK: 180_000,
-  /** AI 任务结果查询 / 轮询 */
-  AI_QUERY: 30_000,
 } as const;

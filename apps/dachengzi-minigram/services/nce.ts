@@ -28,8 +28,6 @@ export interface NceLessonSummary {
   book: string;
   title: string;
   titleCn: string;
-  leadQuestion: string;
-  leadQuestionCn: string;
   textSource: 'xdf' | 'lrc';
   lineCount: number;
   wordCount: number;
@@ -57,8 +55,6 @@ export interface NceLessonDetail {
   bookTitle: string;
   title: string;
   titleCn: string;
-  leadQuestion: string;
-  leadQuestionCn: string;
   text: string;
   textSource: 'xdf' | 'lrc';
   lines: NceLine[];

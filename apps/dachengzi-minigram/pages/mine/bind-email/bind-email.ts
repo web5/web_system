@@ -117,7 +117,7 @@ Page({
       title: '该邮箱已注册',
       content:
         hint ||
-        `${masked} 已注册大橙子个人助理账号。绑定后会把当前小程序的对话、生词本与口味记忆合并到该账号，合并不可撤销。`,
+        `${masked} 已注册大橙子英语账号。绑定后会把当前小程序的收藏与学习进度合并到该账号，合并不可撤销。`,
       confirmText: '确认合并',
       cancelText: '取消',
       success: (res: WechatMiniprogram.ShowModalSuccessCallbackResult) => {
