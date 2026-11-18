@@ -105,11 +105,13 @@ jest.mock('../pages/nce/books', () => ({
 import { speakText, stopSpeak } from '../services/tts';
 import { collectGlossary } from '../services/glossary';
 import { isLoggedIn } from '../services/auth';
+import { getNceLesson } from '../services/nce';
 
 const speakTextMock = speakText as unknown as jest.Mock;
 const stopSpeakMock = stopSpeak as unknown as jest.Mock;
 const collectMock = collectGlossary as unknown as jest.Mock;
 const isLoggedInMock = isLoggedIn as unknown as jest.Mock;
+const getNceLessonMock = getNceLesson as unknown as jest.Mock;
 
 const listeners: Record<string, Array<(p?: unknown) => void>> = {};
 const bus = {
@@ -130,6 +132,21 @@ const wxMock = {
   pageScrollTo: jest.fn(),
   showLoading: jest.fn(),
   hideLoading: jest.fn(),
+  // D-01/D-02 锚定浮层：SelectorQuery 桩（同步回调），rect 为视口 px、scroll 为滚动偏移 px
+  getSystemInfoSync: jest.fn(() => ({ windowWidth: 375, windowHeight: 667 })),
+  createSelectorQuery: jest.fn(() => {
+    const q: any = {
+      select: jest.fn(() => q),
+      selectViewport: jest.fn(() => q),
+      boundingClientRect: jest.fn(() => q),
+      scrollOffset: jest.fn(() => q),
+      exec: jest.fn((cb: (res: any[]) => void) => cb([
+        { left: 60, top: 200, right: 120, bottom: 230, width: 60, height: 30 },
+        { scrollTop: 100, scrollLeft: 0 },
+      ])),
+    };
+    return q;
+  }),
 };
 
 let pageConfig: any = null;
@@ -158,6 +175,11 @@ function makeThis(over: Record<string, unknown> = {}): any {
     setData(patch: Record<string, unknown>) { Object.assign(this.data, patch); },
     load: jest.fn(),
   };
+  // Page 配置里的内部方法需显式挂到 ctx 桩上（onWordTap 依赖 _lookupWord；
+  // D-01/D-02 落码后 onWordTap/onLongPress 还依赖 _anchorFloat），否则 this.xxx 不是函数。
+  for (const k of ['_lookupWord', '_anchorFloat']) {
+    ctx[k] = (pageConfig as any)[k].bind(ctx);
+  }
   Object.assign(ctx, over);
   return ctx;
 }
@@ -272,6 +294,179 @@ describe('C6/V5 · 气泡「朗读此句」= 恰好一次 speakText(line.en)、�
     expect(stopSpeakMock).toHaveBeenCalled();
     expect(speakTextMock).toHaveBeenCalledTimes(1);
     expect(ctx.data.readingLineIdx).toBe(-1);
+  });
+});
+
+// ───────────────────── 选项 A · V7-C 视觉对齐定位断言（18 §5 / D-01…D-11） ─────────────────────
+// 🔴 本轮范围：D-01/D-02/D-03/D-04/D-06/D-07/D-09/D-11；D-05(.head 保留)/D-08/D-10/D-1/D-2 不做。
+
+/** 锚定判据（正反例共用，防假绿）：两个浮层都必须 position:absolute 且不得 fixed 全宽底条 */
+function isAnchored(css: string): boolean {
+  const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
+  const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
+  return (
+    /position:\s*absolute/.test(tip) && /position:\s*absolute/.test(bubble) &&
+    !/position:\s*fixed/.test(tip) && !/position:\s*fixed/.test(bubble) &&
+    !/left:\s*30rpx;\s*right:\s*30rpx;\s*bottom:\s*40rpx/.test(tip) &&
+    !/left:\s*30rpx;\s*right:\s*30rpx;\s*bottom:\s*40rpx/.test(bubble)
+  );
+}
+
+describe('选项 A · D-01/D-02 锚定浮层（最高优先）', () => {
+  const wxss = () => src('pages/nce/detail/detail.wxss');
+  const wxml = () => src('pages/nce/detail/detail.wxml');
+  const ts = () => src('pages/nce/detail/detail.ts');
+
+  it('正例：.word-tip/.bubble 由 fixed 底部全宽条改为 absolute 锚定浮层', () => {
+    expect(isAnchored(wxss())).toBe(true);
+  });
+
+  it('反例（防假绿）：把锚定改回 position:fixed 时同一判据必须失败', () => {
+    const reverted = wxss().replace(
+      /((?:\.word-tip|\.bubble)\s*\{[^}]*?)position:\s*absolute/g,
+      '$1position: fixed',
+    );
+    expect(reverted).not.toBe(wxss());          // 确认反例确实改到了浮层规则
+    expect(isAnchored(reverted)).toBe(false);   // 断言必须失败，否则是假绿
+  });
+
+  it('浮层有坐标 style：left/top 以 rpx 绑定锚点坐标（两个浮层各一处）', () => {
+    const w = wxml();
+    expect(w).toMatch(/class="word-tip[^"]*"\s+style="left:\{\{[^}]+\}\}rpx;top:\{\{[^}]+\}\}rpx"/);
+    expect(w).toMatch(/class="bubble[^"]*"\s+style="left:\{\{[^}]+\}\}rpx;top:\{\{[^}]+\}\}rpx"/);
+  });
+
+  it('detail.ts 用 createSelectorQuery + boundingClientRect + scrollOffset 换算页面坐标（含滚动偏移）', () => {
+    const t = ts();
+    expect(t).toMatch(/wx\.createSelectorQuery\(\)/);
+    expect(t).toMatch(/\.boundingClientRect\(\)/);
+    expect(t).toMatch(/\.selectViewport\(\)\.scrollOffset\(\)/);
+    expect(t).toMatch(/scrollTop/);
+  });
+
+  it('点词：保存锚点坐标到 tipPos（含滚动偏移换算成 rpx），closeTip 清空', () => {
+    const ctx = makeThis();
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+    expect(typeof pageConfig._anchorFloat).toBe('function');
+    pageConfig.onWordTap.call(ctx, {
+      currentTarget: { dataset: { w: 'just', anchor: 'w-0-3' } },
+    });
+    expect(ctx.data.tipWord).toBeTruthy();
+    // 桩：rect.left=60 / rect.bottom=230 / scrollTop=100 / windowWidth=375 → k=2
+    // left=(60+8)*2=136；top=(230+100+6)*2=672（含滚动偏移，不含则仅 472）
+    expect(ctx.data.tipPos).toEqual({ left: 136, top: 672 });
+    expect(wxMock.createSelectorQuery).toHaveBeenCalled();
+    pageConfig.closeTip.call(ctx);
+    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.tipPos).toBeNull();
+  });
+
+  it('长按：保存锚点坐标到 bubblePos，closeBubble 清空；expandedIdx 语义不变（V4）', () => {
+    const ctx = makeThis();
+    ctx.data.lines = mockLines();
+    pageConfig.onLongPress.call(ctx, {
+      currentTarget: { dataset: { i: 4 } },
+    });
+    expect(ctx.data.bubbleIdx).toBe(4);
+    expect(ctx.data.expandedIdx).toBe(-1);
+    expect(ctx.data.bubblePos).toEqual({ left: 136, top: 672 });
+    pageConfig.closeBubble.call(ctx);
+    expect(ctx.data.bubbleIdx).toBe(-1);
+    expect(ctx.data.bubblePos).toBeNull();
+  });
+});
+
+describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', () => {
+  const wxss = () => src('pages/nce/detail/detail.wxss');
+
+  it('tip 白底蓝边窄卡片、bubble 深色 #1F2937 紧凑气泡，视觉层级相反', () => {
+    const css = wxss();
+    const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
+    const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
+    expect(tip).toMatch(/background:\s*#FFFFFF/);
+    expect(tip).toMatch(/border:\s*1rpx solid #DBEAFE/);
+    expect(tip).toMatch(/width:\s*\d+rpx/);            // 收窄为卡片
+    expect(bubble).toMatch(/background:\s*#1F2937/);
+    expect(bubble).toMatch(/width:\s*\d+rpx/);         // 收窄为气泡
+    expect(tip).not.toMatch(/background:\s*#1F2937/);
+    expect(bubble).not.toMatch(/background:\s*#FFFFFF/);
+  });
+
+  it('bubble 动作为浅色文字（深色底），tip 词头为品牌深蓝（白底）', () => {
+    const css = wxss();
+    expect(css).toMatch(/\.bi\s*\{[^}]*color:\s*#FFFFFF/);
+    expect(css).toMatch(/\.wt-w\s*\{[^}]*color:\s*#1D4ED8/);
+  });
+
+  it('D-07 展开态蓝系：.sent.expanded/.sent-cn.show 浅蓝 + 蓝左边框，不再灰系', () => {
+    const css = wxss();
+    const exp = (/\.sent\.expanded\s*\{[^}]*\}/.exec(css) || [''])[0];
+    const cn = (/\.sent-cn\.show\s*\{[^}]*\}/.exec(css) || [''])[0];
+    expect(exp).toMatch(/background:\s*#EFF6FF/);
+    expect(exp).toMatch(/border-left-color:\s*#3B82F6/);
+    expect(cn).toMatch(/background:\s*#EFF6FF/);
+    expect(cn).toMatch(/border-left:[^;]*#3B82F6/);
+    expect(exp).not.toMatch(/#FAFBFF/);
+    expect(cn).not.toMatch(/#F3F4F6/);
+  });
+});
+
+describe('选项 A · D-06 词点线 / hasDef 标记', () => {
+  it('WXML 仅 tk.hasDef 带 has-def，补 .w.hit 命中态；WXSS 有极轻点线', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    const css = src('pages/nce/detail/detail.wxss');
+    expect(w).toMatch(/class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}/);
+    expect(w).toMatch(/'hit'/);
+    expect(css).toMatch(/\.w\.has-def\s*\{[^}]*border-bottom:\s*1rpx dotted #3B82F6/);
+    expect(css).toMatch(/\.w\.hit\s*\{/);
+  });
+
+  it('tokenize 产出 hasDef：词汇表收录词 true、表外词 false，全部 token 带布尔标记', async () => {
+    const ctx = makeThis();
+    getNceLessonMock.mockResolvedValueOnce({
+      id: 4, title: 'L4',
+      words: [{ word: 'engineer', def: '工程师' }],
+      lines: [{ en: 'He is an engineer just.', cn: '译' }],
+    });
+    await pageConfig.load.call(ctx);
+    const tokens: Array<{ w: string; hasDef: boolean }> = ctx.data.lines[0].tokens;
+    expect(tokens.find((t) => t.w === 'engineer')!.hasDef).toBe(true);
+    expect(tokens.find((t) => t.w === 'just')!.hasDef).toBe(false);
+    expect(tokens.find((t) => t.w === 'he')!.hasDef).toBe(false);
+    expect(tokens.every((t) => typeof t.hasDef === 'boolean')).toBe(true);
+  });
+});
+
+describe('选项 A · D-04/D-09/D-11 信息结构、句序号、可发现性', () => {
+  const wxml = () => src('pages/nce/detail/detail.wxml');
+
+  it('句子列表外包 .card + .sect-h「通篇阅读视图 / D1 主定义」+ .hint 长按提示', () => {
+    const w = wxml();
+    expect(w).toMatch(/class="card"[\s\S]{0,400}class="sentences"/);
+    expect(w).toMatch(/class="sect-h"/);
+    expect(w).toMatch(/通篇阅读视图/);
+    expect(w).toMatch(/D1 主定义 · 英文全文不打断/);
+    expect(w).toMatch(/class="hint"/);
+    expect(w).toMatch(/长按句子/);
+    expect(w).toMatch(/朗读此句/);
+    expect(w).toMatch(/收藏/);
+  });
+
+  it('每句补 .sn 句序号，句子文本包 .stx；.sn 为小号浅灰', () => {
+    const w = wxml();
+    const css = src('pages/nce/detail/detail.wxss');
+    expect(w).toMatch(/class="sn"[\s\S]{0,120}class="stx"/);
+    expect(css).toMatch(/\.sn\s*\{[^}]*font-size:\s*\d+rpx[^}]*color:\s*#[0-9A-Fa-f]{6}/);
+    expect(css).toMatch(/\.stx\s*\{/);
+  });
+
+  it('边界：D-05 .head 保留；D-08/D-10 未做（仍是 .pager，无 .lesson-nav）；无常驻控件 / 连播入口', () => {
+    const w = wxml();
+    expect(w).toMatch(/class="head"/);            // D-05 保留
+    expect(w).toMatch(/class="pager"/);           // D-10 未做
+    expect(w).not.toMatch(/class="lesson-nav"/);  // D-10 未做
+    expect(w).not.toMatch(/class="fz"/);          // D-08 未做
+    expect(w).not.toMatch(/连续朗读|data-cont|cont-btn/);
   });
 });
 

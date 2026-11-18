@@ -19,6 +19,10 @@
  * - V16 auth:logged 回调内显式 void this.load()，不依赖 onShow()。
  * - V17 稍后→常驻提示条→再唤起；登录成功前不消失。
  *
+ * 选项 A（18 §5，2026-11-18）：仅对齐 D-01/D-02 锚定浮层、D-03 配色反相、
+ * D-04/D-11 信息结构与操作提示、D-06 词点线、D-07 展开态蓝系、D-09 句序号；
+ * D-05（.head 保留）/ D-08 / D-10 / D-1 / D-2 均不在本轮范围。
+ *
  * 🔴 服务层零改动：services/tts.ts / utils/request.ts / services/auth.ts 一律不改，
  *    本文件只复用 speakText/stopSpeak/onSpeakState、loginFromGate、collectGlossary 既有契约。
  */
@@ -34,7 +38,18 @@ interface WordToken {
   t: string;
   /** 可点单词（小写）；非单词为 '' */
   w: string;
+  /** D-06：词汇表收录词显示点线；非可点片段恒 false */
+  hasDef: boolean;
 }
+
+/** D-01/D-02：浮层锚定坐标（rpx，页面坐标；null = 收起 / 未定位） */
+interface FloatPos {
+  left: number;
+  top: number;
+}
+/** SelectorQuery.exec 结果元素形状（只声明所需字段，避免 any） */
+interface FloatRect { left?: number; bottom?: number; }
+interface FloatScroll { scrollTop?: number; }
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
@@ -58,15 +73,20 @@ interface NceTapEvent {
   currentTarget: { dataset: Record<string, string | number | undefined> };
 }
 
-/** 把英文句子切成「单词 / 非单词」片段，供 V3 点词 tip 使用 */
-function tokenize(en: string): WordToken[] {
+/**
+ * 把英文句子切成「单词 / 非单词」片段，供 V3 点词 tip 使用。
+ * D-06：known 为词汇表小写词集合，仅直收词置 hasDef=true 显示点线；
+ * 表外词 / 标点仍产出可点 token（hasDef=false），形态变化词由 _lookupWord 的 R3 兜底查释义。
+ */
+function tokenize(en: string, known?: Record<string, boolean>): WordToken[] {
   const re = /[A-Za-z]+(?:['’][A-Za-z]+)*|[^A-Za-z]+/g;
   const out: WordToken[] = [];
   let m: RegExpExecArray | null;
   let k = 0;
   while ((m = re.exec(en)) !== null) {
     const t = m[0];
-    out.push({ idx: k++, t, w: /^[A-Za-z]/.test(t) ? t.toLowerCase() : '' });
+    const w = /^[A-Za-z]/.test(t) ? t.toLowerCase() : '';
+    out.push({ idx: k++, t, w, hasDef: !!w && !!known && known[w] === true });
   }
   return out;
 }
@@ -101,6 +121,10 @@ Page({
     bubbleIdx: -1,
     /** V3 点词 tip（null = 收起） */
     tipWord: null as WordTipView | null,
+    /** D-01 点词 tip 锚定坐标（rpx；null = 收起） */
+    tipPos: null as FloatPos | null,
+    /** D-02 长按气泡锚定坐标（rpx；null = 收起） */
+    bubblePos: null as FloatPos | null,
     /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
     guestLoginShow: false,
     /** V11 页面级会话过期标志（由 auth:expired 订阅置位） */
@@ -185,13 +209,18 @@ Page({
         this.setData({ error: '未找到该课，可能尚未入库', loading: false });
         return;
       }
+      // D-06：仅词汇表直收词带点线标记；换课时清空两个浮层锚点，避免残留旧坐标
+      const words: NceWord[] = d.words || [];
+      const known: Record<string, boolean> = {};
+      words.forEach((x) => { known[String(x.word || '').toLowerCase()] = true; });
       const lines: NceLineView[] = (d.lines || []).map((l, i) => ({
-        idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en),
+        idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en, known),
       }));
       wx.setNavigationBarTitle({ title: `Lesson ${d.id} · ${d.title}` });
       this.setData({
         detail: d, lines, readingLineIdx: -1, readingPhase: 'idle',
-        expandedIdx: -1, bubbleIdx: -1, tipWord: null, loading: false,
+        expandedIdx: -1, bubbleIdx: -1, tipWord: null, tipPos: null,
+        bubblePos: null, loading: false,
       });
     } catch {
       // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗
@@ -215,23 +244,49 @@ Page({
       expandedIdx: this.data.expandedIdx === i ? -1 : i,
       bubbleIdx: -1,
       tipWord: null,
+      tipPos: null,
+      bubblePos: null,
     });
   },
 
-  /** V3 点词中文 tip；点页面其他区域 / 再次点该词收起 */
+  /**
+   * D-01/D-02 锚定浮层：取被点词 / 被长按句的视口 rect + 页面滚动偏移，
+   * 换算成页面坐标 rpx 后写入 tipPos / bubblePos 供 WXML style 绑定。
+   * 原型 03:1134-1165 positionFloat(anchor) 取 left=(rect.left+8) / top=(rect.bottom+6)；
+   * 小程序 boundingClientRect 为视口坐标，故 top 需叠加 scrollTop 才是页面坐标。
+   */
+  _anchorFloat(selector: string, key: 'tipPos' | 'bubblePos') {
+    const k = 750 / (wx.getSystemInfoSync().windowWidth || 375); // px → rpx（750 设计稿）
+    wx.createSelectorQuery().select(selector).boundingClientRect().selectViewport().scrollOffset().exec((res: unknown) => {
+      const list: unknown[] = Array.isArray(res) ? res : [];
+      const r = (list[0] || {}) as FloatRect;
+      const s = (list[1] || {}) as FloatScroll;
+      const pos: FloatPos = {
+        left: Math.round((Number(r.left || 0) + 8) * k),
+        top: Math.round((Number(r.bottom || 0) + Number(s.scrollTop || 0) + 6) * k),
+      };
+      if (key === 'tipPos') this.setData({ tipPos: pos });
+      else this.setData({ bubblePos: pos });
+    });
+  },
+
+  /** V3 点词中文 tip；点页面其他区域 / 再次点该词收起（🔴 D-1：不清空 / 不改 expandedIdx 语义） */
   onWordTap(e: NceTapEvent) {
     const raw = String(e.currentTarget.dataset.w || '');
     if (!raw) return;
     const w = raw.toLowerCase();
     const cur = this.data.tipWord;
     if (cur && cur.word === w) {
-      this.setData({ tipWord: null });
+      this.setData({ tipWord: null, tipPos: null });
       return;
     }
-    this.setData({ tipWord: this._lookupWord(w), bubbleIdx: -1 });
+    const anchor = String(e.currentTarget.dataset.anchor || '');
+    const i = Number(e.currentTarget.dataset.i ?? 0);
+    this.setData({ tipWord: this._lookupWord(w), bubbleIdx: -1, bubblePos: null });
+    this._anchorFloat(anchor || `#line-${i}`, 'tipPos');
   },
 
-  closeTip() { this.setData({ tipWord: null }); },
+  closeTip() { this.setData({ tipWord: null, tipPos: null }); },
 
   /**
    * V3-A 封闭规则表 R3（02 §1.4 :110-118，实现期不得扩充）：
@@ -283,15 +338,16 @@ Page({
     return { word: w, none: true };
   },
 
-  /** V4 平台原生 bindlongpress 长按气泡（与 bindtap 同句节点，平台互斥分发） */
+  /** V4 平台原生 bindlongpress 长按气泡（与 bindtap 同句节点，平台互斥分发）+ D-02 锚点 */
   onLongPress(e: NceTapEvent) {
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
-    this.setData({ bubbleIdx: i, expandedIdx: -1, tipWord: null });
+    this.setData({ bubbleIdx: i, expandedIdx: -1, tipWord: null, tipPos: null });
+    this._anchorFloat(`#line-${i}`, 'bubblePos');
   },
 
-  closeBubble() { this.setData({ bubbleIdx: -1 }); },
+  closeBubble() { this.setData({ bubbleIdx: -1, bubblePos: null }); },
 
   /** V5 气泡「朗读此句」：恰好一次 speakText(line.en)、仅该句高亮；再点同句停止 */
   onBubbleSpeak(e: NceTapEvent) {
@@ -302,11 +358,11 @@ Page({
       // same-text 再点 → 停止（tts.ts 零改动，页面侧显式 stopSpeak）
       stopSpeak();
       this._playingIdx = -1;
-      this.setData({ readingLineIdx: -1, readingPhase: 'idle', bubbleIdx: -1 });
+      this.setData({ readingLineIdx: -1, readingPhase: 'idle', bubbleIdx: -1, bubblePos: null });
       return;
     }
     this._playingIdx = i;
-    this.setData({ readingLineIdx: i, readingPhase: 'loading', bubbleIdx: -1 });
+    this.setData({ readingLineIdx: i, readingPhase: 'loading', bubbleIdx: -1, bubblePos: null });
     void speakText(line.en);
   },
 
@@ -315,7 +371,7 @@ Page({
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
-    this.setData({ bubbleIdx: -1 });
+    this.setData({ bubbleIdx: -1, bubblePos: null });
     if (!isLoggedIn()) {
       this.setData({ guestLoginShow: true });
       return;

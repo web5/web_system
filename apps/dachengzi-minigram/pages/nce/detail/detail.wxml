@@ -21,18 +21,32 @@
       <view class="title-cn" wx:if="{{detail.titleCn}}">{{detail.titleCn}}</view>
     </view>
 
-    <view class="sentences">
-      <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
-        id="line-{{si}}"
-        class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
-        data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
-        <view class="en">
-          <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
-            <text wx:if="{{tk.w}}" class="w" data-w="{{tk.w}}" data-i="{{si}}" catchtap="onWordTap">{{tk.t}}</text>
-            <text wx:else>{{tk.t}}</text>
-          </block>
+    <!-- D-04 / D-11：句子列表外包 .card + 分区标题 + 操作提示（长按气泡可发现性） -->
+    <view class="card">
+      <view class="sect-h">
+        <text>通篇阅读视图</text>
+        <text class="sub">D1 主定义 · 英文全文不打断</text>
+      </view>
+      <view class="hint">点句看译文，点词看释义；长按句子出朗读此句 / 收藏气泡</view>
+
+      <view class="sentences">
+        <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
+          id="line-{{si}}"
+          class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
+          data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
+          <view class="sline">
+            <view class="sn">{{si + 1}}</view>
+            <view class="stx">
+              <view class="en">
+                <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{tk.w ? 'hit' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-anchor="w-{{si}}-{{tk.idx}}" catchtap="onWordTap">{{tk.t}}</text>
+                  <text wx:else>{{tk.t}}</text>
+                </block>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{expandedIdx === si}}" class="sent-cn show">{{line.cn}}</view>
         </view>
-        <view wx:if="{{expandedIdx === si}}" class="sent-cn show">{{line.cn}}</view>
       </view>
     </view>
 
@@ -44,8 +58,8 @@
     <view class="pad" />
   </block>
 
-  <!-- V3 点词中文 tip：word / phonetic / pos / def / example（缺失省略）；表外词暂无释义且保留可点 -->
-  <view wx:if="{{tipWord}}" class="word-tip on" bindtap="closeTip">
+  <!-- V3 / D-01 点词中文 tip：锚定被点词的浮层（word / phonetic / pos / def / example，缺失省略；表外词暂无释义且保留可点） -->
+  <view wx:if="{{tipWord}}" class="word-tip on" style="left:{{tipPos ? tipPos.left : 0}}rpx;top:{{tipPos ? tipPos.top : 0}}rpx" bindtap="closeTip">
     <view class="wt-w">{{tipWord.word}}</view>
     <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
     <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
@@ -54,8 +68,8 @@
     <view wx:if="{{tipWord.example}}" class="wt-ex">{{tipWord.example}}</view>
   </view>
 
-  <!-- V4 长按气泡：含且仅含「朗读此句」「收藏」两动作 -->
-  <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" catchtap="closeBubble">
+  <!-- V4 / D-02 长按气泡：锚定被长按句的浮层，含且仅含「朗读此句」「收藏」两动作 -->
+  <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" style="left:{{bubblePos ? bubblePos.left : 0}}rpx;top:{{bubblePos ? bubblePos.top : 0}}rpx" catchtap="closeBubble">
     <view class="bi" data-bubble-act="play" data-i="{{bubbleIdx}}" catchtap="onBubbleSpeak">朗读此句</view>
     <view class="bi" data-bubble-act="fav" data-i="{{bubbleIdx}}" catchtap="collectLine">收藏</view>
   </view>
