@@ -1,13 +1,16 @@
-<!-- 新概念英语 · 课文详情（整改后：英文课文 + 逐句朗读 + 逐句收藏） -->
-<view class="page f{{fontStep}} {{radiusClass}}">
+<!-- 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图；点句中文 / 点词 tip / 长按气泡 / 单句朗读） -->
+<view class="page f{{fontStep}} {{radiusClass}}" data-font="{{fontStep === 0 ? 's' : (fontStep === 2 ? 'l' : 'm')}}">
+  <!-- 顶部工具条：仅字号三级，不提供任何整篇连播入口 -->
   <view class="bar">
     <view class="seg font">
       <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
       <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
       <view class="seg-i {{fontStep === 2 ? 'on' : ''}}" data-step="2" bindtap="setFont">A+</view>
     </view>
+    <view class="bar-note">通篇阅读 · 点句看译文</view>
   </view>
 
+  <!-- 骨架 / 失败态：与弹窗叠加层并存，不整页替换（V12 底层可见 ≥1） -->
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{error}}" class="state err" bindtap="onRetry">{{error}}（点击重试）</view>
 
@@ -21,13 +24,15 @@
     <view class="sentences">
       <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
         id="line-{{si}}"
-        class="sent {{readingLineIdx === si ? 'reading' : ''}}"
-        data-i="{{si}}" bindtap="toggleLine">
-        <view class="en">{{line.en}}</view>
-        <view class="acts">
-          <text class="play">{{readingLineIdx === si ? (readingPhase === 'loading' ? '…' : '■') : '♪'}}</text>
-          <text class="fav" data-i="{{si}}" catchtap="collectLine">☆</text>
+        class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
+        data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
+        <view class="en">
+          <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
+            <text wx:if="{{tk.w}}" class="w" data-w="{{tk.w}}" data-i="{{si}}" catchtap="onWordTap">{{tk.t}}</text>
+            <text wx:else>{{tk.t}}</text>
+          </block>
         </view>
+        <view wx:if="{{expandedIdx === si}}" class="sent-cn show">{{line.cn}}</view>
       </view>
     </view>
 
@@ -38,4 +43,38 @@
 
     <view class="pad" />
   </block>
+
+  <!-- V3 点词中文 tip：word / phonetic / pos / def / example（缺失省略）；表外词暂无释义且保留可点 -->
+  <view wx:if="{{tipWord}}" class="word-tip on" bindtap="closeTip">
+    <view class="wt-w">{{tipWord.word}}</view>
+    <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
+    <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
+    <view wx:if="{{tipWord.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
+    <view wx:elif="{{tipWord.def}}" class="wt-def">{{tipWord.def}}</view>
+    <view wx:if="{{tipWord.example}}" class="wt-ex">{{tipWord.example}}</view>
+  </view>
+
+  <!-- V4 长按气泡：含且仅含「朗读此句」「收藏」两动作 -->
+  <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" catchtap="closeBubble">
+    <view class="bi" data-bubble-act="play" data-i="{{bubbleIdx}}" catchtap="onBubbleSpeak">朗读此句</view>
+    <view class="bi" data-bubble-act="fav" data-i="{{bubbleIdx}}" catchtap="collectLine">收藏</view>
+  </view>
+
+  <!-- 需求① T1 从未登录守卫（内联 modal-login「请先登录」；三态分离，不弹会话过期弹窗） -->
+  <view wx:if="{{guestLoginShow}}" class="modal" id="modal-login">
+    <view class="box">
+      <view class="m-t">请先登录</view>
+      <view class="m-d">登录后学习进度与收藏跟着账号走。登录由小程序静默完成。</view>
+      <view class="m-acts">
+        <view class="btn ghost sm" bindtap="onCloseGuest">取消</view>
+        <view class="btn sm" bindtap="onGuestLogin">去登录</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 需求② T2 会话过期弹窗：login-gate 的 modal 态（叠加层，底层骨架/内容不销毁） -->
+  <login-gate wx:if="{{showAuthModal}}" mode="modal" bind:defer="onAuthDefer" />
+
+  <!-- V17 常驻提示条：稍后收起弹窗后显示，点击再次唤起同一 modal-auth；登录成功前不消失 -->
+  <view wx:if="{{showReloginTip}}" class="relogin-tip" bindtap="onReopenAuth">登录已过期，数据未更新 · 点此重新登录</view>
 </view>

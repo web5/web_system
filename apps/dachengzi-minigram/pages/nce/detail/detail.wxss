@@ -1,10 +1,12 @@
-/* 新概念英语 · 课文详情（整改后：英文课文 + 逐句朗读 + 逐句收藏） */
-.page { min-height: 100vh; background: #FFFFFF; color: #1A1A1F; padding: 0 30rpx; }
-.bar { display: flex; align-items: center; justify-content: flex-end; padding: 20rpx 0; border-bottom: 1rpx solid rgba(0,0,0,.08); position: sticky; top: 0; background: #FFFFFF; z-index: 5; }
+/* 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图：点句中文 / 点词 tip / 长按气泡 / 单句朗读）
+   无常驻 ♪/☆ 控件；朗读仅由气泡「朗读此句」触发，tts 服务零改动。 */
+.page { min-height: 100vh; background: #FFFFFF; color: #1A1A1F; padding: 0 30rpx; position: relative; }
+.bar { display: flex; align-items: center; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid rgba(0,0,0,.08); position: sticky; top: 0; background: #FFFFFF; z-index: 5; }
 .seg { display: flex; border: 1rpx solid rgba(0,0,0,.08); border-radius: var(--r-control); overflow: hidden; }
 .seg-i { padding: 8rpx 14rpx; font-size: 24rpx; color: #6B7280; background: #FFFFFF; }
 .seg-i + .seg-i { border-left: 1rpx solid rgba(0,0,0,.08); }
 .seg-i.on { background: #3B82F6; color: #FFFFFF; }
+.bar-note { font-size: 22rpx; color: #9CA3AF; }
 
 .head { padding: 32rpx 0 18rpx; }
 .lno { font-size: 22rpx; color: #0EA5A4; letter-spacing: 1rpx; }
@@ -12,29 +14,44 @@
 .title-cn { color: #6B7280; font-size: 26rpx; margin-top: 6rpx; }
 
 .sentences { margin-top: 26rpx; }
-.sent {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 16rpx 10rpx;
-  min-height: 88rpx;
-  border-radius: var(--r-control);
-  border-bottom: 1rpx dashed rgba(0,0,0,.10);
-}
+.sent { display: block; padding: 16rpx 10rpx; border-radius: var(--r-control); border-bottom: 1rpx dashed rgba(0,0,0,.10); }
 .sent:active { background: #FAFAFA; }
-.sent.reading { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
-.en { flex: 1; min-width: 0; font-family: Georgia, serif; line-height: 1.9; font-size: 32rpx; }
+.sent.expanded { background: #FAFBFF; }
+.sent.playing { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
+.en { font-family: Georgia, serif; line-height: 1.9; font-size: 32rpx; }
 .f0 .en { font-size: 28rpx; }
 .f2 .en { font-size: 38rpx; }
+.w { color: #1A1A1F; }
+.w:active { color: #3B82F6; }
+.sent-cn { display: none; }
+.sent-cn.show { display: block; margin-top: 10rpx; padding: 12rpx 16rpx; border-radius: var(--r-control); background: #F3F4F6; color: #4B5563; font-size: 26rpx; line-height: 1.7; }
 
-.acts { flex: 0 0 auto; display: flex; align-items: center; gap: 24rpx; }
-.play { color: #9CA3AF; font-size: 30rpx; }
-.play.on { color: #3B82F6; }
-.fav { color: #D98200; font-size: 34rpx; padding: 0 8rpx; }
-.fav:active { opacity: .6; }
+.word-tip { position: fixed; left: 30rpx; right: 30rpx; bottom: 40rpx; z-index: 60; padding: 24rpx; border-radius: var(--r-control); background: #1F2937; color: #FFFFFF; box-shadow: 0 12rpx 40rpx rgba(0,0,0,.25); }
+.wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; }
+.wt-p { font-size: 24rpx; color: #9CA3AF; margin-top: 6rpx; }
+.wt-pos { display: inline-block; font-size: 22rpx; color: #93C5FD; margin-top: 8rpx; }
+.wt-def { font-size: 28rpx; margin-top: 10rpx; line-height: 1.6; }
+.wt-none { font-size: 26rpx; color: #D1D5DB; margin-top: 10rpx; }
+.wt-ex { font-size: 24rpx; color: #D1D5DB; margin-top: 10rpx; font-style: italic; }
+
+.bubble { position: fixed; left: 30rpx; right: 30rpx; bottom: 40rpx; z-index: 61; display: flex; background: #FFFFFF; border-radius: var(--r-control); box-shadow: 0 12rpx 40rpx rgba(0,0,0,.18); overflow: hidden; }
+.bi { flex: 1; text-align: center; padding: 26rpx 0; font-size: 28rpx; color: #1F2937; }
+.bi + .bi { border-left: 1rpx solid rgba(0,0,0,.08); }
+.bi:active { background: #F3F4F6; }
+
+.modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 200; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 0 48rpx; }
+.modal .box { width: 100%; max-width: 560rpx; background: #FFFFFF; border-radius: var(--r-control); padding: 40rpx 32rpx 28rpx; }
+.m-t { font-size: 34rpx; font-weight: 600; color: #1A1A1F; text-align: center; }
+.m-d { font-size: 26rpx; color: #6B7280; line-height: 1.7; margin-top: 16rpx; text-align: center; }
+.m-acts { display: flex; gap: 20rpx; margin-top: 32rpx; }
+.btn { flex: 1; text-align: center; padding: 20rpx 0; border-radius: var(--r-pill); font-size: 28rpx; background: #3B82F6; color: #FFFFFF; }
+.btn.ghost { background: #F3F4F6; color: #6B7280; }
+.btn.sm { font-size: 26rpx; }
+
+.relogin-tip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; padding: 22rpx 30rpx; background: #FEF3C7; color: #92400E; font-size: 26rpx; text-align: center; }
 
 .pager { display: flex; justify-content: space-between; margin-top: 40rpx; }
 .pg { font-size: 26rpx; color: #3B82F6; padding: 14rpx 0; }
-.pad { height: 140rpx; }
+.pad { height: 160rpx; }
 .state { padding: 100rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
 .state.err { color: #DC2626; }

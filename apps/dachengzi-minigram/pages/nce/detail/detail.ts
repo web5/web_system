@@ -1,58 +1,114 @@
 /**
- * 新概念英语 · 课文详情（整改后：纯学习能力）
+ * 新概念英语 · 课文详情（D1=C / V7-C 生效 · 通篇阅读视图）
  *
- * 只保留「英文课文 + 逐句朗读 + 逐句收藏」（specs/dachengzi-minigram/review-remove-ai-2026-11-13.md §4.7）。
- * 已删除：沉浸/点按/对照三模式、点句译文、生词就地查词、参考译文、习题浮层、
- * 导读问题、整篇朗读控制条（刻度条/暂停/继续/停止）。
+ * 生效真源：10-D1方案C冻结与技术方案.md（08 整份作废）。
  *
- * 逐句朗读判据（N1-N7）：
- * - N1 点句朗读：`toggleLine` → `speakText(line.en)`，`_playingIdx = i`；
- * - N2 点同一句停止：`speakText` 内置「same text → stopSpeak」，`_onSpeakState(null)` 复位；
- * - N3 点他句切换：`speakText` 内部 `stopSpeak()` 顶掉上一句再播新句；
- * - N4 句级高亮：`_onSpeakState(s)` → `readingPhase` + `readingLineIdx = _playingIdx`；
- * - N5 逐句收藏：`collectLine`（未登录 toast + 引导到「我的」）；
- * - N6 收藏与朗读隔离：收藏按钮 `catchtap`；
- * - N7 卸载停读：`onUnload`/`onHide` → `stopSpeak()` + 退订 `onSpeakState`。
+ * 需求①（V1–V8）：
+ * - V1/V7-C：顶部工具条不存在「连续朗读」入口；无整篇/连播调度；进页不自动播；
+ *   句子区无常驻 ♪/☆ 控件。C ≠ 删掉所有朗读 —— V5 单句朗读仍可用。
+ * - V2 点句就地展开该句中文（再点收起、同时至多 1 句、不触发 speakText）。
+ * - V3 点词中文 tip：封闭规则表 R3（V3-A）查 d.words[]；表外词「暂无释义」且保留可点。
+ * - V4 平台原生 bindlongpress 长按句子出自绘气泡（含且仅含「朗读此句」「收藏」）。
+ * - V5 气泡「朗读此句」= 恰好一次 speakText(line.en)、仅该句高亮；再点同句停止。
+ * - V6 收藏沿用 collectGlossary({tag:'nce', …}) 契约；T1 未登录弹 modal-login「请先登录」。
+ * - V8 字号三级 + S0–S5 逐态无常驻控件。
+ *
+ * 需求②（V9–V20，本页面也是三数据页之一）：
+ * - V11 页面级 authExpired 标志 + load() catch 分流（会话过期不裸失败、保持骨架准备弹窗）。
+ * - V12/V13/V18 login-gate modal 态弹窗 + 页面级订阅（onLoad on / onUnload off）。
+ * - V16 auth:logged 回调内显式 void this.load()，不依赖 onShow()。
+ * - V17 稍后→常驻提示条→再唤起；登录成功前不消失。
+ *
+ * 🔴 服务层零改动：services/tts.ts / utils/request.ts / services/auth.ts 一律不改，
+ *    本文件只复用 speakText/stopSpeak/onSpeakState、loginFromGate、collectGlossary 既有契约。
  */
-import { getNceLesson, type NceLessonDetail } from '../../../services/nce';
+import { getNceLesson, type NceLessonDetail, type NceWord } from '../../../services/nce';
 import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
 import { speakText, onSpeakState, stopSpeak, type SpeakState } from '../../../services/tts';
 import { collectGlossary } from '../../../services/glossary';
-import { isLoggedIn } from '../../../services/auth';
+import { isLoggedIn, loginFromGate } from '../../../services/auth';
+
+interface WordToken {
+  idx: number;
+  /** 展示片段（单词或标点/空白） */
+  t: string;
+  /** 可点单词（小写）；非单词为 '' */
+  w: string;
+}
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
   idx: number;
   en: string;
   cn: string;
+  tokens: WordToken[];
+}
+
+interface WordTipView {
+  word: string;
+  phonetic?: string;
+  pos?: string;
+  def?: string;
+  example?: string;
+  /** 表外词：暂无释义且保留可点 */
+  none: boolean;
 }
 
 interface NceTapEvent {
   currentTarget: { dataset: Record<string, string | number | undefined> };
 }
 
+/** 把英文句子切成「单词 / 非单词」片段，供 V3 点词 tip 使用 */
+function tokenize(en: string): WordToken[] {
+  const re = /[A-Za-z]+(?:['’][A-Za-z]+)*|[^A-Za-z]+/g;
+  const out: WordToken[] = [];
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = re.exec(en)) !== null) {
+    const t = m[0];
+    out.push({ idx: k++, t, w: /^[A-Za-z]/.test(t) ? t.toLowerCase() : '' });
+  }
+  return out;
+}
+
 Page({
   /** 朗读状态订阅的退订函数（onHide / onUnload 时调用） */
   _offSpeakState: null as null | (() => void),
-  /** 当前正在朗读的句下标（-1 = 无）；`speakText` 的异步状态回推据此高亮 */
+  /** 当前正在朗读的句下标（-1 = 无） */
   _playingIdx: -1,
+  /** auth 事件订阅退订（V18 成对，页面级；组件内不订阅） */
+  _offAuthExpired: null as null | (() => void),
+  _offAuthLogged: null as null | (() => void),
 
   data: {
     id: 0,
-    /** 当前书册（默认 NCE2）：详情跳转必须带 book，否则点 NCE3 第 1 课会打开 NCE2 Lesson 1 */
+    /** 当前书册（默认 NCE2） */
     book: DEFAULT_NCE_BOOK,
     detail: null as NceLessonDetail | null,
     lines: [] as NceLineView[],
     loading: true,
     error: '',
-    /** 字号档位：0=A- / 1=A / 2=A+（纯阅读偏好，`nce-font` 保留） */
+    /** 字号档位：0=A- / 1=A / 2=A+ */
     fontStep: 1,
-    /** 圆角风格：页面根节点叠加的 class（app.wxss 的 .radius-* 覆盖类驱动） */
+    /** 页面根节点叠加的圆角 class */
     radiusClass: '',
-    /** 当前朗读句下标（高亮）；-1 = 无 */
+    /** V5 单句朗读高亮句下标（-1 = 无） */
     readingLineIdx: -1,
-    /** 朗读阶段：idle | loading | playing */
     readingPhase: 'idle',
+    /** V2 点句展开中文下标（-1 = 无；至多 1 句） */
+    expandedIdx: -1,
+    /** V4 长按气泡所在句下标（-1 = 无） */
+    bubbleIdx: -1,
+    /** V3 点词 tip（null = 收起） */
+    tipWord: null as WordTipView | null,
+    /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
+    guestLoginShow: false,
+    /** V11 页面级会话过期标志（由 auth:expired 订阅置位） */
+    authExpired: false,
+    /** V12 T2 会话过期弹窗（login-gate modal 态） */
+    showAuthModal: false,
+    /** V17 稍后后的常驻提示条（登录成功前不消失） */
+    showReloginTip: false,
   },
 
   onShow() {
@@ -70,6 +126,19 @@ Page({
   onUnload() {
     this._unsubscribeReading();
     stopSpeak();
+    // V18：页面级退订（与 onLoad 成对，同一 handler 引用 off；组件内不订阅）
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus) {
+      if (this._offAuthExpired) {
+        __bus.off('auth:expired', this._offAuthExpired);
+        this._offAuthExpired = null;
+      }
+      if (this._offAuthLogged) {
+        __bus.off('auth:logged', this._offAuthLogged);
+        this._offAuthLogged = null;
+      }
+    }
   },
 
   onLoad(options: { id?: string | number; book?: string }) {
@@ -82,6 +151,29 @@ Page({
       book,
       fontStep: typeof fontStep === 'number' ? fontStep : 1,
     });
+    // V13/V18：页面级订阅（onLoad on / onUnload off；先按旧引用退订防重复订阅）
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus) {
+      if (this._offAuthExpired) __bus.off('auth:expired', this._offAuthExpired);
+      if (this._offAuthLogged) __bus.off('auth:logged', this._offAuthLogged);
+      this._offAuthExpired = () => {
+        // T2：置页面级标志 + 弹 modal-auth；保持骨架/原内容，不置裸失败态
+        this.setData({ authExpired: true, showAuthModal: true, showReloginTip: false });
+      };
+      __bus.on('auth:expired', this._offAuthExpired);
+      this._offAuthLogged = () => {
+        // V16：回调内显式重拉，不依赖 onShow()（详情页 onShow 不调 load）
+        this.setData({
+          authExpired: false,
+          showAuthModal: false,
+          showReloginTip: false,
+          guestLoginShow: false,
+        });
+        void this.load();
+      };
+      __bus.on('auth:logged', this._offAuthLogged);
+    }
     void this.load();
   },
 
@@ -90,16 +182,21 @@ Page({
     try {
       const d = await getNceLesson(this.data.id, this.data.book);
       if (!d) {
-        this.setData({ error: '未找到该课，可能尚未入库' });
+        this.setData({ error: '未找到该课，可能尚未入库', loading: false });
         return;
       }
-      const lines: NceLineView[] = (d.lines || []).map((l, i) => ({ idx: i, en: l.en, cn: l.cn }));
+      const lines: NceLineView[] = (d.lines || []).map((l, i) => ({
+        idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en),
+      }));
       wx.setNavigationBarTitle({ title: `Lesson ${d.id} · ${d.title}` });
-      this.setData({ detail: d, lines, readingLineIdx: -1, readingPhase: 'idle' });
+      this.setData({
+        detail: d, lines, readingLineIdx: -1, readingPhase: 'idle',
+        expandedIdx: -1, bubbleIdx: -1, tipWord: null, loading: false,
+      });
     } catch {
-      this.setData({ error: '课文加载失败，请稍后重试' });
-    } finally {
-      this.setData({ loading: false });
+      // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗
+      if (this.data.authExpired) return;
+      this.setData({ error: '课文加载失败，请稍后重试', loading: false });
     }
   },
 
@@ -109,28 +206,118 @@ Page({
     this.setData({ fontStep });
   },
 
-  /** 点句朗读：同句=停，他句=切换（N1/N2/N3）；未登录先引导到「我的」（V13） */
+  /** V2 点句就地展开中文：再点收起、至多 1 句、不触发 speakText */
   toggleLine(e: NceTapEvent) {
-    if (!isLoggedIn()) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      wx.switchTab({ url: '/pages/mine/index/index' });
-      return;
-    }
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
+    this.setData({
+      expandedIdx: this.data.expandedIdx === i ? -1 : i,
+      bubbleIdx: -1,
+      tipWord: null,
+    });
+  },
+
+  /** V3 点词中文 tip；点页面其他区域 / 再次点该词收起 */
+  onWordTap(e: NceTapEvent) {
+    const raw = String(e.currentTarget.dataset.w || '');
+    if (!raw) return;
+    const w = raw.toLowerCase();
+    const cur = this.data.tipWord;
+    if (cur && cur.word === w) {
+      this.setData({ tipWord: null });
+      return;
+    }
+    this.setData({ tipWord: this._lookupWord(w), bubbleIdx: -1 });
+  },
+
+  closeTip() { this.setData({ tipWord: null }); },
+
+  /**
+   * V3-A 封闭规则表 R3（02 §1.4 :110-118，实现期不得扩充）：
+   * R3-1 小写化 → R3-2 -s/-es → R3-3 -ed → R3-4 -ing → R3-5 不规则词封闭枚举
+   * → R3-6 候选集固定顺序 [w, 词元, 词元+'e', w去s, 词元+'s'] 查 d.words[]，
+   * 首个命中即返回该词条；全部未命中一律「暂无释义」且保留可点。
+   */
+  _lookupWord(w: string): WordTipView {
+    const detail = this.data.detail;
+    const words: NceWord[] = (detail && detail.words) || [];
+    const byKey = (k: string): NceWord | undefined =>
+      words.find((x) => String(x.word).toLowerCase() === k);
+
+    // R3-5 不规则词封闭枚举（映射后仍查 d.words[]）
+    const IRREG: Record<string, string> = {
+      has: 'have', have: 'have', had: 'have',
+      been: 'be', is: 'be', am: 'be', are: 'be', was: 'be', were: 'be',
+      does: 'do', do: 'do', did: 'do',
+      gone: 'go', went: 'go',
+      received: 'receive',
+    };
+
+    // R3-2 / R3-3 / R3-4 词形还原（单一词元）
+    let stem = w;
+    if (/ies$/.test(stem)) stem = stem.replace(/ies$/, 'y');
+    else if (/(ches|shes|sses|xes)$/.test(stem)) stem = stem.replace(/es$/, '');
+    else if (/ied$/.test(stem)) stem = stem.replace(/ied$/, 'y');
+    else if (/ed$/.test(stem)) stem = stem.replace(/ed$/, '');
+    else if (/ing$/.test(stem)) stem = stem.replace(/ing$/, '');
+    else if (/s$/.test(stem) && !/ss$/.test(stem)) stem = stem.replace(/s$/, '');
+
+    const lemma = IRREG[w] || stem;
+    // R3-6 候选集固定顺序
+    const candidates = [w, lemma, lemma + 'e', w.replace(/s$/, ''), lemma + 's'];
+    for (const c of candidates) {
+      const hit = byKey(c);
+      if (hit) {
+        return {
+          word: hit.word,
+          phonetic: hit.phonetic,
+          pos: hit.pos,
+          def: hit.def,
+          example: hit.example,
+          none: false,
+        };
+      }
+    }
+    // 表外词：暂无释义且保留可点
+    return { word: w, none: true };
+  },
+
+  /** V4 平台原生 bindlongpress 长按气泡（与 bindtap 同句节点，平台互斥分发） */
+  onLongPress(e: NceTapEvent) {
+    const i = Number(e.currentTarget.dataset.i);
+    const line = this.data.lines[i];
+    if (!line) return;
+    this.setData({ bubbleIdx: i, expandedIdx: -1, tipWord: null });
+  },
+
+  closeBubble() { this.setData({ bubbleIdx: -1 }); },
+
+  /** V5 气泡「朗读此句」：恰好一次 speakText(line.en)、仅该句高亮；再点同句停止 */
+  onBubbleSpeak(e: NceTapEvent) {
+    const i = Number(e.currentTarget.dataset.i);
+    const line = this.data.lines[i];
+    if (!line) return;
+    if (this.data.readingLineIdx === i) {
+      // same-text 再点 → 停止（tts.ts 零改动，页面侧显式 stopSpeak）
+      stopSpeak();
+      this._playingIdx = -1;
+      this.setData({ readingLineIdx: -1, readingPhase: 'idle', bubbleIdx: -1 });
+      return;
+    }
     this._playingIdx = i;
+    this.setData({ readingLineIdx: i, readingPhase: 'loading', bubbleIdx: -1 });
     void speakText(line.en);
   },
 
-  /** 逐句收藏（N5）：未登录引导到「我的」，收藏按钮 catchtap 隔离不冒泡到朗读（N6） */
+  /** V6 收藏：collectGlossary({tag:'nce', …}) 契约不变；T1 弹「请先登录」 */
   async collectLine(e: NceTapEvent) {
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
+    this.setData({ bubbleIdx: -1 });
     if (!isLoggedIn()) {
-      wx.showToast({ title: '请先登录', icon: 'none' });
-      wx.switchTab({ url: '/pages/mine/index/index' });
+      this.setData({ guestLoginShow: true });
       return;
     }
     const { id, book, detail } = this.data;
@@ -146,6 +333,24 @@ Page({
     } catch {
       wx.showToast({ title: '收藏失败，请重试', icon: 'none' });
     }
+  },
+
+  /** T1「去登录」：复用 loginFromGate() 语义；成功由 auth:logged 广播收起并重拉 */
+  async onGuestLogin() {
+    const ok = await loginFromGate();
+    if (ok) this.setData({ guestLoginShow: false });
+  },
+
+  onCloseGuest() { this.setData({ guestLoginShow: false }); },
+
+  /** V17「稍后」：收起弹窗 + 常驻提示条（不是纯 closeModal） */
+  onAuthDefer() {
+    this.setData({ showAuthModal: false, showReloginTip: true });
+  },
+
+  /** V17 点提示条再次唤起同一 modal-auth；提示条登录成功前不消失 */
+  onReopenAuth() {
+    this.setData({ showAuthModal: true });
   },
 
   goLesson(e: NceTapEvent) {
@@ -164,7 +369,7 @@ Page({
 
   onRetry() { void this.load(); },
 
-  /** 朗读状态：null 复位；非 null 高亮跟随当前朗读句（N4） */
+  /** 朗读状态：null 复位；非 null 高亮跟随当前朗读句（V5 单句朗读态） */
   _onSpeakState(s: SpeakState | null) {
     if (!s) {
       this._playingIdx = -1;
@@ -177,12 +382,10 @@ Page({
     });
   },
 
-  /** 订阅朗读回调（onShow 时；防 onShow 重复订阅） */
   _subscribeReading() {
     if (!this._offSpeakState) this._offSpeakState = onSpeakState((s) => this._onSpeakState(s));
   },
 
-  /** 退订朗读回调（onHide / onUnload 时） */
   _unsubscribeReading() {
     if (this._offSpeakState) {
       this._offSpeakState();
