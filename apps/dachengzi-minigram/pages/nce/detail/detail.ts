@@ -23,6 +23,10 @@
  * D-04/D-11 信息结构与操作提示、D-06 词点线、D-07 展开态蓝系、D-09 句序号；
  * D-05（.head 保留）/ D-08 / D-10 / D-1 / D-2 均不在本轮范围。
  *
+ * 2026-11-19 19:11 口径变更：生词 tip 作废「就近锚定」，改移动端底部统一浮层。
+ * onWordTap 不再为 tip 调用 _anchorFloat；tipPos 字段保留但不得驱动 word-tip。
+ * 🔴 _anchorFloat 函数本体与 bubblePos 长按气泡锚定逻辑完全保留、行为不变。
+ *
  * 🔴 服务层零改动：services/tts.ts / utils/request.ts / services/auth.ts 一律不改，
  *    本文件只复用 speakText/stopSpeak/onSpeakState、loginFromGate、collectGlossary 既有契约。
  */
@@ -135,7 +139,7 @@ Page({
     bubbleIdx: -1,
     /** V3 点词 tip（null = 收起） */
     tipWord: null as WordTipView | null,
-    /** D-01 点词 tip 锚定坐标（rpx；null = 收起） */
+    /** 19:11：tipPos 字段保留（切档/换课/收起时仍清），但不再驱动底部浮层 word-tip */
     tipPos: null as FloatPos | null,
     /** D-02 长按气泡锚定坐标（rpx；null = 收起） */
     bubblePos: null as FloatPos | null,
@@ -295,10 +299,11 @@ Page({
   },
 
   /**
-   * D-01/D-02 锚定浮层：取被点词 / 被长按句的视口 rect + 页面滚动偏移，
-   * 换算成页面坐标 rpx 后写入 tipPos / bubblePos 供 WXML style 绑定。
+   * D-02 长按气泡锚定浮层（19:11 后仅 bubblePos 使用；生词 tip 已改底部统一浮层，不再走这里）：
+   * 取被长按句的视口 rect + 页面滚动偏移，换算成页面坐标 rpx 后写入 bubblePos 供 WXML style 绑定。
    * 原型 03:1134-1165 positionFloat(anchor) 取 left=(rect.left+8) / top=(rect.bottom+6)；
    * 小程序 boundingClientRect 为视口坐标，故 top 需叠加 scrollTop 才是页面坐标。
+   * 🔴 tipPos 分支保留（字段仍在），但 onWordTap 不再调用本方法；长按气泡行为不变。
    */
   _anchorFloat(selector: string, key: 'tipPos' | 'bubblePos') {
     const k = 750 / (wx.getSystemInfoSync().windowWidth || 375); // px → rpx（750 设计稿）
@@ -316,11 +321,13 @@ Page({
   },
 
   /**
-   * V23/V26 点词热区分发（27 §3.3）：.w 始终 catchtap="onWordTap"，档位判定全放这里，
-   * WXML 不按档动态切 bind/catch。
+   * V23/V26′ 点词热区分发（27 §3.3 按档分发不变；19:11 ③ 生词 tip 改底部统一浮层）：
+   * .w 始终 catchtap="onWordTap"，档位判定全放这里，WXML 不按档动态切 bind/catch。
    * - readMode !== 'tap' 或该 token 无 hasDef（含空白/非生词文字）→ 与 toggleLine 同语义：_applyLineTap(i)；
-   * - 仅 tap 档 + hasDef 生词 → 只出 tip（复用 _lookupWord + _anchorFloat 就近锚定 tipWord/tipPos），不展开该句中文。
-   * 生词 tip 仅 tap 档生效；再次点同一词收起 tip。
+   * - 仅 tap 档 + hasDef 生词 → 只出底部浮层 tipWord（复用 _lookupWord），
+   *   🔴 不再调用 _anchorFloat 就近锚定，不写 tipPos，也不展开该句中文；再点同一词收起、
+   *   再点其它词替换浮层内容。tipPos 字段保留但不得驱动 word-tip。
+   * 生词 tip 仅 tap 档生效。
    */
   onWordTap(e: NceTapEvent) {
     const ds = e.currentTarget.dataset;
@@ -338,9 +345,8 @@ Page({
       this.setData({ tipWord: null, tipPos: null });
       return;
     }
-    const anchor = String(ds.anchor || '');
-    this.setData({ tipWord: this._lookupWord(w), bubbleIdx: -1, bubblePos: null });
-    this._anchorFloat(anchor || `#line-${i}`, 'tipPos');
+    // 19:11 ③：底部浮层由 tipWord 驱动；不取 anchor、不调 _anchorFloat、不写 tipPos。
+    this.setData({ tipWord: this._lookupWord(w), tipPos: null, bubbleIdx: -1, bubblePos: null });
   },
 
   closeTip() { this.setData({ tipWord: null, tipPos: null }); },

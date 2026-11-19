@@ -305,39 +305,57 @@ describe('C6/V5 · 气泡「朗读此句」= 恰好一次 speakText(line.en)、�
 // ───────────────────── 选项 A · V7-C 视觉对齐定位断言（18 §5 / D-01…D-11） ─────────────────────
 // 🔴 本轮范围：D-01/D-02/D-03/D-04/D-06/D-07/D-09/D-11；D-05(.head 保留)/D-08/D-10/D-1/D-2 不做。
 
-/** 锚定判据（正反例共用，防假绿）：两个浮层都必须 position:absolute 且不得 fixed 全宽底条 */
-function isAnchored(css: string): boolean {
+/**
+ * 19:11 口径变更后的锚定判据（正反例共用，防假绿）：
+ * - 生词 tip 不再是 absolute 就近锚定浮层，改为移动端底部固定浮层 position:fixed / bottom:0；
+ * - 长按气泡仍是 absolute 就近锚定（_anchorFloat / bubblePos 行为不变）。
+ * 两者分开判，避免用旧口径把新实现误判为通过。
+ */
+function isTipBottomSheet(css: string): boolean {
   const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
-  const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
   return (
-    /position:\s*absolute/.test(tip) && /position:\s*absolute/.test(bubble) &&
-    !/position:\s*fixed/.test(tip) && !/position:\s*fixed/.test(bubble) &&
-    !/left:\s*30rpx;\s*right:\s*30rpx;\s*bottom:\s*40rpx/.test(tip) &&
-    !/left:\s*30rpx;\s*right:\s*30rpx;\s*bottom:\s*40rpx/.test(bubble)
+    /position:\s*fixed/.test(tip) &&
+    !/position:\s*absolute/.test(tip) &&
+    /bottom:\s*0/.test(tip) &&
+    /left:\s*0/.test(tip) &&
+    /right:\s*0/.test(tip)
   );
 }
+function isBubbleAnchored(css: string): boolean {
+  const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
+  return /position:\s*absolute/.test(bubble) && !/position:\s*fixed/.test(bubble);
+}
 
-describe('选项 A · D-01/D-02 锚定浮层（最高优先）', () => {
+describe('19:11 · 生词 tip 底部浮层 / 长按 bubble 就近锚定（口径变更，D-01 部分作废）', () => {
   const wxss = () => src('pages/nce/detail/detail.wxss');
   const wxml = () => src('pages/nce/detail/detail.wxml');
   const ts = () => src('pages/nce/detail/detail.ts');
 
-  it('正例：.word-tip/.bubble 由 fixed 底部全宽条改为 absolute 锚定浮层', () => {
-    expect(isAnchored(wxss())).toBe(true);
+  it('正例：.word-tip 为底部固定浮层、.bubble 仍 absolute 就近锚定', () => {
+    expect(isTipBottomSheet(wxss())).toBe(true);
+    expect(isBubbleAnchored(wxss())).toBe(true);
   });
 
-  it('反例（防假绿）：把锚定改回 position:fixed 时同一判据必须失败', () => {
-    const reverted = wxss().replace(
-      /((?:\.word-tip|\.bubble)\s*\{[^}]*?)position:\s*absolute/g,
+  it('反例（防假绿）：tip 回退成 absolute 就近锚定、或 bubble 回退成 fixed，判据必须失败', () => {
+    const css = wxss();
+    const tipReverted = css.replace(
+      /(\.word-tip\s*\{[^}]*?)position:\s*fixed/,
+      '$1position: absolute',
+    );
+    expect(tipReverted).not.toBe(css);                  // 确认反例确实改到了浮层规则
+    expect(isTipBottomSheet(tipReverted)).toBe(false);
+    const bubbleReverted = css.replace(
+      /(\.bubble\s*\{[^}]*?)position:\s*absolute/,
       '$1position: fixed',
     );
-    expect(reverted).not.toBe(wxss());          // 确认反例确实改到了浮层规则
-    expect(isAnchored(reverted)).toBe(false);   // 断言必须失败，否则是假绿
+    expect(bubbleReverted).not.toBe(css);
+    expect(isBubbleAnchored(bubbleReverted)).toBe(false);
   });
 
-  it('浮层有坐标 style：left/top 以 rpx 绑定锚点坐标（两个浮层各一处）', () => {
+  it('word-tip 无 tipPos 的 left/top 内联样式；bubble 仍以 rpx 绑定锚点坐标', () => {
     const w = wxml();
-    expect(w).toMatch(/class="word-tip[^"]*"\s+style="left:\{\{[^}]+\}\}rpx;top:\{\{[^}]+\}\}rpx"/);
+    expect(w).toMatch(/wx:if="\{\{tipWord\}\}" class="word-tip/);    // 底部浮层按 tipWord 渲染
+    expect(w).not.toMatch(/class="word-tip[^"]*"\s+style="left:/);   // 🔴 不再绑 tipPos
     expect(w).toMatch(/class="bubble[^"]*"\s+style="left:\{\{[^}]+\}\}rpx;top:\{\{[^}]+\}\}rpx"/);
   });
 
@@ -349,20 +367,23 @@ describe('选项 A · D-01/D-02 锚定浮层（最高优先）', () => {
     expect(t).toMatch(/scrollTop/);
   });
 
-  it('点词：保存锚点坐标到 tipPos（含滚动偏移换算成 rpx），closeTip 清空（tap 档 + 生词语义）', () => {
+  it('点词：底部浮层显示（tipWord 出）、tipPos 不再驱动 word-tip、closeTip 清空（tap 档 + 生词语义）', () => {
     const ctx = makeThis();
     ctx.data.readMode = 'tap'; // V26：生词 tip 仅 tap 档生效
     ctx.data.lines = mockLines();
-    ctx.data.detail = { id: 4, title: 'L4', words: [] };
-    expect(typeof pageConfig._anchorFloat).toBe('function');
+    ctx.data.detail = { id: 4, title: 'L4', words: [{ word: 'engineer', def: '工程师' }] };
+    expect(typeof pageConfig._anchorFloat).toBe('function');   // 🔴 函数本体保留（长按气泡仍用）
+    wxMock.createSelectorQuery.mockClear();
     pageConfig.onWordTap.call(ctx, {
-      currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
+      currentTarget: { dataset: { w: 'engineer', anchor: 'w-0-2', i: 0, hasdef: true } },
     });
-    expect(ctx.data.tipWord).toBeTruthy();
-    // 桩：rect.left=60 / rect.bottom=230 / scrollTop=100 / windowWidth=375 → k=2
-    // left=(60+8)*2=136；top=(230+100+6)*2=672（含滚动偏移，不含则仅 472）
-    expect(ctx.data.tipPos).toEqual({ left: 136, top: 672 });
-    expect(wxMock.createSelectorQuery).toHaveBeenCalled();
+    expect(ctx.data.tipWord).toBeTruthy();                     // 底部浮层渲染条件成立
+    expect(ctx.data.tipWord.word).toBe('engineer');            // tipWord 内容正确
+    expect(ctx.data.tipWord.def).toBe('工程师');
+    expect(ctx.data.tipWord.none).toBe(false);
+    expect(ctx.data.tipPos).toBeNull();                       // 🔴 tipPos 不再被写入/驱动
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();  // 🔴 不为 tip 调 _anchorFloat
+    expect(ctx.data.expandedIdx).toBe(-1);                    // 点按生词不展开该句中文
     pageConfig.closeTip.call(ctx);
     expect(ctx.data.tipWord).toBeNull();
     expect(ctx.data.tipPos).toBeNull();
@@ -386,13 +407,17 @@ describe('选项 A · D-01/D-02 锚定浮层（最高优先）', () => {
 describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', () => {
   const wxss = () => src('pages/nce/detail/detail.wxss');
 
-  it('tip 白底蓝边窄卡片、bubble 深色 #1F2937 紧凑气泡，视觉层级相反', () => {
+  it('tip 白底蓝边底部浮层（width:auto）、bubble 深色 #1F2937 紧凑气泡，视觉层级相反', () => {
     const css = wxss();
     const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
     const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
     expect(tip).toMatch(/background:\s*#FFFFFF/);
     expect(tip).toMatch(/border:\s*1rpx solid #DBEAFE/);
-    expect(tip).toMatch(/width:\s*\d+rpx/);            // 收窄为卡片
+    expect(tip).toMatch(/width:\s*auto/);              // 19:11：底部浮层横向铺满，不再收窄卡片
+    expect(tip).toMatch(/border-radius:\s*[^;]*rpx/);  // 上方圆角
+    expect(Number((/z-index:\s*(\d+)/.exec(tip) || ['', '0'])[1])).toBeGreaterThan(
+      Number((/z-index:\s*(\d+)/.exec(bubble) || ['', '0'])[1]),
+    );                                                 // z-index 高于气泡
     expect(bubble).toMatch(/background:\s*#1F2937/);
     expect(bubble).toMatch(/width:\s*\d+rpx/);         // 收窄为气泡
     expect(tip).not.toMatch(/background:\s*#1F2937/);
@@ -405,14 +430,15 @@ describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', 
     expect(css).toMatch(/\.wt-w\s*\{[^}]*color:\s*#1D4ED8/);
   });
 
-  it('D-07 展开态蓝系：.sent.expanded/.sent-cn.show 浅蓝 + 蓝左边框，不再灰系', () => {
+  it('19:11 ② 展开态/中文块保留浅蓝背景但去掉左侧色条；.sent 仍留 transparent 占位防跳版', () => {
     const css = wxss();
     const exp = (/\.sent\.expanded\s*\{[^}]*\}/.exec(css) || [''])[0];
     const cn = (/\.sent-cn\.show\s*\{[^}]*\}/.exec(css) || [''])[0];
     expect(exp).toMatch(/background:\s*#EFF6FF/);
-    expect(exp).toMatch(/border-left-color:\s*#3B82F6/);
+    expect(exp).not.toMatch(/border-left-color:\s*#[0-9A-Fa-f]{6}/);
     expect(cn).toMatch(/background:\s*#EFF6FF/);
-    expect(cn).toMatch(/border-left:[^;]*#3B82F6/);
+    expect(cn).not.toMatch(/border-left:[^;]*#[0-9A-Fa-f]{6}/);
+    expect(css).toMatch(/\.sent\s*\{[^}]*border-left:\s*6rpx solid transparent/); // 占位防跳版
     expect(exp).not.toMatch(/#FAFBFF/);
     expect(cn).not.toMatch(/#F3F4F6/);
   });
@@ -708,25 +734,48 @@ describe('V25 · 双语档全部中文常显、点句不 toggle expandedIdx', ()
   });
 });
 
-/** V26 生词 tip 仅 tap 档 + _anchorFloat 就近锚定 */
-describe('V26 · 生词 tip 仅 tap 档生效，tap+hasDef 出 tip 且 _anchorFloat 被调用', () => {
-  it('tap 档 + hasDef → tipWord 出、_anchorFloat 就近锚定 tipPos(rpx)、且只出 tip 不展开', () => {
+/** V26′ 19:11 口径变更：生词 tip 仅 tap 档生效，改为底部统一浮层（不再 _anchorFloat 就近锚定） */
+describe('V26′ · 生词 tip 仅 tap 档生效，改为底部统一浮层（不再就近锚定）', () => {
+  it('tap 档 + hasDef → 底部浮层显示、tipWord 内容正确、不展开该句中文、不为 tip 锚定', () => {
     const ctx = makeThis();
     ctx.data.readMode = 'tap';
     ctx.data.lines = mockLines();
     ctx.data.detail = { id: 4, title: 'L4', words: [] };
     const spy = jest.spyOn(ctx, '_anchorFloat');
+    wxMock.createSelectorQuery.mockClear();
     pageConfig.onWordTap.call(ctx, {
       currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
     });
-    expect(spy).toHaveBeenCalledWith('w-0-3', 'tipPos');
+    const w = src('pages/nce/detail/detail.wxml');
+    expect(w).toMatch(/wx:if="\{\{tipWord\}\}" class="word-tip/);   // 底部浮层渲染
     expect(ctx.data.tipWord).toBeTruthy();
-    expect(ctx.data.tipPos).toEqual({ left: 136, top: 672 });   // k=2, left=(60+8)*2, top=(230+100+6)*2
-    expect(ctx.data.expandedIdx).toBe(-1);                       // 只出 tip 不展开
+    expect(ctx.data.tipWord.word).toBe('just');                      // 内容正确（表外词 → none）
+    expect(ctx.data.tipWord.none).toBe(true);
+    expect(ctx.data.expandedIdx).toBe(-1);                           // 点按生词不展开该句中文
+    expect(spy).not.toHaveBeenCalled();                              // 🔴 不再为 tip 调 _anchorFloat
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
+    expect(ctx.data.tipPos).toBeNull();                              // tipPos 可保留但不得驱动 word-tip
+    expect(w).not.toMatch(/class="word-tip[^"]*"\s+style="left:/);
     spy.mockRestore();
   });
 
-  it('immersion / bilingual 档点同一生词 → tip = 0、_anchorFloat 不调用', () => {
+  it('再点其它生词 → 替换底部浮层内容（仍不锚定、不展开中文）', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'tap';
+    ctx.data.lines = mockLines();
+    ctx.data.detail = { id: 4, title: 'L4', words: [{ word: 'engineer', def: '工程师' }, { word: 'firm', def: '公司' }] };
+    const spy = jest.spyOn(ctx, '_anchorFloat');
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer', i: 0, hasdef: true } } });
+    expect(ctx.data.tipWord.word).toBe('engineer');
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'firm', i: 3, hasdef: true } } });
+    expect(ctx.data.tipWord.word).toBe('firm');
+    expect(ctx.data.tipWord.def).toBe('公司');
+    expect(ctx.data.expandedIdx).toBe(-1);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('非 tap 档（immersion / bilingual）点同一生词 → 底部浮层不触发、_anchorFloat 不调用', () => {
     for (const m of ['immersion', 'bilingual']) {
       const ctx = makeThis();
       ctx.data.readMode = m;
@@ -796,6 +845,85 @@ describe('V28 · 必然失败反例（防假绿）', () => {
     const reverted = w.replace("readMode === 'bilingual' || expandedIdx === si", 'expandedIdx === si');
     expect(reverted).not.toBe(w);
     expect(reverted).not.toMatch(/readMode === 'bilingual' \|\| expandedIdx === si/);
+  });
+});
+
+// ═══════════════ 19:11 三处 UI 优化 · 静态判据 + 必然失败反例（防假绿） ═══════════════
+// 🔴 判据只读取 wxss / wxml / ts 文本，不引入复杂渲染；每条正例配一条「实现回退」反例，
+//    回退成蓝色正文 / 左边框 / 就近锚定时判据须失败。判据号回写另走一轮（本轮不新开 V 号）。
+describe('19:11 · 三处 UI 优化静态判据（读源码文本 + 必然失败反例）', () => {
+  const wxss = () => src('pages/nce/detail/detail.wxss');
+  const wxml = () => src('pages/nce/detail/detail.wxml');
+  const ts = () => src('pages/nce/detail/detail.ts');
+
+  /** 判据①：.w.hit 默认色为 #1A1A1F（不含 #1D4ED8） */
+  const normalBlack = (css: string): boolean => {
+    const hit = (/\.w\.hit\s*\{[^}]*\}/.exec(css) || [''])[0];
+    return /color:\s*#1A1A1F/.test(hit) && !/#1D4ED8/.test(hit);
+  };
+  /** 判据②：.sent-cn.show 无 border-left 色条（.sent.expanded 亦无蓝左边框色），且 .sent 占位边框仍 transparent */
+  const noLeftBar = (css: string): boolean => {
+    const cn = (/\.sent-cn\.show\s*\{[^}]*\}/.exec(css) || [''])[0];
+    const exp = (/\.sent\.expanded\s*\{[^}]*\}/.exec(css) || [''])[0];
+    return !/border-left:[^;]*#[0-9A-Fa-f]{6}/.test(cn) &&
+      !/border-left-color:\s*#[0-9A-Fa-f]{6}/.test(exp) &&
+      /\.sent\s*\{[^}]*border-left:\s*6rpx solid transparent/.test(css);
+  };
+  /** 判据③：.word-tip 为 position:fixed + bottom:0（不再是 absolute）；WXML 不绑 tipPos；onWordTap 不调 _anchorFloat */
+  const onWordTapBody = (t: string): string => {
+    const m = /onWordTap\(e: NceTapEvent\)\s*\{([\s\S]*?)\n  \},/.exec(t);
+    return m ? m[1] : '';
+  };
+  const bottomSheet = (css: string, w: string, t: string): boolean => {
+    const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
+    return /position:\s*fixed/.test(tip) && /bottom:\s*0/.test(tip) &&
+      !/position:\s*absolute/.test(tip) &&
+      !/class="word-tip[^"]*"\s+style="left:/.test(w) &&
+      !/_anchorFloat\s*\(/.test(onWordTapBody(t));
+  };
+
+  it('① 正例：.w.hit 默认色 #1A1A1F，整篇英文正文正常黑（不含 #1D4ED8）', () => {
+    expect(normalBlack(wxss())).toBe(true);
+  });
+  it('① 反例：回退成蓝色正文 #1D4ED8 → 判据失败', () => {
+    const reverted = wxss().replace(/(\.w\.hit\s*\{[^}]*?color:\s*)#1A1A1F/, '$1#1D4ED8');
+    expect(reverted).not.toBe(wxss());
+    expect(normalBlack(reverted)).toBe(false);
+  });
+
+  it('② 正例：.sent-cn.show 无左侧色条、.sent.expanded 无蓝左边框色、.sent 占位边框仍 transparent', () => {
+    expect(noLeftBar(wxss())).toBe(true);
+  });
+  it('② 反例：把 border-left: 6rpx solid #3B82F6 加回中文块 → 判据失败', () => {
+    const reverted = wxss().replace(
+      /(\.sent-cn\.show\s*\{[^}]*?)(background:\s*#EFF6FF)/,
+      '$1border-left: 6rpx solid #3B82F6; $2',
+    );
+    expect(reverted).not.toBe(wxss());
+    expect(noLeftBar(reverted)).toBe(false);
+  });
+
+  it('③ 正例：.word-tip 为 position:fixed + bottom:0 的底部浮层，不再就近锚定', () => {
+    expect(bottomSheet(wxss(), wxml(), ts())).toBe(true);
+  });
+  it('③ 反例：回退成 absolute 就近锚定（并重新绑定 tipPos + 调 _anchorFloat）→ 判据失败', () => {
+    const revertedCss = wxss()
+      .replace(/(\.word-tip\s*\{[^}]*?)position:\s*fixed/, '$1position: absolute')
+      .replace(/(\.word-tip\s*\{[^}]*?)bottom:\s*0/, '$1bottom: auto');
+    const revertedWxml = wxml().replace(
+      'class="word-tip on"',
+      'class="word-tip on" style="left:{{tipPos ? tipPos.left : 0}}rpx;top:{{tipPos ? tipPos.top : 0}}rpx"',
+    );
+    const revertedTs = ts().replace(
+      /(const cur = this\.data\.tipWord;)/,
+      "this._anchorFloat(String(ds.anchor || ''), 'tipPos');\n    $1",
+    );
+    expect(revertedCss).not.toBe(wxss());
+    expect(revertedWxml).not.toBe(wxml());
+    expect(revertedTs).not.toBe(ts());
+    expect(bottomSheet(revertedCss, wxml(), ts())).toBe(false);      // CSS 回退即失败
+    expect(bottomSheet(wxss(), revertedWxml, ts())).toBe(false);      // WXML 重新绑 tipPos 即失败
+    expect(bottomSheet(wxss(), wxml(), revertedTs)).toBe(false);      // TS 重新就近锚定即失败
   });
 });
 

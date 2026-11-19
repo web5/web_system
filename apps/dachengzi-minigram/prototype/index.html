@@ -557,8 +557,13 @@
   .nce-chip.on { background:#F97316; color:#FFFFFF; border-color:#F97316; }
   .nce-hint { font-size:11px; color:#6B7280; margin:0 0 10px; }
   .nce-line { padding:10px 2px; border-bottom:1px solid rgba(0,0,0,.06); cursor:pointer; }
+  /* 2026-11-19 19:11 ① 英文详情字体保持正常黑：正文统一 #1A1A1F（与小程序 .w.hit 默认色一致），
+     生词只留虚线点线作可点提示，文字不再整篇变蓝/变青。 */
   .nce-line .en { line-height:1.7; color:#1A1A1F; }
-  .nce-line .cn { display:none; font-size:12.5px; color:#6B7280; margin-top:5px; line-height:1.6; }
+  /* 2026-11-19 19:11 ② 点击展开的中文部分不要左边框：只用浅蓝背景/间距区分，
+     border-left:none 显式写出该 UI 约定（小程序 .sent 仍保留 transparent 占位边框防跳版）。 */
+  .nce-line .cn { display:none; font-size:12.5px; color:#6B7280; margin-top:5px; line-height:1.6;
+    background:#EFF6FF; padding:8px 10px; border-radius:8px; border-left:none; }
   .nce-line.show .cn { display:block; }
   #p-nce[data-mode="bilingual"] .nce-line .cn { display:block; }
   /* 2026-11-19 用户口径同步：沉浸档独立排版 —— 英文句子连排成段落、去逐句分隔线/卡片感、
@@ -572,10 +577,21 @@
   #p-nce[data-font="sm"] .nce-line .en { font-size:14px; }
   #p-nce[data-font="md"] .nce-line .en { font-size:16px; }
   #p-nce[data-font="lg"] .nce-line .en { font-size:18px; }
-  .nce-w { color:#0EA5A4; border-bottom:1px dashed #0EA5A4; cursor:pointer; }
-  .nce-wordcard { display:none; margin:8px 0 2px; background:#FFFFFF;
-    border:1px solid rgba(14,165,164,.35); border-radius:9px; padding:10px 12px; }
-  .nce-wordcard.on { display:block; }
+  .nce-w { color:#1A1A1F; border-bottom:1px dashed #0EA5A4; cursor:pointer; }
+  /* 2026-11-19 19:11 ③ 移动端底部浮层（bottom sheet）UI 约定：
+     生词 tip 作废「在被点词附近就近锚定」，统一从手机视口底部浮出（tip 统一从底部 tip 出来）。
+     对齐小程序 detail.wxss .word-tip { position:fixed; left:0; right:0; bottom:0; width:auto;
+     上方圆角; 白底/描边/阴影; z-index 高于长按气泡 }。原型在 .phone（position:relative）
+     定位上下文里以 position:absolute 贴底表达同一约定（等价 fixed：都贴手机视口底边）。
+     明确关闭：右上 ✕ / 点浮层外（句子空白、返回目录、切档）/ 再点其它词替换内容；仅 tap 档触发。 */
+  .nce-wordcard { display:none; position:absolute; left:0; right:0; bottom:0; z-index:80;
+    margin:0; padding:14px 16px 30px; background:#FFFFFF;
+    border:1px solid rgba(0,0,0,.08); border-bottom:none; border-radius:16px 16px 0 0;
+    box-shadow:0 -8px 28px rgba(0,0,0,.14); }
+  .nce-wordcard.on { display:block; animation:nceSheetRise .22s cubic-bezier(.32,.72,0,1); }
+  @keyframes nceSheetRise { from { transform:translateY(16px); opacity:.5; } to { transform:translateY(0); opacity:1; } }
+  .nce-wordcard .hd { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .nce-wordcard .x { font-size:16px; line-height:1; color:#6B7280; cursor:pointer; padding:2px 4px; }
   .nce-wordcard .w1 { font-size:14px; font-weight:700; color:#1A1A1F; }
   .nce-wordcard .w1 span { font-size:11.5px; font-weight:400; color:#6B7280; margin-left:7px; }
   .nce-wordcard .w2 { font-size:12.5px; color:#1A1A1F; margin-top:5px; line-height:1.6; }
@@ -1514,11 +1530,7 @@
             <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">A young man and a young woman were sitting behind me. They were talking <span class="nce-w" onclick="nceWord(event)">loudly</span>.</div><div class="cn">一青年男子与一青年女子坐在我的身后，大声地说着话。</div></div>
             <div class="nce-line" onclick="nceToggleLine(this)"><div class="en">I got very angry. I could not hear the actors.</div><div class="cn">我非常生气，因为我听不见演员在说什么。</div></div>
           </div>
-          <div class="nce-wordcard" id="nceWordCard">
-            <div class="w1" id="nceW1"></div>
-            <div class="w2" id="nceW2"></div>
-            <div class="w3" id="nceW3"></div>
-          </div>
+          <!-- 19:11 ③：生词 tip 已改「移动端底部浮层」，DOM 移至 .phone 直接子级贴手机视口底边（见文末 #nceWordCard） -->
           <div class="nce-cta" id="nceCta" onclick="nceOpenEx()">开始练习（1 题）</div>
           <div class="nce-ex" id="nceEx">
             <div class="q">Why did the writer not enjoy the play?</div>
@@ -1537,9 +1549,21 @@
             <div onclick="wxToast('已是第 1 课')">&#8249; 上一课</div>
             <div onclick="wxToast('第 2 课待入库')">下一课 &#8250;</div>
           </div>
-          <div class="nce-foot">逐句中文默认折叠 · 生词就地查零跳转 · 习题读完再展开</div>
+          <div class="nce-foot">逐句中文默认折叠 · 生词底部浮层查义零跳转 · 习题读完再展开</div>
         </div>
       </div>
+    </div>
+
+    <!-- 19:11 ③ 移动端底部浮层（bottom sheet）UI 约定：生词 tip 统一从底部浮出，不再在被点词附近出生。
+         放在 .phone 直接子级 → position:absolute 贴手机视口底边（等价小程序 position:fixed）。
+         仅 tap 档触发；关闭 = 右上 ✕ / 点浮层外（句子空白、返回目录、切档）/ 再点其它词替换内容。 -->
+    <div class="nce-wordcard" id="nceWordCard">
+      <div class="hd">
+        <div class="w1" id="nceW1"></div>
+        <div class="x" onclick="nceCloseWord()" title="关闭">&#10005;</div>
+      </div>
+      <div class="w2" id="nceW2"></div>
+      <div class="w3" id="nceW3"></div>
     </div>
 
     <div class="tabbar">
@@ -2185,7 +2209,7 @@ function nceOpenDetail() {
   // 两组 chip 各自初始化：阅读档回到默认 immersion，字号档回到 md；互不复位对方（正交）。
   nceMode('immersion'); nceFont('md');
   nceCloseEx(); nceToggleFold(true);
-  $('nceWordCard').classList.remove('on');
+  nceCloseWord();
   $('nceFoldC').textContent = nceBuildFullCn();   // 参考译文 = 整篇 lines[].cn 拼接（含空值兜底）
 }
 /** 参考译文：从所有句子的 .cn 拼接整篇中文；全部为空/缺失时给兜底文案。 */
@@ -2202,11 +2226,15 @@ function nceBackToIndex() {
   $('navTitle').textContent = '新概念英语 · NCE2';
   $('p-nce').scrollTop = 0;
 }
-/** 点句：仅 tap（点按/精读）档展开/收起该句中文；沉浸（连排通读）/双语（常显）都不 toggle。 */
+/** 点句：仅 tap（点按/精读）档展开/收起该句中文；沉浸（连排通读）/双语（常显）都不 toggle。
+    19:11 ③ 点浮层外（句子空白）→ 收起底部生词浮层（就近锚定口径已作废）。 */
 function nceToggleLine(el) {
+  nceCloseWord();
   if (NCE_MODE !== 'tap') return;
   el.classList.toggle('show');
 }
+/** 19:11 ③ 底部浮层关闭：右上 ✕ / 点浮层外 / 返回目录 / 切档共用；不再有就近锚定 tipPos。 */
+function nceCloseWord() { $('nceWordCard').classList.remove('on'); }
 var NCE_MODE = 'immersion';
 function nceMode(m) {
   NCE_MODE = m;
@@ -2218,11 +2246,11 @@ function nceMode(m) {
   Array.prototype.forEach.call(document.querySelectorAll('#nceLines .nce-line'), function (l) {
     l.classList.remove('show');
   });
-  $('nceWordCard').classList.remove('on');
+  nceCloseWord();
   $('nceHint').textContent = m === 'bilingual'
     ? '双语档：全部句子中文常显，点句不切换'
     : m === 'tap'
-      ? '点按/精读档：点句任意处展开该句中文，点带释义生词就近看 tip'
+      ? '点按/精读档：点句任意处展开该句中文，点带释义生词从底部浮层看 tip'
       : '沉浸档：英文连排成段，点句不展开逐句中文；整篇中文见文末「参考译文」';
 }
 function nceFont(f) {
@@ -2231,7 +2259,8 @@ function nceFont(f) {
     c.classList.toggle('on', c.dataset.v === f);
   });
 }
-/** 生词 tip：仅 tap 档生效；沉浸/双语点生词等同于点句空白，只走该档点句逻辑、不弹 tip。 */
+/** 生词 tip：19:11 ③ 移动端底部浮层 —— 仅 tap 档生效，统一从底部浮出（不再就近锚定）；
+    沉浸/双语点生词等同于点句空白，只走该档点句逻辑、不弹 tip；再点其它词替换浮层内容。 */
 function nceWord(ev) {
   ev.stopPropagation();
   if (NCE_MODE !== 'tap') return;

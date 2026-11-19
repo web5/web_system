@@ -1,7 +1,10 @@
 /* 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图：点句中文 / 点词 tip / 长按气泡 / 单句朗读）
    无常驻 ♪/☆ 控件；朗读仅由气泡「朗读此句」触发，tts 服务零改动。
    选项 A（18 §5）：D-01/D-02 锚定浮层 · D-03 配色反相 · D-04/D-11 信息结构与操作提示
-   · D-06 词点线 · D-07 展开态蓝系 · D-09 句序号；D-05/D-08/D-10 不做。 */
+   · D-06 词点线 · D-07 展开态蓝系 · D-09 句序号；D-05/D-08/D-10 不做。
+   2026-11-19 19:11 用户口径变更：① 英文正文统一正常黑（.w.hit 不再蓝）；
+   ② 展开的中文块 / .sent.expanded 去掉左侧色条（.sent transparent 占位防跳版保留）；
+   ③ 生词 tip 作废「就近锚定」，改移动端底部固定浮层（长按气泡仍 absolute 就近锚定，行为不变）。 */
 .page { min-height: 100vh; background: #FFFFFF; color: #1A1A1F; padding: 0 30rpx; position: relative; }
 .bar { display: flex; align-items: center; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid rgba(0,0,0,.08); position: sticky; top: 0; background: #FFFFFF; z-index: 5; }
 .seg { display: flex; border: 1rpx solid rgba(0,0,0,.08); border-radius: var(--r-control); overflow: hidden; }
@@ -24,7 +27,8 @@
 .sentences { margin-top: 0; }
 .sent { display: block; padding: 16rpx 10rpx; border-radius: var(--r-control); border-bottom: 1rpx dashed rgba(0,0,0,.10); border-left: 6rpx solid transparent; }
 .sent:active { background: #FAFAFA; }
-.sent.expanded { background: #EFF6FF; border-left-color: #3B82F6; }
+/* 19:11 ② 展开态不再有蓝色左色条；浅蓝背景保留，.sent 的 transparent 占位边框防跳版 */
+.sent.expanded { background: #EFF6FF; }
 .sent.playing { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
 .sline { display: flex; align-items: flex-start; }
 .sn { font-size: 22rpx; color: #9CA3AF; line-height: 1.9; min-width: 34rpx; margin-right: 12rpx; }
@@ -33,14 +37,22 @@
 .f0 .en { font-size: 28rpx; }
 .f2 .en { font-size: 38rpx; }
 .w { color: #1A1A1F; }
-.w.hit { color: #1D4ED8; }
+/* 19:11 ① 英文正文统一正常黑：.w.hit 不再 #1D4ED8；.w:active 按下态可保留；
+   .wt-w 是生词 tip 标题（非课文正文），保留品牌深蓝。 */
+.w.hit { color: #1A1A1F; }
 .w.has-def { border-bottom: 1rpx dotted #3B82F6; }
 .w:active { color: #3B82F6; }
 .sent-cn { display: none; }
-.sent-cn.show { display: block; margin-top: 10rpx; padding: 12rpx 16rpx; border-radius: var(--r-control); border-left: 6rpx solid #3B82F6; background: #EFF6FF; color: #1F2937; font-size: 26rpx; line-height: 1.7; }
+/* 19:11 ② 中文展开块不用左边框：仅浅蓝背景/间距区分；.sent 保留 transparent 占位防跳版 */
+.sent-cn.show { display: block; margin-top: 10rpx; padding: 12rpx 16rpx; border-radius: var(--r-control); background: #EFF6FF; color: #1F2937; font-size: 26rpx; line-height: 1.7; }
 
-/* D-01 / D-03：点词 tip = 白底蓝边窄卡片，absolute 锚定被点词（非 fixed 全宽底条） */
-.word-tip { position: absolute; left: 0; top: 0; z-index: 60; width: 420rpx; padding: 20rpx 22rpx; border: 1rpx solid #DBEAFE; border-radius: var(--r-control); background: #FFFFFF; color: #1A1A1F; box-shadow: 0 12rpx 40rpx rgba(0,0,0,.14); box-sizing: border-box; }
+/* 19:11 ③ 移动端底部浮层（bottom sheet）：生词 tip 统一从底部出来，作废就近锚定。
+   position:fixed + left/right/bottom:0 + width:auto；上方圆角；白底/描边/阴影保留；
+   z-index 80 > 长按气泡 61；轻微上滑感。关闭：右上 ✕ / 点浮层外 / 再点其它词替换内容。 */
+.word-tip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; width: auto; padding: 26rpx 30rpx 44rpx; border: 1rpx solid #DBEAFE; border-radius: 24rpx 24rpx 0 0; background: #FFFFFF; color: #1A1A1F; box-shadow: 0 -12rpx 40rpx rgba(0,0,0,.14); box-sizing: border-box; animation: wt-rise .18s ease-out; }
+@keyframes wt-rise { from { transform: translateY(14rpx); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
+.wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
 .wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }
 .wt-p { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; }
 .wt-pos { display: inline-block; font-size: 22rpx; color: #1D4ED8; margin-top: 8rpx; }
@@ -71,8 +83,10 @@
 .state { padding: 100rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
 .state.err { color: #DC2626; }
 
-/* ===== V21+ 阅读三档（以下均为新增规则，不改动上方 .word-tip/.bubble/.sent.expanded/
-   .sent-cn.show/.sn/.stx/.w.has-def/.w.hit 等既有规则块，保证既有静态判据首个匹配不变） ===== */
+/* ===== V21+ 阅读三档 =====
+   以下均为新增规则，不新增第二个 .word-tip/.bubble/.sent.expanded/.sent-cn.show/.w.hit 规则块，
+   保证静态判据「首个匹配」不变。2026-11-19 19:11 例外：上方 .w.hit/.sent.expanded/.sent-cn.show/
+   .word-tip 四个规则块按用户口径**就地修订**（非追加），语义见各块注释；本段三档排版规则不受影响。 */
 
 /* 顶部两组 seg 正交：阅读档 / 字号档并列，切档互不复位 */
 .bar-segs { display: flex; align-items: center; gap: 14rpx; flex-wrap: wrap; }

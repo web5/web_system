@@ -46,7 +46,7 @@
             <view class="stx">
               <view class="en">
                 <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
-                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{tk.w ? 'hit' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" data-anchor="w-{{si}}-{{tk.idx}}" catchtap="onWordTap">{{tk.t}}</text>
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{tk.w ? 'hit' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap">{{tk.t}}</text>
                   <text wx:else>{{tk.t}}</text>
                 </block>
               </view>
@@ -75,9 +75,15 @@
     <view class="pad" />
   </block>
 
-  <!-- V3 / D-01 点词中文 tip：锚定被点词的浮层（word / phonetic / pos / def / example，缺失省略；表外词暂无释义且保留可点） -->
-  <view wx:if="{{tipWord}}" class="word-tip on" style="left:{{tipPos ? tipPos.left : 0}}rpx;top:{{tipPos ? tipPos.top : 0}}rpx" bindtap="closeTip">
-    <view class="wt-w">{{tipWord.word}}</view>
+  <!-- 19:11 ③ 点词中文 tip = 移动端底部统一浮层（position:fixed / bottom:0），作废 16:30「就近锚定」。
+       word-tip 不再绑定 tipPos 的 left/top；tipPos 字段保留但不得驱动本浮层。
+       关闭：右上 ✕ / 点浮层外（句子空白按既有 _applyLineTap 清 tipWord）/ 再点其它词替换内容。
+       word / phonetic / pos / def / example 缺失省略；表外词「暂无释义」且保留可点。 -->
+  <view wx:if="{{tipWord}}" class="word-tip on">
+    <view class="wt-head">
+      <view class="wt-w">{{tipWord.word}}</view>
+      <view class="wt-x" catchtap="closeTip">✕</view>
+    </view>
     <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
     <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
     <view wx:if="{{tipWord.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
