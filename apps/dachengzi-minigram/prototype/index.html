@@ -561,6 +561,14 @@
   .nce-line .cn { display:none; font-size:12.5px; color:#6B7280; margin-top:5px; line-height:1.6; }
   .nce-line.show .cn { display:block; }
   #p-nce[data-mode="bilingual"] .nce-line .cn { display:block; }
+  /* 2026-11-19 用户口径同步：沉浸档独立排版 —— 英文句子连排成段落、去逐句分隔线/卡片感、
+     行距更宽；沉浸点句不展开逐句中文（.cn 恒隐），整篇中文只在文末「参考译文」折叠区给。
+     🔴 以下规则只作用于 data-mode="immersion"；双语/点按档保持下方既有逐句分行卡片。 */
+  #p-nce[data-mode="immersion"] .nce-line { display:inline; border-bottom:none; padding:0; }
+  #p-nce[data-mode="immersion"] .nce-line::after { content:'  '; }
+  #p-nce[data-mode="immersion"] .nce-line .en { display:inline; line-height:2.15; }
+  #p-nce[data-mode="immersion"] .nce-line .cn,
+  #p-nce[data-mode="immersion"] .nce-line.show .cn { display:none !important; }
   #p-nce[data-font="sm"] .nce-line .en { font-size:14px; }
   #p-nce[data-font="md"] .nce-line .en { font-size:16px; }
   #p-nce[data-font="lg"] .nce-line .en { font-size:18px; }
@@ -1484,12 +1492,13 @@
             <div class="q">作者为什么向坐在他身后的人抱怨？</div>
             <div class="qe">Why did the writer complain to the people behind him?</div>
           </div>
-          <div class="nce-tools">
-            <span class="lb">阅读档</span>
-            <span class="nce-chip on" data-g="mode" data-v="immersion" onclick="nceMode('immersion')">沉浸</span>
-            <span class="nce-chip" data-g="mode" data-v="bilingual" onclick="nceMode('bilingual')">双语</span>
-            <span class="nce-chip" data-g="mode" data-v="tap" onclick="nceMode('tap')">点按</span>
-          </div>
+        <!-- 阅读档三档 chip 与字号三档 chip 正交：切档互不复位（nceMode 不动 font / nceFont 不动 mode） -->
+        <div class="nce-tools">
+          <span class="lb">阅读档</span>
+          <span class="nce-chip on" data-g="mode" data-v="immersion" onclick="nceMode('immersion')">沉浸</span>
+          <span class="nce-chip" data-g="mode" data-v="bilingual" onclick="nceMode('bilingual')">双语</span>
+          <span class="nce-chip" data-g="mode" data-v="tap" onclick="nceMode('tap')">点按</span>
+        </div>
           <div class="nce-tools">
             <span class="lb">字号</span>
             <span class="nce-chip" data-g="font" data-v="sm" onclick="nceFont('sm')">小</span>
@@ -1519,9 +1528,10 @@
             <div class="nce-fb" id="nceFb"></div>
             <div style="font-size:11.5px;color:#6B7280;margin-top:10px;cursor:pointer" onclick="nceCloseEx()">收起练习，继续看正文</div>
           </div>
+          <!-- 参考译文 / 中文解释：默认收起，内容 = 整篇 lines[].cn 拼接（由 nceBuildFullCn 动态生成，含空值兜底）；沉浸档主用，三档均可展开 -->
           <div class="nce-fold" id="nceFold">
-            <div class="h" onclick="nceToggleFold()"><span>参考译文</span><b id="nceFoldTxt">展开</b></div>
-            <div class="c">上星期我去看戏。我的座位很好，戏也很有意思，但我却无法欣赏。一青年男子与一青年女子坐在我的身后，大声地说着话。我非常生气，因为我听不见演员在说什么。</div>
+            <div class="h" onclick="nceToggleFold()"><span>参考译文 / 中文解释</span><b id="nceFoldTxt">展开</b></div>
+            <div class="c" id="nceFoldC">上星期我去看戏。我的座位很好，戏也很有意思，但我却无法欣赏。一青年男子与一青年女子坐在我的身后，大声地说着话。我非常生气，因为我听不见演员在说什么。</div>
           </div>
           <div class="nce-nav">
             <div onclick="wxToast('已是第 1 课')">&#8249; 上一课</div>
@@ -2151,10 +2161,14 @@ $('tasteAdd').onclick = function () {
 };
 refreshSummary();
 /* 二级页右上角的动作 */
-/* ---------- 新概念英语（NCE）· 原型状态机 2026-11-06 ----------
-   与真机 M1-M9 / W1-W8 同口径：默认沉浸纯英文、点句出中文、生词就地零跳转、
-   习题读完再展开且 ≤52vh、参考译文默认折叠、三档 + 字号三档。
-   真机持久化走 wx.setStorageSync('nce-mode' / 'nce-font')，原型仅内存态。 */
+/* ---------- 新概念英语（NCE）· 原型状态机 2026-11-06 / 口径同步 2026-11-19 ----------
+   2026-11-19 按用户 16:30/16:45 口径改三档（🔴 优先级高于本稿旧「沉浸≈点按」行为）：
+   · 三档 immersion(沉浸，默认) / bilingual(双语) / tap(点按=精读)；与字号三档正交、切档互不复位
+     （nceMode 不动 font chip，nceFont 不动 mode chip；真机持久化 nce-mode / nce-font 两个独立 key）。
+   · 沉浸：英文连排成段（独立排版）、点句不展开逐句中文、不弹生词 tip；整篇中文见文末「参考译文」折叠区。
+   · 双语：全部句子中文常显、点句不 toggle 展开态。
+   · 点按：点句任意位置展开/收起该句中文；生词 tip 仅 tap 档生效，且只出 tip 不展开。
+   习题读完再展开且 ≤52vh、参考译文默认折叠。真机持久化走 wx.setStorageSync，原型仅内存态。 */
 var NCE_WORDS = {
   'private': { ph:'/ˈpraɪvət/', pos:'adj.', def:'私人的；私下的', ex:'A private conversation. 一次私人谈话。' },
   'loudly':  { ph:'/ˈlaʊdli/', pos:'adv.', def:'大声地', ex:'They were talking loudly. 他们大声地说着话。' }
@@ -2168,41 +2182,59 @@ function nceOpenDetail() {
   nceShow('detail');
   $('navTitle').textContent = 'Lesson 1';
   $('p-nce').scrollTop = 0;
+  // 两组 chip 各自初始化：阅读档回到默认 immersion，字号档回到 md；互不复位对方（正交）。
   nceMode('immersion'); nceFont('md');
   nceCloseEx(); nceToggleFold(true);
   $('nceWordCard').classList.remove('on');
+  $('nceFoldC').textContent = nceBuildFullCn();   // 参考译文 = 整篇 lines[].cn 拼接（含空值兜底）
+}
+/** 参考译文：从所有句子的 .cn 拼接整篇中文；全部为空/缺失时给兜底文案。 */
+function nceBuildFullCn() {
+  var parts = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#nceLines .nce-line .cn'), function (el) {
+    var t = (el.textContent || '').trim();
+    if (t) parts.push(t);
+  });
+  return parts.length ? parts.join('') : '（本课暂无参考译文）';
 }
 function nceBackToIndex() {
   nceShow('index');
   $('navTitle').textContent = '新概念英语 · NCE2';
   $('p-nce').scrollTop = 0;
 }
+/** 点句：仅 tap（点按/精读）档展开/收起该句中文；沉浸（连排通读）/双语（常显）都不 toggle。 */
 function nceToggleLine(el) {
-  if (NCE_MODE === 'bilingual') return;
+  if (NCE_MODE !== 'tap') return;
   el.classList.toggle('show');
 }
 var NCE_MODE = 'immersion';
 function nceMode(m) {
   NCE_MODE = m;
-  $('p-nce').dataset.mode = m;
+  $('p-nce').dataset.mode = m;           // 只改阅读档，不碰 data-font / 字号 chip（正交）
   Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="mode"]'), function (c) {
     c.classList.toggle('on', c.dataset.v === m);
   });
+  // 切档清掉逐句展开态与生词卡，避免旧档残留；沉浸/双语不依赖 .show。
   Array.prototype.forEach.call(document.querySelectorAll('#nceLines .nce-line'), function (l) {
     l.classList.remove('show');
   });
+  $('nceWordCard').classList.remove('on');
   $('nceHint').textContent = m === 'bilingual'
-    ? '双语档：全部中文可见'
-    : '默认纯英文 · 点任意一句才显示该句中文';
+    ? '双语档：全部句子中文常显，点句不切换'
+    : m === 'tap'
+      ? '点按/精读档：点句任意处展开该句中文，点带释义生词就近看 tip'
+      : '沉浸档：英文连排成段，点句不展开逐句中文；整篇中文见文末「参考译文」';
 }
 function nceFont(f) {
-  $('p-nce').dataset.font = f;
+  $('p-nce').dataset.font = f;           // 只改字号档，不碰 data-mode / 阅读档 chip（正交）
   Array.prototype.forEach.call(document.querySelectorAll('.nce-chip[data-g="font"]'), function (c) {
     c.classList.toggle('on', c.dataset.v === f);
   });
 }
+/** 生词 tip：仅 tap 档生效；沉浸/双语点生词等同于点句空白，只走该档点句逻辑、不弹 tip。 */
 function nceWord(ev) {
   ev.stopPropagation();
+  if (NCE_MODE !== 'tap') return;
   var w = ev.target.textContent.trim().toLowerCase();
   var d = NCE_WORDS[w];
   if (!d) return;

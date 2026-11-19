@@ -70,3 +70,35 @@
 .pad { height: 160rpx; }
 .state { padding: 100rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
 .state.err { color: #DC2626; }
+
+/* ===== V21+ 阅读三档（以下均为新增规则，不改动上方 .word-tip/.bubble/.sent.expanded/
+   .sent-cn.show/.sn/.stx/.w.has-def/.w.hit 等既有规则块，保证既有静态判据首个匹配不变） ===== */
+
+/* 顶部两组 seg 正交：阅读档 / 字号档并列，切档互不复位 */
+.bar-segs { display: flex; align-items: center; gap: 14rpx; flex-wrap: wrap; }
+.seg.mode .seg-i.on { background: #0EA5A4; border-color: #0EA5A4; }
+.seg.mode .seg-i { font-size: 24rpx; }
+
+/* V24 沉浸档独立排版：句子连排成段落、去 .sn 逐句序号与卡片边框/背景、行距更宽。
+   点按/双语档保持上方既有逐句分行卡片（.sent / .sn / .stx / .card 规则不变）。 */
+.mode-immersion .card { border: none; box-shadow: none; background: transparent; padding: 0; }
+.mode-immersion .sentences { margin-top: 8rpx; }
+.mode-immersion .sentences .sent {
+  display: inline; padding: 0; margin: 0; border: none; border-left: none;
+  background: transparent; border-radius: 0;
+}
+.mode-immersion .sentences .sent:active,
+.mode-immersion .sentences .sent.playing { background: transparent; box-shadow: none; }
+.mode-immersion .sentences .sline { display: inline; }
+.mode-immersion .sentences .sn { display: none; }
+.mode-immersion .sentences .stx { display: inline; }
+.mode-immersion .sentences .en { display: inline; line-height: 2.15; }
+/* 沉浸档不逐句展开中文（WXML 已用 wx:if 挡住，此处双保险，绝不产生 .expanded 视觉态） */
+.mode-immersion .sentences .sent-cn { display: none !important; }
+
+/* V24 参考译文 / 中文解释 折叠区（沉浸档文末，默认收起） */
+.cn-fold { margin: 32rpx 0 8rpx; border: 1rpx solid #E5E7EB; border-radius: var(--r-card, 20rpx); background: #FFFFFF; overflow: hidden; }
+.cn-fold-h { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx; font-size: 27rpx; color: #1F2937; }
+.cn-fold-h:active { background: #F9FAFB; }
+.cn-fold-tog { font-size: 24rpx; color: #3B82F6; }
+.cn-fold-c { padding: 8rpx 24rpx 26rpx; font-size: 26rpx; line-height: 1.9; color: #4B5563; border-top: 1rpx solid #F3F4F6; white-space: pre-wrap; }

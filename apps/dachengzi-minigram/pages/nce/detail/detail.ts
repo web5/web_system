@@ -70,7 +70,15 @@ interface WordTipView {
 }
 
 interface NceTapEvent {
-  currentTarget: { dataset: Record<string, string | number | undefined> };
+  currentTarget: { dataset: Record<string, string | number | boolean | undefined> };
+}
+
+/** V21+ 阅读三档：沉浸（连排通读）/ 双语（中文常显）/ 点按=精读（逐句展开 + 生词 tip）。默认沉浸。 */
+type ReadMode = 'immersion' | 'bilingual' | 'tap';
+const READ_MODES: ReadMode[] = ['immersion', 'bilingual', 'tap'];
+/** 把任意 storage / dataset 值收敛到合法档，非法/缺失一律回落默认档 immersion。 */
+function normalizeMode(v: unknown): ReadMode {
+  return typeof v === 'string' && (READ_MODES as string[]).includes(v) ? (v as ReadMode) : 'immersion';
 }
 
 /**
@@ -108,8 +116,14 @@ Page({
     lines: [] as NceLineView[],
     loading: true,
     error: '',
-    /** 字号档位：0=A- / 1=A / 2=A+ */
+    /** 字号档位：0=A- / 1=A / 2=A+（持久化 nce-font） */
     fontStep: 1,
+    /** V21+ 阅读档（持久化 nce-mode，默认 immersion）；与 fontStep 正交，切档互不复位 */
+    readMode: 'immersion' as ReadMode,
+    /** V24 文末「参考译文 / 中文解释」折叠区（默认收起） */
+    cnExpanded: false,
+    /** V24 整篇 lines[].cn 拼接（load 时生成，含空值兜底） */
+    fullCn: '',
     /** 页面根节点叠加的圆角 class */
     radiusClass: '',
     /** V5 单句朗读高亮句下标（-1 = 无） */
@@ -169,11 +183,14 @@ Page({
     const id = Number(options && options.id);
     const book = String((options && options.book) || DEFAULT_NCE_BOOK);
     const fontStep = wx.getStorageSync('nce-font');
+    // V21+ 阅读档：与字号档两个独立 storage key，各自读取、互不复位（正交）。
+    const readMode = normalizeMode(wx.getStorageSync('nce-mode'));
     const realId = id > 0 ? id : 1;
     this.setData({
       id: realId,
       book,
       fontStep: typeof fontStep === 'number' ? fontStep : 1,
+      readMode,
     });
     // V13/V18：页面级订阅（onLoad on / onUnload off；先按旧引用退订防重复订阅）
     const __app = getApp<IAppOption>();
@@ -216,11 +233,14 @@ Page({
       const lines: NceLineView[] = (d.lines || []).map((l, i) => ({
         idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en, known),
       }));
+      // V24 参考译文 = 整篇 lines[].cn 拼接（跳过空值）；全部为空时给兜底文案。
+      const cnParts = lines.map((l) => (l.cn || '').trim()).filter((s) => s.length > 0);
+      const fullCn = cnParts.length ? cnParts.join('') : '（本课暂无参考译文）';
       wx.setNavigationBarTitle({ title: `Lesson ${d.id} · ${d.title}` });
       this.setData({
         detail: d, lines, readingLineIdx: -1, readingPhase: 'idle',
         expandedIdx: -1, bubbleIdx: -1, tipWord: null, tipPos: null,
-        bubblePos: null, loading: false,
+        bubblePos: null, fullCn, cnExpanded: false, loading: false,
       });
     } catch {
       // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗
@@ -231,22 +251,47 @@ Page({
 
   setFont(e: NceTapEvent) {
     const fontStep = Number(e.currentTarget.dataset.step || 1);
+    // V22 正交：只写 nce-font / 只改 fontStep，绝不碰 nce-mode / readMode。
     wx.setStorageSync('nce-font', fontStep);
     this.setData({ fontStep });
   },
 
-  /** V2 点句就地展开中文：再点收起、至多 1 句、不触发 speakText */
-  toggleLine(e: NceTapEvent) {
-    const i = Number(e.currentTarget.dataset.i);
+  /** V21 切阅读档：只写 nce-mode / 只改 readMode，绝不碰 nce-font / fontStep（正交）。切档清浮层。 */
+  setReadMode(e: NceTapEvent) {
+    const mode = normalizeMode(e.currentTarget.dataset.mode);
+    wx.setStorageSync('nce-mode', mode);
+    this.setData({
+      readMode: mode,
+      expandedIdx: -1, bubbleIdx: -1,
+      tipWord: null, tipPos: null, bubblePos: null,
+    });
+  },
+
+  /** V24 文末「参考译文 / 中文解释」折叠区开合（默认收起）。 */
+  toggleCnSection() {
+    this.setData({ cnExpanded: !this.data.cnExpanded });
+  },
+
+  /**
+   * V21+ 点句/点词共用的按档分派（27 §3.3）：
+   * - tap（精读）：toggle 该句 expandedIdx（展开/收起该句中文，至多 1 句，不触发 speakText）；
+   * - immersion / bilingual：不设 expandedIdx（沉浸不展开逐句中文、双语中文常显），只清浮层。
+   * 🔴 WXML 不按档动态切 bind/catch，.w 始终 catchtap=onWordTap，分发全部收敛到本方法。
+   */
+  _applyLineTap(i: number) {
     const line = this.data.lines[i];
     if (!line) return;
-    this.setData({
-      expandedIdx: this.data.expandedIdx === i ? -1 : i,
-      bubbleIdx: -1,
-      tipWord: null,
-      tipPos: null,
-      bubblePos: null,
-    });
+    const clear = { bubbleIdx: -1, tipWord: null, tipPos: null, bubblePos: null };
+    if (this.data.readMode === 'tap') {
+      this.setData({ ...clear, expandedIdx: this.data.expandedIdx === i ? -1 : i });
+    } else {
+      this.setData({ ...clear, expandedIdx: -1 });
+    }
+  },
+
+  /** V2/V23 点句空白热区：与点词热区共用 _applyLineTap，保证「点句任意位置」同语义。 */
+  toggleLine(e: NceTapEvent) {
+    this._applyLineTap(Number(e.currentTarget.dataset.i));
   },
 
   /**
@@ -270,9 +315,22 @@ Page({
     });
   },
 
-  /** V3 点词中文 tip；点页面其他区域 / 再次点该词收起（🔴 D-1：不清空 / 不改 expandedIdx 语义） */
+  /**
+   * V23/V26 点词热区分发（27 §3.3）：.w 始终 catchtap="onWordTap"，档位判定全放这里，
+   * WXML 不按档动态切 bind/catch。
+   * - readMode !== 'tap' 或该 token 无 hasDef（含空白/非生词文字）→ 与 toggleLine 同语义：_applyLineTap(i)；
+   * - 仅 tap 档 + hasDef 生词 → 只出 tip（复用 _lookupWord + _anchorFloat 就近锚定 tipWord/tipPos），不展开该句中文。
+   * 生词 tip 仅 tap 档生效；再次点同一词收起 tip。
+   */
   onWordTap(e: NceTapEvent) {
-    const raw = String(e.currentTarget.dataset.w || '');
+    const ds = e.currentTarget.dataset;
+    const i = Number(ds.i ?? 0);
+    const hasDef = ds.hasdef === true || ds.hasdef === 'true';
+    if (this.data.readMode !== 'tap' || !hasDef) {
+      this._applyLineTap(i);
+      return;
+    }
+    const raw = String(ds.w || '');
     if (!raw) return;
     const w = raw.toLowerCase();
     const cur = this.data.tipWord;
@@ -280,8 +338,7 @@ Page({
       this.setData({ tipWord: null, tipPos: null });
       return;
     }
-    const anchor = String(e.currentTarget.dataset.anchor || '');
-    const i = Number(e.currentTarget.dataset.i ?? 0);
+    const anchor = String(ds.anchor || '');
     this.setData({ tipWord: this._lookupWord(w), bubbleIdx: -1, bubblePos: null });
     this._anchorFloat(anchor || `#line-${i}`, 'tipPos');
   },
@@ -386,8 +443,13 @@ Page({
         meta: { book, lessonId: id, lineIndex: i },
       });
       wx.showToast({ title: res.existed ? '已在收藏中' : '已收藏', icon: 'none' });
-    } catch {
-      wx.showToast({ title: '收藏失败，请重试', icon: 'none' });
+    } catch (err) {
+      // 收藏错误可观测性：① 真实错误落 console（保留后端 400 的 statusCode / message 供排查）；
+      // ② 不再无条件覆盖 utils/request.ts 已弹的真实提示 —— 仅当 err 无 HTTP 响应时补网络兜底。
+      // 🔴 本轮只让错误可见，未改后端/未做 DDL，收藏端到端仍失败（根因见 30，修复待用户授权）。
+      console.error('[nce/collect]', err);
+      const hasHttpResponse = typeof err === 'object' && err !== null && 'statusCode' in err;
+      if (!hasHttpResponse) wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
   },
 

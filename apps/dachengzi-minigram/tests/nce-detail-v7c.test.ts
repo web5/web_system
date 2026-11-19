@@ -177,8 +177,12 @@ function makeThis(over: Record<string, unknown> = {}): any {
   };
   // Page 配置里的内部方法需显式挂到 ctx 桩上（onWordTap 依赖 _lookupWord；
   // D-01/D-02 落码后 onWordTap/onLongPress 还依赖 _anchorFloat），否则 this.xxx 不是函数。
-  for (const k of ['_lookupWord', '_anchorFloat']) {
-    ctx[k] = (pageConfig as any)[k].bind(ctx);
+  // V21+：toggleLine/onWordTap 共用 _applyLineTap 按档分派，也需挂到桩上；
+  // 容错 typeof 判断，保证 TDD 红阶段（实现未落码时方法还不存在）不因 undefined.bind 崩桩。
+  for (const k of ['_lookupWord', '_anchorFloat', '_applyLineTap', 'toggleLine']) {
+    if (typeof (pageConfig as any)[k] === 'function') {
+      ctx[k] = (pageConfig as any)[k].bind(ctx);
+    }
   }
   Object.assign(ctx, over);
   return ctx;
@@ -195,6 +199,7 @@ const mockLines = () => [
 describe('C3/V2 · 点句就地展开中文（不触发 speakText）', () => {
   it('点第 3 句展开该句中文、再点收起、点第 4 句仅第 4 句展开（至多 1 句）', () => {
     const ctx = makeThis();
+    ctx.data.readMode = 'tap'; // V21+：默认档改为 immersion，逐句展开中文是 tap/精读档语义（断言不变）
     ctx.data.lines = mockLines();
     speakTextMock.mockClear();
 
@@ -344,12 +349,14 @@ describe('选项 A · D-01/D-02 锚定浮层（最高优先）', () => {
     expect(t).toMatch(/scrollTop/);
   });
 
-  it('点词：保存锚点坐标到 tipPos（含滚动偏移换算成 rpx），closeTip 清空', () => {
+  it('点词：保存锚点坐标到 tipPos（含滚动偏移换算成 rpx），closeTip 清空（tap 档 + 生词语义）', () => {
     const ctx = makeThis();
+    ctx.data.readMode = 'tap'; // V26：生词 tip 仅 tap 档生效
+    ctx.data.lines = mockLines();
     ctx.data.detail = { id: 4, title: 'L4', words: [] };
     expect(typeof pageConfig._anchorFloat).toBe('function');
     pageConfig.onWordTap.call(ctx, {
-      currentTarget: { dataset: { w: 'just', anchor: 'w-0-3' } },
+      currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
     });
     expect(ctx.data.tipWord).toBeTruthy();
     // 桩：rect.left=60 / rect.bottom=230 / scrollTop=100 / windowWidth=375 → k=2
@@ -500,5 +507,330 @@ describe('V6/清单 8 · 收藏沿用 collectGlossary({tag:"nce"}) 契约 + T1 �
     expect(ctx.data.showAuthModal).not.toBe(true);     // 不弹 T2 的「登录已过期」
     expect(wxMock.switchTab).not.toHaveBeenCalled();
     expect(collectMock).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════ V21–V28 · 阅读三档与点句热区（用户 16:30/16:45 口径） ═══════════════
+// 🔴 覆盖 27 §3.3 分发真源 + 29 §3 判据表；保留上方 C1–C6 / 选项 A / V6 全部既有成功态用例与桩。
+
+/** V21 默认档 + 三档切换（含 onLoad 读回持久化 nce-mode） */
+describe('V21 · 默认档 immersion + setReadMode 三档切换写 nce-mode', () => {
+  const gs = wxMock.getStorageSync as unknown as jest.Mock;
+  afterEach(() => { gs.mockImplementation(() => 1); });   // 还原默认桩，避免串味（clearAllMocks 不清实现）
+
+  it('pageConfig.data.readMode 默认 immersion；makeThis 桩继承默认值', () => {
+    expect(pageConfig.data.readMode).toBe('immersion');
+    expect(makeThis().data.readMode).toBe('immersion');
+    expect(pageConfig.data.cnExpanded).toBe(false);
+    expect(pageConfig.data.fullCn).toBe('');
+  });
+
+  it('setReadMode 三档切换：readMode 正确 + 只写 nce-mode + 切档清浮层/展开态', () => {
+    const ctx = makeThis();
+    ctx.data.lines = mockLines();
+    ctx.data.expandedIdx = 2;
+    ctx.data.tipWord = { word: 'x', none: true };
+    expect(typeof pageConfig.setReadMode).toBe('function');
+    for (const m of ['bilingual', 'tap', 'immersion', 'bogus']) {
+      wxMock.setStorageSync.mockClear();
+      pageConfig.setReadMode.call(ctx, { currentTarget: { dataset: { mode: m } } });
+      expect(wxMock.setStorageSync).toHaveBeenCalledWith('nce-mode', m === 'bogus' ? 'immersion' : m);
+      expect(ctx.data.readMode).toBe(m === 'bogus' ? 'immersion' : m);
+    }
+    expect(ctx.data.expandedIdx).toBe(-1);
+    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.tipPos).toBeNull();
+    expect(ctx.data.bubbleIdx).toBe(-1);
+  });
+
+  it('onLoad 读回持久化的 nce-mode，且非法/缺失值回落默认档 immersion', () => {
+    gs.mockImplementation((k: string) => (k === 'nce-mode' ? 'bilingual' : 1));
+    const a = makeThis();
+    pageConfig.onLoad.call(a, { id: '4', book: 'NCE2' });
+    expect(a.data.readMode).toBe('bilingual');
+    expect(a.data.fontStep).toBe(1);
+
+    gs.mockImplementation((k: string) => (k === 'nce-mode' ? 'NOT_A_MODE' : 1));
+    const b = makeThis();
+    pageConfig.onLoad.call(b, { id: '4', book: 'NCE2' });
+    expect(b.data.readMode).toBe('immersion');
+
+    gs.mockImplementation(() => 1);   // storage 里是 number 1（非字符串）→ 回落 immersion
+    const c = makeThis();
+    pageConfig.onLoad.call(c, { id: '4', book: 'NCE2' });
+    expect(c.data.readMode).toBe('immersion');
+  });
+});
+
+/** V22 阅读档 / 字号档正交：切档互不复位、各写各的 storage key */
+describe('V22 · 阅读档与字号档正交（切档互不复位）', () => {
+  it('setReadMode 不写 nce-font、不复位 fontStep', () => {
+    const ctx = makeThis();
+    ctx.data.fontStep = 2;
+    wxMock.setStorageSync.mockClear();
+    pageConfig.setReadMode.call(ctx, { currentTarget: { dataset: { mode: 'bilingual' } } });
+    expect(wxMock.setStorageSync).toHaveBeenCalledWith('nce-mode', 'bilingual');
+    expect(wxMock.setStorageSync).not.toHaveBeenCalledWith('nce-font', expect.anything());
+    expect(ctx.data.fontStep).toBe(2);
+    expect(ctx.data.readMode).toBe('bilingual');
+  });
+
+  it('setFont 不写 nce-mode、不复位 readMode（取 step=2 避开既有 `step || 1` 的 0-falsy 边界，聚焦正交判据）', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'tap';
+    wxMock.setStorageSync.mockClear();
+    pageConfig.setFont.call(ctx, { currentTarget: { dataset: { step: 2 } } });
+    expect(wxMock.setStorageSync).toHaveBeenCalledWith('nce-font', 2);
+    expect(wxMock.setStorageSync).not.toHaveBeenCalledWith('nce-mode', expect.anything());
+    expect(ctx.data.readMode).toBe('tap');
+    expect(ctx.data.fontStep).toBe(2);
+  });
+
+  it('WXML 两组 seg 并列（阅读档 bindtap=setReadMode / 字号档 bindtap=setFont），各自独立', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    expect(w).toMatch(/bindtap="setReadMode"/);
+    expect(w).toMatch(/bindtap="setFont"/);
+    expect(w).toMatch(/data-mode="immersion"/);
+    expect(w).toMatch(/data-mode="bilingual"/);
+    expect(w).toMatch(/data-mode="tap"/);
+    expect(w).toMatch(/mode-\{\{readMode\}\}/);
+  });
+});
+
+/** V23 tap 档点文字热区（空白 + 非生词文字）展开/收起该句中文 */
+describe('V23 · tap 档点句任意位置展开/收起该句中文（catchtap 不吞整行）', () => {
+  it('点非生词文字（hasdef=false）→ 展开该句中文、不弹 tip；再点收起；点空白 toggleLine 同语义', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'tap';
+    ctx.data.lines = mockLines();
+    expect(typeof pageConfig.onWordTap).toBe('function');
+
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'have', i: 2, hasdef: false } } });
+    expect(ctx.data.expandedIdx).toBe(2);
+    expect(ctx.data.tipWord).toBeNull();
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();  // 非生词不锚定 tip
+
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'been', i: 2, hasdef: false } } });
+    expect(ctx.data.expandedIdx).toBe(-1);   // 再点收起
+
+    pageConfig.toggleLine.call(ctx, { currentTarget: { dataset: { i: 3 } } });  // 点空白
+    expect(ctx.data.expandedIdx).toBe(3);
+    expect(speakTextMock).not.toHaveBeenCalled();
+  });
+
+  it('静态：.w 始终 catchtap=onWordTap 且带 data-hasdef（WXML 不按档动态切 bind/catch）', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    expect(w).toMatch(/data-hasdef="\{\{tk\.hasDef\}\}"/);
+    expect(w).toMatch(/catchtap="onWordTap"/);
+    expect(w).not.toMatch(/bindtap="\{\{readMode/);
+    expect(w).not.toMatch(/catchtap="\{\{readMode/);
+  });
+});
+
+/** V24 沉浸点句不展开 + 参考译文折叠区 */
+describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠区', () => {
+  it('immersion 点空白 / 点生词文字都不设 expandedIdx、不弹 tip、不锚定浮层', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'immersion';
+    ctx.data.lines = mockLines();
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+
+    pageConfig.toggleLine.call(ctx, { currentTarget: { dataset: { i: 2 } } });
+    expect(ctx.data.expandedIdx).toBe(-1);
+    expect(ctx.data.tipWord).toBeNull();
+
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
+    expect(ctx.data.expandedIdx).toBe(-1);           // 🔴 沉浸点生词也不展开
+    expect(ctx.data.tipWord).toBeNull();             // 🔴 沉浸不弹生词 tip
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
+  });
+
+  it('toggleCnSection 开合 cnExpanded（默认收起）；load() 拼整篇 fullCn + 空值兜底', async () => {
+    const ctx = makeThis();
+    expect(ctx.data.cnExpanded).toBe(false);
+    expect(typeof pageConfig.toggleCnSection).toBe('function');
+    pageConfig.toggleCnSection.call(ctx);
+    expect(ctx.data.cnExpanded).toBe(true);
+    pageConfig.toggleCnSection.call(ctx);
+    expect(ctx.data.cnExpanded).toBe(false);
+
+    getNceLessonMock.mockResolvedValueOnce({
+      id: 4, title: 'L4', words: [],
+      lines: [{ en: 'A', cn: '第一句。' }, { en: 'B', cn: '第二句。' }, { en: 'C', cn: '' }],
+    });
+    await pageConfig.load.call(ctx);
+    expect(ctx.data.fullCn).toBe('第一句。第二句。');
+    expect(ctx.data.fullCn).not.toMatch(/第三|undefined|null/);
+    expect(ctx.data.cnExpanded).toBe(false);          // 换课重置折叠区
+
+    getNceLessonMock.mockResolvedValueOnce({
+      id: 5, title: 'L5', words: [],
+      lines: [{ en: 'A', cn: '' }, { en: 'B', cn: '   ' }],
+    });
+    await pageConfig.load.call(ctx);
+    expect(ctx.data.fullCn).toBe('（本课暂无参考译文）');   // 空值兜底
+  });
+
+  it('静态：WXML 有 cn-fold 折叠区 + 双语/tap 中文渲染分支；WXSS 有 mode-immersion 独立排版', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    const css = src('pages/nce/detail/detail.wxss');
+    expect(w).toMatch(/参考译文 \/ 中文解释/);
+    expect(w).toMatch(/bindtap="toggleCnSection"/);
+    expect(w).toMatch(/cnExpanded/);
+    expect(w).toMatch(/\{\{fullCn\}\}/);
+    expect(w).toMatch(/wx:if="\{\{readMode === 'immersion'\}\}" class="cn-fold"/);
+    expect(css).toMatch(/\.mode-immersion \.sentences \.sn\s*\{[^}]*display:\s*none/);  // 去 .sn 序号
+    expect(css).toMatch(/\.mode-immersion \.sentences \.sent\s*\{[^}]*display:\s*inline/); // 连排成段
+    expect(css).toMatch(/\.mode-immersion \.card\s*\{[^}]*border:\s*none/);             // 去卡片边框
+    expect(css).toMatch(/\.mode-immersion \.sentences \.en\s*\{[^}]*line-height:\s*2\.15/); // 行距更宽
+  });
+});
+
+/** V25 双语常显 + 点句不 toggle */
+describe('V25 · 双语档全部中文常显、点句不 toggle expandedIdx', () => {
+  it('WXML .sent-cn 的 wx:if 含 readMode === bilingual 常显分支（不依赖 expandedIdx）', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    expect(w).toMatch(/readMode === 'bilingual' \|\| expandedIdx === si/);
+  });
+
+  it('bilingual 点空白 / 点生词都不 toggle expandedIdx、不弹 tip', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'bilingual';
+    ctx.data.lines = mockLines();
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+    pageConfig.toggleLine.call(ctx, { currentTarget: { dataset: { i: 1 } } });
+    expect(ctx.data.expandedIdx).toBe(-1);
+    expect(ctx.data.tipWord).toBeNull();
+    pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
+    expect(ctx.data.expandedIdx).toBe(-1);           // 不 toggle
+    expect(ctx.data.tipWord).toBeNull();             // 双语不弹生词 tip
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
+  });
+});
+
+/** V26 生词 tip 仅 tap 档 + _anchorFloat 就近锚定 */
+describe('V26 · 生词 tip 仅 tap 档生效，tap+hasDef 出 tip 且 _anchorFloat 被调用', () => {
+  it('tap 档 + hasDef → tipWord 出、_anchorFloat 就近锚定 tipPos(rpx)、且只出 tip 不展开', () => {
+    const ctx = makeThis();
+    ctx.data.readMode = 'tap';
+    ctx.data.lines = mockLines();
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+    const spy = jest.spyOn(ctx, '_anchorFloat');
+    pageConfig.onWordTap.call(ctx, {
+      currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
+    });
+    expect(spy).toHaveBeenCalledWith('w-0-3', 'tipPos');
+    expect(ctx.data.tipWord).toBeTruthy();
+    expect(ctx.data.tipPos).toEqual({ left: 136, top: 672 });   // k=2, left=(60+8)*2, top=(230+100+6)*2
+    expect(ctx.data.expandedIdx).toBe(-1);                       // 只出 tip 不展开
+    spy.mockRestore();
+  });
+
+  it('immersion / bilingual 档点同一生词 → tip = 0、_anchorFloat 不调用', () => {
+    for (const m of ['immersion', 'bilingual']) {
+      const ctx = makeThis();
+      ctx.data.readMode = m;
+      ctx.data.lines = mockLines();
+      ctx.data.detail = { id: 4, title: 'L4', words: [] };
+      const spy = jest.spyOn(ctx, '_anchorFloat');
+      wxMock.createSelectorQuery.mockClear();
+      pageConfig.onWordTap.call(ctx, {
+        currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
+      });
+      expect(ctx.data.tipWord).toBeNull();
+      expect(spy).not.toHaveBeenCalled();
+      expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
+      spy.mockRestore();
+    }
+  });
+});
+
+/** V27 补三档后 V7-C 静态护栏不破（不新增连续朗读入口 / tts.ts 零改动 / 无整篇调度） */
+describe('V27 · V7-C 静态护栏不破', () => {
+  it('无 cont-btn/data-cont/连续朗读；detail.ts 无整篇调度；tts.ts 4 个既有导出不变', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    const ts = src('pages/nce/detail/detail.ts');
+    const tts = src('services/tts.ts');
+    expect(w).not.toMatch(/cont-btn|data-cont|连续朗读/);
+    expect(ts).not.toMatch(/for\s*\([\s\S]{0,200}await\s+speakText/);
+    expect(ts).not.toMatch(/readingLineIdx\s*=\s*\w+\s*\+\s*1|seq\[|逐句高亮/);
+    expect(tts).toMatch(/export async function speakText\(text: string\)/);
+    expect(tts).not.toMatch(/speakLine\(|句边界|onLineBoundary|speakSentence/);
+  });
+});
+
+/** V28 必然失败反例（防假绿：判据须能抓住实现回退） */
+describe('V28 · 必然失败反例（防假绿）', () => {
+  it('静态：删掉 data-hasdef 或把 catchtap 改回按档动态切换，V23 判据必须失败', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    const judge = (s: string): boolean =>
+      /catchtap="onWordTap"/.test(s) &&
+      /data-hasdef="\{\{tk\.hasDef\}\}"/.test(s) &&
+      !/bindtap="\{\{readMode/.test(s);
+    expect(judge(w)).toBe(true);                                                  // 正例
+    expect(judge(w.replace(' data-hasdef="{{tk.hasDef}}"', ''))).toBe(false);     // 反例①
+    const dynamic = w.replace('catchtap="onWordTap"', 'bindtap="{{readMode === \'tap\' ? \'onWordTap\' : \'toggleLine\'}}"');
+    expect(judge(dynamic)).toBe(false);                                            // 反例②
+  });
+
+  it('行为：若 _applyLineTap 回退成「无视 readMode 一律 toggle」，沉浸档就会错误展开（判据须失败）', () => {
+    const bad = makeThis();
+    bad.data.readMode = 'immersion';
+    bad.data.lines = mockLines();
+    bad._applyLineTap = (i: number) => {                      // 注入错误实现（箭头函数闭包，规避 this 隐式 any）
+      bad.setData({ expandedIdx: bad.data.expandedIdx === i ? -1 : i });
+    };
+    pageConfig.toggleLine.call(bad, { currentTarget: { dataset: { i: 2 } } });
+    expect(bad.data.expandedIdx).not.toBe(-1);                // 反例确实「错误地」展开 → 证明判据非恒真
+
+    const good = makeThis();                                  // 正例：真实实现沉浸不展开
+    good.data.readMode = 'immersion';
+    good.data.lines = mockLines();
+    pageConfig.toggleLine.call(good, { currentTarget: { dataset: { i: 2 } } });
+    expect(good.data.expandedIdx).toBe(-1);
+  });
+
+  it('静态：删掉双语常显分支（改回只靠 expandedIdx），V25 判据必须失败', () => {
+    const w = src('pages/nce/detail/detail.wxml');
+    expect(w).toMatch(/readMode === 'bilingual' \|\| expandedIdx === si/);
+    const reverted = w.replace("readMode === 'bilingual' || expandedIdx === si", 'expandedIdx === si');
+    expect(reverted).not.toBe(w);
+    expect(reverted).not.toMatch(/readMode === 'bilingual' \|\| expandedIdx === si/);
+  });
+});
+
+// ═══════════════ 收藏错误可观测性（collectLine catch(err)，不覆盖服务层真实提示） ═══════════════
+describe('收藏 catch · console.error 落日志 + 仅无 HTTP 响应时补兜底 toast', () => {
+  it('① reject 带 statusCode 的对象 → 不再弹「收藏失败，请重试」且 console.error 被调用', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const ctx = makeThis();
+    ctx.data.lines = mockLines();
+    ctx.data.id = 4;
+    ctx.data.book = 'NCE2';
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+    collectMock.mockRejectedValueOnce({ statusCode: 400, message: 'property tag should not exist' });
+    wxMock.showToast.mockClear();
+
+    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.objectContaining({ statusCode: 400 }));
+    expect(wxMock.showToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: '收藏失败，请重试' }));
+    expect(wxMock.showToast).not.toHaveBeenCalled();   // 有 HTTP 响应 → 保留 utils/request.ts 已弹的真实提示，不补兜底
+    errSpy.mockRestore();
+  });
+
+  it('② reject 一个 NOT_LOGGED_IN Error（无 HTTP 响应）→ 兜底 toast「网络异常，请重试」出现', async () => {
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const ctx = makeThis();
+    ctx.data.lines = mockLines();
+    ctx.data.id = 4;
+    ctx.data.book = 'NCE2';
+    ctx.data.detail = { id: 4, title: 'L4', words: [] };
+    collectMock.mockRejectedValueOnce(new Error('NOT_LOGGED_IN'));
+    wxMock.showToast.mockClear();
+
+    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.any(Error));
+    expect(wxMock.showToast).toHaveBeenCalledWith({ title: '网络异常，请重试', icon: 'none' });
+    errSpy.mockRestore();
   });
 });
