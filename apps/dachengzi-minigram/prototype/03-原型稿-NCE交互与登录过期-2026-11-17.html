@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-demo-role="guest">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大橙子英语 · NCE 交互重构 + 登录态过期 · 微信小程序原型 · 2026-11-17</title>
+<!--
+  大橙子英语 · NCE 交互重构(#8900) + 登录态过期(#8901) 原型
+  ─────────────────────────────────────────────────────────────
+  · 目标端：微信小程序（HTML 模拟壳：状态栏 + 导航栏(标题居中 + 右上胶囊占位) + TabBar）
+  · 基线：docs/ui/prototypes/dachengzi-3tab-remove-ai-2026-11-13.html（9 屏 / ux-prototype-designer 流水线 / 蓝色系）
+    本稿在其基础上「扩展 + 更新」，沿用 --brand:#2563EB token 与 9 屏基线，不另起炉灶、不脱离体系
+  · 事实起点：01-事实基线-代码现状核实.md（D1–D7）+ 01 §5 纠错段 + 05 盲审 §0。
+  · 🔴 D1 事实纠错（2026-11-17 修订）：11-13 整改「只删了整篇朗读控制条 UI」，services/tts.ts 现存 732 行整段分句流式管线
+    speakText() 完整保留（非单句 TTS 原语、无句边界信号）；全仓无 speakLines/playLines/pauseSpeak/resumeSpeak 这些具名函数。
+    2026-11-18 10:01 用户改判 D1=C（推翻 11-17 19:33 的 B）：只做通篇阅读视图、不提供连续朗读；
+    顶部工具条不存在「连续朗读」入口（无 #cont-btn）、tts.ts 零改动；点句展开中文(V2)/长按气泡(V4)/气泡「朗读此句」(V5) 仍可用，
+    但任何操作都不得启动整篇连续朗读；C ≠ 删掉所有朗读。
+    冻结语义 = V7-C 生效（第 2 次冻结）；V7-A / V7-B 不生效、仅历史备选留痕（见 02 §0 登记表 / 09 / 10）。
+  · 三态分离（2026-11-17 修订）：T1 从未登录（modal-login 未登录守卫）/ T2 会话过期（modal-auth 登录确认）/ T3 主动退出（不弹 modal-auth）。
+  · D5：login-gate 是整页墙 → 本稿新增「弹窗态」并保留「整页墙」作对比屏
+  · 屏：11 屏（9 基线 + authgate 整页登录墙 + authflow 登录过期状态流转评审屏）
+  · 演示控件：L1 完整（稿头 / 10 场景包 / 2 角色 / 6 数据态 / 屏直达 / 标注层 / 复位 / 收起），移动端控件在壳外画布
+  · 待拍板 D1–D5 共 5 条；data-anno 每拍板项可有多个 DOM 标注点，稿头按去重后的 D 值计数（见 04 §④）
+  · 平台原生能力（wx.login 静默登录 / InnerAudioContext 朗读 / 下拉刷新）为占位 + 真机语义标注，不伪装已实现
+  · 机检：node /Users/geekwen/.workbuddy/skills/ux-prototype-designer/scripts/check-demo-panel.mjs <本文件>
+  · 本稿为 ◆③ 人审对象，未确认前不得落码（SOP §3 / 台账 #8890）
+  · 原型演示正向终态；401 事件链 / 条件判据需真机与盲测验证，「原型看过 ≠ 判据验证过」（见 04 承接清单）
+-->
+<style>
+:root{
+  --bg:#FFFFFF;
+  --page:#F5F8FF;
+  --card:#FFFFFF;
+  --border:rgba(37,99,235,.10);
+  --text:#1A1A1F;
+  --text-2:#6B7280;
+  --text-3:#98A0AE;
+  --cn-text:#2A3550;
+  --brand:#2563EB;
+  --brand-deep:#1D4ED8;
+  --brand-mid:#3B82F6;
+  --brand-tint:#EFF6FF;
+  --brand-tint2:#DBEAFE;
+  --accent:#0EA5A4;
+  --tab-idle:#8A90A0;
+  --shadow:0 1px 3px rgba(0,0,0,.06);
+  --shadow-pop:0 8px 28px rgba(23,50,110,.18);
+  --ok:#2E9E5B; --ok-soft:#E7F5EC;
+  --danger:#E5484D; --danger-soft:#FDEBEC;
+  --warn:#E8833A;  --warn-soft:#FFF3E6;
+  --r-card:16px; --r-btn:12px; --r-tag:999px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:#EDF1F8;color:var(--text);padding:30px 26px 70px;-webkit-font-smoothing:antialiased;
+}
+
+/* ---------- 壳外画布（手机壳在左，演示控件固定右下浮层） ---------- */
+.stage{max-width:1280px;margin:0 auto;display:flex;gap:40px;align-items:flex-start;justify-content:center;}
+.doc-head{max-width:1280px;margin:0 auto 22px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px 24px;box-shadow:var(--shadow);}
+.doc-title{font-size:20px;font-weight:700;letter-spacing:.2px;}
+.doc-title span{color:var(--brand);}
+.doc-meta{margin-top:8px;font-size:12.5px;color:var(--text-2);line-height:1.85;}
+.doc-meta b{color:var(--text);font-weight:600;}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.pill{font-size:11.5px;padding:4px 11px;border-radius:var(--r-tag);background:var(--brand-tint);color:var(--brand-deep);border:1px solid var(--brand-tint2);}
+.pill.g{background:#F2FBFA;color:#0B7C7B;border-color:#CFF0EE;}
+.pill.n{background:#F6F7FB;color:var(--text-2);border-color:rgba(37,99,235,.08);}
+
+/* ---------- 手机外壳（小程序宿主元素） ---------- */
+.phone-wrap{flex:0 0 375px;}
+.frame{
+  width:375px;height:812px;background:var(--page);border-radius:40px;overflow:hidden;position:relative;
+  border:1px solid rgba(37,99,235,.14);box-shadow:0 10px 30px rgba(23,50,110,.10);
+  display:flex;flex-direction:column;
+}
+.statusbar{height:24px;flex:0 0 24px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#fff;font-size:11px;font-weight:600;color:var(--text);}
+.sb-r{display:flex;align-items:center;gap:5px;}
+.sb-bars{display:flex;align-items:flex-end;gap:1.5px;}
+.sb-bars i{width:2.5px;background:var(--text);border-radius:1px;display:block;}
+.sb-bars i:nth-child(1){height:3px;} .sb-bars i:nth-child(2){height:5px;} .sb-bars i:nth-child(3){height:7px;} .sb-bars i:nth-child(4){height:9px;}
+.sb-batt{width:19px;height:9px;border:1px solid var(--text);border-radius:2.5px;position:relative;opacity:.85;}
+.sb-batt::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:11px;background:var(--text);border-radius:1px;}
+
+.navbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:center;position:relative;background:#fff;border-bottom:1px solid var(--border);}
+.navbar .title{font-size:15.5px;font-weight:600;color:var(--text);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.navbar .back{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:26px;height:26px;display:none;place-items:center;color:var(--text);cursor:pointer;}
+.navbar .back .ic{width:20px;height:20px;}
+.navbar .capsule{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:54px;height:26px;border:1px solid #E4E7EE;border-radius:999px;display:flex;align-items:center;justify-content:space-around;}
+
+.body{flex:1;min-height:0;overflow:hidden;background:var(--page);padding:13px 14px;display:flex;flex-direction:column;position:relative;}
+
+/* ---------- 屏幕（.screen 注册表锚点） ---------- */
+.screen{display:none;flex:1;min-height:0;overflow:hidden;}
+.screen.on{display:flex;flex-direction:column;}
+
+/* 分支块：由 data-demo-state 驱动（demo-control-panel §5.2 契约） */
+.only-normal{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;overflow:hidden;}
+.only-empty{display:none;}
+[data-demo-state]:not([data-demo-state="normal"]) .only-normal{display:none;}
+[data-demo-state="empty"] .only-empty{display:flex;flex-direction:column;flex:1;gap:10px;}
+
+/* 登录相关 4 态：方案 B 变体「整屏状态层」，由 buildStateLayers() 挂到每个屏，任何屏切态都真的变 */
+.demo-states{display:none;}
+[data-demo-state="loading"] .demo-states,
+[data-demo-state="error"] .demo-states,
+[data-demo-state="expired"] .demo-states,
+[data-demo-state="relogging"] .demo-states{display:flex;flex-direction:column;flex:1;min-height:0;}
+.demo-states > div{display:none;}
+[data-demo-state="loading"] .demo-states .only-loading,
+[data-demo-state="error"] .demo-states .only-error,
+[data-demo-state="expired"] .demo-states .only-expired,
+[data-demo-state="relogging"] .demo-states .only-relogging{display:flex;flex-direction:column;flex:1;gap:10px;}
+
+/* ---------- tabBar ---------- */
+.tabbar{flex:0 0 58px;height:58px;background:#fff;border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;position:relative;padding-top:7px;}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--tab-idle);width:56px;letter-spacing:.2px;cursor:pointer;}
+.tab .ic{width:22px;height:22px;}
+.tab.active{color:var(--brand);font-weight:600;}
+
+/* ---------- 通用组件 ---------- */
+.ic{width:20px;height:20px;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);}
+.pad{padding:13px 14px;}
+.sect-h{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;font-weight:600;color:var(--text);padding:1px 2px;}
+.sect-h em{font-style:normal;font-size:11px;font-weight:400;color:var(--text-2);}
+.hint{font-size:11px;color:var(--text-2);line-height:1.7;background:var(--brand-tint);border:1px dashed var(--brand-tint2);border-radius:var(--r-btn);padding:9px 11px;}
+.foot-note{margin-top:auto;font-size:10.5px;color:#98A0AE;line-height:1.7;text-align:center;}
+.tag{display:inline-flex;align-items:center;font-size:10.5px;padding:2px 9px;border-radius:var(--r-tag);background:#F4F6FA;color:var(--text-2);border:1px solid rgba(37,99,235,.07);white-space:nowrap;}
+.tag.b{background:var(--brand-tint);color:var(--brand-deep);border-color:var(--brand-tint2);font-weight:600;}
+.tag.a{background:#F0FBFA;color:#0B7C7B;border-color:#CFF0EE;font-weight:600;}
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;height:46px;border-radius:var(--r-btn);font-size:14.5px;font-weight:600;background:var(--brand);color:#fff;border:0;box-shadow:0 2px 8px rgba(37,99,235,.22);cursor:pointer;}
+.btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand-tint2);box-shadow:none;}
+.btn.sm{height:34px;font-size:12.5px;padding:0 14px;border-radius:10px;width:auto;display:inline-flex;box-shadow:none;}
+.btn.ghost.sm{background:#fff;}
+.btn[disabled]{opacity:.6;cursor:default;}
+
+.avatar{width:44px;height:44px;flex:0 0 44px;border-radius:50%;background:var(--brand-tint);color:var(--brand-deep);display:grid;place-items:center;font-size:15px;font-weight:700;border:1.5px solid var(--brand-tint2);}
+.profile{display:flex;align-items:center;gap:12px;padding:13px 14px;}
+.profile .pt{display:flex;flex-direction:column;gap:3px;}
+.profile .pt b{font-size:14.5px;font-weight:600;}
+.profile .pt small{font-size:11px;color:var(--text-2);line-height:1.5;}
+
+.li{display:flex;align-items:center;gap:10px;padding:13px 14px;font-size:13.5px;color:var(--text);border-bottom:1px solid rgba(37,99,235,.06);cursor:pointer;}
+.li:last-child{border-bottom:0;}
+.li .ic{width:19px;height:19px;color:var(--brand-mid);flex:0 0 19px;}
+.li em{margin-left:auto;font-style:normal;font-size:11.5px;color:var(--text-2);}
+.li .chev{width:15px;height:15px;color:#C2C9D6;flex:0 0 15px;}
+
+/* 首页 */
+.hero{background:var(--brand-tint);border:1px solid var(--brand-tint2);border-radius:var(--r-card);padding:15px;display:flex;align-items:center;gap:12px;}
+.logo-o{width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:var(--brand);color:#fff;display:grid;place-items:center;box-shadow:0 3px 10px rgba(37,99,235,.25);font-size:18px;font-weight:700;line-height:1;}
+.hero .ht{display:flex;flex-direction:column;gap:3px;}
+.hero .ht b{font-size:18px;font-weight:700;letter-spacing:.2px;}
+.hero .ht small{font-size:11.5px;color:var(--text-2);}
+.daily{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:13px 14px;}
+.daily .dt{font-size:11px;color:var(--text-2);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
+.daily .dt b{color:var(--brand-deep);font-weight:600;font-size:11.5px;}
+.daily .dc{font-size:13.5px;line-height:1.7;color:var(--text);}
+.daily .dc em{font-style:normal;color:var(--text-2);font-size:12px;display:block;margin-top:3px;}
+.more{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;color:var(--brand);font-weight:500;padding:8px;cursor:pointer;}
+.more .ic{width:15px;height:15px;}
+
+/* 功能卡（首页 + 发现共用） */
+.feature-card{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:13px 14px;cursor:pointer;}
+.f-ico{width:40px;height:40px;flex:0 0 40px;border-radius:12px;display:grid;place-items:center;font-size:16px;font-weight:700;}
+.feature-card.n .f-ico{background:var(--brand-tint);color:var(--brand-deep);}
+.feature-card.g .f-ico{background:#F0FBFA;color:#0B7C7B;}
+.f-txt{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.f-txt b{font-size:14.5px;font-weight:600;}
+.f-txt small{font-size:11.5px;color:var(--text-2);line-height:1.45;}
+.feature-card .chev{width:16px;height:16px;color:#B9C1CF;flex:0 0 16px;}
+.f-toggle{flex:0 0 auto;font-size:11px;font-weight:600;padding:5px 11px;border-radius:var(--r-tag);border:1px solid var(--brand-tint2);background:var(--brand-tint);color:var(--brand-deep);cursor:pointer;}
+.f-toggle.on{background:var(--brand);border-color:var(--brand);color:#fff;}
+
+/* 空态 */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding-bottom:30px;}
+.empty .et{font-size:14px;font-weight:600;color:var(--text);}
+.empty .es{font-size:11.5px;color:var(--text-2);text-align:center;line-height:1.75;max-width:250px;}
+.empty-ill{width:132px;height:112px;flex:0 0 auto;}
+
+/* NCE 目录 */
+.ovcard{display:flex;align-items:center;gap:14px;padding:13px 14px;}
+.ovcard .ovn{display:flex;flex-direction:column;gap:2px;}
+.ovcard .ovn b{font-size:18px;font-weight:700;color:var(--brand-deep);letter-spacing:.2px;}
+.ovcard .ovn b i{font-style:normal;font-size:11.5px;color:var(--text-2);font-weight:500;margin-left:3px;}
+.ovcard .ovn small{font-size:10.5px;color:var(--text-2);}
+.pbar{height:6px;border-radius:3px;background:var(--brand-tint2);overflow:hidden;flex:1;}
+.pbar i{display:block;height:100%;border-radius:3px;background:var(--brand-mid);}
+.lesson{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid rgba(37,99,235,.06);cursor:pointer;}
+.lesson:last-child{border-bottom:0;}
+.lno{width:26px;height:26px;flex:0 0 26px;border-radius:50%;background:var(--page);color:var(--text-2);display:grid;place-items:center;font-size:11.5px;font-weight:700;border:1px solid var(--border);}
+.lno.done{background:#F0FBFA;color:#0B7C7B;border-color:#CFF0EE;}
+.lno.now{background:var(--brand);color:#fff;border-color:var(--brand);}
+.lesson .lt{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.lesson .lt b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lesson .lt small{font-size:10.5px;color:var(--text-2);}
+.lesson .chev{width:14px;height:14px;color:#C2C9D6;flex:0 0 14px;}
+
+/* ---------- NCE 详情 · 通篇阅读视图（需求① 大改） ---------- */
+.readbar{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:var(--r-btn);padding:8px 10px;box-shadow:var(--shadow);}
+.readbar .rb-l{display:flex;align-items:center;gap:5px;}
+.readbar .lb{font-size:11px;color:var(--text-2);margin-right:2px;}
+.fz{font-size:11px;padding:4px 10px;border-radius:var(--r-tag);background:var(--page);color:var(--text-2);border:1px solid var(--border);cursor:pointer;}
+.fz.on{background:var(--brand-tint);color:var(--brand-deep);border-color:var(--brand-tint2);font-weight:700;}
+/* V7-C（第 2 次冻结）：顶部不提供连续朗读入口，.cont-btn / #cont-btn 已移除；readbar 仅保留字号控件 */
+.sent{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border-radius:10px;font-size:14.5px;line-height:1.7;color:var(--text);border-left:2.5px solid transparent;cursor:pointer;}
+.sent .sn{font-size:10px;color:#A2AAB8;flex:0 0 14px;line-height:2.4;}
+.sent .stx{flex:1;min-width:0;}
+.sent.expanded{background:var(--brand-tint);border-left-color:var(--brand-mid);}
+.sent.playing{background:var(--brand-tint);border-left-color:var(--brand);font-weight:600;}
+.sent.playing .sn{color:var(--brand-deep);}
+.sent-cn{display:none;margin:0 10px 6px 34px;padding:8px 10px;background:var(--brand-tint);border-left:2.5px solid var(--brand-mid);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.7;color:var(--cn-text);}
+.sent-cn.show{display:block;}
+/* 通篇阅读视图默认纯净：只有词汇表内收录的词带极轻点线，表外词仍可点但无标记（不打断阅读） */
+.w.hit{cursor:pointer;border-radius:3px;}
+.w.hit:hover{background:var(--brand-tint2);}
+.w.has-def{border-bottom:1px dotted var(--brand-mid);}
+#screen-ncedetail[data-font="s"] .stx{font-size:12.5px;}
+#screen-ncedetail[data-font="m"] .stx{font-size:14.5px;}
+#screen-ncedetail[data-font="l"] .stx{font-size:16.5px;}
+.lesson-nav{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow);padding:9px 12px;}
+.lnav{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--brand-deep);cursor:pointer;}
+.lnav .ic{width:14px;height:14px;}
+
+/* 单词中文 tip / 长按气泡（壳内浮层，锚定句子或单词） */
+.word-tip{position:absolute;z-index:40;width:222px;background:var(--card);border:1px solid var(--brand-tint2);border-radius:12px;box-shadow:var(--shadow-pop);padding:11px 12px;display:none;}
+.word-tip.on{display:block;}
+.word-tip .wt-h{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;}
+.word-tip .wt-w{font-size:14px;font-weight:700;color:var(--brand-deep);}
+.word-tip .wt-p{font-size:10.5px;color:var(--text-2);}
+.word-tip .wt-pos{font-size:10.5px;padding:1px 7px;border-radius:var(--r-tag);background:var(--brand-tint);color:var(--brand-deep);}
+.word-tip .wt-d{font-size:12px;line-height:1.7;margin-top:6px;}
+.word-tip .wt-e{font-size:11px;color:var(--text-2);line-height:1.6;margin-top:5px;border-top:1px dashed var(--border);padding-top:5px;}
+.word-tip .wt-none{font-size:12px;color:var(--text-2);margin-top:6px;}
+.bubble{position:absolute;z-index:45;display:none;background:#1F2937;border-radius:12px;padding:5px;box-shadow:var(--shadow-pop);}
+.bubble.on{display:flex;gap:4px;}
+.bubble .bi{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:8px;font-size:12px;color:#fff;cursor:pointer;white-space:nowrap;}
+.bubble .bi:hover{background:rgba(255,255,255,.12);}
+.bubble .bi .ic{width:14px;height:14px;}
+
+/* 收藏 */
+.col-item{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border-bottom:1px solid rgba(37,99,235,.06);}
+.col-item:last-child{border-bottom:0;}
+.col-txt{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+.col-txt b{font-size:13px;font-weight:600;line-height:1.6;}
+.col-txt small{font-size:10.5px;color:var(--brand-deep);}
+.col-txt em{font-style:normal;font-size:11.5px;color:var(--text-2);}
+.sbtn.del{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#B9C1CF;cursor:pointer;}
+.sbtn.del .ic{width:15px;height:15px;}
+.sbtn.del:hover{color:var(--danger);}
+
+/* 关于页 */
+.brandblk{display:flex;align-items:center;gap:12px;padding:15px 14px;}
+.brandblk .bt{display:flex;flex-direction:column;gap:3px;}
+.brandblk .bt b{font-size:15px;font-weight:700;letter-spacing:.2px;}
+.brandblk .bt small{font-size:10.5px;color:var(--text-2);}
+.legal{padding:14px;font-size:11.5px;line-height:1.95;color:#3A4152;}
+.legal p+p{margin-top:9px;}
+.legal b{font-weight:600;color:var(--text);}
+.legal .sig{color:var(--brand-deep);font-weight:600;}
+
+/* ---------- 需求② 整页登录墙（tab 页态）/ 状态流转评审屏 ---------- */
+.gate-full{position:absolute;inset:0;background:var(--page);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px;text-align:center;z-index:20;}
+.gate-full .gf-ic{width:56px;height:56px;border-radius:var(--r-tag);background:var(--brand-tint);color:var(--brand-deep);font-size:22px;font-weight:700;display:grid;place-items:center;margin-bottom:16px;}
+.gate-full .gf-t{font-size:16px;font-weight:600;}
+.gate-full .gf-d{font-size:12.5px;color:var(--text-2);line-height:1.7;margin-top:8px;}
+.gate-full .gf-btn{margin-top:24px;width:100%;max-width:224px;height:42px;border-radius:var(--r-tag);background:var(--brand);color:#fff;font-size:14px;font-weight:600;display:grid;place-items:center;cursor:pointer;}
+.gate-full .gf-note{font-size:11px;color:var(--text-2);line-height:1.7;margin-top:14px;}
+.flow-step{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(37,99,235,.06);font-size:12px;line-height:1.6;}
+.flow-step:last-child{border-bottom:0;}
+.flow-step .fn{width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:var(--page);color:var(--text-2);display:grid;place-items:center;font-size:10.5px;font-weight:700;border:1px solid var(--border);}
+.flow-step .fc{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;}
+.flow-step .fc b{font-size:12.5px;font-weight:600;}
+.flow-step .fc small{font-size:11px;color:var(--text-2);line-height:1.6;}
+.flow-step .fc code{font-size:10.5px;color:var(--brand-deep);background:var(--brand-tint);padding:1px 5px;border-radius:4px;}
+.flow-step.on{background:var(--brand-tint);}
+.flow-step.on .fn{background:var(--brand);color:#fff;border-color:var(--brand);}
+.flow-step.done .fn{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-soft);}
+
+/* 骨架屏 / 状态层通用 */
+.sk{background:linear-gradient(90deg,var(--brand-tint) 25%,var(--brand-tint2) 50%,var(--brand-tint) 75%);background-size:200% 100%;animation:skmove 1.2s infinite;border-radius:8px;height:14px;}
+@keyframes skmove{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.st-box{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
+.st-ic{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--brand-tint);color:var(--brand-deep);}
+.st-ic .ic{width:24px;height:24px;}
+.st-t{font-size:14px;font-weight:600;}
+.st-s{font-size:11.5px;color:var(--text-2);line-height:1.75;text-align:center;max-width:250px;}
+
+/* ---------- 角色可见性（demo-control-panel §5.3） ---------- */
+html[data-demo-role="guest"] [data-need-role="member"]{display:none}
+html[data-demo-role="member"] [data-need-role="guest"]{display:none}
+
+/* ---------- 标注层（§5.5） ---------- */
+[data-demo-anno="on"] [data-anno]{outline:1px dashed var(--brand);position:relative;}
+[data-demo-anno="on"] [data-anno]::after{content:attr(data-anno);position:absolute;top:-9px;left:-3px;
+  font-size:10px;line-height:14px;padding:0 5px;background:var(--brand);color:#fff;border-radius:4px;z-index:5;}
+
+/* ---------- 弹层 / Toast（壳内，模拟小程序内弹窗，不铺满浏览器视口） ---------- */
+.modal{position:absolute;inset:0;background:rgba(23,32,50,.38);display:none;align-items:center;justify-content:center;z-index:60;}
+.modal.on{display:flex;}
+.modal .box{background:var(--card);border-radius:var(--r-card);width:302px;padding:20px;box-shadow:var(--shadow-pop);}
+.modal h3{margin:0 0 8px;font-size:15.5px;}
+.modal p{margin:0 0 16px;color:var(--text-2);font-size:12.5px;line-height:1.75;}
+.modal .m-ic{width:40px;height:40px;border-radius:50%;background:var(--brand-tint);color:var(--brand-deep);display:grid;place-items:center;margin-bottom:12px;}
+.modal .m-ic .ic{width:22px;height:22px;}
+.modal .acts{display:flex;justify-content:flex-end;gap:8px;}
+.modal .m-note{margin-top:12px;font-size:10.5px;color:var(--text-3);line-height:1.6;border-top:1px dashed var(--border);padding-top:9px;}
+.toast{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);background:#1F2937;color:#fff;border-radius:14px;padding:10px 16px;font-size:12px;box-shadow:0 8px 22px rgba(15,23,42,.28);z-index:70;opacity:0;pointer-events:none;transition:opacity .2s;max-width:82%;text-align:center;line-height:1.6;}
+.toast.on{opacity:1;}
+
+/* V17「稍后」常驻提示条：点「稍后」收起 modal-auth 后显示，点击可再次唤起；登录成功前不消失 */
+.relogin-tip{position:absolute;left:12px;right:12px;top:74px;z-index:58;display:none;align-items:center;gap:8px;
+  background:var(--warn-soft);color:#8A4B16;border:1px solid var(--warn);border-radius:12px;padding:9px 12px;
+  font-size:11.5px;line-height:1.5;box-shadow:var(--shadow-pop);cursor:pointer;}
+.relogin-tip.on{display:flex;}
+.relogin-tip .ic{width:16px;height:16px;flex:0 0 16px;color:var(--warn);}
+.relogin-tip b{color:var(--brand-deep);font-weight:700;}
+
+/* ---------- 原型演示控件（壳外画布右下，宽度 ≤240px） ---------- */
+.demo-ctl{position:fixed;right:16px;bottom:16px;width:240px;background:var(--card);
+  border:1px dashed var(--brand);border-radius:12px;box-shadow:var(--shadow-pop);z-index:80;
+  font-size:12px;transition:opacity .2s;max-height:calc(100vh - 32px);overflow:auto;}
+.demo-ctl[data-open="false"]{width:auto;}
+.demo-ctl[data-open="false"] .dc-body{display:none;}
+body.modal-open .demo-ctl{opacity:.35;}
+body.modal-open .demo-ctl:hover{opacity:1;}
+.dc-head{display:flex;align-items:center;gap:6px;width:100%;padding:9px 12px;background:none;border:none;
+  cursor:pointer;font-size:12px;font-weight:600;color:var(--brand-deep);text-align:left;}
+.dc-head .dot{width:6px;height:6px;border-radius:50%;background:var(--brand);}
+.dc-head .cnt{margin-left:auto;font-weight:400;color:var(--text-2);}
+.dc-body{border-top:1px dashed var(--border);padding:10px 12px;}
+.dc-meta{color:var(--text-2);line-height:1.55;margin-bottom:8px;font-size:11px;}
+.dc-meta b{color:var(--text);font-weight:600;}
+.dc-grp{margin-top:10px;}
+.dc-grp .lb{color:var(--text-2);margin-bottom:4px;font-size:11px;display:flex;align-items:center;justify-content:space-between;}
+.dc-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.chip{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:20px;
+  padding:2px 9px;font-size:11px;cursor:pointer;}
+.chip:hover{border-color:var(--brand);}
+.chip.on{background:var(--brand-tint);border-color:var(--brand);color:var(--brand-deep);font-weight:500;}
+.dc-presets{display:flex;flex-direction:column;gap:3px;}
+.preset{border:1px solid var(--border);background:var(--card);color:var(--text-2);border-radius:8px;
+  padding:4px 8px;font-size:11px;text-align:left;cursor:pointer;}
+.preset:hover{border-color:var(--brand);}
+.preset.on{background:var(--brand-tint);border-color:var(--brand);color:var(--brand-deep);}
+.dc-foot{display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);flex-wrap:wrap;}
+.dc-foot .k{margin-left:auto;color:var(--text-2);font-size:10px;}
+@media print {
+  .demo-ctl{display:none}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.2 10.6 12 3.4l8.8 7.2"/><path d="M5.6 9.4V20.2h12.8V9.4"/><path d="M9.8 20.2v-5.4h4.4v5.4"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><path d="M15.4 8.6 13.6 13.6 8.6 15.4l1.8-5z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20.2c.6-3.9 3.6-6 7.2-6s6.6 2.1 7.2 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.8 5.6 8.2 12l6.6 6.4"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.4 5.6 16 12l-6.6 6.4"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M5.6 9.4 12 16l6.4-6.6"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4.2 5.2c2.6-1 5.2-1 7.8.5 2.6-1.5 5.2-1.5 7.8-.5v13c-2.6-1-5.2-1-7.8.5-2.6-1.5-5.2-1.5-7.8-.5z"/><path d="M12 5.7v12.5"/></symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M12 6.2C9.6 4.6 6.8 4.4 3.6 5.2v13c3.2-.8 6-.6 8.4 1 2.4-1.6 5.2-1.8 8.4-1v-13c-3.2-.8-6-.6-8.4 1z"/><path d="M12 6.2v13"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 4.2 2.5 5.1 5.6.8-4.1 3.9 1 5.5-5-2.7-5 2.7 1-5.5L3.9 10l5.6-.8z"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4.6 9.4h3.2L12.6 5.6v12.8L7.8 14.6H4.6z"/><path d="M16 9.2a4 4 0 0 1 0 5.6"/><path d="M18.6 6.8a7.4 7.4 0 0 1 0 10.4"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.4 5.6 18 12l-9.6 6.4z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.4" y="6.4" width="11.2" height="11.2" rx="2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.4 9.2A7.6 7.6 0 0 0 6 7.2L4.2 9"/><path d="M4.6 14.8A7.6 7.6 0 0 0 18 16.8l1.8-1.8"/><path d="M4.2 5.4V9h3.6"/><path d="M19.8 18.6V15h-3.6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 11v5.4"/><path d="M12 8.2v.1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5.6 12.6 4.2 4.2 8.6-9.6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M10.17 2.58 L13.83 2.58 L13.97 4.66 L15.8 5.42 L17.37 4.04 L19.96 6.63 L18.58 8.2 L19.34 10.03 L21.42 10.17 L21.42 13.83 L19.34 13.97 L18.58 15.8 L19.96 17.37 L17.37 19.96 L15.8 18.58 L13.97 19.34 L13.83 21.42 L10.17 21.42 L10.03 19.34 L8.2 18.58 L6.63 19.96 L4.04 17.37 L5.42 15.8 L4.66 13.97 L2.58 13.83 L2.58 10.17 L4.66 10.03 L5.42 8.2 L4.04 6.63 L6.63 4.04 L8.2 5.42 L10.03 4.66 Z"/><circle cx="12" cy="12" r="3.2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5.4" y="10.4" width="13.2" height="9" rx="2.4"/><path d="M8.6 10.4V8a3.4 3.4 0 0 1 6.8 0v2.4"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M15.4 6.4 9 12l6.4 5.6"/><path d="M6.6 6.4v11.2"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M8.6 6.4 15 12l-6.4 5.6"/><path d="M17.4 6.4v11.2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.2v13.6"/><path d="M5.2 12h13.6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.4 6.4l11.2 11.2"/><path d="M17.6 6.4 6.4 17.6"/></symbol>
+</svg>
+
+<div class="doc-head" data-dr="doc-head">
+  <div class="doc-title">大橙子英语 · NCE 交互重构 + 登录态过期 <span>（微信小程序原型 · 2026-11-17）</span></div>
+  <div class="doc-meta">
+    范围：在 <b>11-13 正式稿（9 屏 / 蓝色系）</b> 基础上扩展。需求① <b>#8900</b>：默认「<b>通篇阅读视图</b>」（英文全文连续可读、朗读/收藏不常驻）→ 点句展开中文 → 点单词中文 tip → 长按句子出气泡（朗读此句 / 收藏）；<b>通篇阅读视图，不提供连续朗读</b>（11-18 10:01 改判 D1=C / V7-C 生效，顶部工具条无「连续朗读」入口）。
+    需求② <b>#8901</b>：数据页会话过期不显示裸「加载失败」，改为<b>登录确认弹窗</b>，登录成功<b>自动重拉</b>数据；并保留 tab 页<b>整页登录墙</b>作形态对比。
+    事实起点 <b>01-事实基线 D1–D7 + 01 §5 纠错 + 05 盲审 §0</b>：<b>11-13 只删了整篇朗读控制条 UI</b>，`tts.ts` 现存 732 行整段流式管线 `speakText()` 完整保留（非单句原语）；<b>11-18 10:01 用户改判 D1=C</b>：只做通篇阅读视图、<b>不提供连续朗读</b>，`tts.ts` 零改动、顶部无 `#cont-btn`；点句/长按/气泡「朗读此句」沿用，任何操作不得启动整篇朗读，<b>V7-C 生效（第 2 次冻结）</b>。中文与词汇数据现成、纯前端；缺口是 3 个非 tab 数据页未订阅 auth 事件。三态分离：未登录守卫 / 会话过期弹窗 / 主动退出不弹。
+  </div>
+  <div class="pills">
+    <span class="pill">主题：蓝色系 · 浅色白底（--brand:#2563EB）</span>
+    <span class="pill">目标端：微信小程序（状态栏 / 导航栏 / 胶囊 / TabBar）</span>
+    <span class="pill g">11 屏可直达 · 10 场景包 · 6 数据态</span>
+    <span class="pill n">平台原生能力：占位 + 真机语义标注</span>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="phone-wrap">
+    <div class="frame">
+      <div class="statusbar"><span>9:41</span><div class="sb-r"><span class="sb-bars"><i></i><i></i><i></i><i></i></span><span class="sb-batt"></span></div></div>
+      <div class="navbar" data-dr="nav-bar">
+        <span class="back" id="nav-back" data-go-back><svg class="ic"><use href="#i-back"/></svg></span>
+        <span class="title" id="nav-title">大橙子英语</span>
+        <span class="capsule" id="nav-capsule"><svg class="ic" style="width:14px;height:14px;color:#8A90A0"><use href="#i-user"/></svg><svg class="ic" style="width:14px;height:14px;color:#8A90A0"><use href="#i-chev-r"/></svg></span>
+      </div>
+
+      <div class="body" id="body">
+
+        <!-- ════════ 首页（tab 1） ════════ -->
+        <section class="screen on" id="screen-home" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="hero">
+              <span class="logo-o">橙</span>
+              <span class="ht">
+                <b data-need-role="guest">下午好</b>
+                <b data-need-role="member">橙友，下午好</b>
+                <small>今天想学哪一课？</small>
+              </span>
+            </div>
+            <div class="daily">
+              <div class="dt"><b>今日一句</b><span>每天一句，稳步进阶。</span></div>
+              <div class="dc">「慢慢来，比较快。」<em>Slow is smooth, smooth is fast.</em></div>
+            </div>
+            <div class="sect-h"><span>常用功能</span><em>在发现页添加</em></div>
+            <div id="home-features" data-dr="home-feature-list"></div>
+            <div class="more" data-go="discover">更多功能 <svg class="ic"><use href="#i-chev-r"/></svg></div>
+            <div class="hint">每天一句，稳步进阶。</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty">
+              <div class="et">还没有常用功能</div>
+              <div class="es">去发现页把功能添加为常用，首页即可直达。</div>
+              <button class="btn ghost sm" data-go="discover">去发现</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ 发现（tab 2） ════════ -->
+        <section class="screen" id="screen-discover" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>全部功能</span><em>添加为常用 · 首页直达</em></div>
+            <div id="discover-features" data-dr="discover-feature-list"></div>
+            <div class="foot-note">更多内容持续更新中</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">暂无功能</div><div class="es">功能列表为空（正常情况不应出现）。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 我的（tab 3） ════════ -->
+        <section class="screen" id="screen-mine" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card profile">
+              <span class="avatar">橙</span>
+              <span class="pt">
+                <b data-need-role="member">橙友</b>
+                <b data-need-role="guest">点击登录</b>
+                <small data-need-role="member">已登录 · 学习进度与收藏已同步</small>
+                <small data-need-role="guest">登录后学习进度与收藏跟着账号走</small>
+              </span>
+              <span class="tag a" data-need-role="member" style="margin-left:auto">已登录</span>
+            </div>
+            <div class="card">
+              <div class="li" data-go="nce"><svg class="ic"><use href="#i-book"/></svg><span>课文学习进度</span><em>3 / 96</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="collection"><svg class="ic"><use href="#i-star"/></svg><span>收藏</span><em id="mine-col-count">3 条</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="settings"><svg class="ic"><use href="#i-gear"/></svg><span>设置</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="agreement"><svg class="ic"><use href="#i-info"/></svg><span>用户协议与隐私政策</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="about"><svg class="ic"><use href="#i-info"/></svg><span>关于与免责</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="authflow" data-need-role="member"><svg class="ic"><use href="#i-lock"/></svg><span>登录过期状态流转（评审示意）</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+            <div class="foot-note">大橙子英语 · 学习进度与收藏都跟着账号走</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ NCE 课文目录（二级页 · 需求② 数据页之一） ════════ -->
+        <!-- D4 补标：三数据页覆盖范围 1/3 = nce/index（连同 ncedetail、collection 共 3 页） -->
+        <section class="screen" id="screen-nce" data-demo-state="normal" data-anno="D4" data-anno-note="D4 覆盖范围 1/3：nce/index 课文目录">
+          <div class="only-normal">
+            <div class="card ovcard">
+              <span class="ovn"><b>3<i>/ 96 课</i></b><small>已学完 3 课 · 正在学第 4 课</small></span>
+              <span class="pbar"><i style="width:3.1%"></i></span>
+            </div>
+            <div class="sect-h"><span>课文</span><em>点一课开始</em></div>
+            <div class="card" data-dr="lesson-list">
+              <div class="lesson" data-go="ncedetail"><span class="lno done">1</span><span class="lt"><b>A Private Conversation</b><small>私人谈话 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno done">2</span><span class="lt"><b>Breakfast or Lunch?</b><small>早餐还是午餐 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno done">3</span><span class="lt"><b>Please Send Me a Card</b><small>请给我寄一张明信片 · 已完成</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail" style="background:var(--brand-tint)"><span class="lno now">4</span><span class="lt"><b>An Exciting Trip</b><small>激动人心的旅行 · 进行中 40%</small></span><span class="pbar" style="max-width:38px"><i style="width:40%"></i></span></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno">5</span><span class="lt"><b>No Wrong Numbers</b><small>无错号之虞 · 未开始</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="lesson" data-go="ncedetail"><span class="lno">6</span><span class="lt"><b>Percy Buttons</b><small>珀西·巴顿斯 · 未开始</small></span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+            <div class="hint" data-dr="pull-refresh-note">[小程序] 列表支持 enablePullDownRefresh 下拉刷新；原型不模拟手势，真机行为以小程序规范为准。</div>
+            <div class="foot-note">课文内容仅供学习参考</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">暂无课文</div><div class="es">课文目录为空。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ NCE 课文详情 · 通篇阅读视图（需求① 大改） ════════ -->
+        <!-- D4 补标：三数据页覆盖范围 2/3 = nce/detail -->
+        <section class="screen" id="screen-ncedetail" data-demo-state="normal" data-font="m" data-anno="D4" data-anno-note="D4 覆盖范围 2/3：nce/detail 课文详情">
+          <div class="only-normal">
+            <div class="readbar" data-dr="detail-toolbar">
+              <span class="rb-l">
+                <span class="lb">字号</span>
+                <span class="fz" data-font="s">A-</span>
+                <span class="fz on" data-font="m">A</span>
+                <span class="fz" data-font="l">A+</span>
+              </span>
+              <!-- V7-C：顶部不提供连续朗读入口（连续朗读按钮已移除）；该处的 D1 标注点已迁移到 #sent-list 容器 -->
+              <span class="lb">通篇阅读 · 不提供连续朗读</span>
+            </div>
+
+            <!-- D1 标注点（V7-C / 第 2 次冻结）：整屏「通篇阅读视图 sentence-list」为主定义（三案共有主拍板对象）；原挂在 #cont-btn 上的第二个 D1 点已随「移除连续朗读入口」迁移到 #sent-list 容器，去重仍 D1–D5 五值 / 10 DOM 点 -->
+            <div class="card" style="padding:8px 6px" data-anno="D1" data-anno-note="D1 主定义=通篇阅读视图整屏 sentence-list">
+              <div class="sect-h" style="padding:2px 8px 6px"><span>通篇阅读视图</span><em>D1 主定义 · 英文全文不打断</em></div>
+              <div id="sent-list" data-dr="sentence-list" data-anno="D1" data-anno-note="D1 主定义=通篇阅读视图 sentence-list（V7-C：无连续朗读入口，仅通读）"></div>
+            </div>
+
+            <div class="hint" data-dr="detail-hint">点句子展开该句中文；点单词看中文 tip；<b>长按句子</b>出「朗读此句 / 收藏」气泡。朗读与收藏不常驻。</div>
+
+            <div class="lesson-nav" style="margin-top:auto">
+              <span class="lnav" data-go="ncedetail"><svg class="ic"><use href="#i-prev"/></svg>上一课</span>
+              <span class="lnav" data-go="ncedetail"><svg class="ic"><use href="#i-next"/></svg>下一课</span>
+            </div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">课文内容为空</div><div class="es">该课暂无课文内容。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 收藏 / mine/glossary（二级页 · 需求② 数据页之一） ════════ -->
+        <!-- D4 补标：三数据页覆盖范围 3/3 = mine/glossary -->
+        <section class="screen" id="screen-collection" data-demo-state="normal" data-anno="D4" data-anno-note="D4 覆盖范围 3/3：mine/glossary 收藏">
+          <div class="only-normal">
+            <div class="sect-h"><span>你收藏的句子会一直保留在这里</span><em id="col-count">3 条</em></div>
+            <div class="card" id="collection-list" data-dr="collection-list">
+              <div class="col-item">
+                <span class="col-txt"><b>He is in Australia.</b><small>Lesson 4 · 第 2 句</small><em>他现在在澳大利亚。</em></span>
+                <span class="sbtn del" data-del="0"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+              <div class="col-item">
+                <span class="col-txt"><b>I had a very good seat.</b><small>Lesson 1 · 第 1 句</small><em>我坐的座位很好。</em></span>
+                <span class="sbtn del" data-del="1"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+              <div class="col-item">
+                <span class="col-txt"><b>Tim is an engineer.</b><small>Lesson 4 · 第 4 句</small><em>蒂姆是一名工程师。</em></span>
+                <span class="sbtn del" data-del="2"><svg class="ic"><use href="#i-x"/></svg></span>
+              </div>
+            </div>
+            <div class="hint">收藏落库 tag='nce' 不变；来源显示「Lesson N · 第 M 句」。</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty">
+              <svg class="empty-ill" viewBox="0 0 132 112" aria-hidden="true">
+                <rect x="20" y="18" width="66" height="82" rx="10" fill="#FFFFFF" stroke="#DBEAFE" stroke-width="1.6"/>
+                <path d="M32 38h42M32 50h42M32 62h28" stroke="#DBEAFE" stroke-width="3.2" stroke-linecap="round"/>
+                <path d="M70 64h30M70 74h18" stroke="#93B4F5" stroke-width="3.2" stroke-linecap="round"/>
+                <path d="M66 92l-2 10 10-6z" fill="#BFDBFE"/>
+              </svg>
+              <div class="et">还没有收藏</div>
+              <div class="es">在课文中长按句子选「收藏」，<br>收藏的句子会一直保留在这里。</div>
+              <button class="btn sm" data-go="nce" style="margin-top:2px">去学课文</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════ 设置（二级页） ════════ -->
+        <section class="screen" id="screen-settings" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>外观</span></div>
+            <div class="card"><div class="li" data-setting="radius"><span>圆角风格</span><em>柔和</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+            <div class="sect-h"><span>存储</span></div>
+            <div class="card"><div class="li" data-setting="cache"><span>清除缓存</span><em>运行时统计</em><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+            <div class="sect-h"><span>关于</span></div>
+            <div class="card">
+              <div class="li" data-go="agreement"><span>用户协议与隐私政策</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li" data-go="about"><span>关于与免责</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+            </div>
+            <div class="sect-h"><span>账号</span></div>
+            <div class="card"><div class="li" data-setting="logout"><span>退出登录</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div></div>
+            <div class="foot-note">这里的设置影响整个小程序</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 关于与免责（二级页） ════════ -->
+        <section class="screen" id="screen-about" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card brandblk">
+              <span class="logo-o">橙</span>
+              <span class="bt"><b>大橙子英语</b><small>版本 v1.0.0</small></span>
+            </div>
+            <div class="card legal">
+              <p><b>关于</b></p>
+              <p>本小程序由 <span class="sig">大橙子英语</span> 提供并维护。</p>
+              <p>提供新概念英语课文学习辅助：通篇阅读、逐句朗读与句子收藏。</p>
+              <p><b>免责声明</b></p>
+              <p>仅用于新概念英语课文学习辅助。课文与朗读内容可能存在偏差，重要场景请自行核实。</p>
+            </div>
+            <div class="card">
+              <div class="li" data-go="agreement"><svg class="ic"><use href="#i-info"/></svg><span>用户协议</span><svg class="ic chev"><use href="#i-chev-r"/></svg></div>
+              <div class="li"><svg class="ic"><use href="#i-check"/></svg><span>检查更新</span><em>已是最新</em></div>
+            </div>
+            <div class="foot-note">大橙子英语 · 保留所有权利</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 用户协议与隐私政策（二级页） ════════ -->
+        <section class="screen" id="screen-agreement" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="card legal">
+              <p><b>用户协议与隐私政策</b></p>
+              <p>学习数据：课文学习进度、收藏。</p>
+              <p>我们仅在提供新概念英语课文学习辅助所必需的范围内处理上述数据，不用于其他用途。</p>
+              <p>你可以在「设置 → 清除缓存」中清除本地缓存；退出登录后，本地学习数据将不再与账号关联。</p>
+            </div>
+            <div class="foot-note">大橙子英语</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为静态信息页</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 新增：Tab 页整页登录墙（需求② 形态对比） ════════ -->
+        <section class="screen" id="screen-authgate" data-demo-state="normal">
+          <div class="only-normal" style="position:relative;flex:1;min-height:0">
+            <div class="gate-full" data-dr="auth-gate-page" data-anno="D4">
+              <span class="gf-ic">橙</span>
+              <span class="gf-t">登录后继续使用</span>
+              <span class="gf-d">学习进度与收藏都跟着账号走<br>（tab 页现状：整页登录墙，非弹窗）</span>
+              <span class="gf-btn" data-wxlogin>微信一键登录</span>
+              <span class="gf-note">真机：wx.login 静默登录，无授权弹窗、无验证码<br>登录即表示同意《用户协议与隐私政策》</span>
+            </div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为形态对比屏</div><div class="es">整页登录墙无数据态分支。</div></div>
+          </div>
+        </section>
+
+        <!-- ════════ 新增：登录过期状态流转（评审示意屏，非产品真实界面） ════════ -->
+        <section class="screen" id="screen-authflow" data-demo-state="normal">
+          <div class="only-normal">
+            <div class="sect-h"><span>登录过期 → 自动重拉 · 状态流转</span><em>评审示意</em></div>
+            <!-- D5 标注点（B1' 收敛）：弹窗触发时机 = 静默重登失败后 emit('auth:expired')；含三条已知边界，详见 04 §④ D5 / 人审知情段 -->
+            <div class="card" id="flow-list" data-dr="auth-flow" data-anno="D5" data-anno-note="D5 弹窗触发时机：仅 auth:expired（重登失败后）弹；三条已知边界见 04 人审知情段">
+              <div class="flow-step on" data-flow="0"><span class="fn">1</span><span class="fc"><b>数据页发起请求</b><small><code>nce/index</code> / <code>nce/detail</code> / <code>mine/glossary</code> 调用 load() 拉列表或详情</small></span></div>
+              <div class="flow-step" data-flow="1"><span class="fn">2</span><span class="fc"><b>返回 401 → 静默重登 + 重试一次</b><small><code>request.ts</code> isRelogging 去重 → loginEnsurer() 5s 超时 → 用新 token 重试一次（现成链路，本次不改）</small></span></div>
+              <div class="flow-step" data-flow="2"><span class="fn">3</span><span class="fc"><b>仍失败 → 清 token + 广播</b><small><code>handleUnauthorized()</code> → toast「登录已过期，请重新登录」+ emit <code>auth:expired</code></small></span></div>
+              <div class="flow-step" data-flow="3"><span class="fn">4</span><span class="fc"><b>数据页订阅收到 → 弹登录确认弹窗</b><small>不显示裸「加载失败」，底层保留骨架/内容；主操作「重新登录」/ 次操作「稍后」</small></span></div>
+              <div class="flow-step" data-flow="4"><span class="fn">5</span><span class="fc"><b>登录成功 → 自动重拉并渲染</b><small><code>auth:logged</code> 广播 → 关弹窗 → 自动 load() → 骨架屏 → 列表/详情出现（无需手动重试）</small></span></div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn sm" data-flow-next style="flex:1">下一步 →</button>
+              <button class="btn ghost sm" data-go="nce">看数据页弹窗</button>
+            </div>
+            <div class="hint">本屏为状态流转评审示意（非产品真实界面）；真实交互请用场景包 S6–S8 / S10 在 nce 目录、ncedetail 详情、collection 收藏页走查。</div>
+          </div>
+          <div class="only-empty">
+            <div class="empty"><div class="et">本屏为流程示意屏</div><div class="es">无列表数据态分支。</div></div>
+          </div>
+        </section>
+
+      </div><!-- /body -->
+
+      <!-- 壳内浮层：单词中文 tip / 长按气泡 -->
+      <div class="word-tip" id="word-tip" data-dr="word-tip" data-anno="D2"></div>
+      <!-- D2 补标：长按自绘气泡载体（原只标 #word-tip，漏 #bubble） -->
+      <div class="bubble" id="bubble" data-dr="longpress-bubble" data-anno="D2">
+        <span class="bi" data-bubble-act="play"><svg class="ic"><use href="#i-sound"/></svg>朗读此句</span>
+        <span class="bi" data-bubble-act="fav"><svg class="ic"><use href="#i-star"/></svg>收藏</span>
+      </div>
+
+      <div class="tabbar" id="tabbar">
+        <div class="tab active" data-tab="home"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+        <div class="tab" data-tab="discover"><svg class="ic"><use href="#i-compass"/></svg><span>发现</span></div>
+        <div class="tab" data-tab="mine"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+      </div>
+
+      <!-- 需求② 登录确认弹窗（T2 会话过期态，仅此态弹 modal-auth） -->
+      <div class="modal" id="modal-auth">
+        <div class="box" data-dr="auth-modal" data-anno="D3">
+          <div class="m-ic"><svg class="ic"><use href="#i-lock"/></svg></div>
+          <h3>登录已过期</h3>
+          <p>刚才的加载没能完成。重新登录后会自动继续加载，学习进度与收藏不受影响。</p>
+          <div class="acts">
+            <!-- V17 定死一种：「稍后」= 收起弹窗 + 常驻提示条可再次唤起（不再纯 closeModal） -->
+            <button class="btn ghost sm" data-defer>稍后</button>
+            <button class="btn sm" data-relogin>重新登录</button>
+          </div>
+          <div class="m-note">真机：wx.login 静默登录，无授权弹窗、无验证码。<br>「稍后」收起后顶部留常驻提示条，点它可再次唤起本弹窗（V17）。<br>（平台原生能力占位，原型不真实触发）</div>
+        </div>
+      </div>
+
+      <!-- 需求① 未登录守卫弹窗（T1 从未登录态；三态分离，弹 modal-login「请先登录」而非 modal-auth） -->
+      <div class="modal" id="modal-login">
+        <div class="box" data-dr="auth-modal-guest">
+          <div class="m-ic"><svg class="ic"><use href="#i-lock"/></svg></div>
+          <h3>请先登录</h3>
+          <p>登录后学习进度与收藏跟着账号走。<br>登录由小程序静默完成，无需额外授权。</p>
+          <div class="acts"><button class="btn ghost sm" data-close>取消</button><button class="btn sm" data-wxlogin>去登录</button></div>
+          <div class="m-note">真机：wx.login 静默登录（平台原生能力占位）。<br>T1 未登录守卫弹窗；收藏（V6）沿用此弹窗，不弹「登录已过期」。</div>
+        </div>
+      </div>
+
+      <!-- V17 常驻提示条：点「稍后」后显示，点击再次唤起 modal-auth；登录成功前不消失 -->
+      <div class="relogin-tip" id="relogin-tip" data-dr="relogin-tip" data-reopen-auth>
+        <svg class="ic"><use href="#i-lock"/></svg>
+        <span>登录已过期，数据未更新 · <b>点此重新登录</b></span>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div><!-- /frame -->
+  </div><!-- /phone-wrap -->
+
+  <!-- ══ 原型演示控件（① 稿头 ② 场景 ③ 导航 ④ 辅助） ══ -->
+  <aside class="demo-ctl" data-demo-ctl data-open="true" aria-label="原型演示控件">
+    <button class="dc-head" data-dc-toggle aria-expanded="true">
+      <span class="dot"></span>原型演示控件<span class="cnt" id="dc-cnt">待确认 5</span>
+    </button>
+    <div class="dc-body">
+      <div class="dc-meta">
+        <b>NCE 交互重构 + 登录过期原型（按 05 盲审修订）</b><br>
+        目标端 微信小程序 · 2026-11-17 · 数据全为 mock<br>
+        待确认 5 项见《04-设计决策记录》§④ D1–D5（B1' 收敛为 D5）<br>
+        一个拍板项可有多个 DOM 标注点，稿头按去重 D 值计数
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb"><span>演示场景（点一下到那儿）</span><button class="chip" data-dc-next>下一步 →</button></div>
+        <div class="dc-presets">
+          <button class="preset" data-dc-preset="p1">1. S1 学员打开第 4 课 · 通篇阅读视图</button>
+          <button class="preset" data-dc-preset="p2">2. S2 学员点第 3 句 · 展开中文译文</button>
+          <button class="preset" data-dc-preset="p3">3. S3 学员点生词 engineer · 中文 tip</button>
+          <button class="preset" data-dc-preset="p4">4. S4 学员长按第 5 句 · 朗读/收藏气泡</button>
+          <button class="preset" data-dc-preset="p5">5. S5 通篇阅读视图 · 无连续朗读入口（D1-C / V7-C）</button>
+          <button class="preset" data-dc-preset="p6">6. S6 老学员会话过期 · NCE 目录弹登录确认</button>
+          <button class="preset" data-dc-preset="p7">7. S7 老学员会话过期 · 课文详情弹登录确认</button>
+          <button class="preset" data-dc-preset="p8">8. S8 老学员会话过期 · 收藏页弹登录确认</button>
+          <button class="preset" data-dc-preset="p9">9. S9 未登录进「我的」· tab 页整页登录墙</button>
+          <button class="preset" data-dc-preset="p10">10. S10 点重新登录 · 自动重拉列表并渲染</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">角色</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-role="guest">未登录</button>
+          <button class="chip" data-dc-role="member">已登录</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">数据态（当前屏）</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-state="normal">正常</button>
+          <button class="chip" data-dc-state="loading">加载中</button>
+          <button class="chip" data-dc-state="empty">空态</button>
+          <button class="chip" data-dc-state="error">错误</button>
+          <button class="chip" data-dc-state="expired">已过期</button>
+          <button class="chip" data-dc-state="relogging">登录中</button>
+        </div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb"><span>V17 登录结果（演示分支）</span><em id="dc-fail-lb">成功</em></div>
+        <div class="dc-chips">
+          <button class="chip on" data-dc-fail="0">登录成功</button>
+          <button class="chip" data-dc-fail="1">模拟登录失败</button>
+        </div>
+        <div class="dc-meta" style="margin-top:6px">切到「模拟登录失败」后，S6–S8/S10 弹窗点「重新登录」→ 弹窗仍在、按钮复位可再点（V17）。</div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb"><span>V7-C 静态断言（演示）</span><em>无连续朗读入口</em></div>
+        <div class="dc-meta" style="margin-top:6px">点场景 S5 可点击验证「顶部工具条不存在 #cont-btn / 无整篇朗读调度」；V7-C 必然失败反例 = 误出现连续朗读入口或整篇朗读调度。浏览器走查未跑，红灯用例由 10 ④ 盲测承接。</div>
+      </div>
+
+      <div class="dc-grp">
+        <div class="lb">屏幕直达（11 屏）</div>
+        <div class="dc-chips">
+          <button class="chip" data-dc-screen="home">首页</button>
+          <button class="chip" data-dc-screen="discover">发现</button>
+          <button class="chip" data-dc-screen="mine">我的</button>
+          <button class="chip" data-dc-screen="nce">NCE 目录</button>
+          <button class="chip" data-dc-screen="ncedetail">NCE 详情</button>
+          <button class="chip" data-dc-screen="collection">收藏</button>
+          <button class="chip" data-dc-screen="settings">设置</button>
+          <button class="chip" data-dc-screen="about">关于</button>
+          <button class="chip" data-dc-screen="agreement">协议</button>
+          <button class="chip" data-dc-screen="authgate">整页登录墙</button>
+          <button class="chip" data-dc-screen="authflow">状态流转</button>
+        </div>
+      </div>
+
+      <div class="dc-foot">
+        <button class="chip" data-dc-anno>标注层</button>
+        <button class="chip" data-dc-reset>复位</button>
+        <span class="k">H 收起 · [ ] 上下屏 · 1-9 场景 · A 标注</span>
+      </div>
+    </div>
+  </aside>
+</div><!-- /stage -->
+
+<script>
+/* ══════════ DEMO 注册表（做新稿只改这一段） ══════════ */
+const DEMO = {
+  screens: {
+    home:       { el:'screen-home',       title:'大橙子英语',              label:'首页',          group:'Tab 页' },
+    discover:   { el:'screen-discover',   title:'发现',                    label:'发现',          group:'Tab 页' },
+    mine:       { el:'screen-mine',       title:'我的',                    label:'我的',          group:'Tab 页' },
+    nce:        { el:'screen-nce',        title:'新概念英语',              label:'NCE 课文目录',  group:'学习 · 数据页' },
+    ncedetail:  { el:'screen-ncedetail',  title:'Lesson 4 · An Exciting Trip', label:'NCE 课文学习', group:'学习 · 数据页' },
+    collection: { el:'screen-collection', title:'收藏',                    label:'收藏',          group:'学习 · 数据页' },
+    settings:   { el:'screen-settings',   title:'设置',                    label:'设置',          group:'我的' },
+    about:      { el:'screen-about',      title:'关于与免责',              label:'关于与免责',    group:'我的' },
+    agreement:  { el:'screen-agreement',  title:'用户协议与隐私政策',      label:'协议',          group:'我的' },
+    authgate:   { el:'screen-authgate',   title:'我的',                    label:'整页登录墙',    group:'登录态 · 对比' },
+    authflow:   { el:'screen-authflow',   title:'登录过期状态流转',        label:'状态流转',      group:'登录态 · 评审' },
+  },
+  roles:  { guest:'未登录', member:'已登录' },
+  states: { normal:'正常', loading:'加载中', empty:'空态', error:'错误', expired:'已过期', relogging:'登录中' },
+  presets: [
+    { id:'p1', label:'S1 学员打开第 4 课 · 通篇阅读视图', role:'member', screen:'ncedetail', state:'normal', default:true, why:'默认主路径：英文全文连续可读、朗读/收藏不常驻、不自动播放' },
+    { id:'p2', label:'S2 学员点第 3 句 · 展开中文译文', role:'member', screen:'ncedetail', state:'normal', action:'expandCn', why:'点句就地展开 lines[2].cn；同一时刻至多展开一句' },
+    { id:'p3', label:'S3 学员点生词 engineer · 中文 tip', role:'member', screen:'ncedetail', state:'normal', action:'wordTip', why:'点单词弹中文 tip，词汇表外词给「暂无释义」' },
+    { id:'p4', label:'S4 学员长按第 5 句 · 朗读/收藏气泡', role:'member', screen:'ncedetail', state:'normal', action:'bubble', why:'长按出气泡，含且仅含朗读此句 / 收藏两个动作' },
+    { id:'p5', label:'S5 通篇阅读视图 · 无连续朗读入口', role:'member', screen:'ncedetail', state:'normal', action:'assertNoContinuous', why:'11-18 10:01 改判 D1=C / V7-C 生效（第 2 次冻结）：只做通篇阅读视图、不提供连续朗读；顶部工具条不存在 #cont-btn / 无整篇朗读调度，tts.ts 零改动；点句展开中文(V2) / 长按气泡(V4) / 气泡「朗读此句」(V5) 仍可用；必然失败反例 = 出现连续朗读入口或整篇朗读调度' },
+    { id:'p6', label:'S6 老学员会话过期 · NCE 目录弹登录确认', role:'member', screen:'nce', state:'expired', modal:'auth', why:'数据页 401 后不显示裸加载失败，弹登录确认弹窗' },
+    { id:'p7', label:'S7 老学员会话过期 · 课文详情弹登录确认', role:'member', screen:'ncedetail', state:'expired', modal:'auth', why:'同一弹窗形态覆盖 nce/detail 数据页' },
+    { id:'p8', label:'S8 老学员会话过期 · 收藏页弹登录确认', role:'member', screen:'collection', state:'expired', modal:'auth', why:'同一弹窗形态覆盖 mine/glossary 数据页（三页统一）' },
+    { id:'p9', label:'S9 未登录进「我的」· tab 页整页登录墙', role:'guest', screen:'authgate', state:'normal', why:'与数据页弹窗形态对比：tab 页保持整页登录墙（当前假设 D4）' },
+    { id:'p10', label:'S10 点重新登录 · 自动重拉列表并渲染', role:'member', screen:'nce', state:'expired', modal:'auth', action:'autoRelogin', why:'登录成功 → 关弹窗 → 骨架屏 → 自动重拉渲染，无需手动重试' },
+  ],
+};
+
+/* ══════════ 功能注册表（对齐 utils/features.ts 语义，沿用 11-13 稿） ══════════ */
+const FEATURES = [
+  { id:'nce', title:'新概念英语', desc:'NCE 通篇精读 · 点句看中文', icon:'英', iconClass:'n', screen:'nce', needLogin:false, defaultPinned:true },
+  { id:'glossary', title:'收藏', desc:'收藏的句子，随时回看', icon:'藏', iconClass:'g', screen:'collection', needLogin:true, defaultPinned:false },
+];
+let pinned = new Set(FEATURES.filter((f) => f.defaultPinned).map((f) => f.id));
+
+/* ══════════ 课文数据（mock，字段对齐 services/nce.ts 的 lines[] / words[]） ══════════ */
+const LESSON = {
+  id:4, title:'An Exciting Trip',
+  lines:[
+    { en:'I have just received a letter from my brother, Tim.', cn:'我刚刚收到弟弟蒂姆的一封信。' },
+    { en:'He is in Australia.', cn:'他现在在澳大利亚。' },
+    { en:'He has been there for six months.', cn:'他在那儿已经住了六个月了。' },
+    { en:'Tim is an engineer.', cn:'蒂姆是一名工程师。' },
+    { en:'He is working for a big firm and he has already visited a great number of different places in Australia.', cn:'他正在为一家大公司工作，并且已经去过澳大利亚不少地方了。' },
+  ],
+};
+const WORDS = {
+  'letter':   { word:'letter',   phonetic:'/ˈletə/',        pos:'n.',  def:'信；信件',       example:'I received a letter from my brother.' },
+  'brother':  { word:'brother',  phonetic:'/ˈbrʌðə/',       pos:'n.',  def:'兄弟',           example:'My brother Tim is in Australia.' },
+  'receive':  { word:'receive',  phonetic:'/rɪˈsiːv/',      pos:'v.',  def:'收到；接到',     example:'receive a letter' },
+  'australia':{ word:'Australia',phonetic:'/ɒˈstreɪliə/',   pos:'n.',  def:'澳大利亚',       example:'He is in Australia.' },
+  'month':    { word:'month',    phonetic:'/mʌnθ/',         pos:'n.',  def:'月份',           example:'six months' },
+  'engineer': { word:'engineer', phonetic:'/ˌendʒɪˈnɪə/',   pos:'n.',  def:'工程师',         example:'Tim is an engineer.' },
+  'firm':     { word:'firm',     phonetic:'/fɜːm/',         pos:'n.',  def:'公司；商行',     example:'a big firm' },
+  'visit':    { word:'visit',    phonetic:'/ˈvɪzɪt/',       pos:'v.',  def:'拜访；参观',     example:'visit a great number of places' },
+  'place':    { word:'place',    phonetic:'/pleɪs/',        pos:'n.',  def:'地方',           example:'different places' },
+};
+/** 基础词形还原（原型级：复数 / 过去式 / 进行时 / 第三人称），真机实现由 rd-engineer 定 */
+function stemOf(w) {
+  let s = w.toLowerCase();
+  if (/ies$/.test(s)) s = s.replace(/ies$/, 'y');
+  else if (/(ches|shes|sses|xes)$/.test(s)) s = s.replace(/es$/, '');
+  else if (/s$/.test(s) && !/ss$/.test(s)) s = s.replace(/s$/, '');
+  if (/ing$/.test(s)) s = s.replace(/ing$/, '');
+  else if (/ed$/.test(s)) s = s.replace(/ed$/, '');
+  return s;
+}
+/** 词汇表匹配（V3）：小写 + 基础词形还原，多候选兜底（原型级，真机规则由 rd-engineer 定） */
+function lookupWord(raw) {
+  const w = raw.toLowerCase();
+  const base = stemOf(w);
+  const candidates = [w, base, base + 'e', w.replace(/s$/, ''), base + 's'];
+  for (const c of candidates) if (WORDS[c]) return WORDS[c];
+  return null;
+}
+
+/* ══════════ 控件逻辑（照抄 11-13 稿 + 状态层 / 场景动作适配） ══════════ */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const KEY = 'dc:' + location.pathname;   // file:// 同源，key 必须带文件标识（§5.6）；本稿不持久化折叠态之外的演示态
+const TABS = ['home', 'discover', 'mine'];
+const PARENT = { nce:'home', ncedetail:'nce', collection:'mine', settings:'mine', about:'mine', agreement:'settings', authgate:'mine', authflow:'nce' };
+let cur = { role:'guest', screen:'home', preset:null, anno:false };
+const stateOf = {};
+let playingIdx = -1;
+let collected = 3;
+// V7-C（第 2 次冻结）：不提供连续朗读，故无 contTimer / contIdx / contSeq / contCalls / contFault 等调度态与反例开关；
+// 顶部无 #cont-btn、无整篇朗读调度；仅 V5 气泡「朗读此句」调用一次现成 speakText(line.en)（真机语义，原型以 toast 占位）。
+let flowIdx = 0;
+let lpTimer = null, lpFired = false, lpIdx = -1;
+let demoLoginFail = false;   // V17 演示开关：模拟重新登录失败（弹窗仍在 + 按钮复位可再点）
+
+function render() {
+  $$('.preset').forEach((b) => b.classList.toggle('on', b.dataset.dcPreset === cur.preset));
+  $$('[data-dc-role]').forEach((b) => b.classList.toggle('on', b.dataset.dcRole === cur.role));
+  const st = stateOf[cur.screen] || 'normal';
+  $$('[data-dc-state]').forEach((b) => b.classList.toggle('on', b.dataset.dcState === st));
+  $$('[data-dc-screen]').forEach((b) => b.classList.toggle('on', b.dataset.dcScreen === cur.screen));
+  // 稿头「待确认 N」按去重后的 D 值计数（一个拍板项可有多个 DOM 标注点）：
+  // D1/D2/D4 补标后 DOM 标注点 >5，但拍板项仍是 D1–D5 共 5 条，与 04 §④ 对账（05 #8）。
+  const dCount = new Set($$('[data-anno]').map((e) => e.dataset.anno)).size;
+  $('#dc-cnt').textContent = '待确认 ' + dCount;
+  // V17 登录结果演示开关高亮同步
+  $$('[data-dc-fail]').forEach((b) => b.classList.toggle('on', (b.dataset.dcFail === '1') === demoLoginFail));
+  const flb = $('#dc-fail-lb'); if (flb) flb.textContent = demoLoginFail ? '失败' : '成功';
+  // V7-C：无连续朗读反例开关（contFault / #dc-cf-lb 已移除），稿头仅按去重 D 值计数
+}
+
+function go(key, opts = {}) {
+  if (!DEMO.screens[key]) return;
+  cur.screen = key;
+  $$('.screen').forEach((s) => s.classList.remove('on'));
+  document.getElementById(DEMO.screens[key].el).classList.add('on');
+  const isTab = TABS.includes(key) || key === 'authgate';
+  const tabKey = key === 'authgate' ? 'mine' : key;
+  $('#nav-title').textContent = DEMO.screens[key].title;
+  $('#nav-back').style.display = isTab ? 'none' : 'grid';
+  $('#nav-capsule').style.display = isTab ? 'flex' : 'none';
+  $('#tabbar').style.display = isTab ? 'flex' : 'none';
+  $$('#tabbar .tab').forEach((t, i) => t.classList.toggle('active', TABS[i] === tabKey));
+  hideFloats();
+  // V7-C：无连续朗读调度，离页无需 stopContinuous()；V5 单句朗读高亮由 resetDetail()/hideFloats() 清
+  applyState(stateOf[key] || 'normal');
+  if (opts.hash !== false && location.hash !== '#s=' + key) location.hash = '#s=' + key;
+  render();
+}
+
+function back() { go(PARENT[cur.screen] || 'home'); }
+
+function setRole(role) {
+  cur.role = role;
+  document.documentElement.dataset.demoRole = role;
+  render();
+}
+
+function applyState(state) {
+  stateOf[cur.screen] = state;
+  const el = document.getElementById(DEMO.screens[cur.screen].el);
+  el.dataset.demoState = state;
+  render();
+}
+
+/* 整屏状态层（方案 B 变体）：给每个 .screen 挂一份，任何屏切 loading/error/expired/relogging 都真的变 */
+const STATE_COPY = {
+  nce:        { loading:'正在加载课文目录…', error:'课文目录加载失败', expired:'登录已过期，目录数据未加载完成' },
+  ncedetail:  { loading:'正在加载课文…',     error:'课文加载失败',     expired:'登录已过期，课文未加载完成' },
+  collection: { loading:'正在加载收藏…',     error:'收藏加载失败',     expired:'登录已过期，收藏未加载完成' },
+  _default:   { loading:'正在加载…',         error:'加载失败',         expired:'登录已过期，数据未加载完成' },
+};
+function buildStateLayers() {
+  $$('.screen').forEach((s) => {
+    if (s.querySelector('.demo-states')) return;
+    const key = s.id.replace(/^screen-/, '');
+    const c = STATE_COPY[key] || STATE_COPY._default;
+    const layer = document.createElement('div');
+    layer.className = 'demo-states';
+    layer.setAttribute('data-dr', 'state-layer');
+    layer.innerHTML =
+      '<div class="only-loading"><div class="st-box"><div class="st-ic"><svg class="ic"><use href="#i-refresh"/></svg></div>' +
+        '<div class="st-t">' + c.loading + '</div><div class="st-s">数据回来前显示骨架屏，不显示裸失败文案</div>' +
+        '<div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:6px"><div class="sk" style="width:92%"></div><div class="sk" style="width:78%"></div><div class="sk" style="width:86%"></div></div></div></div>' +
+      '<div class="only-error"><div class="st-box"><div class="st-ic" style="background:var(--danger-soft);color:var(--danger)"><svg class="ic"><use href="#i-info"/></svg></div>' +
+        '<div class="st-t">' + c.error + '，请稍后重试</div><div class="st-s">非登录类错误保留原错误态与唯一恢复入口（V9）</div>' +
+        '<button class="btn sm" data-retry>点击重试</button></div></div>' +
+      '<div class="only-expired">' +
+        '<div class="card" style="padding:12px"><div class="sect-h"><span>数据加载暂停</span><em>登录已过期</em></div>' +
+          '<div style="display:flex;flex-direction:column;gap:9px;margin-top:10px"><div class="sk" style="width:92%"></div><div class="sk" style="width:78%"></div><div class="sk" style="width:86%"></div><div class="sk" style="width:64%"></div></div></div>' +
+        '<div class="hint">' + c.expired + '。<br>页面保留骨架，不显示裸「加载失败」；重新登录后自动继续加载。</div>' +
+        '<button class="btn sm" data-show-auth>查看登录确认弹窗</button>' +
+        '<div class="foot-note">登录确认弹窗＝数据页形态；tab 页仍为整页登录墙</div></div>' +
+      '<div class="only-relogging"><div class="st-box"><div class="st-ic"><svg class="ic"><use href="#i-refresh"/></svg></div>' +
+        '<div class="st-t">正在重新登录…</div><div class="st-s">wx.login 静默登录中，成功后将自动重新加载数据</div>' +
+        '<div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:6px"><div class="sk" style="width:88%"></div><div class="sk" style="width:66%"></div></div></div></div>';
+    s.appendChild(layer);
+  });
+}
+
+function openModal(id) {
+  const m = document.getElementById('modal-' + id);
+  if (m) m.classList.add('on');
+  document.body.classList.add('modal-open');
+}
+function closeModal() {
+  $$('.modal').forEach((m) => m.classList.remove('on'));
+  document.body.classList.remove('modal-open');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 1900);
+}
+
+function applyPreset(id) {
+  const p = DEMO.presets.find((x) => x.id === id);
+  if (!p) return;
+  cur.preset = id;
+  resetStates();
+  resetPinned();
+  setRole(p.role);
+  go(p.screen, { hash:false });
+  applyState(p.state);
+  closeModal();
+  hideReloginTip();                 // 场景包互不串味：清「稍后」常驻提示条
+  demoLoginFail = false;            // 登录结果复位为「成功」
+  // V7-C：无 contFault 全局反例开关；场景状态一律由 resetDetail()/go() 复位，互不串味。
+  resetDetail();                    // 场景包互不串味：清中文展开 / 长按态 / 浮层 / 字号
+  if (p.modal) openModal(p.modal);
+  if (p.action) runAction(p.action); // 同步执行，避免 setTimeout 与后续点击事件竞态
+  render();
+}
+
+/** 详情屏交互态复位：中文展开、句级高亮、长按态、浮层、字号 */
+function resetDetail() {
+  $$('#screen-ncedetail .sent-cn').forEach((e) => e.classList.remove('show'));
+  $$('#screen-ncedetail .sent').forEach((e) => e.classList.remove('expanded', 'playing'));
+  lpFired = false; lpIdx = -1;
+  hideFloats();
+  hideReloginTip();
+  setFont('m');
+}
+
+function resetStates() {
+  Object.keys(DEMO.screens).forEach((k) => {
+    stateOf[k] = 'normal';
+    const el = document.getElementById(DEMO.screens[k].el);
+    if (el) el.dataset.demoState = 'normal';
+  });
+}
+
+function runAction(a) {
+  if (a === 'expandCn') return toggleCn(2);
+  if (a === 'wordTip') {
+    const w = $('#screen-ncedetail .w[data-w="engineer"]') || $('#screen-ncedetail .w.hit');
+    return w ? openWordTip(w.dataset.w, w) : null;
+  }
+  if (a === 'bubble') {
+    const s = $('#screen-ncedetail .sent[data-line="4"]');
+    return s ? openBubble(4, s) : null;
+  }
+  if (a === 'assertNoContinuous') return assertNoContinuous();
+  if (a === 'autoRelogin') return setTimeout(() => { if (cur.preset === 'p10') reloginFlow(); }, 420);
+  if (a === 'reloginDone') return toast('登录成功 · 已自动重新加载');
+}
+
+/* ══════════ 产品逻辑（开关真生效 / 联动 / 需求① 交互 / 需求② 时序） ══════════ */
+function resetPinned() {
+  pinned = new Set(FEATURES.filter((f) => f.defaultPinned).map((f) => f.id));
+  renderFeatures();
+}
+function featureCardHome(f) {
+  return '<div class="feature-card ' + f.iconClass + '" data-go-feature="' + f.screen + '">' +
+    '<span class="f-ico">' + f.icon + '</span>' +
+    '<span class="f-txt"><b>' + f.title + '</b><small>' + f.desc + '</small></span>' +
+    '<svg class="ic chev"><use href="#i-chev-r"/></svg></div>';
+}
+function featureCardDiscover(f) {
+  const p = pinned.has(f.id);
+  return '<div class="feature-card ' + f.iconClass + '">' +
+    '<span class="f-ico">' + f.icon + '</span>' +
+    '<span class="f-txt" data-go-feature="' + f.screen + '"><b>' + f.title + '</b><small>' + f.desc + '</small></span>' +
+    '<button class="f-toggle' + (p ? ' on' : '') + '" data-toggle-pin="' + f.id + '">' + (p ? '已添加' : '+ 添加') + '</button></div>';
+}
+function renderFeatures() {
+  const homePinned = FEATURES.filter((f) => pinned.has(f.id));
+  const hf = $('#home-features'); if (hf) hf.innerHTML = homePinned.map(featureCardHome).join('');
+  const df = $('#discover-features'); if (df) df.innerHTML = FEATURES.map(featureCardDiscover).join('');
+}
+function togglePinned(id) {
+  if (pinned.has(id)) pinned.delete(id); else pinned.add(id);
+  renderFeatures();
+  const f = FEATURES.find((x) => x.id === id);
+  toast(pinned.has(id) ? '已添加「' + f.title + '」为常用' : '已从常用移除「' + f.title + '」');
+}
+function openFeature(screen) {
+  const f = FEATURES.find((x) => x.screen === screen);
+  if (f && f.needLogin && cur.role === 'guest') { openModal('login'); return; }
+  go(screen);
+}
+
+/* 需求① · 句子拆词渲染（通篇阅读视图，无常驻按钮） */
+function tokenize(en) {
+  return en.split(/(\s+)/).map((tok) => {
+    if (/^\s+$/.test(tok)) return tok;
+    const m = tok.match(/^([A-Za-z][A-Za-z'-]*)(.*)$/);
+    if (!m) return tok;
+    const cls = lookupWord(m[1]) ? 'w hit has-def' : 'w hit';
+    return '<span class="' + cls + '" data-w="' + m[1] + '">' + m[1] + '</span>' + m[2];
+  }).join('');
+}
+function renderSentences() {
+  const box = $('#sent-list');
+  if (!box) return;
+  box.innerHTML = LESSON.lines.map((l, i) =>
+    '<div class="sent" data-line="' + i + '" data-dr="sentence-' + i + '">' +
+      '<span class="sn">' + (i + 1) + '</span><span class="stx">' + tokenize(l.en) + '</span></div>' +
+    '<div class="sent-cn" id="cn-' + i + '" data-dr="sentence-cn">' + l.cn + '</div>'
+  ).join('');
+}
+function hideFloats() {
+  const wt = $('#word-tip'); if (wt) wt.classList.remove('on');
+  const bb = $('#bubble'); if (bb) bb.classList.remove('on');
+}
+function toggleCn(i) {
+  const cn = document.getElementById('cn-' + i);
+  const sent = $('#screen-ncedetail .sent[data-line="' + i + '"]');
+  if (!cn || !sent) return;
+  const willShow = !cn.classList.contains('show');
+  $$('#screen-ncedetail .sent-cn').forEach((e) => e.classList.remove('show'));
+  $$('#screen-ncedetail .sent').forEach((e) => e.classList.remove('expanded'));
+  if (willShow) { cn.classList.add('show'); sent.classList.add('expanded'); }
+  hideFloats();
+}
+function openWordTip(raw, anchor) {
+  const d = lookupWord(raw);
+  const wt = $('#word-tip');
+  wt.innerHTML = d
+    ? '<div class="wt-h"><span class="wt-w">' + d.word + '</span><span class="wt-p">' + d.phonetic + '</span><span class="wt-pos">' + d.pos + '</span></div>' +
+      '<div class="wt-d">' + d.def + '</div><div class="wt-e">例：' + d.example + '</div>'
+    : '<div class="wt-h"><span class="wt-w">' + raw + '</span><span class="wt-pos">词汇表外</span></div>' +
+      '<div class="wt-none">暂无释义（课文词汇表未收录该词）</div>';
+  positionFloat(wt, anchor, 232);
+  wt.classList.add('on');
+  $('#bubble').classList.remove('on');
+}
+function openBubble(idx, anchor) {
+  lpIdx = idx;
+  const bb = $('#bubble');
+  positionFloat(bb, anchor, 178);
+  bb.classList.add('on');
+  $('#word-tip').classList.remove('on');
+}
+function positionFloat(el, anchor, w) {
+  const body = $('#body');
+  const br = body.getBoundingClientRect();
+  const ar = anchor ? anchor.getBoundingClientRect() : null;
+  let left = ar ? (ar.left - br.left + 8) : 24;
+  let top = ar ? (ar.bottom - br.top + 6) : 120;
+  if (!ar || (ar.left === 0 && ar.top === 0)) { left = 34; top = 150; }
+  left = Math.max(10, Math.min(left, br.width - w - 10));
+  top = Math.min(top, br.height - 96);
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  el.style.width = w + 'px';
+}
+function highlight(i) {
+  playingIdx = i;
+  $$('#screen-ncedetail .sent').forEach((el, idx) => el.classList.toggle('playing', idx === i));
+}
+function playOneLine(i) {
+  highlight(playingIdx === i ? -1 : i);
+  toast('[小程序] InnerAudioContext 朗读此句，真机为准');
+}
+function collectLine(i) {
+  // V6 / 三态分离：guest = T1 从未登录态 → 沿用 11-13 既有未登录守卫弹窗 modal-login「请先登录」；
+  // 不弹 T2 会话过期的 modal-auth「登录已过期」（对从未登录用户语义错误，05 #5）。
+  if (cur.role === 'guest') { openModal('login'); return; }
+  const sent = $$('#screen-ncedetail .sent')[i];
+  const txt = sent ? sent.querySelector('.stx').textContent : '';
+  collected += 1;
+  $('#col-count').textContent = collected + ' 条';
+  $('#mine-col-count').textContent = collected + ' 条';
+  toast('已收藏 · tag=\'nce\' · 「' + txt.slice(0, 16) + '…」');
+}
+function setFont(l) {
+  const el = $('#screen-ncedetail');
+  el.dataset.font = l;
+  $$('#screen-ncedetail .fz').forEach((b) => b.classList.toggle('on', b.dataset.font === l));
+}
+/* 2026-11-18 10:01 改判 D1=C / V7-C（生效 · 第 2 次冻结）：只做通篇阅读视图、不提供连续朗读。
+   顶部工具条不存在「连续朗读」入口（无 #cont-btn / data-cont），tts.ts 零改动、不新增单句播放原语、
+   不新增整篇/逐句朗读调度；C ≠ 删掉所有朗读——V2 点句中文 / V4 长按气泡 / V5 气泡「朗读此句」
+   （一次现成 speakText(line.en)）继续存在。
+   必然失败反例 = 出现连续朗读入口或整篇朗读调度；原型以静态断言 assertNoContinuous() 演示，
+   可构造红灯用例由 10 ④ 盲测承接（本原型不跑浏览器走查、不进判据）。 */
+function assertNoContinuous() {
+  // V7-C 静态断言（可点击验证）：顶部工具条不存在连续朗读入口、稿内无整篇朗读调度。
+  const domEntry = document.querySelector('#cont-btn,[data-cont]');
+  const hasEntry = !!domEntry;
+  const sentences = $$('#screen-ncedetail .sent[data-line]').length;
+  if (hasEntry) {
+    toast('[V7-C 必然失败反例] 检测到连续朗读入口（#cont-btn / data-cont）→ V7-C 失败');
+    return false;
+  }
+  toast('[V7-C 断言通过] 顶部无连续朗读入口、无整篇朗读调度；通篇阅读视图 ' + sentences + ' 句按序可读；点句中文 / 长按气泡 / 气泡「朗读此句」仍可用');
+  return true;
+}
+function removeCollected() {
+  collected = Math.max(0, collected - 1);
+  $('#col-count').textContent = collected + ' 条';
+  $('#mine-col-count').textContent = collected + ' 条';
+  const items = $$('#collection-list .col-item');
+  if (items.length) items[items.length - 1].remove();
+  if (collected === 0) applyState('empty');
+}
+
+/* 需求② · 登录确认弹窗 → wx.login 占位 → auth:logged → 自动重拉时序 */
+function wxLoginPlaceholder() {
+  toast('[小程序] wx.login 静默登录，真机无授权弹窗、无验证码');
+}
+/* V17「稍后」：收起弹窗 + 常驻提示条（唯一合格行为，不再纯 closeModal） */
+function showReloginTip() {
+  const t = $('#relogin-tip'); if (t) t.classList.add('on');
+}
+function hideReloginTip() {
+  const t = $('#relogin-tip'); if (t) t.classList.remove('on');
+}
+function deferAuth() {
+  closeModal();          // 收起 modal-auth（不保留弹窗）
+  showReloginTip();      // 常驻提示条：点击可再次唤起同一弹窗
+  toast('已收起 · 点顶部提示条可再次唤起登录弹窗（V17）');
+}
+function reloginFlow() {
+  const btn = $('[data-relogin]');
+  if (btn && btn.disabled) return;
+  if (btn) { btn.disabled = true; btn.textContent = '登录中…'; }
+  wxLoginPlaceholder();
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = '重新登录'; }  // 按钮复位可再点
+    if (demoLoginFail) {
+      // V17 失败分支：弹窗仍在 + 按钮复位 + 失败提示；不关弹窗、不 reLaunch、不静默吞错
+      toast('登录失败，请重试 · 弹窗保留，「重新登录」可再点（V17）');
+      return;
+    }
+    closeModal();
+    hideReloginTip();                            // 登录成功 → 常驻提示条消失
+    applyState('loading');                       // 关弹窗 → 骨架屏
+    setTimeout(() => {
+      applyState('normal');                      // 自动 load() → 渲染完成
+      toast('登录成功 · 已自动重新加载');
+    }, 850);
+  }, 850);
+}
+function advanceFlow() {
+  const steps = $$('#flow-list .flow-step');
+  if (!steps.length) return;
+  steps.forEach((s, i) => {
+    s.classList.toggle('done', i < flowIdx);
+    s.classList.toggle('on', i === flowIdx);
+  });
+  flowIdx = (flowIdx + 1) % steps.length;
+}
+
+/* 统一事件委托：先控件，后产品 */
+document.addEventListener('click', (e) => {
+  const ctl = e.target.closest('[data-dc-preset],[data-dc-role],[data-dc-state],[data-dc-screen],[data-dc-anno],[data-dc-reset],[data-dc-next],[data-dc-toggle],[data-dc-fail],[data-close],[data-defer],[data-reopen-auth]');
+  if (ctl) {
+    if (ctl.dataset.dcPreset) return applyPreset(ctl.dataset.dcPreset);
+    if (ctl.hasAttribute('data-dc-next')) {
+      const i = DEMO.presets.findIndex((p) => p.id === cur.preset);
+      return applyPreset(DEMO.presets[(i + 1) % DEMO.presets.length].id);
+    }
+    if (ctl.dataset.dcRole) return setRole(ctl.dataset.dcRole);
+    if (ctl.dataset.dcState) return applyState(ctl.dataset.dcState);
+    if (ctl.dataset.dcScreen) return go(ctl.dataset.dcScreen);
+    if (ctl.hasAttribute('data-dc-fail')) {
+      demoLoginFail = ctl.dataset.dcFail === '1';
+      render();
+      return toast(demoLoginFail ? '已设为「模拟登录失败」：现在点弹窗「重新登录」看 V17 失败分支' : '已设为「登录成功」默认');
+    }
+    if (ctl.hasAttribute('data-dc-anno')) {
+      cur.anno = !cur.anno;
+      document.documentElement.dataset.demoAnno = cur.anno ? 'on' : 'off';
+      ctl.classList.toggle('on', cur.anno);
+      return;
+    }
+    if (ctl.hasAttribute('data-dc-reset')) {
+      cur.anno = false; document.documentElement.dataset.demoAnno = 'off';
+      $$('[data-dc-anno]').forEach((b) => b.classList.remove('on'));
+      resetStates(); closeModal(); flowIdx = 0;
+      return applyPreset(DEMO.presets.find((p) => p.default).id);
+    }
+    if (ctl.hasAttribute('data-dc-toggle')) {
+      const box = $('[data-demo-ctl]'), open = box.dataset.open !== 'true';
+      box.dataset.open = String(open);
+      $('[data-dc-toggle]').setAttribute('aria-expanded', String(open));
+      try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (_) {}
+      return;
+    }
+    if (ctl.hasAttribute('data-defer')) return deferAuth();          // V17「稍后」→ 收起弹窗 + 常驻提示条
+    if (ctl.hasAttribute('data-reopen-auth')) return openModal('auth'); // 点提示条 → 再次唤起同一弹窗
+    if (ctl.hasAttribute('data-close')) return closeModal();         // guest 守卫弹窗「取消」纯关闭
+  }
+
+  /* 需求② 弹窗动作 */
+  const rl = e.target.closest('[data-relogin]');
+  if (rl) return reloginFlow();
+  const wl = e.target.closest('[data-wxlogin]');
+  if (wl) { wxLoginPlaceholder(); closeModal(); setRole('member'); return toast('登录成功 · auth:logged 广播（真机语义）'); }
+  const sa = e.target.closest('[data-show-auth]');
+  if (sa) return openModal('auth');
+  const rt = e.target.closest('[data-retry]');
+  if (rt) { applyState('loading'); return setTimeout(() => applyState('normal'), 850); }
+  const fn = e.target.closest('[data-flow-next]');
+  if (fn) return advanceFlow();
+
+  /* 需求① 句子 / 单词 / 气泡 / 单句朗读（V7-C：顶部无连续朗读入口，无 data-cont 委托） */
+  const ba = e.target.closest('[data-bubble-act]');
+  if (ba) {
+    const act = ba.dataset.bubbleAct;
+    $('#bubble').classList.remove('on');
+    if (act === 'play') return playOneLine(lpIdx);
+    if (act === 'fav') return collectLine(lpIdx);
+  }
+  const wEl = e.target.closest('#screen-ncedetail .w[data-w]');
+  if (wEl) return openWordTip(wEl.dataset.w, wEl);
+  const fz = e.target.closest('[data-font]');
+  if (fz) return setFont(fz.dataset.font);
+  const line = e.target.closest('#screen-ncedetail .sent[data-line]');
+  if (line) {
+    if (lpFired) { lpFired = false; return; }   // 长按后不误触发点句展开
+    return toggleCn(+line.dataset.line);
+  }
+
+  /* 11-13 基线导航与功能 */
+  const goEl = e.target.closest('[data-go]');
+  if (goEl) return go(goEl.dataset.go);
+  const backEl = e.target.closest('[data-go-back]');
+  if (backEl) return back();
+  const tabEl = e.target.closest('[data-tab]');
+  if (tabEl) return go(tabEl.dataset.tab);
+  const gf = e.target.closest('[data-go-feature]');
+  if (gf) return openFeature(gf.dataset.goFeature);
+  const tp = e.target.closest('[data-toggle-pin]');
+  if (tp) return togglePinned(tp.dataset.togglePin);
+  const del = e.target.closest('[data-del]');
+  if (del) return removeCollected();
+  const set = e.target.closest('[data-setting]');
+  if (set) return toast('「' + set.querySelector('span').textContent + '」落地以小程序真机为准');
+
+  /* 点击别处收起浮层（不拦产品按钮） */
+  if (!e.target.closest('#word-tip,#bubble')) hideFloats();
+});
+
+/* 长按句子（≥500ms）/ 桌面右键等效长按 */
+function startLongPress(e) {
+  const sent = e.target.closest('#screen-ncedetail .sent[data-line]');
+  if (!sent) return;
+  lpFired = false;
+  lpIdx = +sent.dataset.line;
+  clearTimeout(lpTimer);
+  lpTimer = setTimeout(() => { lpFired = true; openBubble(lpIdx, sent); }, 500);
+}
+function endLongPress() {
+  clearTimeout(lpTimer);
+  if (lpFired) setTimeout(() => { lpFired = false; }, 420);
+}
+document.addEventListener('mousedown', startLongPress);
+document.addEventListener('mouseup', endLongPress);
+document.addEventListener('touchstart', startLongPress, { passive:true });
+document.addEventListener('touchend', endLongPress);
+document.addEventListener('touchcancel', endLongPress);
+document.addEventListener('contextmenu', (e) => {
+  const sent = e.target.closest('#screen-ncedetail .sent[data-line]');
+  if (sent) { e.preventDefault(); lpFired = true; openBubble(+sent.dataset.line, sent); }
+});
+
+/* 键盘（§七；输入框内让行） */
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input,textarea,select,[contenteditable]')) return;
+  const keys = Object.keys(DEMO.screens);
+  if (e.key === '[') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) - 1 + keys.length) % keys.length]); }
+  else if (e.key === ']') { e.preventDefault(); go(keys[(keys.indexOf(cur.screen) + 1) % keys.length]); }
+  else if (e.key === 'h' || e.key === 'H') { $('[data-dc-toggle]').click(); }
+  else if (e.key === 'a' || e.key === 'A') { $('[data-dc-anno]').click(); }
+  else if (e.key === '?') { $('[data-demo-ctl]').dataset.open = 'true'; $('[data-dc-toggle]').setAttribute('aria-expanded', 'true'); }
+  else if (e.key === 'Escape') { hideFloats(); closeModal(); }
+  else if (/^[1-9]$/.test(e.key)) { const p = DEMO.presets[+e.key - 1]; if (p) applyPreset(p.id); }
+});
+
+/* hash 路由回灌（§5.4 单一入口的另一半） */
+addEventListener('hashchange', () => {
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  if (k && k !== cur.screen) go(k, { hash:false });
+});
+
+/* 初始化：折叠态恢复 + 状态层 + 句子 + 功能卡 + 默认场景 */
+try { const o = localStorage.getItem(KEY); if (o !== null) $('[data-demo-ctl]').dataset.open = o === '1' ? 'true' : 'false'; } catch (_) {}
+if (innerWidth < 1200) $('[data-demo-ctl]').dataset.open = 'false';
+buildStateLayers();
+renderSentences();
+renderFeatures();
+advanceFlow();
+(function init() {
+  const k = (location.hash.match(/^#s=(\w+)/) || [])[1];
+  applyPreset(DEMO.presets.find((p) => p.default).id);
+  if (k) go(k, { hash:false });
+})();
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@
  * - 合并成功后服务端重签凭证，前端须 setToken 后再刷新身份
  */
 import { get, post, put, setToken, getToken } from '../utils/request';
+import { normalizeMessage } from '../utils/error-message';
 
 export type BindSource = 'phone' | 'email';
 
@@ -235,10 +236,12 @@ export function readConflict(err: unknown): BindConflict | null {
   return null;
 }
 
-/** 服务端错误文案（优先取 message，兼容数组形态） */
+/**
+ * 服务端错误文案（优先取 message，兼容数组形态）。
+ * 归一化委托 utils/error-message.ts 的唯一真相源，与 utils/request.ts 的失败提示共用同一份逻辑
+ * （2026-11-20 治本 / 49 §5 方案 B）；函数签名与返回类型不变，既有调用点零改动。
+ */
 export function readMessage(err: unknown, fallback: string): string {
   const m = (err as { data?: { message?: unknown } } | null | undefined)?.data?.message;
-  if (Array.isArray(m)) return String(m[0] || fallback);
-  if (typeof m === 'string') return m || fallback;
-  return fallback;
+  return normalizeMessage(m, fallback);
 }

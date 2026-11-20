@@ -1,10 +1,23 @@
-<view class="gate">
+<!-- mode='page'：三 tab 页整页登录墙（默认态；不传 mode 即此态，NG5 零回归） -->
+<view wx:if="{{mode !== 'modal'}}" class="gate">
   <view class="gate-ic">橙</view>
   <view class="gate-t">{{title}}</view>
   <view class="gate-d">{{desc}}</view>
-  <view class="gate-btn" bindtap="onLogin">微信一键登录</view>
+  <view class="gate-btn {{logging ? 'disabled' : ''}}" bindtap="onLogin">{{logging ? '登录中…' : '微信一键登录'}}</view>
   <view class="gate-note">
     登录即表示同意<text wx:if="{{agreementUrl}}" class="gate-link" bindtap="onAgreement">《用户协议与隐私政策》</text><text wx:else>《用户协议与隐私政策》</text>
     真机：wx.login 静默登录，无授权弹窗、无验证码
+  </view>
+</view>
+
+<!-- mode='modal'：三数据页会话过期弹窗（标题固定「登录已过期」，含重新登录 / 稍后） -->
+<view wx:if="{{mode === 'modal'}}" class="modal-mask">
+  <view class="modal-box">
+    <view class="modal-t">登录已过期</view>
+    <view class="modal-d">刚才的加载没能完成。重新登录后会自动继续加载，学习进度与收藏不受影响。</view>
+    <view class="modal-acts">
+      <view class="modal-btn ghost" bindtap="onDefer">稍后</view>
+      <view class="modal-btn {{logging ? 'disabled' : ''}}" bindtap="onLogin">{{logging ? '登录中…' : '重新登录'}}</view>
+    </view>
   </view>
 </view>

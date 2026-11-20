@@ -3,5 +3,7 @@
   "navigationBarBackgroundColor": "#FFFFFF",
   "navigationBarTextStyle": "black",
   "backgroundColor": "#FFFFFF",
-  "usingComponents": {}
+  "usingComponents": {
+    "login-gate": "/components/login-gate/index"
+  }
 }

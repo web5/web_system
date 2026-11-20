@@ -32,10 +32,12 @@ const busMock = {
   off: jest.fn(),
 };
 
+let storage: Record<string, string>;
+
 const wxMock = {
   getStorageSync: jest.fn((key: string): unknown => {
-    if (key === 'api_base') return 'http://example.com';
-    if (key === 'access_token') return 'token-123';
+    if (key === 'api_base') return storage.api_base;
+    if (key === 'access_token') return storage.access_token;
     return undefined;
   }),
   setStorageSync: jest.fn(),
@@ -54,6 +56,8 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   capturedSuccess = null;
+  // 默认已初始化、已登录；新增「本地错误边界」用例通过改写 storage 触发对应分支
+  storage = { api_base: 'http://example.com', access_token: 'token-123' };
 });
 
 function fireSuccess(res: FakeSuccessRes): void {
@@ -134,5 +138,41 @@ describe('request.ts 的 HTTP 成功判据统一为 2xx（不只 200）', () => 
     fireSuccess({ statusCode: 401, data: { message: 'Unauthorized' } });
     await expect(p).rejects.toBeDefined();
     expect(wxMock.removeStorageSync).toHaveBeenCalledWith('access_token');
+  });
+});
+
+/**
+ * 本地错误统一兜底边界（2026-11-20 治本 · 49 §5 方案 B / lead 选项 2 裁决 / V6 门）。
+ * 非 silent 且失败 ⇒ 有且仅有一条 string toast；判据原则是「是否有其它 UI 通道承接」：
+ *   - url 非法 / 应用未初始化：无任何 UI 承接 ⇒ 必弹且 string（走 utils/error-message.ts
+ *     归一化，rawMessage 为 undefined 时回落「网络异常，请重试」）；
+ *   - !token → NOT_LOGGED_IN：登录态信号，由 login-gate / modal-login 承接，按 V6 门
+ *     （tests/request-login-timeout.test.ts:111-122，8688 复核）保持静默，页面层与请求层都不弹。
+ * 台账 #8947：把「HTTP 400 必须有提示」与「本地错误边界」一并钉进判据，不跑全量。
+ */
+describe('本地错误统一兜底边界（url 非法 / 未初始化 必弹；NOT_LOGGED_IN 静默）', () => {
+  it('url 非 /api/ 前缀 → 必弹 1 条中文 string（无 UI 承接）', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(request({ url: 'users/me' })).rejects.toThrow(/必须以 \/api\/ 开头/);
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    const title = (wxMock.showToast.mock.calls[0][0] as { title: unknown }).title;
+    expect(typeof title).toBe('string');
+    expect(title).toBe('网络异常，请重试');
+    spy.mockRestore();
+  });
+
+  it('应用未初始化（无 baseUrl）→ 必弹 1 条中文 string（无 UI 承接）', async () => {
+    storage.api_base = '';
+    await expect(request({ url: '/api/glossary' })).rejects.toThrow(/应用未初始化/);
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    const title = (wxMock.showToast.mock.calls[0][0] as { title: unknown }).title;
+    expect(typeof title).toBe('string');
+    expect(title).toBe('网络异常，请重试');
+  });
+
+  it('!token → NOT_LOGGED_IN：登录态信号，页面层与请求层都不弹（V6 门 :111-122）', async () => {
+    storage.access_token = '';
+    await expect(request({ url: '/api/glossary' })).rejects.toThrow('NOT_LOGGED_IN');
+    expect(wxMock.showToast).not.toHaveBeenCalled();
   });
 });

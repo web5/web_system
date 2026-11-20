@@ -1,13 +1,23 @@
-<!-- 新概念英语 · 课文详情（整改后：英文课文 + 逐句朗读 + 逐句收藏） -->
-<view class="page f{{fontStep}} {{radiusClass}}">
+<!-- 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图；点句中文 / 点词 tip / 长按气泡 / 单句朗读） -->
+<view class="page f{{fontStep}} mode-{{readMode}} {{radiusClass}}" data-font="{{fontStep === 0 ? 's' : (fontStep === 2 ? 'l' : 'm')}}">
+  <!-- 顶部工具条：阅读档三档 + 字号三档，两组 seg 正交（切档互不复位）；不提供任何整篇连播入口 -->
   <view class="bar">
-    <view class="seg font">
-      <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
-      <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
-      <view class="seg-i {{fontStep === 2 ? 'on' : ''}}" data-step="2" bindtap="setFont">A+</view>
+    <view class="bar-segs">
+      <view class="seg mode">
+        <view class="seg-i {{readMode === 'immersion' ? 'on' : ''}}" data-mode="immersion" bindtap="setReadMode">沉浸</view>
+        <view class="seg-i {{readMode === 'bilingual' ? 'on' : ''}}" data-mode="bilingual" bindtap="setReadMode">双语</view>
+        <view class="seg-i {{readMode === 'tap' ? 'on' : ''}}" data-mode="tap" bindtap="setReadMode">点按</view>
+      </view>
+      <view class="seg font">
+        <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
+        <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
+        <view class="seg-i {{fontStep === 2 ? 'on' : ''}}" data-step="2" bindtap="setFont">A+</view>
+      </view>
     </view>
+    <view class="bar-note">通篇阅读 · 点句看译文</view>
   </view>
 
+  <!-- 骨架 / 失败态：与弹窗叠加层并存，不整页替换（V12 底层可见 ≥1） -->
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{error}}" class="state err" bindtap="onRetry">{{error}}（点击重试）</view>
 
@@ -18,17 +28,43 @@
       <view class="title-cn" wx:if="{{detail.titleCn}}">{{detail.titleCn}}</view>
     </view>
 
-    <view class="sentences">
-      <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
-        id="line-{{si}}"
-        class="sent {{readingLineIdx === si ? 'reading' : ''}}"
-        data-i="{{si}}" bindtap="toggleLine">
-        <view class="en">{{line.en}}</view>
-        <view class="acts">
-          <text class="play">{{readingLineIdx === si ? (readingPhase === 'loading' ? '…' : '■') : '♪'}}</text>
-          <text class="fav" data-i="{{si}}" catchtap="collectLine">☆</text>
+    <!-- D-04 / D-11：句子列表外包 .card + 分区标题 + 操作提示（长按气泡可发现性） -->
+    <view class="card">
+      <view class="sect-h">
+        <text>通篇阅读视图</text>
+        <text class="sub">D1 主定义 · 英文全文不打断</text>
+      </view>
+      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；长按句子出朗读此句 / 收藏气泡</view>
+
+      <view class="sentences">
+        <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
+          id="line-{{si}}"
+          class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
+          data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
+          <view class="sline">
+            <view class="sn">{{si + 1}}</view>
+            <view class="stx">
+              <view class="en">
+                <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{tk.w ? 'hit' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap">{{tk.t}}</text>
+                  <text wx:else>{{tk.t}}</text>
+                </block>
+              </view>
+            </view>
+          </view>
+          <!-- V25 双语档全部中文常显（不依赖 expandedIdx）；tap 档仍由 expandedIdx 逐句展开；沉浸档不渲染 -->
+          <view wx:if="{{readMode === 'bilingual' || expandedIdx === si}}" class="sent-cn show">{{line.cn}}</view>
         </view>
       </view>
+    </view>
+
+    <!-- V24 参考译文 / 中文解释：沉浸档文末折叠区（默认收起），内容 = 整篇 lines[].cn 拼接（含空值兜底） -->
+    <view wx:if="{{readMode === 'immersion'}}" class="cn-fold">
+      <view class="cn-fold-h" bindtap="toggleCnSection">
+        <text>参考译文 / 中文解释</text>
+        <text class="cn-fold-tog">{{cnExpanded ? '收起' : '展开'}}</text>
+      </view>
+      <view wx:if="{{cnExpanded}}" class="cn-fold-c">{{fullCn}}</view>
     </view>
 
     <view class="pager">
@@ -38,4 +74,44 @@
 
     <view class="pad" />
   </block>
+
+  <!-- 19:11 ③ 点词中文 tip = 移动端底部统一浮层（position:fixed / bottom:0），作废 16:30「就近锚定」。
+       word-tip 不再绑定 tipPos 的 left/top；tipPos 字段保留但不得驱动本浮层。
+       关闭：右上 ✕ / 点浮层外（句子空白按既有 _applyLineTap 清 tipWord）/ 再点其它词替换内容。
+       word / phonetic / pos / def / example 缺失省略；表外词「暂无释义」且保留可点。 -->
+  <view wx:if="{{tipWord}}" class="word-tip on">
+    <view class="wt-head">
+      <view class="wt-w">{{tipWord.word}}</view>
+      <view class="wt-x" catchtap="closeTip">✕</view>
+    </view>
+    <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
+    <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
+    <view wx:if="{{tipWord.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
+    <view wx:elif="{{tipWord.def}}" class="wt-def">{{tipWord.def}}</view>
+    <view wx:if="{{tipWord.example}}" class="wt-ex">{{tipWord.example}}</view>
+  </view>
+
+  <!-- V4 / D-02 长按气泡：锚定被长按句的浮层，含且仅含「朗读此句」「收藏」两动作 -->
+  <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" style="left:{{bubblePos ? bubblePos.left : 0}}rpx;top:{{bubblePos ? bubblePos.top : 0}}rpx" catchtap="closeBubble">
+    <view class="bi" data-bubble-act="play" data-i="{{bubbleIdx}}" catchtap="onBubbleSpeak">朗读此句</view>
+    <view class="bi" data-bubble-act="fav" data-i="{{bubbleIdx}}" catchtap="collectLine">收藏</view>
+  </view>
+
+  <!-- 需求① T1 从未登录守卫（内联 modal-login「请先登录」；三态分离，不弹会话过期弹窗） -->
+  <view wx:if="{{guestLoginShow}}" class="modal" id="modal-login">
+    <view class="box">
+      <view class="m-t">请先登录</view>
+      <view class="m-d">登录后学习进度与收藏跟着账号走。登录由小程序静默完成。</view>
+      <view class="m-acts">
+        <view class="btn ghost sm" bindtap="onCloseGuest">取消</view>
+        <view class="btn sm" bindtap="onGuestLogin">去登录</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 需求② T2 会话过期弹窗：login-gate 的 modal 态（叠加层，底层骨架/内容不销毁） -->
+  <login-gate wx:if="{{showAuthModal}}" mode="modal" bind:defer="onAuthDefer" />
+
+  <!-- V17 常驻提示条：稍后收起弹窗后显示，点击再次唤起同一 modal-auth；登录成功前不消失 -->
+  <view wx:if="{{showReloginTip}}" class="relogin-tip" bindtap="onReopenAuth">登录已过期，数据未更新 · 点此重新登录</view>
 </view>

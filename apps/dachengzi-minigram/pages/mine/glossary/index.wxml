@@ -1,6 +1,8 @@
 <!-- 收藏：句子快照卡片（英文 + 出处 + 译文 + meta），点 × 删除 -->
 <view class="page {{radiusClass}}">
   <view class="tip">你收藏的句子会一直保留在这里。</view>
+
+  <!-- 骨架 / 内容：与弹窗叠加层并存，不整页替换（V12 底层可见 ≥1） -->
   <view class="loading" wx:if="{{loading}}">载入中…</view>
 
   <block wx:if="{{!loading && !empty}}">
@@ -23,4 +25,10 @@
     <view class="e2">在课文中点句子旁的「收藏」</view>
     <view class="go" bindtap="goNce">去学课文</view>
   </view>
+
+  <!-- 需求② T2 会话过期弹窗：login-gate 的 modal 态（叠加层，底层骨架/内容不销毁） -->
+  <login-gate wx:if="{{showAuthModal}}" mode="modal" bind:defer="onAuthDefer" />
+
+  <!-- V17 常驻提示条：稍后收起弹窗后显示，点击再次唤起同一 modal-auth；登录成功前不消失 -->
+  <view wx:if="{{showReloginTip}}" class="relogin-tip" style="position:fixed;left:0;right:0;bottom:0;z-index:150;padding:22rpx 30rpx;background:#FEF3C7;color:#92400E;font-size:26rpx;text-align:center" bindtap="onReopenAuth">登录已过期，数据未更新 · 点此重新登录</view>
 </view>

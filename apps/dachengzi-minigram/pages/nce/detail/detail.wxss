@@ -1,40 +1,118 @@
-/* 新概念英语 · 课文详情（整改后：英文课文 + 逐句朗读 + 逐句收藏） */
-.page { min-height: 100vh; background: #FFFFFF; color: #1A1A1F; padding: 0 30rpx; }
-.bar { display: flex; align-items: center; justify-content: flex-end; padding: 20rpx 0; border-bottom: 1rpx solid rgba(0,0,0,.08); position: sticky; top: 0; background: #FFFFFF; z-index: 5; }
+/* 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图：点句中文 / 点词 tip / 长按气泡 / 单句朗读）
+   无常驻 ♪/☆ 控件；朗读仅由气泡「朗读此句」触发，tts 服务零改动。
+   选项 A（18 §5）：D-01/D-02 锚定浮层 · D-03 配色反相 · D-04/D-11 信息结构与操作提示
+   · D-06 词点线 · D-07 展开态蓝系 · D-09 句序号；D-05/D-08/D-10 不做。
+   2026-11-19 19:11 用户口径变更：① 英文正文统一正常黑（.w.hit 不再蓝）；
+   ② 展开的中文块 / .sent.expanded 去掉左侧色条（.sent transparent 占位防跳版保留）；
+   ③ 生词 tip 作废「就近锚定」，改移动端底部固定浮层（长按气泡仍 absolute 就近锚定，行为不变）。 */
+.page { min-height: 100vh; background: #FFFFFF; color: #1A1A1F; padding: 0 30rpx; position: relative; }
+.bar { display: flex; align-items: center; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid rgba(0,0,0,.08); position: sticky; top: 0; background: #FFFFFF; z-index: 5; }
 .seg { display: flex; border: 1rpx solid rgba(0,0,0,.08); border-radius: var(--r-control); overflow: hidden; }
 .seg-i { padding: 8rpx 14rpx; font-size: 24rpx; color: #6B7280; background: #FFFFFF; }
 .seg-i + .seg-i { border-left: 1rpx solid rgba(0,0,0,.08); }
 .seg-i.on { background: #3B82F6; color: #FFFFFF; }
+.bar-note { font-size: 22rpx; color: #9CA3AF; }
 
 .head { padding: 32rpx 0 18rpx; }
 .lno { font-size: 22rpx; color: #0EA5A4; letter-spacing: 1rpx; }
 .h1 { font-family: Georgia, serif; font-size: 46rpx; line-height: 1.3; margin-top: 8rpx; }
 .title-cn { color: #6B7280; font-size: 26rpx; margin-top: 6rpx; }
 
-.sentences { margin-top: 26rpx; }
-.sent {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  padding: 16rpx 10rpx;
-  min-height: 88rpx;
-  border-radius: var(--r-control);
-  border-bottom: 1rpx dashed rgba(0,0,0,.10);
-}
+/* D-04：句子列表外包卡片 + 分区标题 + 操作提示（D-11 长按气泡可发现性） */
+.card { background: #FFFFFF; border: 1rpx solid #E5E7EB; border-radius: var(--r-card, 20rpx); box-shadow: 0 6rpx 24rpx rgba(0,0,0,.05); padding: 18rpx 20rpx; }
+.sect-h { display: flex; align-items: center; justify-content: space-between; font-size: 25rpx; font-weight: 600; color: #1F2937; padding: 2rpx 4rpx 14rpx; }
+.sect-h .sub { font-size: 22rpx; font-weight: 400; color: #6B7280; }
+.hint { font-size: 22rpx; color: #4B5563; line-height: 1.7; background: #EFF6FF; border: 1rpx dashed #DBEAFE; border-radius: var(--r-control); padding: 14rpx 18rpx; margin-bottom: 16rpx; }
+
+.sentences { margin-top: 0; }
+.sent { display: block; padding: 16rpx 10rpx; border-radius: var(--r-control); border-bottom: 1rpx dashed rgba(0,0,0,.10); border-left: 6rpx solid transparent; }
 .sent:active { background: #FAFAFA; }
-.sent.reading { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
-.en { flex: 1; min-width: 0; font-family: Georgia, serif; line-height: 1.9; font-size: 32rpx; }
+/* 19:11 ② 展开态不再有蓝色左色条；浅蓝背景保留，.sent 的 transparent 占位边框防跳版 */
+.sent.expanded { background: #EFF6FF; }
+.sent.playing { background: #EFF6FF; box-shadow: inset 5rpx 0 0 0 #3B82F6; }
+.sline { display: flex; align-items: flex-start; }
+.sn { font-size: 22rpx; color: #9CA3AF; line-height: 1.9; min-width: 34rpx; margin-right: 12rpx; }
+.stx { flex: 1; min-width: 0; }
+.en { font-family: Georgia, serif; line-height: 1.9; font-size: 32rpx; }
 .f0 .en { font-size: 28rpx; }
 .f2 .en { font-size: 38rpx; }
+.w { color: #1A1A1F; }
+/* 19:11 ① 英文正文统一正常黑：.w.hit 不再 #1D4ED8；.w:active 按下态可保留；
+   .wt-w 是生词 tip 标题（非课文正文），保留品牌深蓝。 */
+.w.hit { color: #1A1A1F; }
+.w.has-def { border-bottom: 1rpx dotted #3B82F6; }
+.w:active { color: #3B82F6; }
+.sent-cn { display: none; }
+/* 19:11 ② 中文展开块不用左边框：仅浅蓝背景/间距区分；.sent 保留 transparent 占位防跳版 */
+.sent-cn.show { display: block; margin-top: 10rpx; padding: 12rpx 16rpx; border-radius: var(--r-control); background: #EFF6FF; color: #1F2937; font-size: 26rpx; line-height: 1.7; }
 
-.acts { flex: 0 0 auto; display: flex; align-items: center; gap: 24rpx; }
-.play { color: #9CA3AF; font-size: 30rpx; }
-.play.on { color: #3B82F6; }
-.fav { color: #D98200; font-size: 34rpx; padding: 0 8rpx; }
-.fav:active { opacity: .6; }
+/* 19:11 ③ 移动端底部浮层（bottom sheet）：生词 tip 统一从底部出来，作废就近锚定。
+   position:fixed + left/right/bottom:0 + width:auto；上方圆角；白底/描边/阴影保留；
+   z-index 80 > 长按气泡 61；轻微上滑感。关闭：右上 ✕ / 点浮层外 / 再点其它词替换内容。 */
+.word-tip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; width: auto; padding: 26rpx 30rpx 44rpx; border: 1rpx solid #DBEAFE; border-radius: 24rpx 24rpx 0 0; background: #FFFFFF; color: #1A1A1F; box-shadow: 0 -12rpx 40rpx rgba(0,0,0,.14); box-sizing: border-box; animation: wt-rise .18s ease-out; }
+@keyframes wt-rise { from { transform: translateY(14rpx); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
+.wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
+.wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }
+.wt-p { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; }
+.wt-pos { display: inline-block; font-size: 22rpx; color: #1D4ED8; margin-top: 8rpx; }
+.wt-def { font-size: 28rpx; color: #1F2937; margin-top: 10rpx; line-height: 1.6; }
+.wt-none { font-size: 26rpx; color: #6B7280; margin-top: 10rpx; }
+.wt-ex { font-size: 24rpx; color: #4B5563; margin-top: 10rpx; font-style: italic; }
+
+/* D-02 / D-03：长按气泡 = 深色紧凑气泡，absolute 锚定被长按句，视觉层级与 tip 相反 */
+.bubble { position: absolute; left: 0; top: 0; z-index: 61; width: 340rpx; display: flex; background: #1F2937; border-radius: var(--r-control); box-shadow: 0 12rpx 40rpx rgba(0,0,0,.22); overflow: hidden; }
+.bi { flex: 1; text-align: center; padding: 22rpx 0; font-size: 26rpx; color: #FFFFFF; }
+.bi + .bi { border-left: 1rpx solid rgba(255,255,255,.18); }
+.bi:active { background: rgba(255,255,255,.12); }
+
+.modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 200; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 0 48rpx; }
+.modal .box { width: 100%; max-width: 560rpx; background: #FFFFFF; border-radius: var(--r-control); padding: 40rpx 32rpx 28rpx; }
+.m-t { font-size: 34rpx; font-weight: 600; color: #1A1A1F; text-align: center; }
+.m-d { font-size: 26rpx; color: #6B7280; line-height: 1.7; margin-top: 16rpx; text-align: center; }
+.m-acts { display: flex; gap: 20rpx; margin-top: 32rpx; }
+.btn { flex: 1; text-align: center; padding: 20rpx 0; border-radius: var(--r-pill); font-size: 28rpx; background: #3B82F6; color: #FFFFFF; }
+.btn.ghost { background: #F3F4F6; color: #6B7280; }
+.btn.sm { font-size: 26rpx; }
+
+.relogin-tip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; padding: 22rpx 30rpx; background: #FEF3C7; color: #92400E; font-size: 26rpx; text-align: center; }
 
 .pager { display: flex; justify-content: space-between; margin-top: 40rpx; }
 .pg { font-size: 26rpx; color: #3B82F6; padding: 14rpx 0; }
-.pad { height: 140rpx; }
+.pad { height: 160rpx; }
 .state { padding: 100rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
 .state.err { color: #DC2626; }
+
+/* ===== V21+ 阅读三档 =====
+   以下均为新增规则，不新增第二个 .word-tip/.bubble/.sent.expanded/.sent-cn.show/.w.hit 规则块，
+   保证静态判据「首个匹配」不变。2026-11-19 19:11 例外：上方 .w.hit/.sent.expanded/.sent-cn.show/
+   .word-tip 四个规则块按用户口径**就地修订**（非追加），语义见各块注释；本段三档排版规则不受影响。 */
+
+/* 顶部两组 seg 正交：阅读档 / 字号档并列，切档互不复位 */
+.bar-segs { display: flex; align-items: center; gap: 14rpx; flex-wrap: wrap; }
+.seg.mode .seg-i.on { background: #0EA5A4; border-color: #0EA5A4; }
+.seg.mode .seg-i { font-size: 24rpx; }
+
+/* V24 沉浸档独立排版：句子连排成段落、去 .sn 逐句序号与卡片边框/背景、行距更宽。
+   点按/双语档保持上方既有逐句分行卡片（.sent / .sn / .stx / .card 规则不变）。 */
+.mode-immersion .card { border: none; box-shadow: none; background: transparent; padding: 0; }
+.mode-immersion .sentences { margin-top: 8rpx; }
+.mode-immersion .sentences .sent {
+  display: inline; padding: 0; margin: 0; border: none; border-left: none;
+  background: transparent; border-radius: 0;
+}
+.mode-immersion .sentences .sent:active,
+.mode-immersion .sentences .sent.playing { background: transparent; box-shadow: none; }
+.mode-immersion .sentences .sline { display: inline; }
+.mode-immersion .sentences .sn { display: none; }
+.mode-immersion .sentences .stx { display: inline; }
+.mode-immersion .sentences .en { display: inline; line-height: 2.15; }
+/* 沉浸档不逐句展开中文（WXML 已用 wx:if 挡住，此处双保险，绝不产生 .expanded 视觉态） */
+.mode-immersion .sentences .sent-cn { display: none !important; }
+
+/* V24 参考译文 / 中文解释 折叠区（沉浸档文末，默认收起） */
+.cn-fold { margin: 32rpx 0 8rpx; border: 1rpx solid #E5E7EB; border-radius: var(--r-card, 20rpx); background: #FFFFFF; overflow: hidden; }
+.cn-fold-h { display: flex; align-items: center; justify-content: space-between; padding: 22rpx 24rpx; font-size: 27rpx; color: #1F2937; }
+.cn-fold-h:active { background: #F9FAFB; }
+.cn-fold-tog { font-size: 24rpx; color: #3B82F6; }
+.cn-fold-c { padding: 8rpx 24rpx 26rpx; font-size: 26rpx; line-height: 1.9; color: #4B5563; border-top: 1rpx solid #F3F4F6; white-space: pre-wrap; }
