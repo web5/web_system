@@ -1,11 +1,17 @@
 /**
  * utils/request.ts「失败提示统一契约」单测（2026-11-20 治本 · 依据 49 §5 方案 B / 台账 #8947）。
+ * 2026-11-20 二改：51 §4 D1 冻结反例 → 改「顶层单一出口」，新增 ⑧ 回归判据。
  *
  * 行为契约（唯一真相源）：
  *   1. 所有经 utils/request.ts 发出的请求，只要非 silent 且失败，必须有且仅有一条
  *      用户可见 toast，且 title 恒为 string —— 禁止把数组 / 对象直接传给 wx.showToast。
- *   2. 错误文案归一化：数组 → String(m[0] || fallback)；string → 原值（空串回落）；
- *      对象 / 其它 → fallback（HTTP 用「请求失败 (<statusCode>)」，本地用「网络异常，请重试」）。
+ *      「有且仅有一条」由「request() 顶层 catch 只调用一次 notifyFailure」结构性保证：
+ *      doRequest 三条失败路径只 reject，不写任何去重标记、不读 / 写错误对象，
+ *      故 Object.freeze / 不可扩展 / Proxy / 原始值 err 天然只弹一次（51 §4 D1）。
+ *   2. 错误文案归一化：数组 → 首项做类型判断（string 原值 / number 十进制字符串 /
+ *      对象·数组·其它回落 fallback）；string → 原值（空串回落）；对象 / 其它 → fallback。
+ *      fallback 口径：HTTP 非 2xx「请求失败 (<statusCode>)」、ai-agent 2xx 错误信封
+ *      「请求失败 (<code>)」、fail(err)「网络请求失败」、本地 throw「网络异常，请重试」。
  *   3. 契约边界（2026-11-20 lead 选项 2 裁决 / V6 门 tests/request-login-timeout.test.ts:111-122）：
  *      判据原则是「是否有其它 UI 通道承接」，不是「是否 throw」。url 非法 / 应用未初始化
  *      无 UI 承接 ⇒ 必弹且 string；「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate
@@ -17,6 +23,10 @@
  *   （@types/wechat-miniprogram@3.4.10 lib.wx.api.d.ts:5843 ShowToastOption.title: string），
  *   页面层 detail.ts 又因 hasHttpResponse 放弃兜底 → 全链路静默（49 §3）。
  *   既有 nce-detail-v7c.test.ts:945 把「HTTP 400 不弹」钉成预期，属验收盲区（49 §4）。
+ *
+ * 51 §4 D1 反例（本单 ⑧ 固化）：旧实现把 __toastShown 写进外部错误对象去重，
+ *   Object.freeze(res) 后赋值抛 TypeError 被 try/catch 吞掉，顶层兜底再弹一次 →
+ *   showToastCount = 2，违反契约 1。改顶层单一出口后不存在写标记，对照组与冻结组都恰 1 条。
  *
  * 测试形态照 tests/request-envelope.test.ts（本地 mock wx，不拉起开发者工具 / 不跑 E2E）。
  */
@@ -90,7 +100,7 @@ function lastTitle(): string {
 }
 
 // ═══════════════ ① 400 + 数组 message（dev 真实形态） ═══════════════
-describe('① HTTP 非 2xx + 数组 message → 归一化 + 必弹 + 去重', () => {
+describe('① HTTP 非 2xx + 数组 message → 归一化 + 必弹 + 恰 1 条', () => {
   it('400 + data.message 为 class-validator 数组 → toast 恰 1 条，title 为 string 且取数组首条', async () => {
     const p = request({ url: '/api/glossary', method: 'POST', data: { tag: 'nce' } });
     fireSuccess({
@@ -106,7 +116,7 @@ describe('① HTTP 非 2xx + 数组 message → 归一化 + 必弹 + 去重', ()
     });
     await expect(p).rejects.toBeDefined();
 
-    expect(wxMock.showToast).toHaveBeenCalledTimes(1); // 去重生效：doRequest 弹 + 顶层不补弹
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1); // 顶层单一出口：仅顶层 catch 弹一次
     expect(wxMock.showToast).toHaveBeenCalledWith({ title: 'property tag should not exist', icon: 'none' });
     expect(lastTitle()).toBe('property tag should not exist');
     expect(wxMock.removeStorageSync).not.toHaveBeenCalled(); // 非 401 不得清 token
@@ -160,6 +170,17 @@ describe('② 对象 / 数字 / 空串 message → 回落 string，绝不透出�
     await expect(p).rejects.toBeDefined();
     expect(wxMock.showToast).toHaveBeenCalledTimes(1);
     expect(lastTitle()).toBe('信封数组首条');
+  });
+
+  it('400 + message 为数组且首项是对象 → 回落 fallback「请求失败 (400)」，绝不产出 "[object Object]"（51 §4 D5）', async () => {
+    const p = request({ url: '/api/glossary', method: 'POST' });
+    fireSuccess({ statusCode: 400, data: { message: [{ error: 'Bad Request' }, 'second'] } });
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    const title = lastTitle();
+    expect(typeof title).toBe('string');
+    expect(title).toBe('请求失败 (400)');
+    expect(title).not.toContain('[object Object]');
   });
 });
 
@@ -285,22 +306,59 @@ describe('⑥ 既有周边行为不变', () => {
   });
 });
 
-// ═══════════════ ⑦ 去重机制（显式标记 __toastShown） ═══════════════
-describe('⑦ 去重：doRequest 已弹 + 顶层不再弹，恰 1 条 + err 带显式标记', () => {
-  it('非 2xx 失败只弹 1 条，reject 的 err 挂 __toastShown', async () => {
+// ═══════════════ ⑦ 顶层单一出口：不写错误对象内部状态 ═══════════════
+describe('⑦ 顶层单一出口：失败提示只在 request() 顶层 catch 发生一次，不污染 err', () => {
+  it('非 2xx 失败只弹 1 条，reject 的 err 保持原始形态（不挂任何去重标记）', async () => {
     const p = request({ url: '/api/glossary', method: 'POST' });
     fireSuccess({ statusCode: 400, data: { message: ['a', 'b'] } });
     const err = await p.catch((e: unknown) => e);
     expect(err).toBeDefined();
-    expect((err as Record<string, unknown>).__toastShown).toBe(true);
+    // 不得改变 reject 的错误对象形态：statusCode / message 原样透出，供上层与既有测试依赖。
+    expect((err as { statusCode?: number }).statusCode).toBe(400);
+    // 顶层单一出口不依赖「往错误对象写 __toastShown」；若有人把旧的去重补丁做健壮写回来，
+    // 这条会 FAIL（防复发护栏）。冻结 / Proxy / 原始值 err 天然只弹一次，见 ⑧。
+    expect((err as Record<string, unknown>).__toastShown).toBeUndefined();
     expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(lastTitle()).toBe('a');
   });
 
-  it('本地 throw 也只弹 1 条，err 挂 __toastShown', async () => {
+  it('本地 throw 也只弹 1 条，且不往 Error 写标记', async () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const err = await request({ url: 'bad' }).catch((e: unknown) => e);
-    expect((err as Record<string, unknown>).__toastShown).toBe(true);
+    expect((err as Record<string, unknown>).__toastShown).toBeUndefined();
     expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(lastTitle()).toBe('网络异常，请重试');
     spy.mockRestore();
+  });
+});
+
+// ═══════════════ ⑧ 冻结 / 不可扩展错误对象（51 §4 D1 反例固化为正式判据） ═══════════════
+// 51 独立复核证伪了旧实现「__toastShown 写标记去重」：Object.freeze(res) 后写标记抛
+// TypeError 被 try/catch 吞掉，顶层兜底再弹一次 → showToastCount=2，违反「有且仅有一条」。
+// 顶层单一出口天然不依赖 err 可扩展：可读不可写、Proxy、原始值 err 都恰 1 条。
+describe('⑧ 冻结 / 不可扩展错误对象 → 仍恰 1 条（51 §4 D1 反例回归）', () => {
+  it('可扩展 400 res → 恰 1 条 string toast（对照组）', async () => {
+    const p = request({ url: '/api/glossary', method: 'POST' });
+    fireSuccess({ statusCode: 400, data: { message: ['property tag should not exist'] } });
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    const arg = wxMock.showToast.mock.calls[0][0] as { title: unknown };
+    expect(typeof arg.title).toBe('string');
+    expect(lastTitle()).toBe('property tag should not exist');
+  });
+
+  it('Object.freeze(res) 的 400 → 仍恰 1 条 string toast（不依赖写标记）', async () => {
+    const p = request({ url: '/api/glossary', method: 'POST' });
+    // 浅冻结 res 本身即可复现 51 §4 D1：旧实现把 __toastShown 写在 res 上会抛 TypeError。
+    const frozen = Object.freeze({
+      statusCode: 400,
+      data: { message: ['property tag should not exist'] },
+    }) as FakeSuccessRes;
+    fireSuccess(frozen);
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    const arg = wxMock.showToast.mock.calls[0][0] as { title: unknown };
+    expect(typeof arg.title).toBe('string');
+    expect(lastTitle()).toBe('property tag should not exist');
   });
 });

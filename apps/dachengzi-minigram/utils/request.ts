@@ -172,51 +172,60 @@ function handleUnauthorized(token: string, options: RequestOptions): void {
 }
 
 /**
- * 「已弹过失败提示」标记 —— 治本 · 49 §5 方案 B（11-20 用户「不做临时修补」授权）。
- * 挂在 reject / throw 的错误对象上，供 request() 顶层统一兜底去重，保证
- * 「非 silent 的失败有且仅有一条用户可见 toast」。
+ * 失败文案提取（纯函数 · 只读）—— 治本 · 51 §4 D1（11-20 用户「合理实现」授权）。
+ *
+ * 「文案提取与展示分离」：doRequest 三条失败路径（HTTP 非 2xx / ai-agent 错误信封 /
+ * fail(err)）与两处本地 throw 都只 reject / throw，不再各自拼文案、各自弹 toast；
+ * request() 顶层 catch 作为唯一出口，从这里按错误对象形态推导 rawMessage / fallback。
+ *
+ * 🔴 全程只读 err，绝不写入任何属性：
+ *   - reject 的错误对象形态保持不变（statusCode / message / __unauthorized 原样透出），
+ *     上层与既有测试依赖这些字段，禁止包装成 { cause, ... } 之类新结构；
+ *   - 旧实现把 __toastShown 写进外部错误对象做去重，冻结 / 不可扩展对象赋值抛
+ *     TypeError 被 try/catch 吞掉 → 顶层兜底再弹一次（51 §4 D1 实跑 showToastCount=2）。
+ *     不写状态就彻底消除 frozen / Proxy / 不可扩展 / 原始值 err 这一整类反例。
  */
-const TOAST_SHOWN_FLAG = '__toastShown';
-
-function hasToastShown(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as Record<string, unknown>)[TOAST_SHOWN_FLAG] === true
-  );
+function extractFailureMessage(err: unknown): { rawMessage: unknown; fallback: string } {
+  const res = err as { statusCode?: unknown; data?: unknown } | null | undefined;
+  const body = res?.data;
+  const statusCode = res?.statusCode;
+  const isHttp2xx =
+    typeof statusCode === 'number' && statusCode >= 200 && statusCode < 300;
+  // ai-agent 统一异常过滤器：仅 HTTP 2xx + { code, message, data: null }（code 非 0）。
+  // 加 2xx 守卫：避免某个恰好带 code+message 的 4xx body 被误判成信封、拿错 fallback。
+  if (isHttp2xx && isAiAgentErrorEnvelope(body)) {
+    return { rawMessage: body.message, fallback: `请求失败 (${body.code})` };
+  }
+  // HTTP 非 2xx（含 304 未变更）：message 可能是 class-validator 数组 / 嵌套对象 / string
+  if (typeof statusCode === 'number' && (statusCode < 200 || statusCode >= 300)) {
+    const data = body as { message?: unknown } | null | undefined;
+    return { rawMessage: data?.message, fallback: `请求失败 (${statusCode})` };
+  }
+  // fail(err) 网络层错误：基础库给的是普通对象（如 { errMsg }），不是 Error 实例
+  if (!(err instanceof Error)) {
+    return { rawMessage: undefined, fallback: '网络请求失败' };
+  }
+  // 本地 throw（url 非法 / 应用未初始化）：无任何 UI 承接，泛化兜底
+  return { rawMessage: undefined, fallback: '网络异常，请重试' };
 }
 
 /**
- * 统一失败提示（唯一出口）—— 治本 · 49 §5 方案 B（11-20 用户「不做临时修补」授权）。
- * - 非 silent 才弹；message 经 utils/error-message.ts 的 normalizeMessage 归一化，title 恒为
- *   string（数组取首条 / string 原值 / 对象与其它回落 fallback），杜绝把数组 / 对象塞进
- *   wx.showToast 的 title（ShowToastOption.title: string，见 49 §3.4 / 30 号定案）。
- * - 同一错误对象只弹一次（__toastShown 去重），避免「doRequest 已弹 + 顶层再弹」双弹。
+ * 展示失败提示的**唯一出口** —— 治本 · 51 §4 D1（11-20 用户「合理实现」授权）。
+ * - 只在 request() 顶层 catch 调用一次；「非 silent 且失败 ⇒ 有且仅有一条可见 toast」
+ *   由「只调用一次」结构性保证，不依赖任何去重标记，也就不需要读 / 写错误对象。
+ * - message 经 utils/error-message.ts 的 normalizeMessage 归一化，title 恒为 string。
  *
  * 🔴 契约边界（2026-11-20 lead 选项 2 裁决，依据 V6 门
  *    tests/request-login-timeout.test.ts:111-122，8688 复核人审约束）：
- *    本函数只服务「已进入统一失败提示」的业务 / 网络 / 本地失败（含 url 非法、应用未初始化）。
  *    「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate / modal-login 专门 UI 承接，
- *    刻意不进入本函数 —— 页面层与请求层都不弹。判据原则是「是否有其它 UI 通道承接」，
+ *    顶层刻意不调用本函数 —— 页面层与请求层都不弹。判据原则是「是否有其它 UI 通道承接」，
  *    不是「是否 throw」。切勿以「本地 throw 也该弹」为由把它「补」回去：那会与 V6 门 3 条
  *    断言冲突，且并发页面数据拉取会刷屏、与登录墙重复提示。
+ *    401 / ai-agent 4010 带 __unauthorized，提示由 handleUnauthorized 负责，同样不进本函数。
  */
-function notifyFailure(
-  options: RequestOptions,
-  err: unknown,
-  rawMessage: unknown,
-  fallback: string,
-): void {
+function notifyFailure(options: RequestOptions, rawMessage: unknown, fallback: string): void {
   if (options.silent) return;
-  if (hasToastShown(err)) return;
   wx.showToast({ title: normalizeMessage(rawMessage, fallback), icon: 'none' });
-  if (typeof err === 'object' && err !== null) {
-    try {
-      (err as Record<string, unknown>)[TOAST_SHOWN_FLAG] = true;
-    } catch {
-      // 冻结 / 不可扩展对象：此类错误只在单一调用点产生，不会双弹
-    }
-  }
 }
 
 /** 通用请求方法 */
@@ -291,6 +300,11 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
             // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
             // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
             // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
+            //
+            // 🔴 三条失败路径一律只 reject、不弹 toast：提示统一由 request() 顶层 catch
+            //    一次出口负责（51 §4 D1 顶层单一出口）。文案由 extractFailureMessage(err)
+            //    只读提取，reject 的错误对象形态一字不改 —— 冻结 / 不可扩展 / Proxy /
+            //    原始值 err 天然只弹一次，不再有「两处都可能弹」的复杂度。
             if (res.statusCode >= 200 && res.statusCode < 300) {
               const body = res.data as unknown;
               if (isAiAgentErrorEnvelope(body)) {
@@ -299,8 +313,6 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
                   reject(Object.assign(res, { __unauthorized: true }));
                   return;
                 }
-                // 统一失败提示：message 归一化后 title 恒为 string，并挂去重标记
-                notifyFailure(options, res, body.message, `请求失败 (${body.code})`);
                 reject(res);
                 return;
               }
@@ -309,15 +321,10 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
               // HTTP 401：标记未授权，交由 request() 统一静默重登重试
               reject(Object.assign(res, { __unauthorized: true }));
             } else {
-              const data = res.data as { message?: unknown } | null | undefined;
-              // 统一失败提示：兼容 class-validator 数组 / 嵌套对象 message（49 §5 方案 B）
-              notifyFailure(options, res, data?.message, `请求失败 (${res.statusCode})`);
               reject(res);
             }
           },
           fail(err) {
-            // 统一失败提示：网络层兜底固定中文，title 恒为 string
-            notifyFailure(options, err, undefined, '网络请求失败');
             reject(err);
           },
         });
@@ -348,22 +355,29 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw res;
     }
   } catch (err) {
-    // 顶层统一兜底（治本 · 49 §5 方案 B / 11-20 用户授权）：
-    // - doRequest 内已弹过的错误带 __toastShown → notifyFailure 内部去重，绝不双弹；
-    // - url 非法 / 应用未初始化 两处本地 throw 无任何 UI 承接 → 在此补一条 string toast，
-    //   覆盖「不经 doRequest 的静默」这一半根因（49 §3 + 契约 4）；
+    // 顶层唯一失败提示出口（治本 · 51 §4 D1 / 11-20 用户「合理实现」授权）：
+    // - doRequest 三条失败路径（HTTP 非 2xx / ai-agent 非 4010 错误信封 / fail(err)）
+    //   只 reject 不弹；url 非法 / 应用未初始化 两处本地 throw 也无 UI 承接 ——
+    //   全部在此收敛为**一次** wx.showToast。「有且仅有一条」由「只调用一次」结构性保证，
+    //   不再依赖写进错误对象的去重标记：冻结 / 不可扩展 / Proxy / 原始值 err 天然只弹一次
+    //   （51 §4 D1 反例：Object.freeze(res) 旧实现 showToastCount=2）。
+    // - 文案提取与展示分离：extractFailureMessage(err) 只读推导 rawMessage / fallback，
+    //   交给 notifyFailure 归一化后展示；全程不写 err，reject 形态（statusCode / message /
+    //   __unauthorized）保持不变，上层与既有测试依赖不变。
     // - 「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate / modal-login 承接，按 V6 门
     //   （tests/request-login-timeout.test.ts:111-122，8688 复核）刻意保持静默 ——
     //   页面层与请求层都不弹。判据原则是「是否有其它 UI 通道承接」，不是「是否 throw」；
-    // - 401 / ai-agent 4010 带 __unauthorized，提示由 handleUnauthorized 负责，此处不重复；
-    // - silent:true 全程不弹（notifyFailure 内部亦判 silent，登出 auth.ts:61 保持静默）。
+    // - 401 / ai-agent 4010 带 __unauthorized，登录态提示由 handleUnauthorized 负责，此处不重复；
+    // - silent:true 全程不弹（notifyFailure 内部亦判 silent，登出 auth.ts:61 保持静默）；
+    // - 401 重登成功后 return await doRequest(nt) 若第二次失败会冒泡到此处，同样恰 1 条。
     const isNotLoggedIn = err instanceof Error && err.message === 'NOT_LOGGED_IN';
     if (
       !options.silent &&
       !(err as { __unauthorized?: boolean } | null)?.__unauthorized &&
       !isNotLoggedIn
     ) {
-      notifyFailure(options, err, undefined, '网络异常，请重试');
+      const { rawMessage, fallback } = extractFailureMessage(err);
+      notifyFailure(options, rawMessage, fallback);
     }
     throw err;
   }

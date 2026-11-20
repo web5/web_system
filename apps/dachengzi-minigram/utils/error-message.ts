@@ -22,19 +22,31 @@
  *      - url 非法 / 应用未初始化：无任何 UI 承接 ⇒ 必弹且 string（rawMessage 为 undefined
  *        时经本函数回落 fallback「网络异常，请重试」）；
  *      - 「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate / modal-login 专门 UI 承接
- *        ⇒ utils/request.ts 根本不调用 notifyFailure / 本函数，页面层与请求层都不弹。
+ *        ⇒ utils/request.ts 顶层唯一出口对这条路径不调用 notifyFailure / 本函数
+ *        （51 §4 D1：改顶层单一出口后唯一出口仍在 request() 顶层 catch），
+ *        页面层与请求层都不弹。
  *    这是刻意例外，不是遗漏：切勿把 NOT_LOGGED_IN 也拉进统一提示来「补」这个边界。
  */
 
 /**
  * 把任意形态的服务端 message 归一化为可安全传给 wx.showToast({ title }) 的 string。
- * - 数组（class-validator）→ String(m[0] || fallback)
+ * - 数组（class-validator）→ 首项做**类型判断**（51 §4 D5 订正）：
+ *     · string → 原值（空串回落 fallback）
+ *     · number → 十进制字符串（如 123 → "123"）
+ *     · 对象 / 数组 / undefined / null / 布尔 / 其它 → fallback
+ *   旧写法 String(m[0] || fallback) 在首项为对象时会产出不可读的 "[object Object]"；
+ *   虽仍是 string、符合旧公式，但用户看到的是无意义文案 —— 此处按「可读性」收紧。
  * - string → 原值（空串回落 fallback）
- * - 对象 / undefined / null / 数字 / 其它 → fallback
- * 恒返回 string，绝不把数组 / 对象透出。
+ * - 对象 / undefined / null / 数字 / 布尔 / 其它 → fallback
+ * 恒返回 string，绝不把数组 / 对象透出，且保证文案可读。
  */
 export function normalizeMessage(message: unknown, fallback: string): string {
-  if (Array.isArray(message)) return String(message[0] || fallback);
+  if (Array.isArray(message)) {
+    const first = message[0];
+    if (typeof first === 'string') return first || fallback;
+    if (typeof first === 'number') return String(first);
+    return fallback;
+  }
   if (typeof message === 'string') return message || fallback;
   return fallback;
 }
