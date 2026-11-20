@@ -89,7 +89,8 @@ for dir in $changed_dirs; do
       tail -20 /tmp/ws-test-$$.log || true
       echo "  ✓ test 通过"
     else
-      tail -20 /tmp/ws-test-$$.log || true
+      # 失败需完整输出，勿截断：tail -20 会吞掉首个 FAIL 的完整报错栈，CI 排障必须看到全量 jest 输出
+      cat /tmp/ws-test-$$.log || true
       echo "  ✗ test 失败"; fail=1
     fi
     rm -f /tmp/ws-test-$$.log

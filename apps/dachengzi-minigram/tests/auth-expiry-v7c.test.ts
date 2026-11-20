@@ -24,9 +24,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const APP = path.resolve(__dirname, '..');
-const TASK = '/Users/geekwen/AiWorkspace/30-任务产物/2026-11-17-大橙子小程序NCE交互与登录态整改';
 const src = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'utf8');
-const proto = (): string => fs.readFileSync(path.join(TASK, '03-原型稿-NCE交互与登录过期-2026-11-17.html'), 'utf8');
+const proto = (): string => fs.readFileSync(path.join(APP, 'prototype', '03-原型稿-NCE交互与登录过期-2026-11-17.html'), 'utf8');
 
 /** 递归收集生产源码（排除 tests/ 断言字面量、prototype/、node_modules） */
 function walk(dir: string, out: string[] = []): string[] {
