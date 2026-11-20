@@ -297,6 +297,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
             ...options.header,
           },
           success(res) {
+            try {
             // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
             // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
             // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
@@ -310,7 +311,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
               if (isAiAgentErrorEnvelope(body)) {
                 if (body.code === 4010) {
                   // ai-agent 未授权/缺 token：标记未授权，交由 request() 统一静默重登重试
-                  reject(Object.assign(res, { __unauthorized: true }));
+                  reject({ ...res, __unauthorized: true });
                   return;
                 }
                 reject(res);
@@ -319,9 +320,19 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
               resolve(res.data as T);
             } else if (res.statusCode === 401) {
               // HTTP 401：标记未授权，交由 request() 统一静默重登重试
-              reject(Object.assign(res, { __unauthorized: true }));
+              reject({ ...res, __unauthorized: true });
             } else {
               reject(res);
+            }
+            } catch (e) {
+              // 🔴 #8949 settle 边界：R1 已把未授权信号改由【本地新建对象】承载、外部 res
+              //    只读摊平绝不写入；但外部 res 在【读取阶段】仍可能抛错（Proxy get trap、
+              //    畸形 getter），异常发生在 wx 异步回调里无人接，reject/resolve 漏调 ⇒
+              //    promise 永久 PENDING。此处把同步异常【原样转 reject(e)，绝不吞】，
+              //    保证 promise 必 settle，异常仍由顶层唯一出口感知并恰 1 条 toast。
+              //    ⚠️ 这不是「给 Object.assign(res, ...) 兜底」：主修复已彻底不写外部 res，
+              //       本边界不承担掩盖写异常的职能（W 方案已否决）。
+              reject(e);
             }
           },
           fail(err) {

@@ -30,7 +30,7 @@
  *
  * 测试形态照 tests/request-envelope.test.ts（本地 mock wx，不拉起开发者工具 / 不跑 E2E）。
  */
-import { request } from '../utils/request';
+import { request, setLoginEnsurer } from '../utils/request';
 
 interface FakeSuccessRes {
   statusCode: number;
@@ -360,5 +360,259 @@ describe('⑧ 冻结 / 不可扩展错误对象 → 仍恰 1 条（51 §4 D1 反
     const arg = wxMock.showToast.mock.calls[0][0] as { title: unknown };
     expect(typeof arg.title).toBe('string');
     expect(lastTitle()).toBe('property tag should not exist');
+  });
+});
+
+// ═══════════════ ⑨ #8949 冻结 / 不可扩展 / Proxy 的 401 与 4010（58 §4.1） ═══════════════
+// 根因（58 §2）：doRequest 的 success 回调把「未授权」信号用 Object.assign 写进外部
+//   传入的 res；frozen / preventExtensions / set 抛错 Proxy 下赋值抛 TypeError，异常
+//   发生在 wx 异步回调栈、脱离 Promise executor 的隐式保护 ⇒ reject 从未执行，promise
+//   永久 PENDING + 0 条 toast + 页面永久骨架屏。get 抛错 Proxy 在读取 res.statusCode
+//   阶段就抛，是同一条链更前一环。父版 21a96f99 与 fdc4d525 同态，属既有缺陷。
+// 方案 R（58 §3）：两处信号改由本地新建对象承载 reject({ ...res, __unauthorized: true })，
+//   外部 res 只读摊平、绝不写入；success 整体包 try/catch(e){ reject(e) } 作为 settle
+//   边界（异常原样转 reject、绝不吞）。顶层 :336 / :376 判据与 handleUnauthorized 一字不动。
+// 🔴 每条断言同时钉 5 个维度（58 §4.1）：settle 状态 + toast 计数 + toast 文案 +
+//   removeStorageSync(access_token) + busMock.emit('auth:expired')。只钉计数会让 §4.3 的
+//   M3「丢 __unauthorized 信号」假绿（计数仍恰 1 条，文案 / 清 token / 广播全丢）。
+// 🔴 复用现有【同步】fireSuccess：旧实现下 Object.assign 抛 TypeError 会冒泡到调用处，
+//   故用 expect(() => fireSuccess(res)).not.toThrow() 直接判红（不把 mock 改成异步触发，
+//   避免动 ①-⑧ 的时序假设）。「永久 PENDING」的严格实证由 /tmp harness 异步触发承担。
+describe('⑨ #8949 冻结 / 不可扩展 / Proxy 的 401 与 4010 → 必 settle 且信号不丢', () => {
+  /** 模块级 loginEnsurer 单例复位为「未注入」初始态（内部变量本就是 X|null，导出 API 只收函数） */
+  const resetEnsurer = (): void => {
+    setLoginEnsurer(null as unknown as () => Promise<boolean>);
+  };
+
+  beforeEach(() => {
+    resetEnsurer();
+    jest.useRealTimers();
+  });
+
+  afterEach(() => {
+    resetEnsurer();
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  /** 冻结的 HTTP 401 响应（#8949 触发输入） */
+  const frozen401 = (): FakeSuccessRes =>
+    Object.freeze({ statusCode: 401, data: { message: 'Unauthorized' } }) as FakeSuccessRes;
+
+  /** 冻结的 ai-agent 4010 错误信封（HTTP 200 + code 4010） */
+  const frozen4010 = (): FakeSuccessRes =>
+    Object.freeze({
+      statusCode: 200,
+      data: Object.freeze({ code: 4010, message: 'Authorization header missing', data: null }),
+    }) as FakeSuccessRes;
+
+  /** settle 探针：200ms 内未 settle 即判 PENDING；用后 clearTimeout，零悬挂 handle */
+  const assertSettled = async (p: Promise<unknown>): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const state = await Promise.race([
+      p.then(() => 'SETTLED', () => 'SETTLED'),
+      new Promise<string>((r) => {
+        timer = setTimeout(() => r('PENDING'), 200);
+      }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+    expect(state).toBe('SETTLED');
+  };
+
+  /** 五维授权断言（非 silent 的 401/4010）：计数 / 文案 / 清 token / 广播 / 不叠加通用 */
+  const expectUnauthorized = (): void => {
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(wxMock.showToast).toHaveBeenCalledWith({ title: '登录已过期，请重新登录', icon: 'none' });
+    expect(lastTitle()).toBe('登录已过期，请重新登录');
+    expect(wxMock.removeStorageSync).toHaveBeenCalledWith('access_token');
+    expect(wxMock.removeStorageSync).toHaveBeenCalledWith('refresh_token');
+    expect(busMock.emit).toHaveBeenCalledWith('auth:expired');
+    // 授权链不得叠加通用失败 toast：顶层唯一出口靠 __unauthorized 排除判据跳过
+    expect(wxMock.showToast).not.toHaveBeenCalledWith({ title: '请求失败 (401)', icon: 'none' });
+    expect(wxMock.showToast).not.toHaveBeenCalledWith({ title: '网络异常，请重试', icon: 'none' });
+  };
+
+  it('⑨-1 可扩展 401（对照组）→ rejects + 五维授权断言全绿', async () => {
+    const p = request({ url: '/api/glossary' });
+    expect(() => fireSuccess({ statusCode: 401, data: { message: 'Unauthorized' } })).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expectUnauthorized();
+  });
+
+  it('⑨-2 Object.freeze(res) 的 401 → 不抛 + 必 settle + 五维授权断言 + 外部 res 未被写入', async () => {
+    const p = request({ url: '/api/glossary' });
+    const res = frozen401();
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expectUnauthorized();
+    // R1 的本质：信号在新对象上，外部冻结 res 绝不带 __unauthorized
+    expect(Object.prototype.hasOwnProperty.call(res, '__unauthorized')).toBe(false);
+  });
+
+  it('⑨-3 Object.preventExtensions(res) 的 401 → 不抛 + 必 settle + 五维授权断言', async () => {
+    const p = request({ url: '/api/glossary' });
+    const res = Object.preventExtensions({
+      statusCode: 401,
+      data: { message: 'Unauthorized' },
+    }) as FakeSuccessRes;
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expectUnauthorized();
+    expect(Object.prototype.hasOwnProperty.call(res, '__unauthorized')).toBe(false);
+  });
+
+  it('⑨-4 Object.freeze 的 ai-agent 4010 信封 → 不抛 + 必 settle + 五维授权断言', async () => {
+    const p = request({ url: '/api/ai-agent/agent/conversations' });
+    const res = frozen4010();
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expectUnauthorized();
+    expect(Object.prototype.hasOwnProperty.call(res, '__unauthorized')).toBe(false);
+  });
+
+  it('⑨-5 Proxy set/defineProperty 抛错的 401 → 不抛 + 必 settle + 五维授权断言', async () => {
+    const p = request({ url: '/api/glossary' });
+    const res = new Proxy(
+      { statusCode: 401, data: { message: 'Unauthorized' } },
+      {
+        set() {
+          throw new TypeError('proxy set forbidden');
+        },
+        defineProperty() {
+          throw new TypeError('proxy defineProperty forbidden');
+        },
+      },
+    ) as FakeSuccessRes;
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expectUnauthorized();
+  });
+
+  it('⑨-6 Proxy get 抛错的 401 → 不抛 + 必 settle + 恰 1 条通用 toast + 不误走授权（有意行为变化）', async () => {
+    const p = request({ url: '/api/glossary' });
+    const res = new Proxy(
+      { statusCode: 401, data: { message: 'Unauthorized' } },
+      {
+        get() {
+          throw new TypeError('proxy get forbidden');
+        },
+      },
+    ) as FakeSuccessRes;
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    // 该输入在读取阶段就抛错、无法识别为 401；R2 边界原样转 reject，顶层唯一出口
+    // 降级为 1 条通用失败 toast（title 恒 string）—— 从「0 条 + 永久 PENDING」变为
+    // 「1 条 + REJECTED」，符合「非 silent 失败恰 1 条」契约，属有意的行为变化。
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(lastTitle()).toBe('网络异常，请重试');
+    expect(wxMock.showToast).not.toHaveBeenCalledWith({ title: '登录已过期，请重新登录', icon: 'none' });
+    expect(wxMock.removeStorageSync).not.toHaveBeenCalled();
+    expect(busMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('⑨-7 冻结 401 + silent:true → 不抛 + 必 settle + 0 条 toast + 仍清 token + 不广播', async () => {
+    const p = request({ url: '/api/glossary', silent: true });
+    const res = frozen401();
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).not.toHaveBeenCalled();
+    // silent 只关提示，不关清 token：handleUnauthorized 的 clearToken 在 silent 判断之外
+    expect(wxMock.removeStorageSync).toHaveBeenCalledWith('access_token');
+    expect(busMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('⑨-8 冻结 401 + 静默重登成功 → 用新 token 重试并 resolve，0 条 toast', async () => {
+    // fake timers 只为收掉 request.ts 内层 Promise.race 的 5s 兜底 timer（不改该源码）
+    jest.useFakeTimers();
+    try {
+      setLoginEnsurer(async () => {
+        storage.access_token = 'tk-new';
+        return true;
+      });
+      const p = request<{ ok: boolean }>({ url: '/api/glossary' });
+      expect(() => fireSuccess(frozen401())).not.toThrow();
+      // 等 401 重登链路把第二次 wx.request 发出（纯微任务链，不依赖 timer）
+      for (let i = 0; i < 50 && wxMock.request.mock.calls.length < 2; i++) {
+        await Promise.resolve();
+      }
+      expect(wxMock.request).toHaveBeenCalledTimes(2);
+      const secondOpts = wxMock.request.mock.calls[1][0] as unknown as { header?: Record<string, string> };
+      expect(secondOpts.header?.Authorization).toBe('Bearer tk-new');
+      // 第二次请求成功 → 整体 resolve
+      fireSuccess({ statusCode: 200, data: { ok: true } });
+      await expect(p).resolves.toEqual({ ok: true });
+      expect(wxMock.showToast).not.toHaveBeenCalled();
+      expect(wxMock.removeStorageSync).not.toHaveBeenCalled();
+      expect(busMock.emit).not.toHaveBeenCalled();
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  it('⑨-9 冻结 401 + 静默重登失败 → rejects + 五维授权断言', async () => {
+    jest.useFakeTimers();
+    try {
+      setLoginEnsurer(async () => false);
+      const p = request({ url: '/api/glossary' });
+      expect(() => fireSuccess(frozen401())).not.toThrow();
+      await expect(p).rejects.toBeDefined();
+      expectUnauthorized();
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    }
+  });
+
+  it('⑨-10a 冻结 400 → 恰 1 条 + 不清 token + 不广播（非 401 不回归）', async () => {
+    const p = request({ url: '/api/glossary', method: 'POST' });
+    const res = Object.freeze({
+      statusCode: 400,
+      data: { message: ['property tag should not exist'] },
+    }) as FakeSuccessRes;
+    expect(() => fireSuccess(res)).not.toThrow();
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(lastTitle()).toBe('property tag should not exist');
+    expect(wxMock.removeStorageSync).not.toHaveBeenCalled();
+    expect(busMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('⑨-10b fail(err) → 恰 1 条「网络请求失败」+ 不清 token + 不广播（非 401 不回归）', async () => {
+    const p = request({ url: '/api/glossary' });
+    fireFail({ errMsg: 'request:fail timeout' });
+    await assertSettled(p);
+    await expect(p).rejects.toBeDefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
+    expect(lastTitle()).toBe('网络请求失败');
+    expect(wxMock.removeStorageSync).not.toHaveBeenCalled();
+    expect(busMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('⑨-11a NOT_LOGGED_IN → 静默（0 条）+ 不清 token + 不广播（V6 门不回归）', async () => {
+    storage.access_token = '';
+    await expect(request({ url: '/api/glossary' })).rejects.toThrow('NOT_LOGGED_IN');
+    expect(wxMock.showToast).not.toHaveBeenCalled();
+    expect(wxMock.removeStorageSync).not.toHaveBeenCalled();
+    expect(busMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('⑨-11b 非 401 的 reject 形态不回归：statusCode / data 原样、无去重与未授权标记', async () => {
+    const p = request({ url: '/api/glossary', method: 'POST' });
+    fireSuccess({ statusCode: 400, data: { message: ['a', 'b'] } });
+    const err = (await p.catch((e: unknown) => e)) as Record<string, unknown>;
+    expect(err.statusCode).toBe(400);
+    expect((err.data as { message: string[] }).message).toEqual(['a', 'b']);
+    expect(err.__toastShown).toBeUndefined();
+    expect(err.__unauthorized).toBeUndefined();
+    expect(wxMock.showToast).toHaveBeenCalledTimes(1);
   });
 });
