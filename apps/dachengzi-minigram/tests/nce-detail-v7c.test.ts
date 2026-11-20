@@ -927,9 +927,16 @@ describe('19:11 · 三处 UI 优化静态判据（读源码文本 + 必然失败
   });
 });
 
-// ═══════════════ 收藏错误可观测性（collectLine catch(err)，不覆盖服务层真实提示） ═══════════════
-describe('收藏 catch · console.error 落日志 + 仅无 HTTP 响应时补兜底 toast', () => {
-  it('① reject 带 statusCode 的对象 → 不再弹「收藏失败，请重试」且 console.error 被调用', async () => {
+// ═══════════════ 收藏错误可观测性（collectLine catch(err)：页面层责任收敛） ═══════════════
+// 2026-11-20 治本（49 §5 方案 B / 用户「不做临时修补」授权 / lead 选项 2 裁决）：
+//   页面层 collectLine catch 只保留 console.error 排障留痕，不再自行弹 toast、不再做
+//   hasHttpResponse 判定。服务层在本文件 :91-93 被 jest.fn 全量 mock，请求层根本不进这个测试：
+//   ① HTTP 400 等业务失败 → 由 utils/request.ts 统一负责「有且仅有一条 string toast」
+//      （断言见 tests/request-failure-toast.test.ts + request-envelope.test.ts，台账 #8947）；页面层不重复弹。
+//   ② NOT_LOGGED_IN 属登录态信号 → 页面层与请求层都不弹，由 login-gate 承接
+//      （V6 门 tests/request-login-timeout.test.ts:111-122）；页面层只保留 console.error 留痕。
+describe('收藏 catch · console.error 落日志 + 页面层不重复弹（业务失败归请求层 / 登录态信号静默）', () => {
+  it('① reject 带 statusCode 的对象（HTTP 400）→ 页面层不重复弹、console.error 被调用', async () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const ctx = makeThis();
     ctx.data.lines = mockLines();
@@ -942,11 +949,11 @@ describe('收藏 catch · console.error 落日志 + 仅无 HTTP 响应时补兜�
     await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
     expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.objectContaining({ statusCode: 400 }));
     expect(wxMock.showToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: '收藏失败，请重试' }));
-    expect(wxMock.showToast).not.toHaveBeenCalled();   // 有 HTTP 响应 → 保留 utils/request.ts 已弹的真实提示，不补兜底
+    expect(wxMock.showToast).not.toHaveBeenCalled();   // 服务层被 mock 时页面层不弹；真实提示由 utils/request.ts 统一负责
     errSpy.mockRestore();
   });
 
-  it('② reject 一个 NOT_LOGGED_IN Error（无 HTTP 响应）→ 兜底 toast「网络异常，请重试」出现', async () => {
+  it('② reject 一个 NOT_LOGGED_IN Error（登录态信号）→ 页面层与请求层都不弹，由 login-gate 承接', async () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const ctx = makeThis();
     ctx.data.lines = mockLines();
@@ -958,7 +965,8 @@ describe('收藏 catch · console.error 落日志 + 仅无 HTTP 响应时补兜�
 
     await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
     expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.any(Error));
-    expect(wxMock.showToast).toHaveBeenCalledWith({ title: '网络异常，请重试', icon: 'none' });
+    // NOT_LOGGED_IN 属登录态信号，页面层与请求层都不弹，由 login-gate 承接；页面层只保留 console.error 留痕
+    expect(wxMock.showToast).not.toHaveBeenCalled();
     errSpy.mockRestore();
   });
 });

@@ -4,6 +4,7 @@
  */
 
 import { API_TIMEOUT } from './constants';
+import { normalizeMessage } from './error-message';
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -170,131 +171,201 @@ function handleUnauthorized(token: string, options: RequestOptions): void {
   }
 }
 
+/**
+ * 「已弹过失败提示」标记 —— 治本 · 49 §5 方案 B（11-20 用户「不做临时修补」授权）。
+ * 挂在 reject / throw 的错误对象上，供 request() 顶层统一兜底去重，保证
+ * 「非 silent 的失败有且仅有一条用户可见 toast」。
+ */
+const TOAST_SHOWN_FLAG = '__toastShown';
+
+function hasToastShown(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as Record<string, unknown>)[TOAST_SHOWN_FLAG] === true
+  );
+}
+
+/**
+ * 统一失败提示（唯一出口）—— 治本 · 49 §5 方案 B（11-20 用户「不做临时修补」授权）。
+ * - 非 silent 才弹；message 经 utils/error-message.ts 的 normalizeMessage 归一化，title 恒为
+ *   string（数组取首条 / string 原值 / 对象与其它回落 fallback），杜绝把数组 / 对象塞进
+ *   wx.showToast 的 title（ShowToastOption.title: string，见 49 §3.4 / 30 号定案）。
+ * - 同一错误对象只弹一次（__toastShown 去重），避免「doRequest 已弹 + 顶层再弹」双弹。
+ *
+ * 🔴 契约边界（2026-11-20 lead 选项 2 裁决，依据 V6 门
+ *    tests/request-login-timeout.test.ts:111-122，8688 复核人审约束）：
+ *    本函数只服务「已进入统一失败提示」的业务 / 网络 / 本地失败（含 url 非法、应用未初始化）。
+ *    「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate / modal-login 专门 UI 承接，
+ *    刻意不进入本函数 —— 页面层与请求层都不弹。判据原则是「是否有其它 UI 通道承接」，
+ *    不是「是否 throw」。切勿以「本地 throw 也该弹」为由把它「补」回去：那会与 V6 门 3 条
+ *    断言冲突，且并发页面数据拉取会刷屏、与登录墙重复提示。
+ */
+function notifyFailure(
+  options: RequestOptions,
+  err: unknown,
+  rawMessage: unknown,
+  fallback: string,
+): void {
+  if (options.silent) return;
+  if (hasToastShown(err)) return;
+  wx.showToast({ title: normalizeMessage(rawMessage, fallback), icon: 'none' });
+  if (typeof err === 'object' && err !== null) {
+    try {
+      (err as Record<string, unknown>)[TOAST_SHOWN_FLAG] = true;
+    } catch {
+      // 冻结 / 不可扩展对象：此类错误只在单一调用点产生，不会双弹
+    }
+  }
+}
+
 /** 通用请求方法 */
 export async function request<T = unknown>(options: RequestOptions): Promise<T> {
-  // 不变量：业务接口一律走 /api 前缀。漏写前缀的 URL 会被网关 SPA 兜底成
-  // 200 + shell HTML（2026-11-11 appearance.ts '/users/me' 实测），2xx 判据
-  // 会把壳当成功吞掉且静默出错——在此显式失败，把运行时诡异提前为开发期显错。
-  if (!options.url.startsWith('/api/')) {
-    const err = new Error(`[request] url 必须以 /api/ 开头，收到: ${options.url}`);
-    console.error(err.message);
-    throw err;
-  }
-  // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
-  const baseUrl = getApiBase();
-  if (!baseUrl) {
-    throw new Error('应用未初始化，请稍后重试或重启小程序');
-  }
-
-  // 首次启动时 App.onLaunch 的 autoLogin 是异步的，首屏页面请求可能早于登录完成；
-  // 无 token 时先「确保登录」再发请求，避免发出无 token 请求 → 401 → 误触发掉线。
-  // ⚠️ 用户已主动退出时不自动重登，否则「退出登录」点了等于没点。
-  if (!getToken() && !isLoggedOut() && loginEnsurer) {
-    // ⚠️ 自动登录必须包硬超时：底层 wx.login 无超时且 loginPromise 是全局单例，
-    // 一次悬挂就拖死所有无 token 请求（永停 loading 的根因之一，台账 #8687）。
-    // 超时/失败**不在这里抛**，统一落到下面的 `!token` 分支抛 NOT_LOGGED_IN ——
-    // 与「本来就没有 token」同口径，上层 `.catch(() => null)` 能正常接住，
-    // 页面转异常态而不是变成未捕获 rejection。
-    let ensureTimer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        loginEnsurer(),
-        new Promise<never>((_resolve, reject) => {
-          ensureTimer = setTimeout(
-            () => reject(new Error('NOT_LOGGED_IN')),
-            LOGIN_ENSURE_TIMEOUT,
-          );
-        }),
-      ]);
-    } catch {
-      // 登录失败 / 超时：不再重试，交由下面的 `!token` 分支统一按未登录处理
-    } finally {
-      // 正常登录成功时也要收掉计时器：否则它会在 5s 后 reject 一个没人 await 的
-      // Promise（未捕获 rejection），且留下悬挂 handle。
-      if (ensureTimer !== undefined) clearTimeout(ensureTimer);
-    }
-  }
-  const token = getToken();
-  if (!token) {
-    // 未登录（含主动退出态）：不发无 token 请求，交由上层引导登录
-    throw new Error('NOT_LOGGED_IN');
-  }
-
-  const doRequest = (tk: string): Promise<T> =>
-    new Promise<T>((resolve, reject) => {
-      wx.request({
-        url: `${baseUrl}${options.url}`,
-        // wx.request 运行时支持 PATCH，但 @types/wechat-miniprogram 的 method 枚举未收录 PATCH，
-        // 此处按运行时能力放宽类型（保留 PATCH 透传）。
-        method: (options.method || 'GET') as WechatMiniprogram.RequestOption['method'],
-        data: options.data,
-        timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
-        header: {
-          'Content-Type': 'application/json',
-          // 强制不压缩：gateway 启用了 compression，但 wx.request 在开发者工具对 gzip 响应解析失败
-          // (Failed to load response data)。identity 表示不压缩，gateway 会返回明文。
-          'Accept-Encoding': 'identity',
-          ...(tk ? { Authorization: `Bearer ${tk}` } : {}),
-          ...options.header,
-        },
-        success(res) {
-          // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
-          // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
-          // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            const body = res.data as unknown;
-            if (isAiAgentErrorEnvelope(body)) {
-              if (body.code === 4010) {
-                // ai-agent 未授权/缺 token：标记未授权，交由 request() 统一静默重登重试
-                reject(Object.assign(res, { __unauthorized: true }));
-                return;
-              }
-              const msg = body.message || `请求失败 (${body.code})`;
-              if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
-              reject(res);
-              return;
-            }
-            resolve(res.data as T);
-          } else if (res.statusCode === 401) {
-            // HTTP 401：标记未授权，交由 request() 统一静默重登重试
-            reject(Object.assign(res, { __unauthorized: true }));
-          } else {
-            const data = res.data as any;
-            const msg = data?.message || `请求失败 (${res.statusCode})`;
-            if (!options.silent) wx.showToast({ title: msg, icon: 'none' });
-            reject(res);
-          }
-        },
-        fail(err) {
-          if (!options.silent) wx.showToast({ title: '网络请求失败', icon: 'none' });
-          reject(err);
-        },
-      });
-    });
-
   try {
-    return await doRequest(token);
-  } catch (res) {
-    const is401 = (res as any)?.__unauthorized === true;
-    // 静默重登：401 且非主动登出、非 silent、有 loginEnsurer、当前无并发重登时，
-    // 先确保登录成功，再用新 token 重试一次；仍失败则走 handleUnauthorized。
-    if (is401 && !isLoggedOut() && !options.silent && loginEnsurer && !isRelogging) {
-      isRelogging = true;
+    // 不变量：业务接口一律走 /api 前缀。漏写前缀的 URL 会被网关 SPA 兜底成
+    // 200 + shell HTML（2026-11-11 appearance.ts '/users/me' 实测），2xx 判据
+    // 会把壳当成功吞掉且静默出错——在此显式失败，把运行时诡异提前为开发期显错。
+    if (!options.url.startsWith('/api/')) {
+      const err = new Error(`[request] url 必须以 /api/ 开头，收到: ${options.url}`);
+      console.error(err.message);
+      throw err;
+    }
+    // 优先 storage 读 baseUrl（避免 wx.getApp 在异步栈里抛错）
+    const baseUrl = getApiBase();
+    if (!baseUrl) {
+      throw new Error('应用未初始化，请稍后重试或重启小程序');
+    }
+
+    // 首次启动时 App.onLaunch 的 autoLogin 是异步的，首屏页面请求可能早于登录完成；
+    // 无 token 时先「确保登录」再发请求，避免发出无 token 请求 → 401 → 误触发掉线。
+    // ⚠️ 用户已主动退出时不自动重登，否则「退出登录」点了等于没点。
+    if (!getToken() && !isLoggedOut() && loginEnsurer) {
+      // ⚠️ 自动登录必须包硬超时：底层 wx.login 无超时且 loginPromise 是全局单例，
+      // 一次悬挂就拖死所有无 token 请求（永停 loading 的根因之一，台账 #8687）。
+      // 超时/失败**不在这里抛**，统一落到下面的 `!token` 分支抛 NOT_LOGGED_IN ——
+      // 与「本来就没有 token」同口径，上层 `.catch(() => null)` 能正常接住，
+      // 页面转异常态而不是变成未捕获 rejection。
+      let ensureTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const ok = await Promise.race([
+        await Promise.race([
           loginEnsurer(),
-          new Promise<false>((r) => setTimeout(() => r(false), LOGIN_ENSURE_TIMEOUT)),
+          new Promise<never>((_resolve, reject) => {
+            ensureTimer = setTimeout(
+              () => reject(new Error('NOT_LOGGED_IN')),
+              LOGIN_ENSURE_TIMEOUT,
+            );
+          }),
         ]);
-        if (ok) {
-          const nt = getToken();
-          if (nt) return await doRequest(nt);
-        }
+      } catch {
+        // 登录失败 / 超时：不再重试，交由下面的 `!token` 分支统一按未登录处理
       } finally {
-        isRelogging = false;
+        // 正常登录成功时也要收掉计时器：否则它会在 5s 后 reject 一个没人 await 的
+        // Promise（未捕获 rejection），且留下悬挂 handle。
+        if (ensureTimer !== undefined) clearTimeout(ensureTimer);
       }
     }
-    if (is401) handleUnauthorized(token, options);
-    throw res;
+    const token = getToken();
+    if (!token) {
+      // 未登录（含主动退出态）：不发无 token 请求，交由上层引导登录
+      throw new Error('NOT_LOGGED_IN');
+    }
+
+    const doRequest = (tk: string): Promise<T> =>
+      new Promise<T>((resolve, reject) => {
+        wx.request({
+          url: `${baseUrl}${options.url}`,
+          // wx.request 运行时支持 PATCH，但 @types/wechat-miniprogram 的 method 枚举未收录 PATCH，
+          // 此处按运行时能力放宽类型（保留 PATCH 透传）。
+          method: (options.method || 'GET') as WechatMiniprogram.RequestOption['method'],
+          data: options.data,
+          timeout: options.timeout ?? API_TIMEOUT.DEFAULT,
+          header: {
+            'Content-Type': 'application/json',
+            // 强制不压缩：gateway 启用了 compression，但 wx.request 在开发者工具对 gzip 响应解析失败
+            // (Failed to load response data)。identity 表示不压缩，gateway 会返回明文。
+            'Accept-Encoding': 'identity',
+            ...(tk ? { Authorization: `Bearer ${tk}` } : {}),
+            ...options.header,
+          },
+          success(res) {
+            // 成功判据统一 2xx（不只 200）：201 Created / 204 No Content 都是合法成功。
+            // 与 services/auth.ts:95 的 `>= 200 && < 300` 同口径；304 Not Modified 属未变更，
+            // 业务 body 拿不到，仍走失败分支（不得放宽为「所有 3xx」）。
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              const body = res.data as unknown;
+              if (isAiAgentErrorEnvelope(body)) {
+                if (body.code === 4010) {
+                  // ai-agent 未授权/缺 token：标记未授权，交由 request() 统一静默重登重试
+                  reject(Object.assign(res, { __unauthorized: true }));
+                  return;
+                }
+                // 统一失败提示：message 归一化后 title 恒为 string，并挂去重标记
+                notifyFailure(options, res, body.message, `请求失败 (${body.code})`);
+                reject(res);
+                return;
+              }
+              resolve(res.data as T);
+            } else if (res.statusCode === 401) {
+              // HTTP 401：标记未授权，交由 request() 统一静默重登重试
+              reject(Object.assign(res, { __unauthorized: true }));
+            } else {
+              const data = res.data as { message?: unknown } | null | undefined;
+              // 统一失败提示：兼容 class-validator 数组 / 嵌套对象 message（49 §5 方案 B）
+              notifyFailure(options, res, data?.message, `请求失败 (${res.statusCode})`);
+              reject(res);
+            }
+          },
+          fail(err) {
+            // 统一失败提示：网络层兜底固定中文，title 恒为 string
+            notifyFailure(options, err, undefined, '网络请求失败');
+            reject(err);
+          },
+        });
+      });
+
+    try {
+      return await doRequest(token);
+    } catch (res) {
+      const is401 = (res as any)?.__unauthorized === true;
+      // 静默重登：401 且非主动登出、非 silent、有 loginEnsurer、当前无并发重登时，
+      // 先确保登录成功，再用新 token 重试一次；仍失败则走 handleUnauthorized。
+      if (is401 && !isLoggedOut() && !options.silent && loginEnsurer && !isRelogging) {
+        isRelogging = true;
+        try {
+          const ok = await Promise.race([
+            loginEnsurer(),
+            new Promise<false>((r) => setTimeout(() => r(false), LOGIN_ENSURE_TIMEOUT)),
+          ]);
+          if (ok) {
+            const nt = getToken();
+            if (nt) return await doRequest(nt);
+          }
+        } finally {
+          isRelogging = false;
+        }
+      }
+      if (is401) handleUnauthorized(token, options);
+      throw res;
+    }
+  } catch (err) {
+    // 顶层统一兜底（治本 · 49 §5 方案 B / 11-20 用户授权）：
+    // - doRequest 内已弹过的错误带 __toastShown → notifyFailure 内部去重，绝不双弹；
+    // - url 非法 / 应用未初始化 两处本地 throw 无任何 UI 承接 → 在此补一条 string toast，
+    //   覆盖「不经 doRequest 的静默」这一半根因（49 §3 + 契约 4）；
+    // - 「!token → NOT_LOGGED_IN」是登录态信号，由 login-gate / modal-login 承接，按 V6 门
+    //   （tests/request-login-timeout.test.ts:111-122，8688 复核）刻意保持静默 ——
+    //   页面层与请求层都不弹。判据原则是「是否有其它 UI 通道承接」，不是「是否 throw」；
+    // - 401 / ai-agent 4010 带 __unauthorized，提示由 handleUnauthorized 负责，此处不重复；
+    // - silent:true 全程不弹（notifyFailure 内部亦判 silent，登出 auth.ts:61 保持静默）。
+    const isNotLoggedIn = err instanceof Error && err.message === 'NOT_LOGGED_IN';
+    if (
+      !options.silent &&
+      !(err as { __unauthorized?: boolean } | null)?.__unauthorized &&
+      !isNotLoggedIn
+    ) {
+      notifyFailure(options, err, undefined, '网络异常，请重试');
+    }
+    throw err;
   }
 }
 

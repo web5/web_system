@@ -27,8 +27,12 @@
  * onWordTap 不再为 tip 调用 _anchorFloat；tipPos 字段保留但不得驱动 word-tip。
  * 🔴 _anchorFloat 函数本体与 bubblePos 长按气泡锚定逻辑完全保留、行为不变。
  *
- * 🔴 服务层零改动：services/tts.ts / utils/request.ts / services/auth.ts 一律不改，
- *    本文件只复用 speakText/stopSpeak/onSpeakState、loginFromGate、collectGlossary 既有契约。
+ * 2026-11-20 治本授权（用户原话「不做临时修补，要从合理的实现方案去改」）：
+ *    原「utils/request.ts 一律不改」红线就此解除 —— 依据 49 §5 方案 B，在
+ *    utils/request.ts 建立失败提示统一错误契约（常规失败必有且仅有一条中文 string toast），
+ *    页面层不再自行弹失败 toast / 不再做 hasHttpResponse 判定，只保留 console.error 排障留痕。
+ *    services/tts.ts / services/auth.ts 仍零改动；speakText/stopSpeak/onSpeakState、
+ *    loginFromGate、collectGlossary 既有契约不变。
  */
 import { getNceLesson, type NceLessonDetail, type NceWord } from '../../../services/nce';
 import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
@@ -450,12 +454,11 @@ Page({
       });
       wx.showToast({ title: res.existed ? '已在收藏中' : '已收藏', icon: 'none' });
     } catch (err) {
-      // 收藏错误可观测性：① 真实错误落 console（保留后端 400 的 statusCode / message 供排查）；
-      // ② 不再无条件覆盖 utils/request.ts 已弹的真实提示 —— 仅当 err 无 HTTP 响应时补网络兜底。
-      // 🔴 本轮只让错误可见，未改后端/未做 DDL，收藏端到端仍失败（根因见 30，修复待用户授权）。
+      // 失败提示由 utils/request.ts 统一负责（49 §5 方案 B / 11-20 治本授权）：
+      // 常规失败在请求层保证「有且仅有一条中文 string toast」；页面层只保留排障留痕
+      // （后端 400 的 statusCode / message 供排查），不再自行弹 toast / 不再做 hasHttpResponse 判定，
+      // 避免与请求层重复弹或把数组 message 直接塞进 wx.showToast 的 title。
       console.error('[nce/collect]', err);
-      const hasHttpResponse = typeof err === 'object' && err !== null && 'statusCode' in err;
-      if (!hasHttpResponse) wx.showToast({ title: '网络异常，请重试', icon: 'none' });
     }
   },
 
