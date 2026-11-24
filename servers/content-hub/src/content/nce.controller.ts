@@ -12,6 +12,7 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ListNceLessonsDto, NceLessonIdDto } from './dto/nce-lesson.dto';
 import { NceLessonService } from './services/nce-lesson.service';
+import { loadDailyQuotesPool, type DailyQuotesPool } from './daily-quotes.data';
 
 function ok<T>(data: T): { code: number; data: T; message: string } {
   return { code: 0, data, message: 'ok' };
@@ -37,5 +38,18 @@ export class NceController {
   @Get('lessons/:id(\\d+)')
   async detail(@Param() params: NceLessonIdDto, @Query('book') book?: string) {
     return ok(await this.nceLessons.detail(params.id, book));
+  }
+
+  /**
+   * 今日一句精选池（阶段③ S4）：只读冻结 JSON 资产，无任何生成逻辑、不调 LLM。
+   * 静态段 'daily-quotes' 与上方 'lessons/:id(\\d+)' 无同前缀 :param 抢匹配。
+   * 可选 ?version 仅条件请求留痕：非法值（非整数）忽略、不 500；资产当前恒返回整池。
+   */
+  @Get('daily-quotes')
+  dailyQuotes(@Query('version') version?: string): { code: number; data: DailyQuotesPool; message: string } {
+    // 强校验但仅留痕：非法 version 忽略（undefined），合法亦不改变返回（冻结资产单版本）
+    const parsed = version !== undefined && /^\d+$/.test(version) ? Number(version) : undefined;
+    void parsed;
+    return ok(loadDailyQuotesPool());
   }
 }
