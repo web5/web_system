@@ -12,7 +12,8 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ListNceLessonsDto, NceLessonIdDto } from './dto/nce-lesson.dto';
 import { NceLessonService } from './services/nce-lesson.service';
-import { loadDailyQuotesPool, type DailyQuotesPool } from './daily-quotes.data';
+import { DailyQuoteService } from './services/daily-quote.service';
+import { type DailyQuotesPool } from './daily-quotes.data';
 
 function ok<T>(data: T): { code: number; data: T; message: string } {
   return { code: 0, data, message: 'ok' };
@@ -20,7 +21,10 @@ function ok<T>(data: T): { code: number; data: T; message: string } {
 
 @Controller('api/nce')
 export class NceController {
-  constructor(private readonly nceLessons: NceLessonService) {}
+  constructor(
+    private readonly nceLessons: NceLessonService,
+    private readonly dailyQuoteService: DailyQuoteService,
+  ) {}
 
   /** 教材与入库进度（?book=NCE2|NCE3|NCE4，缺省 NCE2） */
   @Get('meta')
@@ -41,15 +45,16 @@ export class NceController {
   }
 
   /**
-   * 今日一句精选池（阶段③ S4）：只读冻结 JSON 资产，无任何生成逻辑、不调 LLM。
+   * 今日一句精选池（s27）：从 DB 读冻结快照 + 进程内缓存，无任何生成逻辑、不调 LLM。
    * 静态段 'daily-quotes' 与上方 'lessons/:id(\\d+)' 无同前缀 :param 抢匹配。
-   * 可选 ?version 仅条件请求留痕：非法值（非整数）忽略、不 500；资产当前恒返回整池。
+   * 可选 ?version 仅条件请求留痕：非法值（非整数）忽略、不 500；当前恒返回整池。
+   * DB 不可用且无缓存时 service 抛错 → Nest 映射 5xx（不静默返回空池）。
    */
   @Get('daily-quotes')
-  dailyQuotes(@Query('version') version?: string): { code: number; data: DailyQuotesPool; message: string } {
-    // 强校验但仅留痕：非法 version 忽略（undefined），合法亦不改变返回（冻结资产单版本）
+  async dailyQuotes(@Query('version') version?: string): Promise<{ code: number; data: DailyQuotesPool; message: string }> {
+    // 强校验但仅留痕：非法 version 忽略（undefined），合法亦不改变返回（冻结单版本）
     const parsed = version !== undefined && /^\d+$/.test(version) ? Number(version) : undefined;
     void parsed;
-    return ok(loadDailyQuotesPool());
+    return ok(await this.dailyQuoteService.getPool());
   }
 }

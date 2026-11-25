@@ -1,15 +1,22 @@
 /**
- * 今日一句 · 服务端冻结内容资产只读加载器。
+ * 今日一句 · 冻结池的**类型与常量**（s27 起 DB 存储，runtime 零文件依赖）。
  *
- * 该资产由后台一次性从 s16 的 136 条精选句迁用导出（见 daily-quotes.json 头注），
- * 逐字取自 lessons.json（sha16 40339154ec0a54ad），零编造、零运行时生成、零 LLM。
- * 运行时只做「读文件 → 基本形状校验 → 内存缓存」，不改内容、不落库、不发外部请求。
+ * 136 条内容逐字取自后台一次性冻结资产 `data/daily-quotes.json`
+ * （sha256 6f5fe566dc9191d0dfae0d0211f8132b9492681b514ee4d7f58a9d2676fd0756，
+ * 头注溯源 sha16 40339154ec0a54ad），零编造、零运行时生成、零 LLM。
+ * 该 JSON 现在只是 seed 与测试的唯一真源；服务运行期只查 DB + 内存缓存，
+ * 不 readFileSync、不依赖发布包内的 data/ 目录（2026-11-25 500 根因）。
  *
  * 版权：教材内容仅供个人学习，不对外分发；派生语句为 NCE 原文筛选 / 提炼。
  * 正式上架 / 商用前须另行确认 NCE 教材与译文授权范围（风险归用户）。
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+
+/** 冻结池版本：与资产 `version` 字段一致；换池须走新 migration/seed + 新版本常量。 */
+export const DAILY_QUOTES_FROZEN_VERSION = 1;
+/** 冻结池条数：与资产 `count` 字段一致；service 与 seed 均按此做形状校验。 */
+export const DAILY_QUOTES_FROZEN_COUNT = 136;
+/** 冻结资产快照 sha256：seed/测试用于防篡改（内容若变必须显式换版本）。 */
+export const DAILY_QUOTES_ASSET_SHA256 = '6f5fe566dc9191d0dfae0d0211f8132b9492681b514ee4d7f58a9d2676fd0756';
 
 export type DailyQuoteSource = {
   book: string;
@@ -29,47 +36,3 @@ export type DailyQuotesPool = {
   count: number;
   items: DailyQuoteItem[];
 };
-
-/**
- * 资产路径：优先相对 cwd（content-hub 服务根），回退相对本文件（dist/src 两种布局）。
- * 服务部署时该 JSON 随 content-hub 一起发布到同一相对位置（dev/prod 各一份）。
- */
-export const DAILY_QUOTES_ASSET_PATH = resolve(
-  __dirname,
-  '../../data/daily-quotes.json',
-);
-
-let cached: DailyQuotesPool | null = null;
-
-function isValidItem(x: unknown): x is DailyQuoteItem {
-  if (!x || typeof x !== 'object') return false;
-  const q = x as Partial<DailyQuoteItem>;
-  if (typeof q.cn !== 'string' || q.cn.length === 0) return false;
-  if (typeof q.en !== 'string' || q.en.length === 0) return false;
-  const s = q.source as Partial<DailyQuoteSource> | undefined;
-  if (!s || typeof s !== 'object') return false;
-  return (
-    typeof s.book === 'string'
-    && Number.isInteger(s.lessonId)
-    && typeof s.title === 'string'
-    && Number.isInteger(s.lineIndex)
-  );
-}
-
-/** 读取冻结资产（首次读盘 + 形状校验，之后走内存缓存）；形状非法直接抛，属部署错误不该静默吞。 */
-export function loadDailyQuotesPool(): DailyQuotesPool {
-  if (cached) return cached;
-  const raw = JSON.parse(readFileSync(DAILY_QUOTES_ASSET_PATH, 'utf-8'));
-  if (
-    !raw
-    || !Number.isInteger(raw.version)
-    || !Number.isInteger(raw.count)
-    || !Array.isArray(raw.items)
-    || raw.items.length !== raw.count
-    || !raw.items.every(isValidItem)
-  ) {
-    throw new Error('[daily-quotes] frozen asset shape invalid');
-  }
-  cached = { version: raw.version, count: raw.count, items: raw.items };
-  return cached;
-}
