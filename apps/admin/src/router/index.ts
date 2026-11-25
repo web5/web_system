@@ -340,6 +340,13 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/Content/NceLessons.vue'),
             meta: { title: '新概念英语课文', permission: 'content:view' },
           },
+          {
+            // 每日美句（只读查看）：服务端冻结池整池返回，后台不提供写操作
+            path: 'daily-quotes',
+            name: 'DailyQuotes',
+            component: () => import('@/views/Content/DailyQuotes.vue'),
+            meta: { title: '每日美句', permission: 'content:view' },
+          },
         ],
       },
     ],
