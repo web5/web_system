@@ -13,6 +13,7 @@ import {
   DAILY_QUOTES_ASSET_SHA256,
   DAILY_QUOTES_FROZEN_COUNT,
   DAILY_QUOTES_FROZEN_VERSION,
+  dailyQuoteIdentity,
 } from '../daily-quotes.data';
 import { DailyQuoteEntity } from '../entities/daily-quote.entity';
 import { DailyQuoteService, resetDailyQuoteCacheForTest } from './daily-quote.service';
@@ -54,20 +55,47 @@ describe('冻结资产与代码常量（V1 零编造）', () => {
     expect(ASSET.items).toHaveLength(DAILY_QUOTES_FROZEN_COUNT);
   });
 
-  it('资产 136 条 source 锚点合法且身份键唯一（冻结真源自洽）', () => {
+  it('资产 281 条 source 锚点合法（三册白名单 + 按册课号上限）且含 book 身份键唯一（冻结真源自洽）', () => {
+    const maxByBook: Record<string, number> = { NCE2: 96, NCE3: 60, NCE4: 48 };
     const keys = new Set<string>();
+    const books = new Set<string>();
     for (const q of ASSET.items) {
       expect(q.cn.length).toBeGreaterThan(0);
       expect(q.en.length).toBeGreaterThan(0);
-      expect(q.source.book).toBe('NCE2');
+      expect(Object.keys(maxByBook)).toContain(q.source.book);
       expect(Number.isInteger(q.source.lessonId)).toBe(true);
+      expect(q.source.lessonId).toBeGreaterThanOrEqual(1);
+      expect(q.source.lessonId).toBeLessThanOrEqual(maxByBook[q.source.book]);
       expect(q.source.title.length).toBeGreaterThan(0);
       expect(Number.isInteger(q.source.lineIndex)).toBe(true);
-      const key = `${q.source.lessonId}:${q.source.lineIndex}`;
+      expect(q.source.lineIndex).toBeGreaterThanOrEqual(0);
+      const key = dailyQuoteIdentity(q.source.book, q.source.lessonId, q.source.lineIndex);
       expect(keys.has(key)).toBe(false);
       keys.add(key);
+      books.add(q.source.book);
     }
-    expect(keys.size).toBe(136);
+    expect(keys.size).toBe(281);
+    expect([...books].sort()).toEqual(['NCE2', 'NCE3', 'NCE4']);
+  });
+
+  it('三册分布：NCE2=136（冻结原样）/ NCE3=80 / NCE4=65', () => {
+    const dist: Record<string, number> = {};
+    for (const q of ASSET.items) dist[q.source.book] = (dist[q.source.book] || 0) + 1;
+    expect(dist).toEqual({ NCE2: 136, NCE3: 80, NCE4: 65 });
+  });
+
+  it('含 book 身份键：跨册同 (lessonId,lineIndex) 共存不被判重复；无 book 键会碰撞（变异反例）', () => {
+    // 构造 NCE2 L1:0 与 NCE3 L1:0 两条同号行
+    const a = dailyQuoteIdentity('NCE2', 1, 0);
+    const b = dailyQuoteIdentity('NCE3', 1, 0);
+    expect(a).not.toBe(b);
+    const set = new Set([a, b]);
+    expect(set.size).toBe(2);
+    // 反例：若身份键不含 book，两者会碰撞 → 这正是 0030 之前的老键形态
+    const oldA = `${1}:${0}`;
+    const oldB = `${1}:${0}`;
+    expect(oldA).toBe(oldB);
+    expect(new Set([oldA, oldB]).size).toBe(1);
   });
 });
 
@@ -84,6 +112,26 @@ describe('DailyQuoteService.getPool（V1/V3/V4/V5）', () => {
     const second = await service.getPool();
     expect(second).toEqual(first);
     expect(repo.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('跨册同 (lessonId,lineIndex) 两行共存：含 book 身份键不被 shapeIsValid 误判重复（V4）', async () => {
+    // 用资产中真实存在的跨册同号锚点：构造两条仅 book 不同的行，ordinal 连续。
+    const rows = dbRows();
+    const nce2 = rows.find((r) => r.source_book === 'NCE2' && r.source_lesson_id === 1 && r.source_line_index === 0)
+      || rows.find((r) => r.source_book === 'NCE2');
+    const nce3 = rows.find((r) => r.source_book === 'NCE3');
+    expect(nce2 && nce3).toBeTruthy();
+    // 把两条改成同一 (lessonId,lineIndex)，保留不同 book
+    const cross = [
+      { ...nce2!, ordinal: 1, source_lesson_id: 1, source_line_index: 0, pool_version: DAILY_QUOTES_FROZEN_VERSION },
+      { ...nce3!, ordinal: 2, source_lesson_id: 1, source_line_index: 0, pool_version: DAILY_QUOTES_FROZEN_VERSION },
+    ];
+    // 补齐到 COUNT 条（其余用普通行、ordinal 从 3 开始），确保形状校验只针对身份键
+    const filler = rows.filter((r) => r !== nce2 && r !== nce3).slice(0, DAILY_QUOTES_FROZEN_COUNT - 2)
+      .map((r, i) => ({ ...r, ordinal: i + 3 }));
+    const repo = mockRepo(async () => [...cross, ...filler]);
+    const service = new DailyQuoteService(repo as unknown as Repository<DailyQuoteEntity>);
+    await expect(service.getPool()).resolves.toMatchObject({ count: DAILY_QUOTES_FROZEN_COUNT });
   });
 
   it('并发首次请求共用一个 in-flight 查询，只打库一次', async () => {
@@ -113,7 +161,7 @@ describe('DailyQuoteService.getPool（V1/V3/V4/V5）', () => {
     ['缺一条', (rows: DailyQuoteEntity[]) => rows.slice(0, 135)],
     ['多一条', (rows: DailyQuoteEntity[]) => [...rows, { ...rows[0], ordinal: 137 }]],
     ['ordinal 跳号', (rows: DailyQuoteEntity[]) => rows.map((r, i) => (i === 2 ? { ...r, ordinal: 4 } : r))],
-    ['版本混杂', (rows: DailyQuoteEntity[]) => rows.map((r, i) => (i === 0 ? { ...r, pool_version: 2 } : r))],
+    ['版本混杂', (rows: DailyQuoteEntity[]) => rows.map((r, i) => (i === 0 ? { ...r, pool_version: DAILY_QUOTES_FROZEN_VERSION + 1 } : r))],
     ['cn 为空', (rows: DailyQuoteEntity[]) => rows.map((r, i) => (i === 0 ? { ...r, cn: '' } : r))],
     ['source 非法', (rows: DailyQuoteEntity[]) => rows.map((r, i) => (i === 0 ? { ...r, source_book: 'X', source_lesson_id: 0 } : r))],
   ])('形状漂移 %s → 拒绝返回（count/ordinal/version/source 判据生效）', async (_name, mutate) => {
@@ -127,7 +175,7 @@ describe('DailyQuoteService.getPool（V1/V3/V4/V5）', () => {
     const service = new DailyQuoteService(repo as unknown as Repository<DailyQuoteEntity>);
     await expect(service.getPool()).rejects.toThrow(/DB unavailable/i);
     repo.find.mockImplementationOnce(async () => dbRows());
-    await expect(service.getPool()).resolves.toMatchObject({ count: 136 });
+    await expect(service.getPool()).resolves.toMatchObject({ count: DAILY_QUOTES_FROZEN_COUNT });
     expect(repo.find).toHaveBeenCalledTimes(2);
   });
 });

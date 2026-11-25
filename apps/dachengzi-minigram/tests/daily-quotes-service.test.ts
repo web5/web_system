@@ -4,7 +4,7 @@
  *
  * 钉住五条口径：
  *  ① 静默 GET：request({url:'/api/content-admin/nce/daily-quotes', silent:true, method:'GET'})，无 toast；
- *  ② 成功解包 {code:0,data:{version,count,items}} → 写缓存 daily_quotes_pool={version,fetchedAt,items:[{cn,en}]}（source 不进缓存）；
+ *  ② 成功解包 {code:0,data:{version,count,items}} → 写缓存 daily_quotes_pool={version,fetchedAt,items:[{cn,en,book,lessonId}]}（s33 增角标字段；title/lineIndex 不进缓存）；
  *  ③ 失败 / 非 2xx / 非 0 信封 / 脏响应 → silent 吞掉、不写缓存（保留旧缓存 stale-while-error）；
  *  ④ 不抛异常（.catch 不透到 UI）；⑤ 缓存键中性、无 AI/LLM/prompt 痕迹。
  */
@@ -60,7 +60,7 @@ describe('services/daily-quotes 拉取段', () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
-  it('② 成功解包：写缓存 {version,fetchedAt,items:[{cn,en}]}，source 不进缓存', async () => {
+  it('② 成功解包：写缓存 {version,fetchedAt,items:[{cn,en,book,lessonId}]}（s33 角标字段；title/lineIndex 不进缓存）', async () => {
     requestMock.mockResolvedValueOnce(VALID_BODY);
     await prefetchDailyQuotes();
     expect(setStorageSync).toHaveBeenCalledTimes(1);
@@ -71,9 +71,12 @@ describe('services/daily-quotes 拉取段', () => {
     expect(typeof value.fetchedAt).toBe('number');
     expect(value.items).toHaveLength(2);
     for (const it of value.items) {
-      expect(Object.keys(it).sort()).toEqual(['cn', 'en']);
+      expect(Object.keys(it).sort()).toEqual(['book', 'cn', 'en', 'lessonId']);
     }
-    expect(value.items[0]).toEqual({ cn: VALID_BODY.data.items[0].cn, en: VALID_BODY.data.items[0].en });
+    expect(value.items[0]).toEqual({
+      cn: VALID_BODY.data.items[0].cn, en: VALID_BODY.data.items[0].en,
+      book: 'NCE2', lessonId: 2,
+    });
   });
 
   it('③ 非 0 信封 / 脏 body / 非数组 items / count 不符 → 不写缓存（保留旧池）', async () => {
@@ -105,7 +108,18 @@ describe('services/daily-quotes 拉取段', () => {
     expect(isValidPoolBody({ version: 1, count: 1, items: [{ cn: 'x', en: '' }] })).toBe(false);
     const cache = toCachePool(VALID_BODY.data);
     expect(cache.version).toBe(1);
-    expect(cache.items[0]).toEqual({ cn: VALID_BODY.data.items[0].cn, en: VALID_BODY.data.items[0].en });
+    expect(cache.items[0]).toEqual({
+      cn: VALID_BODY.data.items[0].cn, en: VALID_BODY.data.items[0].en,
+      book: 'NCE2', lessonId: 2,
+    });
+  });
+
+  it('isValidPoolBody 拒绝非法 book / 越界 lessonId（三册白名单 + 按册课号上限）', () => {
+    const base = VALID_BODY.data;
+    const one = (source: object) => ({ version: base.version, count: 1, items: [{ ...base.items[0], source }] });
+    expect(isValidPoolBody(one({ ...base.items[0].source, book: 'NCE5' }))).toBe(false);
+    expect(isValidPoolBody(one({ ...base.items[0].source, book: 'NCE4', lessonId: 49 }))).toBe(false);
+    expect(isValidPoolBody(one({ ...base.items[0].source, book: 'NCE4', lessonId: 48 }))).toBe(true);
   });
 
   it('⑤ 中性命名：模块源码无 ai/llm/prompt/generatedAt 痕迹（源码层静态检查）', () => {

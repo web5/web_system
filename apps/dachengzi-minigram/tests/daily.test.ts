@@ -50,11 +50,11 @@ describe('getDailyQuote 读缓存池（服务端下发）', () => {
     expect(getDailyQuote()).not.toEqual(a);
   });
 
-  it('N 天轮回：第 1 天与第 N+1 天一致（N = 缓存池长度 136，不硬编码 7）', () => {
+  it('N 天轮回：第 1 天与第 N+1 天一致（N = 缓存池长度，随资产 v2=281，不硬编码）', () => {
     jest.useFakeTimers();
-    setCache({ version: 1, items: POOL, fetchedAt: Date.now() });
+    setCache({ version: 2, items: POOL, fetchedAt: Date.now() });
     const n = POOL.length;
-    expect(n).toBe(136);
+    expect(n).toBe(281); // v2 资产 count，取模按实际池长（变异「回退 136」会被此断言抓红）
     jest.setSystemTime(new Date(2026, 0, 1, 8, 0, 0));
     const a = getDailyQuote();
     jest.setSystemTime(new Date(2026, 0, 1 + n, 8, 0, 0));

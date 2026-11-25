@@ -24,6 +24,19 @@ export type DailyQuote = {
   en: string;
 };
 
+/** 册别角标（A3 / 原型 d3c3730281e758d8）：中文册名映射留前端，book 存规范码。 */
+export const BOOK_LABEL: Record<string, string> = {
+  NCE2: '新概念二册',
+  NCE3: '新概念三册',
+  NCE4: '新概念四册',
+};
+
+/** 角标锚点：book/lessonId 缺省时为 undefined（旧缓存无 book → UI 隐藏角标，不显 undefined）。 */
+export type DailyQuoteMeta = { book?: string; lessonId?: number };
+
+/** 带册别锚点的缓存行：在 {cn,en} 上可选携带 book/lessonId。 */
+type MetaQuote = DailyQuote & DailyQuoteMeta;
+
 /** 兜底句出处锚点，仅供溯源留痕，不在 UI 展示 */
 type FallbackSource = { book: string; lessonId: number; title: string; lineIndex: number };
 type FallbackQuote = DailyQuote & { source: FallbackSource };
@@ -47,17 +60,18 @@ export const FALLBACK_QUOTES: FallbackQuote[] = [
   { cn: "整夜，人们都在跳舞唱歌。", en: "All night long, people dance and sing.", source: { book: "NCE2", lessonId: 96, title: "The Dead Return", lineIndex: 7 } },
 ];
 
-/** 读本地缓存池；任何异常 / 脏结构 → 空数组（交给 pickNceLine 回落兜底），绝不抛到 UI。 */
-function readCachedPool(): DailyQuote[] {
+/** 读本地缓存池；任何异常 / 脏结构 → 空数组（交给 pickNceLine 回落兜底），绝不抛到 UI。
+ *  透传 book/lessonId（旧缓存缺字段 → 保持 undefined，由 UI 降级隐藏角标）。 */
+function readCachedPool(): MetaQuote[] {
   try {
     const raw = wx.getStorageSync(DAILY_QUOTES_CACHE_KEY);
     if (!raw || typeof raw !== 'object') return [];
     const items = (raw as { items?: unknown }).items;
     if (!Array.isArray(items)) return [];
-    return items.filter((it): it is DailyQuote =>
+    return items.filter((it): it is MetaQuote =>
       !!it && typeof it === 'object'
-      && typeof (it as DailyQuote).cn === 'string' && (it as DailyQuote).cn.length > 0
-      && typeof (it as DailyQuote).en === 'string' && (it as DailyQuote).en.length > 0);
+      && typeof (it as MetaQuote).cn === 'string' && (it as MetaQuote).cn.length > 0
+      && typeof (it as MetaQuote).en === 'string' && (it as MetaQuote).en.length > 0);
   } catch {
     return [];
   }
@@ -74,6 +88,24 @@ function dayIndex(): number {
 /** 今日一句（签名 { cn, en } 与「同天稳定 / 隔天换」行为完全不变）。 */
 export function getDailyQuote(): DailyQuote {
   return pickNceLine(dayIndex(), readCachedPool());
+}
+
+/**
+ * 今日一句的册别锚点（A3 角标）；与 getDailyQuote() 同源同天同条。
+ * 缓存行缺 book/lessonId（旧缓存）→ 返回 undefined 字段，UI 据此隐藏角标，不编造。
+ * 兜底路径恒 NCE2，取兜底句的 source.book/lessonId（真实锚点，非编造）。
+ */
+export function getDailyQuoteMeta(): DailyQuoteMeta {
+  const pool = readCachedPool().filter(
+    (l) => typeof l.cn === 'string' && l.cn.length > 0 && typeof l.en === 'string' && l.en.length > 0,
+  );
+  const day = dayIndex();
+  if (pool.length === 0) {
+    const fb = FALLBACK_QUOTES[normalizeIndex(day, FALLBACK_QUOTES.length)];
+    return { book: fb.source.book, lessonId: fb.source.lessonId };
+  }
+  const picked = pool[normalizeIndex(day, pool.length)];
+  return { book: picked.book, lessonId: picked.lessonId };
 }
 
 /** 把任意 dayNumber 归一化为 [0, len) 下标：负数 / 超大 / 小数 / 非有限值均安全，不抛异常。 */
