@@ -8,8 +8,8 @@
 | 原型 sha | `3ac228a0a62df6c8`（167 附件 HTML，`shasum -a 256` 实算，沿用 s36 已确认原型，本轮不改交互） |
 | 交互清单 | `docs/ui/page-specs/daily-quotes-readonly.md`（沿用，本轮无新增交互） |
 | 基线 | `origin/master = ddab1c29`（PR #669 已合入） |
-| PR | 待填（draft PR，本轮创建后回填） |
-| commitId | 待填 |
+| PR | **#670**（draft）· https://github.com/web5/web_system/pull/670 |
+| commitId | `c162cb09`（fix 主体） |
 
 阻塞: 0
 
