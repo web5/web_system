@@ -376,12 +376,35 @@ async function mountPage(): Promise<MountedPage> {
   };
 }
 
-/** 页面自己的空态：排除 a-table 内置的 "No data" 占位（它挂在 .ant-table 内部）。 */
+/**
+ * 页面自己的空态。
+ *
+ * ⚠️ 2026-11-25（s44 双空态修复）**订正定位口径**，用例语义不变、用例不删：
+ *
+ * 上一轮（s42）这里是「找**不在** `.ant-table` 内的 `.ant-empty`」，即用**位置**区分
+ * 「页面空态」与「表格内置 No data 占位」。这条判据本身正是双空态的帮凶——它主动
+ * 忽略了表格那块占位，于是「空态有几块」从来没被问过（#8993 就是这样全绿上线的）。
+ * 本轮修复把自定义空态搬进了表格的 `emptyText` 槽，页面空态**就住在** `.ant-table` 内，
+ * 位置判据必然失效。故改为**按文案定位**：description === 「没有匹配的美句」的那块。
+ *
+ * 数量唯一性由下方的 allEmptyStates / T5 单独严格断言，不再靠"排除法"取巧。
+ */
+const PAGE_EMPTY_DESCRIPTION = '没有匹配的美句';
+
 function pageEmptyState(container: HTMLElement): Element | null {
   return (
-    Array.from(container.querySelectorAll('.ant-empty')).find((node) => node.closest('.ant-table') === null) ??
-    null
+    Array.from(container.querySelectorAll('.ant-empty')).find(
+      (node) => (node.querySelector('.ant-empty-description')?.textContent ?? '').trim() === PAGE_EMPTY_DESCRIPTION,
+    ) ?? null
   );
+}
+
+/**
+ * 页面上**所有**空态占位（含 a-table 内置 `renderEmpty('Table')` 的 No data）。
+ * T5 用它数数量：双空态时 === 2，单空态时 === 1。
+ */
+function allEmptyStates(container: HTMLElement): Element[] {
+  return Array.from(container.querySelectorAll('.ant-empty'));
 }
 
 function buttonLabelsWithin(root: Element | null): string[] {
@@ -553,5 +576,86 @@ describe('V9 · 空态恢复入口 · 渲染态（真实挂载生产 SFC）', ()
     expect(totalText(page.container)).toContain('共281条');
     expect(activePage(page.container)).toBe('1');
     expect(firstRowLesson(page.container)).toBe('L1');
+  });
+});
+
+// ══════════════ V13 空态唯一性 · 渲染态（s44 / 台账 #8993 双空态） ══════════════
+//
+// 上一轮 V9 只证明了「空态里的按钮能用」，**没有证明「空态只有一块」**：
+// `pageEmptyState()` 当时用「不在 .ant-table 内」排除掉表格内置占位，于是
+// `dataSource` 为空时那块 `No data` 与表格外的自定义空态**同时渲染**（数量 2），
+// 4 条用例照样全绿 —— 用户 2026-11-25 16:23 目视确认「确实是双空态」。
+//
+// 本组是**验收层根因**的补齐：直接数渲染后 DOM 里的空态占位数量，并要求唯一那块
+// 落在表格 tbody 的占位行内（列头保留）、按钮就在它里面。
+// 修复手段：自定义空态整块搬进 `<a-table>` 的 `emptyText` 槽（antdv 4.2.6
+// Table.js L428–430 该槽优先级最高，命中后不再走 renderEmpty('Table')）。
+
+describe('V13 · 空态唯一性 · 渲染态（真实挂载生产 SFC）', () => {
+  jest.setTimeout(60_000);
+
+  let page: MountedPage | null = null;
+
+  beforeEach(() => {
+    installJsdomGaps();
+    mockedGetDailyQuotes.mockReset();
+  });
+
+  afterEach(() => {
+    page?.destroy();
+    page = null;
+    document.querySelectorAll('.ant-select-dropdown').forEach((node) => node.remove());
+    document.body.innerHTML = '';
+  });
+
+  it('T5 无命中时空态占位数量 === 1（唯一那块在表格内、列头保留、按钮在其中）', async () => {
+    page = await mountPage();
+    expect(totalText(page.container)).toContain('共281条');
+    await reachEmptyStateAtPage2(page);
+
+    // ① 数量：这就是 #8993 的正题。修复前这里 Received: 2（内置 No data + 自定义空态）。
+    const empties = allEmptyStates(page.container);
+    expect(empties.length).toBe(1);
+
+    // ② 唯一那块的归属与文案：必须落在表格体内（列头因此保留），且是自定义文案而非内置 No data
+    const only = requireNode(empties[0], '唯一的空态占位');
+    expect(only.closest('.ant-table')).not.toBeNull();
+    expect((only.querySelector('.ant-empty-description')?.textContent ?? '').trim()).toBe(PAGE_EMPTY_DESCRIPTION);
+
+    // ③ 列头未被空态吃掉（空态只替换 tbody 占位行）
+    const headers = Array.from(page.container.querySelectorAll('.ant-table-thead th')).map((th) =>
+      (th.textContent ?? '').replace(/\s+/g, ''),
+    );
+    expect(headers).toEqual(['#', '英文/English', '中文/Chinese', '来源/Source', '操作']);
+
+    // ④ 恢复入口就在这块空态里面，且可点击
+    expect(buttonLabelsWithin(only)).toContain('清空筛选与搜索');
+    const button = requireNode(only.querySelector('button'), '唯一空态内的恢复按钮');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('T6 点击唯一空态内的按钮 → 281 条 / 页码 1 / 册别课号 keyword 三条件复位', async () => {
+    page = await mountPage();
+    await reachEmptyStateAtPage2(page);
+
+    // 前置：先确认只有一块（与 T5 同判据；单列一条是为了让"点了哪一块"无歧义）
+    expect(allEmptyStates(page.container).length).toBe(1);
+    const only = requireNode(allEmptyStates(page.container)[0], '唯一的空态占位');
+    const button = requireNode(only.querySelector('button'), '唯一空态内的恢复按钮');
+
+    clickNode(button, '唯一空态内的恢复按钮');
+    await settle();
+
+    // ① 空态彻底消失（不是减到 1，是 0）
+    expect(allEmptyStates(page.container).length).toBe(0);
+    expect(page.container.querySelectorAll('.ant-table-tbody tr.ant-table-row').length).toBe(20);
+    // ② 总数回 281
+    expect(totalText(page.container)).toContain('共281条');
+    // ③ 页码回 1
+    expect(activePage(page.container)).toBe('1');
+    // ④ 三条件全复位
+    expect((page.container.querySelector('.ant-select-selection-item')?.textContent ?? '').trim()).toBe('全部');
+    expect(inputByPlaceholder(page.container, '课号').value).toBe('');
+    expect(inputByPlaceholder(page.container, '搜索中英文句子').value).toBe('');
   });
 });
