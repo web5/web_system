@@ -1,23 +1,22 @@
 <view class="page {{radiusClass}}">
   <view class="sec-t">我们收集什么</view>
   <view class="doc">
-    <view class="p"><text class="b">微信身份标识（openid）</text>：首次进入时通过 wx.login 静默获取，用于建立你的账号，不弹授权窗。</view>
-    <view class="p"><text class="b">手机号</text>：仅在你主动点击「绑定手机号」并授权后，经微信手机号验证组件获取，用于多端账号打通。<text class="b">不绑定不影响任何功能使用</text>。</view>
-    <view class="p"><text class="b">邮箱</text>：仅在你主动填写并验证后用于账号打通，同样可选。</view>
-    <view class="p"><text class="b">学习数据</text>：课文学习进度、收藏，保存在你的账号下。</view>
+    <view class="p"><text class="b">微信身份标识（openid）</text>：进入小程序时自动获取，用于建立你的账号。</view>
+    <view class="p"><text class="b">账号资料</text>：你主动设置的昵称、头像，以及可选绑定的邮箱，仅用于识别你的账号。</view>
+    <view class="p"><text class="b">学习数据</text>：课文学习进度与收藏，保存在你的账号下。</view>
   </view>
 
-  <view class="sec-t">手机号与邮箱怎么用</view>
+  <view class="sec-t">这些信息怎么用</view>
   <view class="doc">
-    <view class="p">仅作为账号打通的标识；接口与页面一律只展示脱敏形式（138****6688 / a***@example.com）。</view>
-    <view class="p">若该手机号或邮箱已注册过大橙子英语账号，会先征求你的同意，再把当前小程序的数据合并到那个账号 —— <text class="b">合并不可撤销</text>。</view>
+    <view class="p">仅用于提供本小程序的学习服务与账号识别，不用于其他用途，也不会提供给第三方。</view>
+    <view class="p">若绑定的邮箱已注册过大橙子英语账号，经你同意后会把当前数据合并到该账号，<text class="b">合并不可撤销</text>。</view>
   </view>
 
   <view class="sec-t">你的控制权</view>
   <view class="doc">
-    <view class="p">可在「我的 → 个人信息」绑定或更换手机号 / 邮箱，更换需重新验证。</view>
-    <view class="p">可在「我的 → 设置」退出登录：本地登录态清除，同时服务端凭证失效。</view>
-    <view class="p">账号注销：当前版本暂未开放自助注销，可联系我们处理，我们将在 15 个工作日内完成。</view>
+    <view class="p">可在「我的 → 个人信息」修改昵称、头像或更换邮箱。</view>
+    <view class="p">可在「我的 → 设置」退出登录，本地登录态会被清除。</view>
+    <view class="p">可在「收藏」中删除单条收藏；需要删除学习数据或注销账号，可联系我们处理。</view>
   </view>
 
   <view class="foot">本协议自「大橙子英语」小程序上线之日起生效。</view>
