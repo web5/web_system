@@ -1,0 +1,2817 @@
+{
+  "_notice": "来源：三册真实课文 lines[] 离线逐字精选（非运行时、非 LLM 生成）：NCE2 lessons.json sha16 40339154ec0a54ad（96 课）NCE3 lessons3.json sha16 9558256c30524970（60 课）NCE4 lessons4.json sha16 4885c6aee9121a2f（48 课）；本池 version=2 / count=281（NCE2 136 冻结原样 + NCE3 80 + NCE4 65 交错）；生成时间 2026-11-25T03:52:59.513Z。所有 cn/en 逐字取自原文、不改写不编造、可反查（mismatches=0）。教材内容仅供个人学习，不对外分发；正式上架/商用前须另行确认 NCE 教材与译文授权范围（风险归用户）。",
+  "version": 2,
+  "count": 281,
+  "items": [
+    {
+      "cn": "我从不在星期天早起。",
+      "en": "I never get up early on Sundays.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 2,
+        "title": "Breakfast or Lunch",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "美洲狮是大型猫科动物，产于美洲。",
+      "en": "Pumas are large cat-like animals which are found in America.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 1,
+        "title": "A Puma at Large",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "但世界上有些地方，即使是现在，人们也无法书写。",
+      "en": "But there are some parts of the world where even now people cannot write.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 1,
+        "title": "Finding Fossil Man",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "我有时会一直睡到午饭时间。",
+      "en": "I sometimes stay in bed until lunchtime.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 2,
+        "title": "Breakfast or Lunch",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "然而，一天晚上，我们的牧师突然惊醒。",
+      "en": "One night, however, our vicar woke up with a start.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 2,
+        "title": "Thirteen Equals One",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "为什么，你可能会想，蜘蛛应该是我们的朋友？",
+      "en": "Why, you may wonder, should spiders be our friends?",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 2,
+        "title": "Spare That Spider",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "明信片总是破坏我的假期。",
+      "en": "Postcards always spoil my holidays.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 3,
+        "title": "Please Send Me a Card",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "一个美国团队探索了一座位于艾伊里尼海角古城中的寺庙。",
+      "en": "An American team explored a temple which stands in an ancient city on the promontory of Ayia Irini.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 3,
+        "title": "An Unknown Goddess",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "现代登山者尝试通过一条能让他们享受运动乐趣的路线来攀登山脉。",
+      "en": "Modern alpinists try to climb mountains by a route which will give them good sport.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 3,
+        "title": "Matterhorn Man",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在最后一天，我做了一个重要的决定。",
+      "en": "On the last day, I made a big decision.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 3,
+        "title": "Please Send Me a Card",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "如今，从事体力劳动的人挣的钱往往比办公室职员多得多。",
+      "en": "These days, people who do manual work often receive far more money than clerks who work in offices.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 4,
+        "title": "The Double Life of Alfred Bloggs",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "近来，苏联报道了几起案例，有人能用手指阅读并识别颜色，甚至能看穿实心门和墙壁。",
+      "en": "In the Soviet Union, several cases have been reported recently of people who can read and detect colors with their fingers, and even see through solid doors and walls.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 4,
+        "title": "Seeing Hands",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我在房间里呆了一整天，但一张明信片也没写。",
+      "en": "I spent the whole day in my room, but I did not write a single card.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 3,
+        "title": "Please Send Me a Card",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "报纸和杂志的编辑们常常不遗余力地向读者提供一些无关紧要的事实和统计数据。",
+      "en": "Editors of newspapers and magazines often go to extremes to provide their readers with unimportant facts and statistics.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 5,
+        "title": "The Facts",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "大猩猩在非洲情境中是有些矛盾的。",
+      "en": "The gorilla is something of a paradox in the African scene.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 5,
+        "title": "Gorilla",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我哥哥以前从未出国过，所以他觉得这次旅行非常激动人心。",
+      "en": "My brother has never been abroad before, so he is finding this trip very exciting.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 4,
+        "title": "An Exciting Trip",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "皮卡迪利附近的著名拱廊里的那些高檔商店剛剛開門。",
+      "en": "The expensive shops in the famous arcade near Piccadilly were just opening.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 6,
+        "title": "Smash and Grab",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "人们总是在谈论青年的问题。",
+      "en": "People are always talking about the problem of youth.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 6,
+        "title": "Youth",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这只鸟在三分钟内飞完了这段距离。",
+      "en": "The bird covered the distance in three minutes.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 5,
+        "title": "No Wrong Numbers",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "孩子们往往比他们的长辈更懂事。",
+      "en": "Children often have far more sense than their elders.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 7,
+        "title": "Crazy",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "如今进行的几乎所有体育运动都是竞争性的。",
+      "en": "Nearly all the sports practiced nowadays are competitive.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 7,
+        "title": "The Sporting Spirit",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "这样一来，他就开通了自己的私人电话服务。",
+      "en": "In this way, he has begun his own private telephone service.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 5,
+        "title": "No Wrong Numbers",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "大圣伯纳德山口连接着瑞士和意大利。",
+      "en": "The Great St Bernard Pass connects Switzerland to Italy.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 8,
+        "title": "A Famous Monastery",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "如今，父母为孩子做的事情比以往少得多。",
+      "en": "Parents have to do much less for their children today than they used to do.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 8,
+        "title": "Employment of Family",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "人人都认识他。",
+      "en": "Everybody knows him.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 6,
+        "title": "Percy Buttons",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "火箭将飞行九个月才能到达这颗行星。",
+      "en": "The rocket will be traveling for nine months before it reaches the planet.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 9,
+        "title": "A Trip to Mars",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "并非所有动物发出的声音都充当语言。",
+      "en": "Not all sounds made by animals serve as language.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 9,
+        "title": "Bats",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "乔·桑德斯拥有我们镇上最美丽的花园。",
+      "en": "Joe Saunders has the most beautiful garden in our town.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 8,
+        "title": "The Best and the Worst",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "1912年4月10日，巨轮泰坦尼克号从南安普敦启程驶往纽约。",
+      "en": "The great ship Titanic sailed for New York from Southampton on April the 10th, 1912.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 10,
+        "title": "The Loss of the Titanic",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在我们的新社会中，人们对原创型创造性人才的厌恶与日俱增。",
+      "en": "In our new society, there is a growing dislike of original creative men.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 10,
+        "title": "Creative Men",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "它已经属于我们家很长时间了。",
+      "en": "It has belonged to our family for a long time.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 10,
+        "title": "Not for Jazz",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "过海关是一件麻烦事。",
+      "en": "Going through the customs is a tiresome business.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 11,
+        "title": "Not Guilty",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "在那些日子里，四处游走的吟游诗人到处都受欢迎。",
+      "en": "In those days, wandering minstrels were welcome everywhere.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 11,
+        "title": "Royal Espionage",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "现在我们不被允许碰它。",
+      "en": "Now we are not allowed to touch it.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 10,
+        "title": "Not for Jazz",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "我们大多数人对荒岛生活形成了一个不切实际的画面。",
+      "en": "Most of us have formed an unrealistic picture of life on a desert island.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 12,
+        "title": "Life on a Desert Island",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "几乎所有好莱坞电影的特点都在于其内在的空虚。",
+      "en": "What characterizes almost all Hollywood pictures is their inner emptiness.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 12,
+        "title": "The Language of Hollywood",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "他从没向我借过钱。",
+      "en": "He has never borrowed money from me.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 11,
+        "title": "One Good Turn Deserves Another",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "理查兹夫人送孩子们上学，然后上楼回到自己的卧室。",
+      "en": "Mrs. Richards sent her children to school and went upstairs to her bedroom.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 13,
+        "title": "It's Only Me",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "牛津已被汽车工业毁坏。",
+      "en": "Oxford has been ruined by the motor industry.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 13,
+        "title": "Oxford",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "它曾多次横渡大西洋。",
+      "en": "It has sailed across the Atlantic many times.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 12,
+        "title": "Goodbye and Good Luck",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "曾几何时，芝加哥的商店和企业主不得不向黑帮支付大笔金钱，以换取保护。",
+      "en": "There was a time when the owners of shops and businesses in Chicago had to pay large sums of money to gangsters in return for protection.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 14,
+        "title": "A Noble Gangster",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "有些老年人被死亡的恐惧所压迫。",
+      "en": "Some old people are oppressed by the fear of death.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 14,
+        "title": "How to Grow Old",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我们为他感到非常骄傲。",
+      "en": "We are very proud of him.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 12,
+        "title": "Goodbye and Good Luck",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "孩子们总是很喜欢小额的钱财礼物。",
+      "en": "Children always appreciate small gifts of money.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 15,
+        "title": "Sixpence Worth of Trouble",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "从根本上讲，银行与客户的关系是债权人与债务人的关系。",
+      "en": "Primarily, the bank-customer relationship is that of debtor and creditor.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 15,
+        "title": "Banks and Their Customers",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "在这些场合下，情况总是如此。",
+      "en": "It is always the same on these occasions.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 13,
+        "title": "The Greenwood Boys",
+        "lineIndex": 13
+      }
+    },
+    {
+      "cn": "玛丽和她的丈夫季米特里住在希腊南部佩拉霍拉小村庄。",
+      "en": "Mary and her husband Dimitri lived in the tiny village of Perahora in Southern Greece.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 16,
+        "title": "Mary Had a Little Lamb",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这些孔只是钻孔，直径不到一英尺。",
+      "en": "The holes are only borings, less than a foot in diameter.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 16,
+        "title": "The Search for Oil",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "我知道轮到我了。",
+      "en": "I knew that my turn had come.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 15,
+        "title": "Good News",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "他形容那里是一个非常宜人的地方，坐落在两座小山之间，中间流淌着一条大河。",
+      "en": "He described it as a very agreeable situation, located within two small hills, in the midst of which flowed a great river.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 17,
+        "title": "The Greatest Bridge in the World",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "在智力测试中，我们会抽取个体解决各种谜题和问题的能力样本。",
+      "en": "In an intelligence test, we take a sample of an individual's ability to solve puzzles and problems of various kinds.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 17,
+        "title": "Intelligence",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "然而，这并不总是发生。",
+      "en": "However, this does not always happen.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 16,
+        "title": "A Polite Request",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "现代雕塑已经很少再让我们感到惊讶了。",
+      "en": "Modern sculpture rarely surprises us anymore.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 18,
+        "title": "Electric Currents in Modern Art",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "有两个因素严重阻碍了工业中科学研究的有效性。",
+      "en": "Two factors weigh heavily against the effectiveness of scientific research in industry.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 18,
+        "title": "Secrecy in Industry",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "先生，我们欢迎您来到我们的城市。",
+      "en": "Sir, we welcome you to our city.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 16,
+        "title": "A Polite Request",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "拉斯特斯过着有规律的生活。",
+      "en": "Rastus leads an orderly life.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 19,
+        "title": "A Very Dear Cat",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "绅士重“是”而非“做”。",
+      "en": "A gentleman is, rather than does.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 19,
+        "title": "Gentleman",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "如果您留意我们的路标，您会在这里度过愉快的时光。",
+      "en": "You will enjoy your stay here if you pay attention to our street signs.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 16,
+        "title": "A Polite Request",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "1908年，诺斯克利夫勋爵设下1000英镑的奖金，奖励第一位飞越英吉利海峡的人。",
+      "en": "In 1908, Lord Northcliffe offered a prize of 1,000 pounds to the first man who would fly across the English Channel.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 20,
+        "title": "Pioneer Pilots",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在工业生活的组织中，工厂对工人身心状态的影响已被完全忽视。",
+      "en": "In the organization of industrial life, the influence of the factory upon the physiological and mental state of the workers has been completely neglected.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 20,
+        "title": "The Modern City",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "这张纸条只是一个提醒。",
+      "en": "This note is only a reminder.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 16,
+        "title": "A Polite Request",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "200年前，拳击比赛在英格兰非常流行。",
+      "en": "Boxing matches were very popular in England 200 years ago.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 21,
+        "title": "Daniel Mendoza",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "它遍布整个大陆。",
+      "en": "It overran a whole continent.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 21,
+        "title": "A Man Made Disease",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "钓鱼是我最喜欢的运动。",
+      "en": "Fishing is my favourite sport.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "有些戏剧非常成功，可以连续上演多年。",
+      "en": "Some plays are so successful that they run for years on end.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 22,
+        "title": "By Heart",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "海豚和鲨鱼是天敌。",
+      "en": "Porpoises and sharks are natural enemies.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 22,
+        "title": "Porpoises",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "我经常钓好几个小时，却什么也钓不到。",
+      "en": "I often fish for hours without catching anything.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "当人们试图决定什么可以吃，什么不可以吃的时候，他们会变得相当不合逻辑。",
+      "en": "People become quite illogical when they try to decide what can be eaten and what cannot be eaten.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 23,
+        "title": "One Man's Meat Is Another Man's Poison",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "睡眠期肯定具有某种功能。",
+      "en": "It's fairly clear that the sleeping period must have some function.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 23,
+        "title": "The Stuff of Dreams",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我总是空手而归。",
+      "en": "I always go home with an empty bag.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "英语中有一个生动的说法来描述这种情况。",
+      "en": "The English language possesses a vivid saying to describe this sort of situation.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 24,
+        "title": "A Skeleton in the Cupboard",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "他所拥有的那些轻而易举的百科全书式知识又在哪里？",
+      "en": "Where that encyclopaedic knowledge which he bore so lightly?",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 24,
+        "title": "Going Out for a Walk",
+        "lineIndex": 18
+      }
+    },
+    {
+      "cn": "这是浪费时间。",
+      "en": "It's a waste of time.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 12
+      }
+    },
+    {
+      "cn": "她停泊在陆地上，每年有成千上万的人前来参观。",
+      "en": "She stands on dry land and is visited by thousands of people each year.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 25,
+        "title": "The Cutty Sark",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "蛇是如何制造毒液的，至今仍是一个谜。",
+      "en": "How it came about that snakes manufactured poison is a mystery.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 25,
+        "title": "Snake Poison",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我对钓鱼不感兴趣。",
+      "en": "I'm not interested in fishing.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "没有人能避免受广告的影响。",
+      "en": "No one can avoid being influenced by advertisements.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 26,
+        "title": "Wanted: A Large Biscuit Tin",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "从1914年到1924年，他至高无上，无人能及。",
+      "en": "From 1914 to 1924, he was supreme and unchallenged.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 26,
+        "title": "William S. Hart",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "我只对坐在船上什么也不做感兴趣。",
+      "en": "I am only interested in sitting in a boat and doing nothing at all.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 20,
+        "title": "One Man in a Boat",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "有人曾说，人人都是靠出卖某种东西而生活的。",
+      "en": "It has been said that everyone lives by selling something.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 27,
+        "title": "Nothing to Sell and Nothing to Buy",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "为什么进步的观念在现代世界中如此突出？",
+      "en": "Why does the idea of progress loom so large in the modern world?",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 27,
+        "title": "Knowledge and Progress",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "飞机正慢慢地把我逼疯。",
+      "en": "Aeroplanes are slowly driving me mad.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 21,
+        "title": "Mad or Not",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "很难不心动。",
+      "en": "It was difficult not to be tempted.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 28,
+        "title": "A Pound Too Dear",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "没有哪两种鸟的飞行方式是完全相同的。",
+      "en": "No two sorts of birds practice quite the same sort of flight.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 28,
+        "title": "Bird Flight",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "每个人都说我一定是疯了。",
+      "en": "Everybody says I must be mad.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 21,
+        "title": "Mad or Not",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "我们觉得一个笑话好笑不好笑，很大程度上取决于我们的成长环境。",
+      "en": "Whether we find a joke funny or not largely depends on where we have been brought up.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 29,
+        "title": "Funny or Not",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在某些心境下，大自然也分享着这种力量。",
+      "en": "In some moods nature shares it.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 29,
+        "title": "Beauty",
+        "lineIndex": 20
+      }
+    },
+    {
+      "cn": "现在两个女孩都定期给对方写信。",
+      "en": "Both girls write to each other regularly now.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 22,
+        "title": "A Glass Envelope",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "多年来，村民们一直认为恩德利农场闹鬼。",
+      "en": "For years, villagers believed that Endley Farm was haunted.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 30,
+        "title": "The Death of a Ghost",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "每一种文明都会诞生、发展到顶峰，然后衰落。",
+      "en": "Each civilization is born, it culminates, and it decays.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 30,
+        "title": "Progress of Civilization",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "信件的花费会多一点，但肯定会更快送达。",
+      "en": "Letters will cost a little more, but they will certainly travel faster.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 22,
+        "title": "A Glass Envelope",
+        "lineIndex": 7
+      }
+    },
+    {
+      "cn": "真正的怪人从不刻意引人注目。",
+      "en": "True eccentrics never deliberately set out to draw attention to themselves.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 31,
+        "title": "A Lovable Eccentric",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "他们甚至不愿承认噪音会影响人的可能性。",
+      "en": "They're not prepared even to admit the possibility that noise affects people.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 31,
+        "title": "Non-Auditory Effects of Noise",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "我们现在正住在乡村的一座漂亮的新房子里。",
+      "en": "We are now living in a beautiful new house in the country.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 23,
+        "title": "A New House",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "打捞行动彻底失败了。",
+      "en": "The salvage operation had been a complete failure.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 32,
+        "title": "A Lost Ship",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "生活在水边或水中的动物和植物的遗骸最有可能被保存下来，因为保存的必要条件之一是快速埋藏。",
+      "en": "It is animals and plants which lived in or near water, whose remains are most likely to be preserved, for one of the necessary conditions of preservation is quick burial.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 32,
+        "title": "The Past Life of the Earth",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "它一定是这个地区唯一一座现代化的房子。",
+      "en": "It must be the only modern house in the district.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 23,
+        "title": "A New House",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "我们都经历过事事不顺的日子。",
+      "en": "We have all experienced days when everything goes wrong.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 33,
+        "title": "A Day to Remember",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这就是瓦萨号，大帝国舰队的皇家旗舰。",
+      "en": "This was the Vasa, royal flagship of the Great Imperial Fleet.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 33,
+        "title": "The ‘Vasa’",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "在英国每个人都说不同的语言。",
+      "en": "In England each man speaks a different language.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 25,
+        "title": "Do the English Speak English",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "古董店对很多人来说都有一种奇特的魅力。",
+      "en": "Antique shops exert a peculiar fascination on a great many people.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 34,
+        "title": "A Happy Discovery",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这是一个怀疑的时代。",
+      "en": "This is a skeptical age.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 34,
+        "title": "Patients and Doctors",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "英国人彼此都能听懂，可我听不懂他们。",
+      "en": "The English understand each other, but I don’t understand them.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 25,
+        "title": "Do the English Speak English",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "“正义”这个词通常与法庭联系在一起。",
+      "en": "The word 'justice' is usually associated with courts of law.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 35,
+        "title": "Justice Was Done",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在我们这个世纪里，许多新奇的交通工具相继问世。",
+      "en": "Many strange new means of transport have been developing in our century.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 35,
+        "title": "The Hovercraft",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "许多人假装他们懂现代艺术。",
+      "en": "Many people pretend that they understand modern art.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 26,
+        "title": "The Best Art Critics",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我们不像过去那样轻信了。",
+      "en": "We are less credulous than we used to be.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 36,
+        "title": "A Chance in a Million",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "公海深邃而神秘，任何对海底边界稍作思考的人，可能都认为海底是平坦的。",
+      "en": "The open sea was deep and mysterious, and anyone who gave more than a passing thought to the bottom confines of the oceans, probably assumed that the seabed was flat.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 36,
+        "title": "The Cost of Living",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "当然，许多画根本不是关于任何东西的。",
+      "en": "Of course, many pictures are not about anything.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 26,
+        "title": "The Best Art Critics",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "我们已经习惯了火车会准时到达。",
+      "en": "We have learned to expect that trains will be punctual.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 37,
+        "title": "The West Haven Express",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "维多利亚时代的人们意识到，人类最大的幸福莫过于拥有一桩幸福的婚姻，因此他们竭力假装自己的所有婚姻都是幸福的。",
+      "en": "The Victorians, realizing that the greatest happiness accorded to man, is that provided by a happy marriage, endeavoured to pretend that all their marriages were happy.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 37,
+        "title": "What Every Writer Wants",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "它们只是漂亮的图案。",
+      "en": "They are just pretty patterns.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 26,
+        "title": "The Best Art Critics",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "未来的历史学家在记录我们这个时代的历史时，将处于独特的地位。",
+      "en": "Future historians will be in a unique position when they come to record the history of our own times.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 38,
+        "title": "The First Calendar",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "雕塑的欣赏取决于在三维空间中对形态做出反应的能力。",
+      "en": "Appreciation of sculpture depends upon the ability to respond to form in three dimensions.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 38,
+        "title": "Water and the Traveller",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我认为小孩子往往比其他人更能欣赏现代画。",
+      "en": "I think that young children often appreciate modern pictures better than anyone else.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 26,
+        "title": "The Best Art Critics",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "穿过平原的崎岖道路很快变得非常糟糕，我们试图让布鲁斯开车回到我们来时的村庄。",
+      "en": "The rough road across the plain soon became so bad that we tried to get Bruce to drive back to the village we had come from.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 39,
+        "title": "Nothing to Worry About",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "在伽利略生前，他一直是激烈争议的中心。",
+      "en": "In his own lifetime, Galileo was the center of violent controversy.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 39,
+        "title": "Waves",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "她是对的。",
+      "en": "She was right.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 26,
+        "title": "The Best Art Critics",
+        "lineIndex": 20
+      }
+    },
+    {
+      "cn": "大学生似乎比任何人都喜欢恶作剧，这其中的原因从未被解释过。",
+      "en": "It has never been explained why university students seem to enjoy practical jokes more than anyone else.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 40,
+        "title": "Who's Who?",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "人口相对地增加和减少，不仅是相对于彼此而言，也是相对于自然资源而言。",
+      "en": "Populations increase and decrease relatively, not only to one another, but also to natural resources.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 40,
+        "title": "Silicon Valley",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "他们都饿了，饭菜闻起来很香。",
+      "en": "They were all hungry and the food smelled good.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 27,
+        "title": "A Wet Night",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "乡村的宁静生活从未吸引过我。",
+      "en": "The quiet life of the country has never appealed to me.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 41,
+        "title": "Illusions of Pastoral Peace",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "教育是我们这个时代的关键词之一。",
+      "en": "Education is one of the key words of our time.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 41,
+        "title": "Illusions of Pastoral Peace",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "美餐一顿后，他们围着篝火讲故事、唱歌。",
+      "en": "After a wonderful meal, they told stories and sang songs by the campfire.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 27,
+        "title": "A Wet Night",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "也许是出于对独处的渴望，或者是有机会进行意想不到的发现，吸引着人们深入地球的深处。",
+      "en": "Perhaps it is the desire for solitude or the chance of making an unexpected discovery that lures men down to the depths of the earth.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 42,
+        "title": "Modern Caveman",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "但他们很少意识到这是他们自找的。",
+      "en": "But they seldom realize that they have brought this on themselves.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 42,
+        "title": "Adolescence",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "贾斯珀·怀特是那种相信古代神话的罕见人物之一。",
+      "en": "Jasper White is one of those rare people who believes in ancient myths.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 28,
+        "title": "No Parking",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "保险公司通常愿意为任何事物投保。",
+      "en": "Insurance companies are normally willing to insure anything.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 43,
+        "title": "Fully Insured",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "对受控核裂变的信心，如今正通过原子能发电站的建设得以体现。",
+      "en": "Faith in controlled nuclear fission is now being shown by the construction of atomic power stations.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 43,
+        "title": "Sources of Power",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "那是我见过最丑陋的面孔之一。",
+      "en": "It is one of the ugliest faces I have ever seen.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 28,
+        "title": "No Parking",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "远距离旅行的人们常常需要决定是选择陆路、海路还是航空。",
+      "en": "People traveling long distances frequently have to decide whether they would prefer to go by land, sea, or air.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 44,
+        "title": "Speed and Comfort",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "一个国家的情况也正是如此。",
+      "en": "It is precisely the same with a nation.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 44,
+        "title": "The Cost of Government",
+        "lineIndex": 40
+      }
+    },
+    {
+      "cn": "这架奇妙的飞机可以载七名乘客。",
+      "en": "This wonderful plane can carry seven passengers.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 29,
+        "title": "Taxi",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "然而，这种自由很容易被滥用。",
+      "en": "However, this freedom can easily be abused.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 45,
+        "title": "The Power of the Press",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "在12岁的时候，人体是最有活力的。",
+      "en": "At the age of 12 years, the human body is at its most vigorous.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 45,
+        "title": "The Process of Aging",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "弗兰克回想起他艰难的早年岁月和漫长的成功之路时，露出了笑容。",
+      "en": "Frank smiled when he remembered his hard early years and the long road to success.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 31,
+        "title": "Success Story",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "再没有人能以对某一学科一无所知为由而推诿了。",
+      "en": "No one can plead ignorance of a subject any longer.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 46,
+        "title": "Do It Yourself",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "世界人口每年增长2%。",
+      "en": "The world population goes up by 2% a year.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 46,
+        "title": "Urban Growth",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "人们不再像以前那样诚实了。",
+      "en": "People are not so honest as they once were.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 32,
+        "title": "Shopping Made Easy",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "环绕地球运行的卫星已向科学家提供了大量有关外层空间情况的资料。",
+      "en": "Satellites orbiting round the earth have provided scientists with a vast amount of information about conditions in outer space.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 47,
+        "title": "Through the Earth's Crust",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "他认为赚钱是庸俗的，并避免一切炫耀。",
+      "en": "He regards money-making as vulgar and avoids all ostentation.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 47,
+        "title": "Modern Plato",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "这个女孩每周给她母亲一件免费的连衣裙。",
+      "en": "The girl gave her mother a free dress once a week.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 32,
+        "title": "Shopping Made Easy",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "在这个人们常常出行旅游的世界上，仍然有成千上万个游客无法到达的地方。",
+      "en": "In this much-traveled world, there are still thousands of places which are inaccessible to tourists.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 48,
+        "title": "The Silent Village",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "他们有一个个性，也许是两个。",
+      "en": "They have a character, perhaps two.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 48,
+        "title": "What Every Writer Wants",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "那就是她所记得的一切。",
+      "en": "That was all she remembered.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 33,
+        "title": "Out of the Darkness",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "幸好我的哈里特姑妈多年前就去世了。",
+      "en": "It is a good thing my Aunt Harriet died years ago.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 49,
+        "title": "The Ideal Servant",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "人类学家想知道现在生活在太平洋岛屿上的波利尼西亚人的远古祖先来自哪里。",
+      "en": "Anthropologists wondered where the remote ancestors of the Polynesian peoples now living in the Pacific Islands came from.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 1,
+        "title": "Finding Fossil Man",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "一天后她醒来时，发现自己躺在医院里。",
+      "en": "When she woke up a day later, she found herself in hospital.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 33,
+        "title": "Out of the Darkness",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "新的一年是制定決心的時刻。",
+      "en": "The new year is a time for resolutions.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 50,
+        "title": "New Year Resolutions",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "因为它们消灭了如此多的昆虫，而昆虫包括了人类最大的敌人中的一部分。",
+      "en": "Because they destroy so many insects, and insects include some of the greatest enemies of the human race.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 2,
+        "title": "Spare That Spider",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "泰德听到这个消息时非常惊讶。",
+      "en": "Ted was most surprised when he heard the news.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 34,
+        "title": "Quick Work",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "现代科技最伟大的进步之一就是计算机的发明。",
+      "en": "One of the greatest advances in modern technology has been the invention of computers.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 51,
+        "title": "Automation",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "难度越大，越受推崇。",
+      "en": "And the more difficult it is, the more highly it is regarded.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 3,
+        "title": "Matterhorn Man",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "那是20年前，泰德15岁时被偷的。",
+      "en": "It was stolen 20 years ago when Ted was a boy of 15.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 34,
+        "title": "Quick Work",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "我的表弟哈利在他的书房里长期展示着一个大而形状奇特的瓶子。",
+      "en": "My cousin Harry keeps a large, curiously shaped bottle on permanent display in his study.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 52,
+        "title": "Mud Is Mud",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "其中一个案例是一名11岁的小学女生，维拉·彼得罗娃，她视力正常，但也能用皮肤的不同部位感知事物，甚至能看穿实心墙。",
+      "en": "One case concerns an 11-year-old schoolgirl, Vera Petrova, who has normal vision, but who can also perceive things with different parts of her skin and through solid walls.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 4,
+        "title": "Seeing Hands",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "他发现他的新工作远比以前刺激。",
+      "en": "He is finding his new work far more exciting.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 35,
+        "title": "Stop Thief",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "司法监察官（Justitieombudsmannen）。",
+      "en": "Justitieombudsmannen.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 53,
+        "title": "In the Public Interest",
+        "lineIndex": 21
+      }
+    },
+    {
+      "cn": "人們認為自己很了解他。",
+      "en": "One thinks one knows him very well.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 5,
+        "title": "Gorilla",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "他的表现就好像他以前从未在英国生活过一样。",
+      "en": "He acted as if he had never lived in England before.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 38,
+        "title": "Everything Except the Weather",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "我们从小就被教导要害怕昆虫。",
+      "en": "We have been brought up to fear insects.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 54,
+        "title": "Instinct or Cleverness?",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "老年人和青年人之间只有一个区别。",
+      "en": "There is only one difference between an old man and a young one.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 6,
+        "title": "Youth",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "我试图和她攀谈。",
+      "en": "I tried to make conversation.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 40,
+        "title": "Food and Talk",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "射电天文学极大地增进了我们对宇宙的理解。",
+      "en": "Radio astronomy has greatly increased our understanding of the universe.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 55,
+        "title": "From the Earth, Greetings",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "你为赢而比赛，除非你竭尽全力去赢，否则一场比赛就没有多少意义。",
+      "en": "You play to win, and a game has little meaning unless you do your utmost to win.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 7,
+        "title": "The Sporting Spirit",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "我几乎立刻就后悔说了那句话。",
+      "en": "I regretted saying it almost at once.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 41,
+        "title": "Do You Call That a Hat",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "为什么邻居们离开了他们的农场？",
+      "en": "Why had the neighbours left their farm?",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 56,
+        "title": "Our neighbour, the river",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "家庭也不再像以前那样是个作坊了。",
+      "en": "And home has become much less of a workshop.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 8,
+        "title": "Employment of Family",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "男人永远不嫌领带多。",
+      "en": "A man can never have too many ties.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 41,
+        "title": "Do You Call That a Hat",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "叙述者找到他母亲的坟墓了吗？",
+      "en": "Did the narrater find his mother's grave?",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 57,
+        "title": "Back in the old country",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "鱼群也会这样做。",
+      "en": "A shoal of fish will do this.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 9,
+        "title": "Bats",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "然而，这条蛇仍然缓慢地舞动着。",
+      "en": "The snake, however, continued to dance slowly.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 42,
+        "title": "Not Very Musical",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "那位老太太回家后发现了什么？",
+      "en": "What did the old lady find when she got home?",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 58,
+        "title": "A spot of bother",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "被操纵者不理解他们。",
+      "en": "The manipulated do not understand them.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 10,
+        "title": "Creative Men",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "它显然分辨不出印度音乐和爵士乐的区别。",
+      "en": "It obviously could not tell the difference between Indian music and jazz.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 42,
+        "title": "Not Very Musical",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "一个人成为真正的收藏家后，具体能获得什么呢？",
+      "en": "What in particular does a person gain when he or she becomes a serious collector?",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 59,
+        "title": "Collecting",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "丹麦人在奇彭纳姆安顿下来过冬。",
+      "en": "These had settled down for the winter at Chippenham.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 11,
+        "title": "Royal Espionage",
+        "lineIndex": 12
+      }
+    },
+    {
+      "cn": "飞机能够毫不费力地飞越无尽的白色平原。",
+      "en": "The aircraft was able to fly over the endless white plains without difficulty.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 43,
+        "title": "Over the South Pole",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "为什么那个小女孩错过了火车？",
+      "en": "Why did the young girl miss the train?",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 60,
+        "title": "Too early and too late",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这一点通过外在的华丽感得到了弥补。",
+      "en": "This is compensated for by an out of impressiveness.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 12,
+        "title": "The Language of Hollywood",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "最终，山姆所有的钱都以这种方式还了回来。",
+      "en": "In time, all Sam's money was paid back in this way.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 45,
+        "title": "A Clear Conscience",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "当伦敦动物园收到报告，说在伦敦以南45英里处发现了一只野生美洲狮时，他们并没有认真对待。",
+      "en": "When reports came into London Zoo that a wild puma had been spotted 45 miles south of London, they were not taken seriously.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 1,
+        "title": "A Puma at Large",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "泰晤士河水。",
+      "en": "Thames Waters.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 13,
+        "title": "Oxford",
+        "lineIndex": 38
+      }
+    },
+    {
+      "cn": "最后的纸条写道：我现在100%诚实了。",
+      "en": "The last note said: I am 100% honest now.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 45,
+        "title": "A Clear Conscience",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "钟声正在报时。",
+      "en": "The clock was striking the hours.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 2,
+        "title": "Thirteen Equals One",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "在年轻人身上，这种感觉有其正当理由。",
+      "en": "In the young, there is a justification for this feeling.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 14,
+        "title": "How to Grow Old",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "他被眼前发现的东西惊呆了。",
+      "en": "He was astonished at what he found.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 46,
+        "title": "Expensive and Uncomfortable",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "房屋通常有三层楼高，由石头建造。",
+      "en": "Houses, often three stories high, were built of stone.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 3,
+        "title": "An Unknown Goddess",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "这些义务中的许多都可能引发问题和复杂情况。",
+      "en": "Many of these obligations can give rise to problems and complications.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 15,
+        "title": "Banks and Their Customers",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "一张机票的正常价格是230英镑。",
+      "en": "The normal price of a ticket is 230 pounds.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 46,
+        "title": "Expensive and Uncomfortable",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "这可能会导致一些奇怪的情况。",
+      "en": "This can give rise to curious situations.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 4,
+        "title": "The Double Life of Alfred Bloggs",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "地质学家需要知道钻头到达了哪些岩石。",
+      "en": "The geologist needs to know what rocks the drill has reached.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 16,
+        "title": "The Search for Oil",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "牙医总是在你无法回答的时候提问。",
+      "en": "Dentists always ask questions when it is impossible for you to answer.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 48,
+        "title": "Did You Want to Tell Me Something",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "去年，一位记者受一家知名杂志社之托，撰写一篇关于某个新成立的非洲共和国总统府的文章。",
+      "en": "Last year, a journalist had been instructed by a well-known magazine to write an article on the president's palace in a new African Republic.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 5,
+        "title": "The Facts",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "比阿特丽克斯·图多尔-哈特，《学会生活》。",
+      "en": "Beatrix Tudor-Hart, Learning to Live.",
+      "source": {
+        "book": "NCE4",
+        "lessonId": 17,
+        "title": "Intelligence",
+        "lineIndex": 22
+      }
+    },
+    {
+      "cn": "我突然感到非常担心，但什么也说不出来。",
+      "en": "I suddenly felt very worried, but could not say anything.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 48,
+        "title": "Did You Want to Tell Me Something",
+        "lineIndex": 7
+      }
+    },
+    {
+      "cn": "在早上這個時候，拱廊裡幾乎空無一人。",
+      "en": "At this time of the morning, the arcade was almost empty.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 6,
+        "title": "Smash and Grab",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "我们就到这儿了。",
+      "en": "This is as far as we go.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 50,
+        "title": "Taken for a Ride",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "这个简单的真理在加拿大一个小镇举行的一次民防演习中得到了相当戏剧性的证实。",
+      "en": "This simple truth was demonstrated rather dramatically during a civil defense exercise in a small town in Canada.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 7,
+        "title": "Crazy",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "我宁愿留在车上。",
+      "en": "I prefer to stay on the bus.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 50,
+        "title": "Taken for a Ride",
+        "lineIndex": 29
+      }
+    },
+    {
+      "cn": "几百年来，圣伯纳德犬拯救了穿越这个危险山口的旅行者的生命。",
+      "en": "For hundreds of years St Bernard dogs have saved the lives of travellers crossing the dangerous pass.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 8,
+        "title": "A Famous Monastery",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "很明显，他非常尴尬。",
+      "en": "It was obvious that he was very embarrassed.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 51,
+        "title": "Reward for Virtue",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "任何拍摄到的照片都需要飞行三周才能到达地球。",
+      "en": "Any pictures that are taken will have to travel for three weeks before they reach the earth.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 9,
+        "title": "A Trip to Mars",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "这并不容易，因为我拥有一千多本书。",
+      "en": "This has not been easy because I own over a thousand books.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 52,
+        "title": "A Pretty Carpet",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "船上载有1,316名乘客和891名船员。",
+      "en": "She was carrying 1,316 passengers and a crew of 891.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 10,
+        "title": "The Loss of the Titanic",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "更糟的是，房间相当小。",
+      "en": "To make matters worse, the room is rather small.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 52,
+        "title": "A Pretty Carpet",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "“你有什么要申报的吗？”",
+      "en": "\"Have you anything to declare?\"",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 11,
+        "title": "Not Guilty",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "目前，它们占据了每一寸地板空间。",
+      "en": "At the moment, they cover every inch of floor space.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 52,
+        "title": "A Pretty Carpet",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "我们有时会把荒岛想象成一个阳光普照的乐园。",
+      "en": "We sometimes imagine a desert island to be a sort of paradise where the sun always shines.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 12,
+        "title": "Life on a Desert Island",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "通过这种方式，他解开了这个谜团。",
+      "en": "In this way, he was able to solve the mystery.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 53,
+        "title": "Hot Snake",
+        "lineIndex": 7
+      }
+    },
+    {
+      "cn": "她那天早上太兴奋了，什么家务也做不了。",
+      "en": "She was too excited to do any housework that morning.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 13,
+        "title": "It's Only Me",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "解释很简单，但非常不寻常。",
+      "en": "The explanation was simple, but very unusual.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 53,
+        "title": "Hot Snake",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "索取保护费并非现代才有的罪行。",
+      "en": "Obtaining protection money is not a modern crime.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 14,
+        "title": "A Noble Gangster",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "孩子们在学校，我丈夫在上班，家里一片宁静。",
+      "en": "The children were at school, my husband was at work, and the house was quiet.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 54,
+        "title": "Sticky Fingers",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "对一些孩子来说，小额的钱能用很久。",
+      "en": "With some children, small sums go a long way.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 15,
+        "title": "Sixpence Worth of Trouble",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "没有什么比这更烦人的了。",
+      "en": "Nothing could have been more annoying.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 54,
+        "title": "Sticky Fingers",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "玛丽珍爱的一件宝物是她丈夫送给她的一只白色小羊羔。",
+      "en": "One of Mary's prized possessions was a little white lamb which her husband had given her.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 16,
+        "title": "Mary Had a Little Lamb",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "真是一团糟！",
+      "en": "What a mess!",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 54,
+        "title": "Sticky Fingers",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "因为在1964年11月21日，世界上最宏伟的桥梁以他的名字命名。",
+      "en": "For on November the 21st, 1964, the greatest bridge in the world was named after him.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 17,
+        "title": "The Greatest Bridge in the World",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "寻找失落宝藏的梦想最近几乎成真。",
+      "en": "Dreams of finding lost treasure almost came true recently.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 55,
+        "title": "Not a Gold Mine",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "认为现代艺术只能在博物馆里看到，这种想法是错误的。",
+      "en": "The idea that modern art can only be seen in museums is mistaken.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 18,
+        "title": "Electric Currents in Modern Art",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "尽管如此，许多人仍相信“揭示者”可能很快会揭示出一些有价值的东西。",
+      "en": "In spite of this, many people are confident that the Revealer may reveal something of value fairly soon.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 55,
+        "title": "Not a Gold Mine",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "他通常在晚上散步，并且总是在七点钟前回家。",
+      "en": "He usually takes a short walk in the evenings and is always home by 7 o'clock.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 19,
+        "title": "A Very Dear Cat",
+        "lineIndex": 6
+      }
+    },
+    {
+      "cn": "它建于1885年，是参赛车辆中最古老的一辆。",
+      "en": "Built in 1885, it was the oldest car taking part.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 56,
+        "title": "Faster Than Sound",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "一年多过去了，才有人首次尝试。",
+      "en": "Over a year passed before the first attempt was made.",
+      "source": {
+        "book": "NCE3",
+        "lessonId": 20,
+        "title": "Pioneer Pilots",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "这场比赛给每个人带来了极大的乐趣。",
+      "en": "The race gave everyone a great deal of pleasure.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 56,
+        "title": "Faster Than Sound",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "它与现代汽车比赛大不相同，但同样激动人心。",
+      "en": "It was very different from modern car races, but no less exciting.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 56,
+        "title": "Faster Than Sound",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "她一看到那件连衣裙，就说不喜欢。",
+      "en": "As soon as she saw it, the woman said she did not like it.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 57,
+        "title": "Can I Help You, Madam",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "据说，如果有人触摸这棵树，他就会遭遇厄运。",
+      "en": "It is said that if anyone touches the tree, he will have bad luck.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 58,
+        "title": "A Blessing in Disguise",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "如果他摘一片叶子，他就会死去。",
+      "en": "If he picks a leaf, he will die.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 58,
+        "title": "A Blessing in Disguise",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "到目前为止，他们中没有一个人因猝死而倒下。",
+      "en": "So far, not one of them has been struck down by sudden death.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 58,
+        "title": "A Blessing in Disguise",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "雷克斯很快就成了开门的专家。",
+      "en": "Rex soon became an expert at opening the gate.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 59,
+        "title": "In or Out",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "这种能力在未来前往遥远行星的飞行中是必要的。",
+      "en": "The ability to do this will be necessary in future flights to distant planets.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 61,
+        "title": "Trouble with the Hubble",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "不久前，参天大树覆盖着方圆数英里的乡村。",
+      "en": "A short time before, great trees had covered the countryside for miles around.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 62,
+        "title": "After the Fire",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "然而，到那时，许多地方的草皮已经扎下了根。",
+      "en": "By then, however, in many places the grass had already taken root.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 62,
+        "title": "After the Fire",
+        "lineIndex": 12
+      }
+    },
+    {
+      "cn": "大家都因为他出色的幽默感而敬佩他。",
+      "en": "Everybody admires him for his fine sense of humor.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 63,
+        "title": "She Was Not Amused",
+        "lineIndex": 1
+      }
+    },
+    {
+      "cn": "这正是杰弗里喜欢做的事情。",
+      "en": "This is the sort of thing that Jeffrey loves.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 63,
+        "title": "She Was Not Amused",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "令他惊讶的是，她说她不喜欢。",
+      "en": "To his surprise, she said she hadn't.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 63,
+        "title": "She Was Not Amused",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "这个平台将兼作港口和火车站。",
+      "en": "This platform would serve as a port and a railway station.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 64,
+        "title": "The Channel Tunnel",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "如果它建成，将是历史上第一次把英国和欧洲连接起来。",
+      "en": "If it is built, it will connect Britain to Europe for the first time in history.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 64,
+        "title": "The Channel Tunnel",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "许多人对这项新奇而不寻常的运动表现出了兴趣。",
+      "en": "Many people have shown interest in this new and unusual sport.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 66,
+        "title": "Sweet as Honey",
+        "lineIndex": 16
+      }
+    },
+    {
+      "cn": "塔兹耶夫经常以这种方式冒着生命危险。",
+      "en": "Tazieff has often risked his life in this way.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 67,
+        "title": "Volcanoes",
+        "lineIndex": 13
+      }
+    },
+    {
+      "cn": "他向我们讲述的关于活跃火山的知识比任何在世的人都多。",
+      "en": "He has been able to tell us more about active volcanoes than any man alive.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 67,
+        "title": "Volcanoes",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "我从不喜欢遇见伯特·戴克斯。",
+      "en": "I never enjoy meeting Bert Dykes.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 68,
+        "title": "Persistent",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "他总是无所事事。",
+      "en": "He never has anything to do.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 68,
+        "title": "Persistent",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "确信自己已经通过了，我几乎开始享受我的考试了。",
+      "en": "Sure that I had passed, I was almost beginning to enjoy my test.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 69,
+        "title": "But not Murder",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "尽管声音听得很清楚，但我花了很长时间才做出反应。",
+      "en": "Though the sound could be heard clearly, it took me a long time to react.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 69,
+        "title": "But not Murder",
+        "lineIndex": 9
+      }
+    },
+    {
+      "cn": "人群突然安静下来。",
+      "en": "The crowd suddenly grew quiet.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 70,
+        "title": "Red for Danger",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "大本钟很少出问题。",
+      "en": "Big Ben has rarely gone wrong.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 71,
+        "title": "A Famous Clock",
+        "lineIndex": 15
+      }
+    },
+    {
+      "cn": "从那时起，赛车手们已经达到了每小时400英里以上的速度。",
+      "en": "Since that time, racing drivers have reached speeds of over 400 miles an hour.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 72,
+        "title": "A Car Called Bluebird",
+        "lineIndex": 18
+      }
+    },
+    {
+      "cn": "他悄悄溜走时，没有人注意到他。",
+      "en": "No one noticed the boy as he crept off.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 73,
+        "title": "The Record",
+        "lineIndex": 13
+      }
+    },
+    {
+      "cn": "当时正值隆冬。",
+      "en": "It was the middle of winter.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 75,
+        "title": "SOS",
+        "lineIndex": 4
+      }
+    },
+    {
+      "cn": "雪厚厚地覆盖着地面。",
+      "en": "Snow lay thick on the ground.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 75,
+        "title": "SOS",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "然后她有了一个主意。",
+      "en": "Then she had an idea.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 75,
+        "title": "SOS",
+        "lineIndex": 16
+      }
+    },
+    {
+      "cn": "她在雪中踩出了SOS的字样。",
+      "en": "She stamped out the letters SOS in the snow.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 75,
+        "title": "SOS",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "我点燃了一支烟来镇定我的神经。",
+      "en": "I lit a cigarette to calm my nerves.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 78,
+        "title": "The Last One",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "这样过了七天，我参加了一个派对。",
+      "en": "After seven days of this, I went to a party.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 78,
+        "title": "The Last One",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "周围每个人都在吸烟，我感到非常不舒服。",
+      "en": "Everybody around me was smoking, and I felt extremely uncomfortable.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 78,
+        "title": "The Last One",
+        "lineIndex": 12
+      }
+    },
+    {
+      "cn": "我妻子很高兴一切又恢复了正常。",
+      "en": "My wife was delighted that things had returned to normal once more.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 78,
+        "title": "The Last One",
+        "lineIndex": 16
+      }
+    },
+    {
+      "cn": "我小时候经常乘飞机旅行。",
+      "en": "I used to travel by air a great deal when I was a boy.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 79,
+        "title": "By Air",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "一位空姐会照顾我，我从未有过不愉快的经历。",
+      "en": "An air hostess would take charge of me, and I never had an unpleasant experience.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 79,
+        "title": "By Air",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "幸运的是，什么也没找到，五个小时后，我们又可以起飞了。",
+      "en": "Fortunately, nothing was found, and five hours later, we were able to take off again.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 79,
+        "title": "By Air",
+        "lineIndex": 11
+      }
+    },
+    {
+      "cn": "还有大量的机器展出。",
+      "en": "There was also a great deal of machinery on display.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 80,
+        "title": "The Crystal Palace",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "他年纪相当大，头发灰白，眼睛湛蓝清澈。",
+      "en": "He was rather elderly with grey hair and clear blue eyes.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 81,
+        "title": "Escape",
+        "lineIndex": 19
+      }
+    },
+    {
+      "cn": "渔民和水手有时声称在海上见过怪物。",
+      "en": "Fishermen and sailors sometimes claimed to have seen monsters in the sea.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 82,
+        "title": "Monster or Fish",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "这次，尽管那位警察有点怀疑，但他还是做了同样的回答。",
+      "en": "Though a little suspicious this time, the policeman gave him the same answer.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 83,
+        "title": "After the Elections",
+        "lineIndex": 7
+      }
+    },
+    {
+      "cn": "没人知道罢工会持续多久。",
+      "en": "No one knows how long it will last.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 84,
+        "title": "On Strike",
+        "lineIndex": 2
+      }
+    },
+    {
+      "cn": "大多数人认为罢工至少会持续一周。",
+      "en": "Most people believe that the strike will last for at least a week.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 84,
+        "title": "On Strike",
+        "lineIndex": 5
+      }
+    },
+    {
+      "cn": "这将在一定程度上缓解火车的压力。",
+      "en": "This will relieve pressure on the trains to some extent.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 84,
+        "title": "On Strike",
+        "lineIndex": 8
+      }
+    },
+    {
+      "cn": "即便如此，人们仍然会发现上班很困难。",
+      "en": "Even so, people are going to find it difficult to get to work.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 84,
+        "title": "On Strike",
+        "lineIndex": 14
+      }
+    },
+    {
+      "cn": "对他来说，这将是一个全新的爱好。",
+      "en": "For him, this will be an entirely new hobby.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 85,
+        "title": "Never Too Old To Learn",
+        "lineIndex": 22
+      }
+    },
+    {
+      "cn": "然而，这一次快艇的速度大大减慢了。",
+      "en": "On this occasion, however, it had slowed down considerably.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 86,
+        "title": "Out of Control",
+        "lineIndex": 16
+      }
+    },
+    {
+      "cn": "汽油差不多已经用完了。",
+      "en": "The petrol had nearly all been used up.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 86,
+        "title": "Out of Control",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "然而，救援行动进展困难。",
+      "en": "However, rescue operations are proving difficult.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 88,
+        "title": "Trapped in a Mine",
+        "lineIndex": 3
+      }
+    },
+    {
+      "cn": "他们被告知救援行动进展顺利。",
+      "en": "They have been told that rescue operations are progressing smoothly.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 88,
+        "title": "Trapped in a Mine",
+        "lineIndex": 17
+      }
+    },
+    {
+      "cn": "巴西利亚经过精心规划，以适应现代生活。",
+      "en": "Brasilia has been carefully planned for modern living.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 90,
+        "title": "What's for Supper",
+        "lineIndex": 10
+      }
+    },
+    {
+      "cn": "孩子们上学不必穿过繁忙的街道。",
+      "en": "Children do not have to cross busy streets to go to school.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 90,
+        "title": "What's for Supper",
+        "lineIndex": 13
+      }
+    },
+    {
+      "cn": "巴西利亚已迅速确立了其作为国家首都的地位。",
+      "en": "Brasilia has quickly established itself as the capital of the country.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 90,
+        "title": "What's for Supper",
+        "lineIndex": 21
+      }
+    },
+    {
+      "cn": "我回到家时，大概是凌晨两点钟。",
+      "en": "It must have been about two in the morning when I returned home.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 92,
+        "title": "Asking for Trouble",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "这个节日是一个欢乐的时刻。",
+      "en": "This festival is a cheerful occasion.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 96,
+        "title": "The Dead Return",
+        "lineIndex": 0
+      }
+    },
+    {
+      "cn": "整夜，人们都在跳舞唱歌。",
+      "en": "All night long, people dance and sing.",
+      "source": {
+        "book": "NCE2",
+        "lessonId": 96,
+        "title": "The Dead Return",
+        "lineIndex": 7
+      }
+    }
+  ]
+}

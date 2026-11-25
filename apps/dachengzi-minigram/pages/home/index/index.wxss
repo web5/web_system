@@ -87,10 +87,32 @@ page {
   border-radius: var(--r-card);
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
 }
+/* 册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill，
+   与真机蓝色系 --accent-soft 同族；深青字 --accent-ink 过 WCAG AA（4.92:1）。 */
+.daily-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
 .daily-k {
   font-size: 22rpx;
   color: var(--brand-txt);
-  margin-bottom: 12rpx;
+}
+.badge-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 2rpx 14rpx;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  border: 1rpx solid rgba(14, 155, 140, .18);
+  color: var(--accent-ink);
+  font-size: 20rpx;
+  line-height: 30rpx;
+  white-space: nowrap;
 }
 .daily-cn {
   font-size: 30rpx;

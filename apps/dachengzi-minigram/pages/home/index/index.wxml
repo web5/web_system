@@ -14,9 +14,14 @@
       </view>
     </view>
 
-    <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换 -->
+    <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换
+         册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill；
+         book 缺失时 bookBadge 为空串 → wx:if 隐藏，不显 undefined -->
     <view class="daily">
-      <view class="daily-k">今日一句</view>
+      <view class="daily-top">
+        <view class="daily-k">今日一句</view>
+        <view class="badge-pill" wx:if="{{showBookBadge && bookBadge}}">{{bookBadge}}</view>
+      </view>
       <view class="daily-cn">{{quote.cn}}</view>
       <view class="daily-en">{{quote.en}}</view>
     </view>
