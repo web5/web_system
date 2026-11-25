@@ -86,3 +86,28 @@ export function listNceLessons(params: ListNceParams = {}): Promise<{ total: num
 export function getNceLesson(id: number, book?: string): Promise<NceLessonDetail> {
   return request.get(`/content-admin/nce/lessons/${id}`, { params: book ? { book } : undefined });
 }
+
+/** 每日美句（只读冻结池）：服务端整池一次返回，无分页 / keyword 参数，?version 忽略。 */
+export interface DailyQuoteSource {
+  book: string;
+  lessonId: number;
+  title: string;
+  lineIndex: number;
+}
+
+export interface DailyQuoteItem {
+  cn: string;
+  en: string;
+  source: DailyQuoteSource;
+}
+
+export interface DailyQuotesPool {
+  version: number;
+  count: number;
+  items: DailyQuoteItem[];
+}
+
+/** 响应拦截器已拆 { code, data }，返回类型直接写 data 本体。 */
+export function getDailyQuotes(): Promise<DailyQuotesPool> {
+  return request.get('/content-admin/nce/daily-quotes');
+}
