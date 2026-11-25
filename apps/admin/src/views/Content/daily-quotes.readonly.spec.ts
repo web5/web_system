@@ -98,16 +98,35 @@ describe('V8 · 只读 DOM 硬审计（生产 SFC AST + 编译产物）', () => 
     expect(compiled.code).not.toContain('createElementBlock("textarea"');
   });
 
-  it('所有按钮文案仅在白名单内（预览/关闭/刷新/重试/清空搜索），无写按钮', () => {
+  it('所有按钮文案仅在白名单内（预览/关闭/刷新/重试/清空/清空筛选与搜索），无写按钮', () => {
+    // 167 稿 §1.6 边界：筛选/搜索复位的「清空」「清空筛选与搜索」是查询控件，
+    // 不动任何数据、不触发写接口，归入搜索同类白名单放行；写语义按钮仍零容忍。
+    const ALLOWED = ['预览', '关闭', '刷新', '重试', '清空搜索', '清空', '清空筛选与搜索'];
     const buttons = elements.filter(isButton);
     expect(buttons.length).toBeGreaterThan(0);
     for (const b of buttons) {
       const label = textOf(b).trim();
-      expect(['预览', '关闭', '刷新', '重试', '清空搜索']).toContain(label);
+      expect(ALLOWED).toContain(label);
       expect(WRITE_WORDS.test(label)).toBe(false);
     }
     const domButtons = Array.from(doc.querySelectorAll('a-button, button')).map((b) => b.textContent?.trim() ?? '');
     for (const label of domButtons) expect(WRITE_WORDS.test(label)).toBe(false);
+  });
+
+  it('167 稿来源筛选：查询用 a-select/a-input 放行，表格/抽屉内无编辑控件', () => {
+    // 语义判定（§1.6）：绑定筛选 ref 的 select/input 是查询控件，不是写控件。
+    // v-model:value 在 AST 里是 type 7 指令而非普通属性，直接查模板源码更稳。
+    const tpl = sfc.descriptor.template!.content;
+    expect(elements.some((n) => n.tag === 'a-select')).toBe(true);
+    expect(elements.some((n) => n.tag === 'a-input')).toBe(true);
+    expect(tpl).toMatch(/<a-select[^>]*v-model:value="bookFilter"/);
+    expect(tpl).toMatch(/<a-input[^>]*v-model:value="lessonFilter"/);
+
+    // 原生可编辑元素（可能是编辑控件）只能在产品区之外；本页应全无。
+    const nativeEditable = elements.filter((n) => ['input', 'textarea'].includes(n.tag));
+    expect(nativeEditable).toEqual([]);
+    const editableAttr = allNodes.filter((n) => n.type === 6 && n.name === 'contenteditable');
+    expect(editableAttr).toEqual([]);
   });
 });
 

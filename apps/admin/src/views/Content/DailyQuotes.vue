@@ -21,6 +21,9 @@ const pool = ref<DailyQuotesPool>({ version: 0, count: 0, items: [] });
 const page = ref(1);
 const pageSize = ref(20);
 const keyword = ref('');
+/** 来源筛选（167 稿）：册别单选 + 课号包含查询，纯前端 computed，不回传接口。 */
+const bookFilter = ref<'ALL' | 'NCE2' | 'NCE3' | 'NCE4'>('ALL');
+const lessonFilter = ref('');
 
 const previewVisible = ref(false);
 const preview = ref<DailyQuoteItem | null>(null);
@@ -50,14 +53,16 @@ async function load() {
   }
 }
 
-/** 客户端搜索：接口无 keyword 参数，只对已加载整池做本地过滤。 */
+/** 客户端筛选：接口无筛选参数，册别/课号/keyword 三者 AND，只对已加载整池本地过滤。 */
 const filtered = computed(() => {
   const k = keyword.value.trim().toLowerCase();
-  if (!k) return pool.value.items;
-  return pool.value.items.filter((item) =>
-    [item.cn, item.en, item.source.title, String(item.source.lessonId)]
-      .some((v) => v.toLowerCase().includes(k)),
-  );
+  return pool.value.items.filter((item) => {
+    const okBook = bookFilter.value === 'ALL' || item.source.book === bookFilter.value;
+    const okLesson = !lessonFilter.value || String(item.source.lessonId).includes(lessonFilter.value.trim());
+    const okKeyword = !k || [item.cn, item.en, item.source.title, String(item.source.lessonId)]
+      .some((v) => v.toLowerCase().includes(k));
+    return okBook && okLesson && okKeyword;
+  });
 });
 
 /** 客户端分页：服务端不分页，禁止把 page/pageSize 伪造成查询参数发给接口。 */
@@ -65,11 +70,19 @@ const paged = computed(() =>
   filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value),
 );
 
-function onSearch() {
+/** 任一筛选/搜索变化都重置到第一页，避免停在第 N 页看到空页。 */
+function onFilterChange() {
   page.value = 1;
 }
 
-function clearSearch() {
+function onSearch() {
+  onFilterChange();
+}
+
+/** 清空：一键复位册别/课号/keyword 三条件 + 页码；不触发任何写接口。 */
+function clearFilters() {
+  bookFilter.value = 'ALL';
+  lessonFilter.value = '';
   keyword.value = '';
   page.value = 1;
 }
@@ -114,15 +127,36 @@ const columns = [
     </div>
 
     <div class="toolbar">
+      <a-select
+        v-model:value="bookFilter"
+        placeholder="册别：全部"
+        style="width: 128px"
+        @change="onFilterChange"
+      >
+        <a-select-option value="ALL">全部</a-select-option>
+        <a-select-option value="NCE2">NCE2</a-select-option>
+        <a-select-option value="NCE3">NCE3</a-select-option>
+        <a-select-option value="NCE4">NCE4</a-select-option>
+      </a-select>
+      <a-input
+        v-model:value="lessonFilter"
+        placeholder="课号（可选，如 3）"
+        allow-clear
+        style="width: 156px"
+        @change="onFilterChange"
+      />
+      <span class="filter-sep"></span>
       <a-input-search
         v-model:value="keyword"
         placeholder="搜索中英文句子 / 来源标题 / 课号"
         allow-clear
-        style="width: 320px"
+        style="width: 280px"
         @search="onSearch"
+        @change="onFilterChange"
       />
+      <a-button @click="clearFilters">清空</a-button>
       <a-button @click="load">刷新</a-button>
-      <span class="hint">内容由服务端冻结池提供，不生成 · 不编辑 · 不删除</span>
+      <span class="hint">查询控件仅用于筛选，不生成 · 不编辑 · 不删除</span>
     </div>
 
     <a-spin :spinning="loading">
@@ -168,7 +202,7 @@ const columns = [
         </a-table>
         <a-empty v-if="!filtered.length && !loading" description="没有匹配的美句">
           <template #extra>
-            <a-button @click="clearSearch">清空搜索</a-button>
+            <a-button @click="clearFilters">清空筛选与搜索</a-button>
           </template>
         </a-empty>
       </template>
@@ -217,7 +251,8 @@ const columns = [
 .badge-ro { border: 1px solid #fed7aa; background: #fff7ed; color: #ea580c; border-radius: 4px; padding: 1px 8px; font-size: 12px; }
 .stat { color: #6b7280; font-size: 13px; }
 .stat b { color: #ea580c; font-size: 15px; font-variant-numeric: tabular-nums; }
-.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.filter-sep { width: 1px; height: 20px; background: rgba(0, 0, 0, .08); }
 .hint { color: #6b7280; font-size: 12px; margin-left: auto; }
 .no { color: #0ea5a4; font-weight: 600; font-variant-numeric: tabular-nums; }
 .en, .quote { font-family: Georgia, 'Songti SC', serif; }
