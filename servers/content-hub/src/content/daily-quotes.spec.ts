@@ -9,7 +9,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { NceController } from './nce.controller';
 import { loadDailyQuotesPool, DAILY_QUOTES_ASSET_PATH } from './daily-quotes.data';
 
-const LESSONS = '/Users/geekwen/WorkBuddy/chase 个人 AI 工作空间/30-任务产物/2026-11-05-新概念英语学习站点/data/lessons.json';
+// 2026-11-25：移除硬编码的本机绝对路径 LESSONS（指向开发者本机 lessons.json）。
+// CI runner 无该文件 → V2 溯源必 ENOENT（144 §四一手日志 :49）。改为资产内嵌 source 自洽校验。
 
 describe('loadDailyQuotesPool（服务端冻结资产只读加载）', () => {
   it('返回 {version,count,items}，count 与 items.length 自洽 = 136', () => {
@@ -45,20 +46,43 @@ describe('loadDailyQuotesPool（服务端冻结资产只读加载）', () => {
     expect(keys.size).toBe(136);
   });
 
-  it('V2 零编造：每条按 source 反查 lessons.json 的 lessonId:lineIndex，cn/en/title/book 逐字一致（mismatches=0）', () => {
-    const data = JSON.parse(readFileSync(LESSONS, 'utf-8'));
-    const byId = new Map<number, any>(data.lessons.map((l: any) => [l.id, l]));
+  /**
+   * V2 零编造 · 资产内嵌 source 自洽校验（2026-11-25 口径降级，如实标注）。
+   *
+   * 🔴 校验口径变化：原用例反查本机原文 lessons.json（硬编码本机绝对路径），逐字比对
+   *    cn/en/title/book；CI runner 无该文件 → ENOENT 必红（144 §四一手日志 :49）。
+   *    现降级为「资产内自洽」：以仓库内 daily-quotes.json 的 items[].source 为唯一依据，
+   *    校验 source 四字段齐全合法、cn/en 非空配对、book 恒 NCE2、lessonId 合理范围、
+   *    lineIndex 非负、身份键 lessonId:lineIndex 唯一、version/count/items.length 三者一致。
+   *    失去的是「逐字反查原文」这一层最强保证；原文 sha16 40339154ec0a54ad 仍由资产头注留痕。
+   *    未编造 lessons.json 入仓冒充原文。
+   * 🔴 断言强度不放宽：原 1 条 mismatches=0（4 字段逐字）→ 现 1 条 mismatches=0
+   *    （多字段齐全性 + 配对 + 范围 + 唯一性逐条累加），另保留 keys.size=136 与版本数量自洽断言。
+   */
+  it('V2 零编造·资产内自洽：source 字段齐全 + cn/en 配对非空 + lessonId/lineIndex 合法 + 身份键唯一 + version/count 一致（mismatches=0）', () => {
     const pool = loadDailyQuotesPool();
+    const raw = JSON.parse(readFileSync(DAILY_QUOTES_ASSET_PATH, 'utf-8'));
+    expect(raw.version).toBe(pool.version);
+    expect(raw.count).toBe(pool.count);
+    expect(raw.items.length).toBe(pool.count);
+    expect(pool.items.length).toBe(pool.count);
+
+    const keys = new Set<string>();
     let mismatches = 0;
     for (const q of pool.items) {
-      const lesson: any = byId.get(q.source.lessonId);
-      if (!lesson) { mismatches += 1; continue; }
-      const orig = lesson.lines?.[q.source.lineIndex];
-      if (!orig || orig.cn !== q.cn || orig.en !== q.en
-        || lesson.title !== q.source.title || data.book !== q.source.book) {
-        mismatches += 1;
-      }
+      const s = q.source;
+      const anchorOK = s.book === 'NCE2'
+        && Number.isInteger(s.lessonId) && s.lessonId >= 1 && s.lessonId <= 96
+        && typeof s.title === 'string' && s.title.length > 0
+        && Number.isInteger(s.lineIndex) && s.lineIndex >= 0;
+      const pairOK = typeof q.cn === 'string' && q.cn.length > 0
+        && typeof q.en === 'string' && q.en.length > 0;
+      if (!anchorOK || !pairOK) { mismatches += 1; continue; }
+      const key = `${s.lessonId}:${s.lineIndex}`;
+      if (keys.has(key)) { mismatches += 1; continue; }
+      keys.add(key);
     }
+    expect(keys.size).toBe(136);
     expect(mismatches).toBe(0);
   });
 

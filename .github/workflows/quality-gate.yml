@@ -95,6 +95,16 @@ jobs:
     # 要改名必须同时改 Settings → Branches → required checks，否则就是悄悄把门禁变成摆设。
     name: 改动包 build/test   # 含 lint（步骤见下），名字保持与分支保护一致
     runs-on: ubuntu-latest
+    # 2026-11-25（PR #663 第四根因）：小程序 dayIndex() 锁死「本地午夜口径」
+    #   new Date(y,m,d).getTime()/86400000（page-spec / 141 V10，🔴 不改成 UTC epoch 天数），
+    #   getDailyQuote() 的 dayNumber 因此依赖运行时 TZ。小程序实际运行在东八设备，
+    #   GitHub runner 默认 UTC → 2026-11-24 13:00 +08 被算成 20781（期望 20780），
+    #   daily.test.ts 两例必红（144 §四 / 146 §二一手日志）。
+    # 选 workflow 钉 TZ 而非改生产注入：注入固定 +08 会改变「本地午夜」语义（其它时区设备
+    #   不再按本地日期换句），且会动 getDailyQuote() 锁死的同步签名/行为；A 路径不可行。
+    # 此处把 runner TZ 钉到目标运行时时区，令 CI 与本机（CST+0800）同口径。
+    env:
+      TZ: Asia/Shanghai
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,6 +135,9 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: 提取改动包并逐个 build/test/lint
+        # 双保险：即便将来 job 级 env 被移除，跑测试的这一步仍显式钉东八。
+        env:
+          TZ: Asia/Shanghai
         run: |
           BASE="${{ github.event.pull_request.base.sha || 'origin/master' }}"
           if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
