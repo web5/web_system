@@ -53,6 +53,8 @@ const VERBOSE = argv.includes('--verbose');
 // 变异验证开关（只改内存里的 workflow 文本，不改磁盘文件）：
 //   WF_MUTATE=no-unstable-classification  拆掉 unstable 分类 →「unstable 可恢复」用例应转红
 //   WF_MUTATE=no-setfailed                把 setFailed 降级成 warning →「真失败判红」用例应转红
+//   WF_MUTATE=any-unstable-error          分类退回「拼接串命中任一 unstable 即算时序」→ P2 混合错误用例应转红
+//   WF_MUTATE=no-sync-step-guard          去掉同步 step 的 pull_request 守卫 → P1 workflow_run 跳过用例应转红
 // 用法：WF_MUTATE=<name> node scripts/verify-workflows.mjs
 const MUTATE = process.env.WF_MUTATE || '';
 
@@ -128,12 +130,21 @@ for (const f of FILES) {
     if (MUTATE === 'no-unstable-classification') {
       // 让「时序性 unstable」落到真失败分支 —— 复现自锁（failed check 回流）
       texts[f] = texts[f].replace(
-        /const isUnstable = \([^)]*\) => \/unstable status\/i\.test\([^)]*\);/,
+        /const isUnstable = \([^)]*\) => \{[^\n]*\};/,
         'const isUnstable = () => false;',
       );
     } else if (MUTATE === 'no-setfailed') {
       // 复现 #396：把判红降级为 warning → 全绿静默不合
       texts[f] = texts[f].replace(/core\.setFailed\(/g, 'core.warning(');
+    } else if (MUTATE === 'any-unstable-error') {
+      // 复现 P2 补丁前的判据：拼接串命中任一 unstable 就算时序 → 混合错误里真失败被吞
+      texts[f] = texts[f].replace(
+        /const isUnstable = \(e\) => \{[^\n]*\};/,
+        'const isUnstable = (e) => /unstable status/i.test(errText(e));',
+      );
+    } else if (MUTATE === 'no-sync-step-guard') {
+      // 复现 P1 补丁前：同步 step 没有 step 级 if → workflow_run 下直接执行并崩
+      texts[f] = texts[f].replace(/^\s*if:\s*github\.event_name == 'pull_request'\s*$\n?/m, '');
     } else {
       throw new Error(`未知 WF_MUTATE=${MUTATE}`);
     }
@@ -160,6 +171,39 @@ const prBlock = findBlock('auto-pr.yml', 'enablePullRequestAutoMerge');
 t('blocks:auto-merge 的挂合入块', !!enableMerge, enableMerge ? '已定位' : '找不到含 enablePullRequestAutoMerge 的 script 块');
 t('blocks:auto-merge 的同步块', !!syncBlock, syncBlock ? '已定位' : '找不到含 updatePullRequestBranch 的 script 块');
 t('blocks:auto-pr 的 script 块', !!prBlock, prBlock ? '已定位' : '找不到含 enablePullRequestAutoMerge 的 script 块');
+
+// ── 补修 P1（2026-11-25）：step 级 if 守卫的静态定位 + 事件求值 ──
+// GitHub Actions 的 step 级 `if` 不会被本 harness 的 VM 执行（VM 只跑 script: | 块），
+// 所以必须把这段表达式当「代码」求值：设 github.event_name 后跑一遍，看 step 会不会被跳过。
+function stepGuard(file, stepName) {
+  const lines = (texts[file] || '').split('\n');
+  const start = lines.findIndex((l) => l.includes(`- name: ${stepName}`));
+  if (start < 0) return null;
+  const baseIndent = (lines[start].match(/^\s*/) || [''])[0].length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const l = lines[i];
+    const stripped = l.trim();
+    if (!stripped || stripped.startsWith('#')) continue;
+    const indent = (l.match(/^\s*/) || [''])[0].length;
+    if (indent <= baseIndent) break; // 已经走到下一个 step / job
+    const m = l.match(/^\s*if:\s*(.*?)\s*$/);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// 把 GitHub Actions 的 if 表达式当 JS 求值（本例是 `github.event_name == '...'`，合法 JS）。
+// 返回 null 表示守卫缺失/表达式抛错 —— 调用方据此判红。
+function guardAllows(expr, eventName) {
+  if (!expr) return null;
+  try {
+    return !!vm.runInNewContext(`(${expr})`, { github: { event_name: eventName } });
+  } catch (e) {
+    return null;
+  }
+}
+
+const syncStepGuard = stepGuard('auto-merge.yml', '落后 master 时自动同步分支');
 
 // ─────────────────────────── 3. 静态断言（离线可跑，防历史回归） ───────────────────────────
 // 只看代码，不看注释：这两个文件里恰好有一段注释在解释「为什么不要用 rest.pulls.enableAutoMerge」，
@@ -261,6 +305,14 @@ t(
     /pull_requests/.test(enableMerge) &&
     /payload\.pull_request/.test(enableMerge),
   'workflow_run 下 PR 号来自 workflow_run.pull_requests[]，不是 payload.pull_request.number',
+);
+// 补修 P1（2026-11-25 盲测）：同步 step 直接读 payload.pull_request.number，
+// workflow_run 下该字段不存在 → TypeError → job failure →「CI 全绿」变成红 run（与 #396 冲突）。
+// 必须靠 step 级 if 让它在 workflow_run 路径整个跳过；同步职责由 sync-behind-on-master job 覆盖。
+t(
+  'static:同步 step 有 pull_request 守卫（P1）',
+  guardAllows(syncStepGuard, 'pull_request') === true && guardAllows(syncStepGuard, 'workflow_run') === false,
+  `同步 step if=${syncStepGuard || '缺失'}；workflow_run 必须跳过（payload 无 pull_request）`,
 );
 
 // ─────────────────────────── 4. mock 运行器 ───────────────────────────
@@ -389,8 +441,17 @@ function runEnable(
 
 // ── 4.2 落后同步（compareCommits 判据 + graphql 写） ──
 // compare: compareCommits 返回的 status —— behind/identical = head 已含 tip；diverged/ahead = 落后
-function runSync(script, { compare = 'diverged', baseTip = 'tip999', graphqlFails = false } = {}) {
-  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [] };
+function runSync(
+  script,
+  {
+    compare = 'diverged',
+    baseTip = 'tip999',
+    graphqlFails = false,
+    event = 'pull_request', // 'pull_request' | 'workflow_run'（P1：验证守卫是否让 step 跳过）
+    guard = null, // 该 step 的 if 表达式；null = 无守卫（补丁前状态）
+  } = {},
+) {
+  const st = { mutations: [], notices: [], warnings: [], failed: [], logs: [], executed: false };
   const github = {
     rest: {
       pulls: {
@@ -414,7 +475,14 @@ function runSync(script, { compare = 'diverged', baseTip = 'tip999', graphqlFail
       return { updatePullRequestBranch: { pullRequest: { number: 407 } } };
     },
   };
-  const context = { repo: { owner: 'web5', repo: 'web_system' }, payload: { pull_request: { number: 407 } } };
+  // workflow_run 下 payload 没有 pull_request —— 这正是 P1 崩溃的触发条件。
+  const context = {
+    repo: { owner: 'web5', repo: 'web_system' },
+    payload:
+      event === 'workflow_run'
+        ? { workflow_run: { conclusion: 'success', pull_requests: [{ number: 407 }] } }
+        : { pull_request: { number: 407 } },
+  };
   const sandbox = newSandbox({
     github,
     context,
@@ -426,7 +494,12 @@ function runSync(script, { compare = 'diverged', baseTip = 'tip999', graphqlFail
     },
   });
   sandbox.console = { log: (m) => st.logs.push(String(m)), warn: () => {} };
+  // 模拟 GitHub Actions 的 step 级 if：不满足就整个 step 不执行（脚本一行都不跑）。
+  if (guard !== null && guardAllows(guard, event) === false) return st;
+  st.executed = true;
   exec(script, sandbox);
+  // exec 的 async 拒绝在微任务里才写 __err，用 getter 延迟到断言时（tick 之后）再读。
+  Object.defineProperty(st, 'crashed', { get: () => sandbox.__err || null });
   return st;
 }
 
@@ -621,6 +694,39 @@ function runMasterSync(script, prs, { after = null, graphqlFails = false } = {})
       s.failed.length > 0,
       s.failed[0] ? s.failed[0].slice(0, 90) : 'setFailed 未被调用',
     );
+
+    // ── 补修 P2（2026-11-25 盲测）：多错误拼接串不得吞真失败 ──
+    // 反例：一次 mutation 返回多条错误，一条 unstable + 一条真权限失败。
+    // 补丁前 errText 把所有错误拼成一个串，isUnstable 对整串 test → 命中 → notice + return，
+    // 真失败被静默吞掉（#396 禁止的静默不合）。补丁后必须逐条判定：有一条真失败就判红。
+    const mixedErr = Object.assign(new Error('Pull request is in unstable status'), {
+      errors: [
+        { message: 'Pull request is in unstable status' },
+        { message: 'Resource not accessible by integration' },
+      ],
+    });
+    s = runEnable(enableMerge, { mutationError: mixedErr });
+    await tick();
+    t(
+      'behave:B10 混合错误（unstable+真失败）必须判红',
+      s.failed.length > 0 && s.failed[0].includes('Resource not accessible') && s.notices.length === 0,
+      `setFailed=${s.failed.length} notices=${s.notices.length}（notice 吞掉真失败 = #396 静默不合重现）`,
+    );
+
+    // B11（防过度修正的对照）：多条错误全是 unstable，仍按「时序」走 notice 不判红。
+    const allUnstableErr = Object.assign(new Error('Pull request is in unstable status'), {
+      errors: [
+        { message: 'Pull request is in unstable status' },
+        { message: 'still in unstable status' },
+      ],
+    });
+    s = runEnable(enableMerge, { mutationError: allUnstableErr });
+    await tick();
+    t(
+      'behave:B11 多条错误全 unstable 仍按时序处理',
+      s.failed.length === 0 && s.notices.length === 1 && s.notices[0].includes('unstable'),
+      `setFailed=${s.failed.length} notices=${s.notices.length}`,
+    );
   }
 
   if (prBlock) {
@@ -679,6 +785,26 @@ function runMasterSync(script, prs, { after = null, graphqlFails = false } = {})
       'behave:同步失败只 warning',
       s.warnings.length === 1 && s.failed.length === 0,
       `warnings=${s.warnings.length} setFailed=${s.failed.length}`,
+    );
+
+    // ── 补修 P1（2026-11-25 盲测）：workflow_run payload 下同步 step 必须整个跳过 ──
+    // 这是 step 级 if 的语义：不满足时 GitHub 连脚本都不跑，所以 harness 用 guard 模拟跳过；
+    // 守卫缺失时脚本会执行并读 payload.pull_request.number → 崩溃（crashed 非空）→ 转红。
+    s = runSync(syncBlock, { event: 'workflow_run', guard: syncStepGuard });
+    await tick();
+    t(
+      'behave:workflow_run 下同步 step 被跳过（不崩溃）',
+      s.executed === false && s.mutations.length === 0 && s.failed.length === 0 && !s.crashed,
+      `executed=${s.executed} crashed=${s.crashed || '无'} mutation=${s.mutations.length}`,
+    );
+
+    // 13（P1 对照组）：pull_request payload 下守卫必须放行，同步照常工作（防止守卫写成恒 false）
+    s = runSync(syncBlock, { event: 'pull_request', guard: syncStepGuard });
+    await tick();
+    t(
+      'behave:pull_request 下同步 step 照常执行',
+      s.executed === true && s.mutations.length === 1 && !s.crashed,
+      `executed=${s.executed} mutation=${s.mutations.length} crashed=${s.crashed || '无'}`,
     );
   }
 
