@@ -199,13 +199,19 @@ const columns = [
               <a-button type="link" size="small" @click="openPreview(record as DailyQuoteItem)">预览</a-button>
             </template>
           </template>
+          <!-- 空态**唯一**实现点：走 Table 的 emptyText 槽（ant-design-vue 4.2.6
+               es/table/Table.js L428–430 —— 该槽优先级最高，命中后不再 renderEmpty('Table')），
+               由 vc-table 渲染进 tbody 的 .ant-table-placeholder 占位行，列头保留。
+               放在这里而不是表格外：否则内置「No data」+ 自定义空态会同时出现（台账 #8993 双空态）。
+               恢复入口必须走 Empty 的**默认槽**：Empty 只渲染 slots.image / description / default
+               （默认槽进 .ant-empty-footer），写成 <template #extra> 会被静默丢弃（V9 缺陷本体）。
+               v-if="!loading"：加载中渲染空占位，避免把「没有匹配的美句」当成加载态文案。 -->
+          <template #emptyText>
+            <a-empty v-if="!loading" description="没有匹配的美句">
+              <a-button @click="clearFilters">清空筛选与搜索</a-button>
+            </a-empty>
+          </template>
         </a-table>
-        <!-- 空态恢复入口必须走 Empty 的**默认槽**：ant-design-vue 4.2.6 的 Empty 只渲染
-             slots.image / slots.description / slots.default（默认槽进 .ant-empty-footer），
-             写成 <template #extra> 会被静默丢弃 → 按钮不渲染（V9 缺陷本体）。 -->
-        <a-empty v-if="!filtered.length && !loading" description="没有匹配的美句">
-          <a-button @click="clearFilters">清空筛选与搜索</a-button>
-        </a-empty>
       </template>
     </a-spin>
 
