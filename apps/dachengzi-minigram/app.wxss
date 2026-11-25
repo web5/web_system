@@ -24,6 +24,8 @@ page {
   /* ---- 强调色 ---- */
   --accent:      #0E9B8C;
   --accent-soft: #E4F6F2;
+  /* 深青：浅青底（--accent-soft）上的文本色，4.92:1 过 WCAG AA；用于册别角标 pill 文字（s33 / 原型 d3c3730281e758d8） */
+  --accent-ink:  #0F766E;
 
   /* ---- 语义色 ---- */
   --green: #12A150; --green-soft: #E7F7EE;

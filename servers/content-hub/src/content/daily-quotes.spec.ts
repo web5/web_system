@@ -29,12 +29,17 @@ function controllerWith(pool: DailyQuotesPool, fail = false) {
 }
 
 describe('冻结资产仍为唯一内容真源（V1）', () => {
-  it('资产 _notice 保留版权/原文 sha16，version/count 与代码冻结常量一致', () => {
+  it('资产 _notice 保留版权/三册原文 sha16，version/count 与代码冻结常量一致', () => {
     expect(ASSET._notice).toContain('仅供个人学习，不对外分发');
-    expect(ASSET._notice).toContain('40339154ec0a54ad');
+    expect(ASSET._notice).toContain('40339154ec0a54ad'); // NCE2
+    expect(ASSET._notice).toContain('9558256c30524970'); // NCE3
+    expect(ASSET._notice).toContain('4885c6aee9121a2f'); // NCE4
+    expect(ASSET._notice).toContain('version=2');
+    // 零外部 LLM：头注只应出现「非 LLM 生成」这类否定声明，不得出现「经 LLM / 由 AI 生成」等肯定式生成痕迹
+    expect(ASSET._notice).not.toMatch(/经\s*(LLM|GPT|AI)|由\s*(LLM|GPT|AI)\s*生成|调用\s*(LLM|GPT|OpenAI)/);
     expect(ASSET.version).toBe(DAILY_QUOTES_FROZEN_VERSION);
     expect(ASSET.count).toBe(DAILY_QUOTES_FROZEN_COUNT);
-    expect(ASSET.items).toHaveLength(136);
+    expect(ASSET.items).toHaveLength(281);
     // 冻结快照防篡改：与资产 sha256 对齐（内容若变必须同步改常量并走新版本）
     const { createHash } = require('node:crypto') as typeof import('node:crypto');
     expect(createHash('sha256').update(readFileSync(ASSET_PATH)).digest('hex')).toBe(DAILY_QUOTES_ASSET_SHA256);
@@ -48,6 +53,21 @@ describe('NceController.dailyQuotes（V2 契约不变 / V4 故障传播）', () 
     const { controller } = controllerWith(pool);
     const res = await controller.dailyQuotes();
     expect(res).toEqual({ code: 0, data: pool, message: 'ok' });
+  });
+
+  it('契约：version=2 / count=281 / 三册 source.book 均出现且分布非零（V8）', async () => {
+    const { controller } = controllerWith(pool);
+    const res = await controller.dailyQuotes();
+    expect(res.data.version).toBe(2);
+    expect(res.data.count).toBe(281);
+    expect(res.data.items).toHaveLength(281);
+    const books = new Set(res.data.items.map((it) => it.source.book));
+    expect([...books].sort()).toEqual(['NCE2', 'NCE3', 'NCE4']);
+    const dist: Record<string, number> = {};
+    for (const it of res.data.items) dist[it.source.book] = (dist[it.source.book] || 0) + 1;
+    expect(dist.NCE2).toBeGreaterThan(0);
+    expect(dist.NCE3).toBeGreaterThan(0);
+    expect(dist.NCE4).toBeGreaterThan(0);
   });
 
   it('?version 合法整数 / 非法串 / 负数都忽略、不 500，恒返回同池', async () => {

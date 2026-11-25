@@ -14,6 +14,8 @@ import { Repository } from 'typeorm';
 import {
   DAILY_QUOTES_FROZEN_COUNT,
   DAILY_QUOTES_FROZEN_VERSION,
+  dailyQuoteIdentity,
+  dailyQuoteSourceValid,
   type DailyQuoteItem,
   type DailyQuotesPool,
 } from '../daily-quotes.data';
@@ -32,10 +34,12 @@ function isValidRow(row: DailyQuoteEntity): boolean {
   return row.pool_version === DAILY_QUOTES_FROZEN_VERSION
     && typeof row.cn === 'string' && row.cn.length > 0
     && typeof row.en === 'string' && row.en.length > 0
-    && row.source_book === 'NCE2'
-    && Number.isInteger(row.source_lesson_id) && row.source_lesson_id >= 1 && row.source_lesson_id <= 96
-    && typeof row.source_title === 'string' && row.source_title.length > 0
-    && Number.isInteger(row.source_line_index) && row.source_line_index >= 0;
+    && dailyQuoteSourceValid({
+      book: row.source_book,
+      lessonId: row.source_lesson_id,
+      title: row.source_title,
+      lineIndex: row.source_line_index,
+    });
 }
 
 function shapeIsValid(rows: DailyQuoteEntity[]): boolean {
@@ -44,7 +48,8 @@ function shapeIsValid(rows: DailyQuoteEntity[]): boolean {
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     if (!isValidRow(row) || row.ordinal !== i + 1) return false;
-    const key = `${row.source_lesson_id}:${row.source_line_index}`;
+    // 身份键含 book：三册课号都从 1 起，(lessonId,lineIndex) 大量跨册碰撞。
+    const key = dailyQuoteIdentity(row.source_book, row.source_lesson_id, row.source_line_index);
     if (keys.has(key)) return false;
     keys.add(key);
   }
