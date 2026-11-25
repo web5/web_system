@@ -14,9 +14,46 @@
  * ③ 页码不重置 → hasPageReset 必须变 false
  *
  * 路径用 __dirname 相对定位，绝不硬编码本机绝对路径（历史 CI 事故）。
+ *
+ * ---
+ *
+ * ## 🔴 2026-11-25 增补（s42 / V9 缺陷）：源码守卫对「渲染」是瞎的
+ *
+ * 上文的源码正则守卫有一个已被实测击穿的盲区：**它只证明"源码里有这段文本"，
+ * 不证明"浏览器里真渲染出来"**。实证：`<a-empty>` 里写的 `<template #extra>`
+ * 被 antdv 4.2.6 的 Empty 静默丢弃（该组件只读 slots.image / description / default，
+ * 见 node_modules/ant-design-vue/es/empty/index.js 第 49/50/81–83 行），
+ * 按钮 **从未进入 vnode 树**，而 hasClearButton / hasEmptyClearLabel 照样绿。
+ * V9 要求的「空态唯一恢复入口」实际不存在，页面已上线却没被任何断言拦住。
+ *
+ * 因此本文件**追加**（不替换、不删除旧断言）一组「渲染态用例」：
+ *   · 真实编译并挂载**生产 SFC**（同一个 DailyQuotes.vue，不是副本、不是手搓模板）；
+ *   · antdv 用生产同款注册函数 setupAntd 注册；
+ *   · 空态按钮一律按**渲染后 DOM**（.ant-empty-footer 内的 button）断言与点击，
+ *     绝不读源码字符串 —— 模板槽失效时会立刻变红（见 M1 变异）。
+ *
+ * 挂载实现说明：仓库无 @vue/test-utils，且 jest.config.cjs 把 `.vue$` 映射为空模块桩。
+ * 为不触碰共享测试基建（改了会影响全部 14 个 suite），这里沿用本仓已有的
+ * `@vue/compiler-sfc` 路线（daily-quotes.readonly.spec.ts 同样在用）：
+ * parse → compileScript + compileTemplate → 用 vue 原生 createApp 挂到 jsdom。
+ * 编译产物是 ESM，用 typescript.transpileModule 转 CJS 后以显式模块白名单求值，
+ * 白名单之外出现新 import 会直接抛错（防止 harness 悄悄失配生产代码）。
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { createApp, nextTick, type App as VueApplication, type Component } from 'vue';
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
+import * as ts from 'typescript';
+import * as VueRuntime from 'vue';
+import * as nceApiModule from '@/api/nce';
+import * as mountModule from '@/utils/mount';
+import { setupAntd } from '@/plugins/antd';
+import type { DailyQuoteItem } from '@/api/nce';
+
+// 渲染态用例的替身：接口整池由用例给定；antd 的 reset.css 在 jsdom 里只需空对象
+// （setupAntd 会 import 它，jest 无 css transform，不 mock 会同步抛语法错）。
+jest.mock('@/api/nce', () => ({ getDailyQuotes: jest.fn() }));
+jest.mock('ant-design-vue/dist/reset.css', () => ({}));
 
 /** 本文件在 views/Content/ 下，页面源码同级，逐级不依赖 cwd。 */
 const PAGE = join(__dirname, 'DailyQuotes.vue');
@@ -206,5 +243,315 @@ describe('变异红绿 · 守卫有效性自证', () => {
   it('③ 页码不重置 → 页码守卫红', () => {
     expect(hasPageReset(GOOD)).toBe(true); // 绿
     expect(hasPageReset(MUT_NO_RESET)).toBe(false); // 红
+  });
+});
+
+// ══════════════════ V9 渲染态用例（真实挂载生产 SFC） ══════════════════
+//
+// 这一组是本轮（s42）新增的「验收层根因」修复：上面的源码正则守卫证明不了
+// 「浏览器里真渲染出来」，`<template #extra>` 被 antdv Empty 静默丢弃时它们照样绿。
+// 下方用例一律断言**渲染后的 DOM**，模板槽一失效即红。
+
+/** 281 = NCE2 136 + NCE3 80 + NCE4 65（167 稿 V2/V3/V4 实测口径）。 */
+function buildPool(): DailyQuoteItem[] {
+  const items: DailyQuoteItem[] = [];
+  const ranges: Array<{ book: 'NCE2' | 'NCE3' | 'NCE4'; total: number }> = [
+    { book: 'NCE2', total: 136 },
+    { book: 'NCE3', total: 80 },
+    { book: 'NCE4', total: 65 },
+  ];
+  for (const { book, total } of ranges) {
+    for (let i = 1; i <= total; i += 1) {
+      items.push({
+        cn: `${book} 第 ${i} 课中文`,
+        en: `${book} lesson ${i} english`,
+        source: { book, lessonId: i, title: `${book} Lesson ${i}`, lineIndex: 0 },
+      });
+    }
+  }
+  return items;
+}
+
+const POOL = buildPool();
+const mockedGetDailyQuotes = nceApiModule.getDailyQuotes as unknown as jest.Mock;
+
+/**
+ * 编译产物是 ESM 串，只能运行时求值。求值时的模块解析走**显式白名单**：
+ * 生产 SFC 若新增了别的 import，这里会直接抛错，避免 harness 悄悄与生产代码失配。
+ */
+const MODULE_REGISTRY: Record<string, unknown> = {
+  vue: VueRuntime,
+  '@/api/nce': nceApiModule,
+  '@/utils/mount': mountModule,
+};
+
+function evalCjs(esm: string, label: string): Record<string, unknown> {
+  const cjs = ts.transpileModule(esm, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const sandboxModule: { exports: Record<string, unknown> } = { exports: {} };
+  const sandboxRequire = (id: string): unknown => {
+    if (!(id in MODULE_REGISTRY)) {
+      throw new Error(`[${label}] 渲染态 harness 未登记模块 "${id}"，请同步 MODULE_REGISTRY`);
+    }
+    return MODULE_REGISTRY[id];
+  };
+  // 被测对象就是本仓生产 SFC 的编译产物，输入可信；此处仅为把 ESM 放到 CJS 运行时里执行。
+  new Function('require', 'module', 'exports', cjs)(sandboxRequire, sandboxModule, sandboxModule.exports);
+  return sandboxModule.exports;
+}
+
+/** 编译**生产** DailyQuotes.vue（同一份文件，不是副本、不是手搓模板）。 */
+function compileProductionPage(): Component {
+  const id = 'v9-empty-recover';
+  const { descriptor, errors } = parse(readFileSync(PAGE, 'utf8'), { filename: PAGE });
+  if (errors.length > 0) throw new Error(`SFC 解析失败：${errors.map(String).join('; ')}`);
+  const script = compileScript(descriptor, { id, inlineTemplate: false });
+  const template = compileTemplate({
+    source: descriptor.template?.content ?? '',
+    filename: PAGE,
+    id,
+    compilerOptions: { bindingMetadata: script.bindings },
+  });
+  if (template.errors.length > 0) throw new Error(`模板编译失败：${template.errors.map(String).join('; ')}`);
+  const component = evalCjs(script.content, 'script').default as Record<string, unknown>;
+  (component as { render?: unknown }).render = evalCjs(template.code, 'template').render;
+  return component as unknown as Component;
+}
+
+/** jsdom 缺 matchMedia / ResizeObserver，antdv 的响应式栅格与 rc-resize-observer 会直接调用。 */
+function installJsdomGaps(): void {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  }
+  if (typeof window.ResizeObserver !== 'function') {
+    window.ResizeObserver = class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    } as unknown as typeof window.ResizeObserver;
+  }
+}
+
+interface MountedPage {
+  container: HTMLElement;
+  app: VueApplication;
+  destroy(): void;
+}
+
+const TICKS = 8;
+/** 一次交互后把 onMounted 的异步 load / computed / watcher / antdv 内部更新都跑干净。 */
+async function settle(): Promise<void> {
+  for (let i = 0; i < TICKS; i += 1) await nextTick();
+}
+
+async function mountPage(): Promise<MountedPage> {
+  mockedGetDailyQuotes.mockResolvedValue({ version: 7, count: POOL.length, items: POOL });
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const app = createApp(compileProductionPage());
+  setupAntd(app);
+  app.mount(container);
+  await settle();
+  return {
+    container,
+    app,
+    destroy(): void {
+      app.unmount();
+      container.remove();
+    },
+  };
+}
+
+/** 页面自己的空态：排除 a-table 内置的 "No data" 占位（它挂在 .ant-table 内部）。 */
+function pageEmptyState(container: HTMLElement): Element | null {
+  return (
+    Array.from(container.querySelectorAll('.ant-empty')).find((node) => node.closest('.ant-table') === null) ??
+    null
+  );
+}
+
+function buttonLabelsWithin(root: Element | null): string[] {
+  if (root === null) return [];
+  return Array.from(root.querySelectorAll('button')).map((b) => (b.textContent ?? '').trim());
+}
+
+function requireNode<T extends Element>(node: T | null | undefined, what: string): T {
+  if (node == null) throw new Error(`断言前置失败：找不到${what}`);
+  return node;
+}
+
+function clickNode(node: Element | null | undefined, what: string): void {
+  requireNode(node, what).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
+function activePage(container: HTMLElement): string {
+  return (container.querySelector('.ant-pagination-item-active')?.textContent ?? '').trim();
+}
+
+/**
+ * 分页区文本去空白：showTotal 渲染成「共 281 条」，此处统一成「共281条」。 */function totalText(container: HTMLElement): string {
+  return (container.querySelector('.ant-pagination')?.textContent ?? '').replace(/\s+/g, '');
+}
+
+function inputByPlaceholder(container: HTMLElement, hint: string): HTMLInputElement {
+  const found = Array.from(container.querySelectorAll('input')).find((el) =>
+    (el.getAttribute('placeholder') ?? '').includes(hint),
+  );
+  return requireNode(found as HTMLInputElement | undefined, `placeholder 含「${hint}」的输入框`);
+}
+
+/** 用真实 DOM 操作册别下拉（mousedown 展开 → 点选项），不直接改组件内部状态。 */
+async function chooseBook(container: HTMLElement, label: string): Promise<void> {
+  const selector = requireNode(container.querySelector('.ant-select-selector'), '册别下拉');
+  selector.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  await settle();
+  const option = Array.from(document.querySelectorAll('.ant-select-item-option')).find(
+    (o) => (o.textContent ?? '').trim() === label,
+  );
+  requireNode(option, `册别下拉选项「${label}」`);
+  option?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await settle();
+}
+
+/** 走到 V9 的现场：NCE4 + 不可能命中 keyword，且**先停在第 2 页**。 */
+async function reachEmptyStateAtPage2(page: MountedPage): Promise<void> {
+  await chooseBook(page.container, 'NCE4'); // 65 条 → 4 页
+  clickNode(page.container.querySelector('.ant-pagination-item-2'), '第 2 页页码');
+  await settle();
+  expect(activePage(page.container)).toBe('2'); // 前置条件自检：确实停在第 2 页
+  const kw = inputByPlaceholder(page.container, '搜索中英文句子');
+  kw.value = 'zzzzz-no-hit';
+  // 只派发 input（模拟「正在输入、尚未 blur」那一刻）：keyword 立即参与 filtered 计算，
+  // 但不触发 onFilterChange 的页码复位 —— 于是 page 仍为 2，clearFilters 的 page 复位才可被观测。
+  kw.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle();
+}
+
+/**
+ * 第 1 条数据的课号角标（`L21` 之类）。用来判定「现在到底是第几页」——
+ * 比只读分页高亮更硬：页码错了，首行数据必然错。
+ */
+function firstRowLesson(container: HTMLElement): string {
+  return (container.querySelector('.ant-table-tbody tr.ant-table-row .no')?.textContent ?? '').trim();
+}
+
+/**
+ * 工具栏上的「清空」按钮（与空态里的「清空筛选与搜索」区分）。
+ *
+ * ⚠️ 必须去掉空白再比：antd 会给**两字**中文按钮自动插空格，渲染出来是「清 空」而不是「清空」。
+ */
+function toolbarClearButton(container: HTMLElement): Element | null {
+  return (
+    Array.from(container.querySelectorAll('button')).find(
+      (b) => (b.textContent ?? '').replace(/\s+/g, '') === '清空',
+    ) ?? null
+  );
+}
+
+describe('V9 · 空态恢复入口 · 渲染态（真实挂载生产 SFC）', () => {
+  jest.setTimeout(60_000);
+
+  let page: MountedPage | null = null;
+
+  beforeEach(() => {
+    installJsdomGaps();
+    mockedGetDailyQuotes.mockReset();
+  });
+
+  afterEach(() => {
+    page?.destroy();
+    page = null;
+    document.querySelectorAll('.ant-select-dropdown').forEach((node) => node.remove());
+    document.body.innerHTML = '';
+  });
+
+  it('T1 前置：NCE4 + 不可能命中 keyword → 空态「没有匹配的美句」渲染存在', async () => {
+    page = await mountPage();
+    expect(totalText(page.container)).toContain('共281条');
+    await reachEmptyStateAtPage2(page);
+
+    const empty = pageEmptyState(page.container);
+    expect(empty).not.toBeNull();
+    expect((empty?.querySelector('.ant-empty-description')?.textContent ?? '').trim()).toBe('没有匹配的美句');
+  });
+
+  it('T2 空态区域内渲染出可点击的「清空筛选与搜索」按钮', async () => {
+    page = await mountPage();
+    await reachEmptyStateAtPage2(page);
+
+    const empty = pageEmptyState(page.container);
+    expect(empty).not.toBeNull();
+    // 关键断言：只看**渲染后 DOM**。antdv Empty 只把默认槽渲染进 .ant-empty-footer，
+    // 写成 <template #extra> 时这里按钮数为 0（M1 变异即红）。
+    expect(buttonLabelsWithin(empty)).toContain('清空筛选与搜索');
+    const button = requireNode(empty?.querySelector('.ant-empty-footer button'), '空态 footer 里的恢复按钮');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('T3 点击恢复按钮 → 281 条 / 页码 1 / 册别课号 keyword 三条件全复位', async () => {
+    page = await mountPage();
+    await reachEmptyStateAtPage2(page);
+
+    const empty = pageEmptyState(page.container);
+    const button = empty?.querySelector('.ant-empty-footer button');
+    if (button == null) throw new Error('V9 缺陷：空态区域内没有可点击的恢复按钮');
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settle();
+
+    // ① 空态消失、列表恢复整池第一页
+    expect(pageEmptyState(page.container)).toBeNull();
+    expect(page.container.querySelectorAll('.ant-table-tbody tr.ant-table-row').length).toBe(20);
+    // ② 总数回 281
+    expect(totalText(page.container)).toContain('共281条');
+    // ③ 页码回 1（清空前停在第 2 页）
+    expect(activePage(page.container)).toBe('1');
+    // ④ 册别 / 课号 / keyword 三条件全复位
+    expect((page.container.querySelector('.ant-select-selection-item')?.textContent ?? '').trim()).toBe('全部');
+    expect(inputByPlaceholder(page.container, '课号').value).toBe('');
+    expect(inputByPlaceholder(page.container, '搜索中英文句子').value).toBe('');
+  });
+
+  /**
+   * T4 · 为什么必须单列一条
+   *
+   * `clearFilters()` 的 `page.value = 1` 在 **T3 的空态路径上不可观测**：antdv Table 在
+   * `total` 归零时会把分页 current 自动纠偏为 1 并回抛 change（→ onPageChange），
+   * 也就是说「清空前的第 2 页」在空态出现那一刻就被抹平了。实测：删掉 clearFilters 里的
+   * `page.value = 1`，T3 仍绿（只有旧源码守卫红）——这正是"断言不触达"的又一次伪装。
+   *
+   * 所以页码复位改在**能留下页码的现场**验证：NCE4 第 2 页（filtered 非空，total 65，
+   * 页码不会被纠偏），再走同一个 clearFilters（工具栏「清空」与空态按钮绑的是同一函数，
+   * 这里点工具栏那个，不修改它、只是调用）。
+   */
+  it('T4 页码复位（M2 可观测性）：NCE4 停在第 2 页时清空 → 回第 1 页（首行 L1）', async () => {
+    page = await mountPage();
+    await chooseBook(page.container, 'NCE4');
+    clickNode(page.container.querySelector('.ant-pagination-item-2'), '第 2 页页码');
+    await settle();
+
+    // 前置自检：确实在第 2 页（NCE4 第 21 条是课号 21）
+    expect(activePage(page.container)).toBe('2');
+    expect(firstRowLesson(page.container)).toBe('L21');
+
+    clickNode(toolbarClearButton(page.container), '工具栏「清空」按钮');
+    await settle();
+
+    expect(totalText(page.container)).toContain('共281条');
+    expect(activePage(page.container)).toBe('1');
+    expect(firstRowLesson(page.container)).toBe('L1');
   });
 });

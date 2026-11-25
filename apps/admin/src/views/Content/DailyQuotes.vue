@@ -200,10 +200,11 @@ const columns = [
             </template>
           </template>
         </a-table>
+        <!-- 空态恢复入口必须走 Empty 的**默认槽**：ant-design-vue 4.2.6 的 Empty 只渲染
+             slots.image / slots.description / slots.default（默认槽进 .ant-empty-footer），
+             写成 <template #extra> 会被静默丢弃 → 按钮不渲染（V9 缺陷本体）。 -->
         <a-empty v-if="!filtered.length && !loading" description="没有匹配的美句">
-          <template #extra>
-            <a-button @click="clearFilters">清空筛选与搜索</a-button>
-          </template>
+          <a-button @click="clearFilters">清空筛选与搜索</a-button>
         </a-empty>
       </template>
     </a-spin>
