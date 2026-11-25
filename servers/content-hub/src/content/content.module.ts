@@ -28,7 +28,9 @@ import { ContentQualityController } from './content-quality.controller';
 import { MediaController } from './media.controller';
 import { NceController } from './nce.controller';
 import { NceLessonEntity } from './entities/nce-lesson.entity';
+import { DailyQuoteEntity } from './entities/daily-quote.entity';
 import { NceLessonService } from './services/nce-lesson.service';
+import { DailyQuoteService } from './services/daily-quote.service';
 import { MediaService } from './services/media.service';
 import { CoverAiService } from './services/cover-ai.service';
 import { UploadStoreClient } from './services/upload-store.client';
@@ -49,6 +51,7 @@ import { ContentAuthModule } from '../auth/auth.module';
       ContentAccountEntity,
       PipelineRunEntity,
       NceLessonEntity,
+      DailyQuoteEntity,
     ]),
     ContentAuthModule,
   ],
@@ -71,6 +74,7 @@ import { ContentAuthModule } from '../auth/auth.module';
     CoverAiService,
     UploadStoreClient,
     NceLessonService,
+    DailyQuoteService,
   ],
   exports: [
     ContentService,
