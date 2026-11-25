@@ -50,6 +50,11 @@ if (argv.includes('-h') || argv.includes('--help')) {
 }
 const WITH_SCHEMA = argv.includes('--schema');
 const VERBOSE = argv.includes('--verbose');
+// 变异验证开关（只改内存里的 workflow 文本，不改磁盘文件）：
+//   WF_MUTATE=no-unstable-classification  拆掉 unstable 分类 →「unstable 可恢复」用例应转红
+//   WF_MUTATE=no-setfailed                把 setFailed 降级成 warning →「真失败判红」用例应转红
+// 用法：WF_MUTATE=<name> node scripts/verify-workflows.mjs
+const MUTATE = process.env.WF_MUTATE || '';
 
 // ─────────────────────────── 断言收集 ───────────────────────────
 const results = [];
@@ -118,6 +123,22 @@ const texts = {};
 const blocks = {};
 for (const f of FILES) {
   texts[f] = fs.readFileSync(path.join(WF_DIR, f), 'utf8');
+  if (f === 'auto-merge.yml' && MUTATE) {
+    const before = texts[f];
+    if (MUTATE === 'no-unstable-classification') {
+      // 让「时序性 unstable」落到真失败分支 —— 复现自锁（failed check 回流）
+      texts[f] = texts[f].replace(
+        /const isUnstable = \([^)]*\) => \/unstable status\/i\.test\([^)]*\);/,
+        'const isUnstable = () => false;',
+      );
+    } else if (MUTATE === 'no-setfailed') {
+      // 复现 #396：把判红降级为 warning → 全绿静默不合
+      texts[f] = texts[f].replace(/core\.setFailed\(/g, 'core.warning(');
+    } else {
+      throw new Error(`未知 WF_MUTATE=${MUTATE}`);
+    }
+    if (texts[f] === before) throw new Error(`WF_MUTATE=${MUTATE} 未命中任何变异点（判据文本已漂移？）`);
+  }
   blocks[f] = extractScripts(texts[f]);
   blocks[f].forEach((s, i) => {
     try {
@@ -209,6 +230,39 @@ t(
   'mergeable_state 是异步缓存：master 刚前进时十几秒都是 unknown（实测 15 秒轮询仍 unknown），而「master 刚前进」正是本 job 的启动时刻 → 改用 compareCommits',
 );
 
+// ── 治本修复（2026-11-25 / PR #666）：workflow_run 重试点 + 错误分流 ──
+// 同样只认代码锚点，加注释不能蒙混：这些断言是「死锁不回流」的第一道静态闸。
+const wfText = texts['auto-merge.yml'];
+t(
+  'static:auto-merge 监听 quality-gate workflow_run 成功',
+  /\n\s*workflow_run:\s*\n\s*workflows:\s*\[\s*quality-gate\s*\]\s*\n\s*types:\s*\[\s*completed\s*\]/.test(wfText),
+  '缺这个触发点：CI 全绿后没有任何事件重新触发挂载（#666 死锁根因）',
+);
+for (const anchor of [
+  ["github.event_name == 'pull_request'", 'pull_request 路径仍在（labeled/unlabeled 的 disable 依赖它）'],
+  ["github.event_name == 'workflow_run'", 'workflow_run 路径存在'],
+  ["github.event.workflow_run.conclusion == 'success'", '只在 quality-gate 成功时重试挂载'],
+  ['github.event.workflow_run.head_repository.full_name == github.repository', 'workflow_run 路径挡住 fork PR'],
+]) {
+  t(`static:enable if 含 ${anchor[0]}`, wfText.includes(anchor[0]), anchor[1]);
+}
+t(
+  'static:enable 脚本区分 unstable 与真失败',
+  !!enableMerge &&
+    /unstable status/i.test(enableMerge) &&
+    /core\.setFailed/.test(enableMerge) &&
+    /core\.notice/.test(enableMerge),
+  '时序性 unstable → notice 不判红；其它错误 → setFailed（不倒退 #396）',
+);
+t(
+  'static:enable 脚本兼容 workflow_run payload',
+  !!enableMerge &&
+    /payload\.workflow_run/.test(enableMerge) &&
+    /pull_requests/.test(enableMerge) &&
+    /payload\.pull_request/.test(enableMerge),
+  'workflow_run 下 PR 号来自 workflow_run.pull_requests[]，不是 payload.pull_request.number',
+);
+
 // ─────────────────────────── 4. mock 运行器 ───────────────────────────
 function newSandbox({ github, core, context }) {
   const sandbox = {
@@ -237,12 +291,38 @@ function exec(script, sandbox) {
 }
 
 // ── 4.1 挂自动合入（enable / auto-pr 共用一套 mock） ──
-function runEnable(script, { recognize = true, presetAutoMerge = null, state = 'OPEN' } = {}) {
-  const st = { autoMerge: presetAutoMerge, mutations: [], failed: [], warnings: [], logs: [] };
+// 2026-11-25 扩展：兼容 workflow_run payload、unstable 时序错误、真失败、逃生口字段。
+function runEnable(
+  script,
+  {
+    recognize = true,
+    presetAutoMerge = null,
+    state = 'OPEN',
+    event = 'pull_request', // 'pull_request' | 'workflow_run'
+    conclusion = 'success', // workflow_run.conclusion
+    workflowPRs = [999], // workflow_run.pull_requests[].number
+    draft = false,
+    labels = [],
+    headRefName = 'chore/999-x',
+    unstableTimes = 0, // 前 N 次 mutation 抛「unstable status」；超过后成功
+    mutationError = null, // mutation 抛的非时序错误（真失败）
+  } = {},
+) {
+  const st = {
+    autoMerge: presetAutoMerge,
+    mutations: [],
+    attempts: 0,
+    failed: [],
+    warnings: [],
+    notices: [],
+    logs: [],
+  };
   const pr = {
     id: 'PR_node_1',
     state,
-    isDraft: false,
+    isDraft: draft,
+    headRefName,
+    labels: { nodes: labels.map((n) => ({ name: n })) },
     get autoMergeRequest() {
       return st.autoMerge;
     },
@@ -251,6 +331,9 @@ function runEnable(script, { recognize = true, presetAutoMerge = null, state = '
     graphql: async (q, vars) => {
       if (q.includes('mutation')) {
         st.mutations.push(vars);
+        st.attempts += 1;
+        if (mutationError) throw mutationError;
+        if (st.attempts <= unstableTimes) throw new Error('Pull request is in unstable status');
         // 负向场景：mutation 名被改错 → 后端不认 → 状态不变（模拟「静默不生效」）
         if (recognize && q.includes('enablePullRequestAutoMerge')) {
           st.autoMerge = { enabledAt: '2026-10-23T00:00:00Z', mergeMethod: vars.m || 'MERGE' };
@@ -270,9 +353,20 @@ function runEnable(script, { recognize = true, presetAutoMerge = null, state = '
       issues: { get: async () => ({ data: { state: 'open', pull_request: undefined } }) },
     },
   };
+  const payload =
+    event === 'workflow_run'
+      ? {
+          workflow_run: {
+            conclusion,
+            head_repository: { full_name: 'web5/web_system' },
+            head_branch: headRefName,
+            pull_requests: workflowPRs.map((n) => ({ number: n })),
+          },
+        }
+      : { pull_request: { number: 999 } };
   const context = {
     repo: { owner: 'web5', repo: 'web_system' },
-    payload: { pull_request: { number: 999 } },
+    payload,
     ref: 'refs/heads/chore/999-x', // 不含 issue 编号，避免 Closes 分支影响断言
   };
   const sandbox = newSandbox({
@@ -281,7 +375,10 @@ function runEnable(script, { recognize = true, presetAutoMerge = null, state = '
     core: {
       setFailed: (m) => st.failed.push(m),
       warning: (m) => st.warnings.push(m),
-      notice: (m) => st.logs.push(m),
+      notice: (m) => {
+        st.notices.push(m);
+        st.logs.push(m);
+      },
       info: () => {},
     },
   });
@@ -435,6 +532,94 @@ function runMasterSync(script, prs, { after = null, graphqlFails = false } = {})
       'behave:负向-mutation 名错必须判红',
       s.failed.length > 0,
       s.failed[0] ? s.failed[0].slice(0, 90) : 'setFailed 未被调用 —— 又静默了',
+    );
+
+    // ── B1..B9：2026-11-25 自指死锁治本（workflow_run 重试点 + 错误分流）──
+
+    // B1: workflow_run payload —— PR 号来自 workflow_run.pull_requests[]
+    s = runEnable(enableMerge, { event: 'workflow_run' });
+    await tick();
+    t(
+      'behave:B1 workflow_run 取 PR 号并挂上',
+      s.mutations.length === 1 && s.failed.length === 0 && s.logs.join(' ').includes('已启用自动合入'),
+      `event=workflow_run mutation=${s.mutations.length} setFailed=${s.failed.length}`,
+    );
+
+    // B2: workflow_run 非 success —— 不挂、不红
+    s = runEnable(enableMerge, { event: 'workflow_run', conclusion: 'failure' });
+    await tick();
+    t(
+      'behave:B2 workflow_run 非 success 跳过',
+      s.mutations.length === 0 && s.failed.length === 0,
+      `mutation=${s.mutations.length} setFailed=${s.failed.length}`,
+    );
+
+    // B3: workflow_run 关联 PR 带 no-automerge —— 不重新挂（逃生口不能被重试点绕过）
+    s = runEnable(enableMerge, { event: 'workflow_run', labels: ['no-automerge'] });
+    await tick();
+    t(
+      'behave:B3 workflow_run 尊重 no-automerge 标签',
+      s.mutations.length === 0 && s.failed.length === 0 && s.logs.join(' ').includes('no-automerge'),
+      `mutation=${s.mutations.length} setFailed=${s.failed.length}`,
+    );
+
+    // B4: workflow_run 关联 PR 是 draft —— 跳过
+    s = runEnable(enableMerge, { event: 'workflow_run', draft: true });
+    await tick();
+    t(
+      'behave:B4 workflow_run 尊重 draft',
+      s.mutations.length === 0 && s.failed.length === 0,
+      `mutation=${s.mutations.length}`,
+    );
+
+    // B5: workflow_run 关联 PR 已挂 —— 幂等
+    s = runEnable(enableMerge, {
+      event: 'workflow_run',
+      presetAutoMerge: { enabledAt: 'x', mergeMethod: 'MERGE' },
+    });
+    await tick();
+    t(
+      'behave:B5 workflow_run 已挂则幂等跳过',
+      s.mutations.length === 0 && s.failed.length === 0 && s.logs.join(' ').includes('幂等跳过'),
+      `mutation=${s.mutations.length}`,
+    );
+
+    // B6: 时序性 unstable 首次被拒、重试成功 —— 必须挂上且不判红（死锁可恢复）
+    s = runEnable(enableMerge, { unstableTimes: 2 });
+    await tick();
+    t(
+      'behave:B6 unstable 可恢复（重试后挂上、不判红）',
+      s.attempts === 3 && s.autoMerge && s.failed.length === 0 && s.logs.join(' ').includes('已启用自动合入'),
+      `attempts=${s.attempts} setFailed=${s.failed.length} enabled=${!!s.autoMerge}`,
+    );
+
+    // B7: 持续 unstable —— 不判红、留 notice（不制造 failed check 自锁，等下一次事件）
+    s = runEnable(enableMerge, { unstableTimes: 999 });
+    await tick();
+    t(
+      'behave:B7 持续 unstable 不判红（等下一次事件）',
+      s.failed.length === 0 && s.notices.length === 1 && s.notices[0].includes('unstable'),
+      `setFailed=${s.failed.length} notices=${s.notices.length}`,
+    );
+
+    // B8: 真失败（权限/配置类，非 unstable）—— 必须判红（不倒退 #396）
+    s = runEnable(enableMerge, { mutationError: new Error('Resource not accessible by integration') });
+    await tick();
+    t(
+      'behave:B8 真失败必须判红',
+      s.failed.length > 0 && s.failed[0].includes('Resource not accessible'),
+      s.failed[0] ? s.failed[0].slice(0, 90) : 'setFailed 未被调用 —— #396 静默不合重现',
+    );
+
+    // B9: workflow_run 重试路径上 mutation 名改错 —— 同样必须判红
+    s = runEnable(enableMerge.replace(/enablePullRequestAutoMerge/g, 'enableAutoMerge'), {
+      event: 'workflow_run',
+    });
+    await tick();
+    t(
+      'behave:B9 workflow_run 路径负向也判红',
+      s.failed.length > 0,
+      s.failed[0] ? s.failed[0].slice(0, 90) : 'setFailed 未被调用',
     );
   }
 
