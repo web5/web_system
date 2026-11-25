@@ -9,8 +9,8 @@
 | 交互清单 | `docs/ui/page-specs/daily-quotes-readonly.md`（沿用，本轮无新增交互） |
 | 基线 | `origin/master = 2c37a474`（含 PR #670 的 V9 修复） |
 | 回滚点 | `2c37a474`（本次合入前的 dev 版本） |
-| PR | 待回填（draft） |
-| commitId | 待回填 |
+| PR | **#671**（draft）· https://github.com/web5/web_system/pull/671 |
+| commitId | `2da04775`（fix 主体；spec + 方案文档同 commit） |
 
 阻塞: 0
 
