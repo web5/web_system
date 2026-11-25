@@ -103,6 +103,14 @@ describe('goFeature（点常用功能卡跳转）', () => {
   });
 });
 
+describe('册别角标 data（s33 方案①）', () => {
+  it('data 含 bookBadge 字符串与 showBookBadge=true，quote 仍为 {cn,en}', () => {
+    expect(typeof pageConfig.data.bookBadge).toBe('string');
+    expect(pageConfig.data.showBookBadge).toBe(true);
+    expect(Object.keys(pageConfig.data.quote).sort()).toEqual(['cn', 'en']);
+  });
+});
+
 describe('goMore / onShareAppMessage', () => {
   it('更多功能 → switchTab 发现', () => {
     pageConfig.goMore.call(null);

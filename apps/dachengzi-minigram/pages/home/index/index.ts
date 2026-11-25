@@ -9,9 +9,18 @@
  * selected 会回到初始值，权威做法见 utils/tabbar.ts 的 setTabBarSelected。
  */
 import { isLoggedIn } from '../../../services/auth';
-import { getDailyQuote } from '../../../utils/daily';
+import { getDailyQuote, getDailyQuoteMeta, BOOK_LABEL } from '../../../utils/daily';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { FEATURES, getPinned, FEATURES_UPDATED_EVENT, type FeatureDef } from '../../../utils/features';
+
+/** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
+ *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
+function bookBadgeText(): string {
+  const { book, lessonId } = getDailyQuoteMeta();
+  const label = book ? BOOK_LABEL[book] : undefined;
+  if (!label) return '';
+  return Number.isInteger(lessonId) ? `${label} · L${lessonId}` : label;
+}
 
 /** 未登录时的登录引导落点：「我的」页有登录入口 */
 const MINE_PATH = '/pages/mine/index/index';
@@ -33,6 +42,10 @@ Page({
     radiusClass: '',
     /** 今日一句（本地文案池按日期取模，同天稳定、隔天自动换） */
     quote: getDailyQuote(),
+    /** 册别角标文案（方案①浅青 pill；book 缺失时为空串 → WXML 隐藏） */
+    bookBadge: bookBadgeText(),
+    /** 角标开关（默认开；灰度/回滚可置 false 隐藏角标，不影响取句） */
+    showBookBadge: true,
     /** 登录态：false 时整页渲染登录引导卡（login-gate），不发起任何业务请求 */
     loggedIn: true,
     /** 常用功能（pinned 项，读 utils/features 注册表） */

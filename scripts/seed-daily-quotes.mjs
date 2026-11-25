@@ -3,12 +3,15 @@
  * seed-daily-quotes · NCE 每日美句冻结池入库（s27，幂等）
  *
  * 内容真源只有仓库内 servers/content-hub/data/daily-quotes.json：
- *   - 文件 sha256 必须等于 DAILY_QUOTES_ASSET_SHA256（6f5fe566…）；
- *   - version=1、count=136、items.length=136，逐条形状与身份键校验；
+ *   - 文件 sha256 必须等于 DAILY_QUOTES_ASSET_SHA256（41e3588e…）；
+ *   - version=2、count=281、items.length=281（NCE2 136 + NCE3 80 + NCE4 65），逐条形状与含 book 身份键校验；
  *   - 任一不符直接非零退出，不写库、不编造、不调 LLM。
  *
- * 幂等：事务内按 (pool_version, ordinal) upsert 136 行，清理非冻结版本/越界 ordinal；
- * 写后回读逐字比对资产，不一致 rollback。重复执行不重复插、不漂移。
+ * s33：三册跨册课号大量同号（2091 处碰撞），身份键必须含 source_book；
+ * 依赖 migrations/0030 已把 DB 唯一键补进 source_book，否则 upsert 会覆盖跨册行。
+ *
+ * 幂等：事务内按 (pool_version, ordinal) upsert 281 行；v1(136) 行保留可回滚，
+ * 只清理 pool_version>2 或本版越界 ordinal；写后回读逐字比对资产，不一致 rollback。
  *
  * 用法：
  *   node scripts/seed-daily-quotes.mjs --dry-run              # 只校验资产，不连库
@@ -27,9 +30,13 @@ import { createRequire } from 'node:module';
 
 const ASSET_URL = new URL('../servers/content-hub/data/daily-quotes.json', import.meta.url);
 const CH_PKG_URL = new URL('../servers/content-hub/package.json', import.meta.url);
-const ASSET_SHA256 = '6f5fe566dc9191d0dfae0d0211f8132b9492681b514ee4d7f58a9d2676fd0756';
-const FROZEN_VERSION = 1;
-const FROZEN_COUNT = 136;
+const ASSET_SHA256 = '41e3588e28b05436a7136e684e20f893bd28c11daa4c86ce2d61d3149d0e74f7';
+const FROZEN_VERSION = 2;
+const FROZEN_COUNT = 281;
+/** 上一版冻结池：保留可回滚，清理时不删。 */
+const LEGACY_VERSION = 1;
+/** 册别白名单与课号上限（NCE4 官方仅 48 课）。 */
+const BOOK_LESSON_MAX = { NCE2: 96, NCE3: 60, NCE4: 48 };
 const ALLOWED_DB = 'web_system';
 
 const argv = process.argv.slice(2);
@@ -66,25 +73,34 @@ function loadFrozenAsset() {
     die(`资产 items.length=${Array.isArray(asset.items) ? asset.items.length : 'n/a'}，期望 ${FROZEN_COUNT}`);
   }
   const keys = new Set();
+  const dist = {};
   asset.items.forEach((q, i) => {
     const s = q?.source;
+    const maxLesson = s && BOOK_LESSON_MAX[s.book];
     const ok = q && typeof q.cn === 'string' && q.cn.length > 0
       && typeof q.en === 'string' && q.en.length > 0
-      && s && s.book === 'NCE2' && Number.isInteger(s.lessonId) && s.lessonId >= 1 && s.lessonId <= 96
+      && maxLesson !== undefined && Number.isInteger(s.lessonId) && s.lessonId >= 1 && s.lessonId <= maxLesson
       && typeof s.title === 'string' && s.title.length > 0
       && Number.isInteger(s.lineIndex) && s.lineIndex >= 0;
-    if (!ok) die(`资产第 ${i + 1} 条形状非法`);
-    const key = `${s.lessonId}:${s.lineIndex}`;
+    if (!ok) die(`资产第 ${i + 1} 条形状非法（book/lessonId 越界或字段缺失）`);
+    // 身份键含 book：跨册同 (lessonId,lineIndex) 不互覆（2091 处碰撞）
+    const key = `${s.book}:${s.lessonId}:${s.lineIndex}`;
     if (keys.has(key)) die(`资产第 ${i + 1} 条身份键重复：${key}`);
     keys.add(key);
+    dist[s.book] = (dist[s.book] || 0) + 1;
   });
+  // 三册均须出现（防资产被篡成单册）
+  for (const book of Object.keys(BOOK_LESSON_MAX)) {
+    if (!dist[book]) die(`资产缺少册别 ${book} 的句子`);
+  }
   return asset.items;
 }
 
 const items = loadFrozenAsset();
 if (dryRun) {
-  console.log(`✅ 冻结资产校验通过：sha256=${ASSET_SHA256.slice(0, 12)}… version=${FROZEN_VERSION} count=${items.length}`);
-  console.log(`   dry-run：未连库、未写入。正式执行将按 (pool_version, ordinal) upsert ${FROZEN_COUNT} 行到 ${ALLOWED_DB}.daily_quotes`);
+  const dist = items.reduce((d, q) => { d[q.source.book] = (d[q.source.book] || 0) + 1; return d; }, {});
+  console.log(`✅ 冻结资产校验通过：sha256=${ASSET_SHA256.slice(0, 12)}… version=${FROZEN_VERSION} count=${items.length} 分布=${JSON.stringify(dist)}`);
+  console.log(`   dry-run：未连库、未写入。正式执行将按 (pool_version, ordinal) upsert ${FROZEN_COUNT} 行到 ${ALLOWED_DB}.daily_quotes，保留 v${LEGACY_VERSION} 行可回滚`);
   process.exit(0);
 }
 
@@ -131,10 +147,11 @@ const UPSERT = `
 
 try {
   await conn.beginTransaction();
-  // 清理非冻结版本与越界行：防止历史误写造成"多插/漂移"。
+  // 清理策略（s33）：保留 v1 行可回滚；只清理 > 本版 的版本与本版越界 ordinal。
+  // 参数化绑定，勿拼字符串；前置依赖 migrations/0030 已改唯一键。
   await conn.execute(
-    'DELETE FROM daily_quotes WHERE pool_version <> ? OR ordinal > ?',
-    [FROZEN_VERSION, FROZEN_COUNT],
+    'DELETE FROM daily_quotes WHERE pool_version > ? OR (pool_version = ? AND ordinal > ?)',
+    [FROZEN_VERSION, FROZEN_VERSION, FROZEN_COUNT],
   );
   for (const row of canonical) {
     await conn.execute(UPSERT, [

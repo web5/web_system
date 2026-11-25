@@ -6,10 +6,11 @@
  * 零编造 / 池规模 / 首末锚点 / getDailyQuote 对外形状全部保留，只是校验对象从
  * 「随包常量 utils/daily-quotes.ts」改为「服务端冻结资产 servers/content-hub/data/daily-quotes.json」。
  *
- * 说明：单测不绑定工作机绝对路径除数据源外；NCE_LINES 是 lessons.json 的逐字快照
- * （由 nce-quotes.test.ts 独立校验 1601/1601 反查），本文件以 NCE_LINES 作「镜像真源」：
- * 资产每条按 source 身份键反查到同一条、cn/en/title/book 逐字一致 ⇒ 等价 lessons.json
- * mismatches=0（直接读 lessons.json 的 python 命令见 141 回执）。
+ * 说明：单测不绑定工作机绝对路径除数据源外；NCE_LINES 是 NCE2 lessons.json 的逐字快照
+ * （由 nce-quotes.test.ts 独立校验 1601/1601 反查）。s33 资产扩为三册（v2/281）：
+ *  - NCE2 部分仍按 NCE_LINES 作「镜像真源」逐字反查（mismatches=0）；
+ *  - NCE3/NCE4 部分按资产内嵌 source 四字段自洽 + 头注三册 sha16 锁定（lessons 不入仓）；
+ *  - 三册全量逐字反查（mismatches=0）一手证据由离线脚本 + 回执 V2 的 python 命令给出。
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -40,21 +41,27 @@ function injectAssetCache(): void {
 }
 
 describe('DAILY_QUOTES 服务端冻结资产（阶段③ S4 · 仅精选池 / 离线 / 零编造）', () => {
-  it('资产自洽：version 整数 / count == items.length == 136 / 头注含版权与 sha16', () => {
+  it('资产自洽：version=2 / count == items.length == 281 / 头注含版权与三册 sha16', () => {
     expect(Number.isInteger(raw.version)).toBe(true);
-    expect(raw.count).toBe(136);
+    expect(raw.version).toBe(2);
+    expect(raw.count).toBe(281);
     expect(raw.items.length).toBe(raw.count);
     expect(raw._notice).toContain('仅供个人学习，不对外分发');
-    expect(raw._notice).toContain('40339154ec0a54ad');
+    expect(raw._notice).toContain('40339154ec0a54ad'); // NCE2
+    expect(raw._notice).toContain('9558256c30524970'); // NCE3
+    expect(raw._notice).toContain('4885c6aee9121a2f'); // NCE4
   });
 
-  it('S-V1 溯源反查：每条按 source 身份键在 NCE_LINES 命中同一条，cn/en/title/book 逐字一致（mismatches=0）', () => {
+  it('S-V1 溯源反查：NCE2 部分按 NCE_LINES 镜像真源逐字反查（mismatches=0）', () => {
     const bySource = new Map<string, NceQuoteLine>();
     for (const l of NCE_LINES) {
       bySource.set(`${l.source.lessonId}:${l.source.lineIndex}`, l);
     }
     let mismatches = 0;
+    let nce2Count = 0;
     for (const q of DAILY_QUOTES) {
+      if (q.source.book !== 'NCE2') continue;
+      nce2Count += 1;
       const key = `${q.source.lessonId}:${q.source.lineIndex}`;
       const orig = bySource.get(key);
       if (!orig
@@ -65,25 +72,30 @@ describe('DAILY_QUOTES 服务端冻结资产（阶段③ S4 · 仅精选池 / �
         mismatches += 1;
       }
     }
+    expect(nce2Count).toBe(136);
     expect(mismatches).toBe(0);
   });
 
-  it('S-V1 每条 source 锚点合法：book=NCE2 / lessonId∈[1,96] / title 非空 / lineIndex≥0 整数；身份键唯一', () => {
+  it('S-V1 三册身份键含 book 唯一；NCE3/NCE4 source 四字段自洽（逐字反查一手证据见回执 V2）', () => {
     const keys = new Set<string>();
+    const dist: Record<string, number> = { NCE2: 0, NCE3: 0, NCE4: 0 };
+    const maxByBook: Record<string, number> = { NCE2: 96, NCE3: 60, NCE4: 48 };
     for (const q of DAILY_QUOTES) {
-      expect(q.source.book).toBe('NCE2');
+      expect(maxByBook[q.source.book]).toBeGreaterThan(0); // book 白名单
       expect(Number.isInteger(q.source.lessonId)).toBe(true);
       expect(q.source.lessonId).toBeGreaterThanOrEqual(1);
-      expect(q.source.lessonId).toBeLessThanOrEqual(96);
+      expect(q.source.lessonId).toBeLessThanOrEqual(maxByBook[q.source.book]);
       expect(typeof q.source.title).toBe('string');
       expect(q.source.title.length).toBeGreaterThan(0);
       expect(Number.isInteger(q.source.lineIndex)).toBe(true);
       expect(q.source.lineIndex).toBeGreaterThanOrEqual(0);
-      const key = `${q.source.lessonId}:${q.source.lineIndex}`;
-      expect(keys.has(key)).toBe(false);
+      const key = `${q.source.book}:${q.source.lessonId}:${q.source.lineIndex}`;
+      expect(keys.has(key)).toBe(false); // 含 book，跨册同号不碰撞
       keys.add(key);
+      dist[q.source.book] += 1;
     }
     expect(keys.size).toBe(DAILY_QUOTES.length);
+    expect(dist).toEqual({ NCE2: 136, NCE3: 80, NCE4: 65 });
   });
 
   it('S-V2 中英成对 + 结构中性：对外仅 {cn,en,source} 三字段，cn/en 均非空字符串', () => {
@@ -96,10 +108,10 @@ describe('DAILY_QUOTES 服务端冻结资产（阶段③ S4 · 仅精选池 / �
     }
   });
 
-  it('S-V2 完整句：en 以 . ! ? 结尾、cn 以 。！？ 结尾，均非逗号/分号结尾的叙事半句', () => {
+  it('S-V2 完整句：en 以 . ! ?（可带尾引号）结尾、cn 以 。！？（可带尾引号）结尾，非逗号/分号半句', () => {
     for (const q of DAILY_QUOTES) {
-      const e = q.en.trim();
-      const c = q.cn.trim();
+      const e = q.en.trim().replace(/[\u201C\u201D\u2018\u2019"']+$/, '');
+      const c = q.cn.trim().replace(/[\u201C\u201D\u2018\u2019"']+$/, '');
       expect(e).toMatch(/[.!?]$/);
       expect(c).toMatch(/[。！？]$/);
       expect(e).not.toMatch(/[,;]$/);
@@ -107,11 +119,15 @@ describe('DAILY_QUOTES 服务端冻结资产（阶段③ S4 · 仅精选池 / �
     }
   });
 
-  it('零编造：精选池每条 cn/en 均逐字取自 NCE_LINES（真实课文原文，无改写、无新造）', () => {
+  it('零编造（NCE2）：NCE2 部分 cn/en 逐字取自 NCE_LINES；三册全量反查见回执 V2', () => {
     const content = new Set(NCE_LINES.map((l) => `${l.cn}\u0000${l.en}`));
+    let checked = 0;
     for (const q of DAILY_QUOTES) {
+      if (q.source.book !== 'NCE2') continue;
+      checked += 1;
       expect(content.has(`${q.cn}\u0000${q.en}`)).toBe(true);
     }
+    expect(checked).toBe(136);
   });
 
   it('池规模合理：100 ≤ N ≤ 300，且严格大于兜底池，保证显示层来自精选池而非兜底', () => {

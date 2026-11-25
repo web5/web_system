@@ -6,6 +6,8 @@
  * 写入只由 scripts/seed-daily-quotes.mjs 在运维显式执行时完成。
  *
  * 时间列 DATETIME(3) 与 migrations/0029_daily_quotes.sql、实体 precision:3 对齐。
+ * s33：migrations/0030_daily_quotes_source_book.sql 把 uk_daily_quotes_version_source
+ * 补进 source_book（三册跨册课号碰撞）；下方 @Index 同名同列，DDL 与实体一致。
  */
 import {
   Column,
@@ -18,7 +20,7 @@ import {
 
 @Entity('daily_quotes')
 @Index('uk_daily_quotes_version_ordinal', ['pool_version', 'ordinal'], { unique: true })
-@Index('uk_daily_quotes_version_source', ['pool_version', 'source_lesson_id', 'source_line_index'], { unique: true })
+@Index('uk_daily_quotes_version_source', ['pool_version', 'source_book', 'source_lesson_id', 'source_line_index'], { unique: true })
 export class DailyQuoteEntity {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
   id: number;
@@ -26,7 +28,7 @@ export class DailyQuoteEntity {
   @Column({ type: 'int', unsigned: true, default: 1, comment: '冻结池版本' })
   pool_version: number;
 
-  @Column({ type: 'int', unsigned: true, comment: '资产 items[] 原序（1..136）' })
+  @Column({ type: 'int', unsigned: true, comment: '资产 items[] 原序（v2: 1..281）' })
   ordinal: number;
 
   @Column({ type: 'varchar', length: 512, comment: '冻结中文（逐字）' })
@@ -35,7 +37,7 @@ export class DailyQuoteEntity {
   @Column({ type: 'varchar', length: 512, comment: '冻结英文（逐字）' })
   en: string;
 
-  @Column({ type: 'varchar', length: 16, comment: '来源册别（恒 NCE2）' })
+  @Column({ type: 'varchar', length: 16, comment: '来源册别（NCE2/NCE3/NCE4）' })
   source_book: string;
 
   @Column({ type: 'int', unsigned: true, comment: '来源课号' })

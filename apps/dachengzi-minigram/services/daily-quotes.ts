@@ -12,23 +12,37 @@ import { request } from '../utils/request';
 
 const ENDPOINT = '/api/content-admin/nce/daily-quotes';
 
-/** 本地缓存键（中性命名；source 仅留痕、不进缓存、不进 UI） */
+/** 本地缓存键（中性命名；册别锚点随缓存，册名字典留前端映射） */
 export const DAILY_QUOTES_CACHE_KEY = 'daily_quotes_pool';
 
-export type CachedQuote = { cn: string; en: string };
+/** 缓存项：在 {cn,en} 基础上增 book/lessonId（原型字段契约）；旧缓存缺字段时按降级处理。 */
+export type CachedQuote = { cn: string; en: string; book?: string; lessonId?: number };
 export type CachedPool = {
   version: number;
   items: CachedQuote[];
   fetchedAt: number;
 };
 
+type PoolSource = { book: string; lessonId: number; title: string; lineIndex: number };
 type PoolBody = {
   version: number;
   count: number;
-  items: Array<{ cn: string; en: string; source: unknown }>;
+  items: Array<{ cn: string; en: string; source: PoolSource }>;
 };
 
-/** 服务端 data 形状校验：version/count 整数、items 数组、count 自洽、每条 cn/en 非空且带 source。 */
+/** 服务端 source 形状校验：book 白名单三册、lessonId 按册上限、lineIndex 非负整数。 */
+function sourceIsValid(s: unknown): boolean {
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return false;
+  const maxByBook: Record<string, number> = { NCE2: 96, NCE3: 60, NCE4: 48 };
+  const src = s as Partial<PoolSource>;
+  const max = typeof src.book === 'string' ? maxByBook[src.book] : undefined;
+  return max !== undefined
+    && Number.isInteger(src.lessonId) && (src.lessonId as number) >= 1 && (src.lessonId as number) <= max
+    && typeof src.title === 'string' && src.title.length > 0
+    && Number.isInteger(src.lineIndex) && (src.lineIndex as number) >= 0;
+}
+
+/** 服务端 data 形状校验：version/count 整数、items 数组、count 自洽、每条 cn/en 非空且 source 合法。 */
 export function isValidPoolBody(data: unknown): data is PoolBody {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   const d = data as Partial<PoolBody>;
@@ -38,14 +52,19 @@ export function isValidPoolBody(data: unknown): data is PoolBody {
     !!it && typeof it === 'object'
     && typeof it.cn === 'string' && it.cn.length > 0
     && typeof it.en === 'string' && it.en.length > 0
-    && !!it.source && typeof it.source === 'object');
+    && sourceIsValid(it.source));
 }
 
-/** 把服务端 data 剥成缓存结构：只留 {cn,en}（source 不进缓存/UI），写缓存时间。 */
+/** 把服务端 data 剥成缓存结构：留 {cn,en,book,lessonId}（title/lineIndex 不进缓存/UI），写缓存时间。 */
 export function toCachePool(data: PoolBody, now: number = Date.now()): CachedPool {
   return {
     version: data.version,
-    items: data.items.map((it) => ({ cn: it.cn, en: it.en })),
+    items: data.items.map((it) => ({
+      cn: it.cn,
+      en: it.en,
+      book: it.source.book,
+      lessonId: it.source.lessonId,
+    })),
     fetchedAt: now,
   };
 }
