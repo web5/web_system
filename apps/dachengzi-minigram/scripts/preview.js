@@ -2,6 +2,11 @@
  * 微信小程序预览脚本（生成开发版二维码）
  * 使用方法: npm run preview
  *
+ * 🔴 出码前门禁（P1–P6）在**本文件第一行代码**就执行（台账 9122）：
+ *    判据实现只有 scripts/preflight.js 一份，本文件不再自带任何判据。
+ *    直连 `node scripts/preview.js` 与走 `npm run preview`（publish.js）过的是同一道门。
+ *    逃生口：--skip-preflight / --allow-any-dir / --expect-version / --expect-sha / --require-dir。
+ *
  * 前提条件:
  * 1. private.key 已放在 apps/dachengzi-minigram/private.key（已 gitignore，切勿入库）
  * 2. 公众平台已把**执行机器**的公网 IP 加入白名单（本地跑加本机，dev 机器跑加 dev 机器）
@@ -33,6 +38,32 @@
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const preflight = require('./preflight');
+
+/* ---------- 0. 出码前门禁：本文件的**第一条动作**（台账 9122） ----------
+ *
+ * 🔴 为什么必须在这里、且排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
+ *    本文件是「出码」这件事的真载体。此前门禁只挂在 scripts/publish.js 外层，
+ *    而 `node scripts/preview.js` 这种直连（preview-push.js 就这么干）会把 P1 版本对账、
+ *    P2 私钥、P4 目录白名单全套绕过 —— 门禁写着，路却绕得过。
+ *    现在「直连 js 文件」与「走 npm / publish.js」是同一道门。
+ *
+ * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）。
+ *    这里只是「调用 + 打印 + 不通过就退」，且**不带自己的判据**（复制即违规）。
+ *
+ * 🔴 防重复执行：由 publish.js 经 MINIPROGRAM_PREFLIGHT_GATE=done 声明「上游已跑过」，
+ *    runGateOrExit 会只打一行「不重复执行」而不判定；未经上游直接跑本文件时它照常判定。
+ *
+ * 🔴 逃生口：--skip-preflight（打印风险自负）/ --allow-any-dir（只降 P4）/ --expect-version /
+ *    --expect-sha / --require-dir / --allow-dirty 均由 parsePreflightArgs 解析，与其它入口同一套。
+ *    绝不能写成「总是跑门禁且无法跳过」—— 那会让排障彻底失能。
+ */
+const gateOpts = preflight.parsePreflightArgs(process.argv.slice(2));
+// 出码根就是本包：不接受 --root 把门禁指到别处（否则「门禁查的根 ≠ 出码的根」，比没有门禁更坏）
+delete gateOpts.root;
+// 本文件走 miniprogram-ci：mode 固定 ci（P2 允许包根私钥但要求 ignore 覆盖，P6 不判开发者工具）
+gateOpts.mode = 'ci';
+preflight.runGateOrExit(gateOpts, 'preview');
 
 /**
  * 依赖加载：默认从干净安装目录（MINIPROGRAM_CI_PATH）加载 miniprogram-ci。

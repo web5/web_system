@@ -25,15 +25,21 @@
  * 🔴 边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须人工在
  *    微信公众平台操作，微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。
  *
- * 🔴 出码前检查（preflight，见 scripts/preflight.js）：
- *    preview / upload 两个子命令的**第一步**就跑四项硬检查 ——
+ * 🔴 出码前检查（preflight，判据唯一实现 scripts/preflight.js）：
+ *    preview / upload 两个子命令的**第一步**就跑六项硬检查 ——
  *      P1 版本真实性（package.json.version == utils/version.ts 的 APP_VERSION，缺 version.ts 即失败）
  *      P2 私钥不入包（包根出现 *.key / *.pem → 硬失败，P0 安全项）
  *      P3 工作区身份（打印分支@sha；给了 --expect-sha 就核对，不符即失败）
- *      P4 目录白名单提示（不在 web_system-<任务号> 命名内 → 硬失败；
+ *      P4 目录白名单（不在 web_system-<任务号> 命名内 → 硬失败；
  *         --allow-any-dir 显式放开并打印告警行，比 --skip-preflight 窄，只降 P4）
+ *      P5 工作区干净（会进包的未提交改动 → 硬失败，--allow-dirty 显式放行）
+ *      P6 开发者工具 CLI 可执行（cli 模式）
  *    失败即 exit 1，**先于任何 CLI 调用**；push / trial / release 三个子命令不受影响。
  *    --skip-preflight 显式跳过（打印「已跳过出码前检查，风险自负」），只留给已知异常场景。
+ *    🔴 台账 9122：门禁已下沉到 scripts/preview.js / scripts/upload.js 本体，
+ *       「直连 js 文件」不再是绕过路径；本脚本 + preview.js/upload.js 走的是同一个
+ *       preflight.runGateOrExit（编排一份）+ runPreflight（判据一份）。
+ *       本脚本 spawn 它们时用 MINIPROGRAM_PREFLIGHT_GATE=done 声明「已跑过」，避免两份报表。
  *    起因：web_system-dachengzi 这个分支名叫 devtools/dachengzi-preview 的 worktree 里
  *    躺着 1.0.14 的代码 + 一个真 private.key —— 一次「顺手出个预览码」就是旧包 + 私钥外发。
  *
@@ -472,11 +478,15 @@ function writeCliMeta(outPath, meta) {
 /**
  * 出码前硬门禁（preview / upload 入口第一件事）。
  *
- * 🔴 为什么放在 main() 的子命令分支最前面，而不是 cmdPreview / cmdUpload 内部：
- *    1. 位置等价于「子命令第一步」，且**先于任何 CLI 调用**（两条路的第一个动作就是它）；
- *    2. cmdPreview / cmdUpload 被单测直接调用时保持纯函数语义 —— publish.test.ts 是
- *       「向后兼容基准」（文件里明确写着「不得为了让测试变绿而改它」），
- *       把 spawn git 的门禁塞进 cmdUpload 会污染它「execFileSync 零调用」的断言。
+ * 🔴 本函数**只做参数映射**（publish 的 CLI 语义 → preflight 的 opts），不含任何判定、
+ *    也不自己 printReport / exit —— 编排只在 preflight.runGateOrExit 一份（台账 9122）。
+ *    此前这里是「第二份编排」（自己拼 opts、自己 printReport、自己 exit），
+ *    而真正出码的 preview.js / upload.js 一份都没有，于是直连 js 文件就能绕过。
+ *
+ * 🔴 为什么仍在 main() 的子命令分支里，而不搬进 cmdPreview / cmdUpload：
+ *    cmdPreview / cmdUpload 被单测直接调用时保持纯函数语义 —— publish.test.ts 是
+ *    「向后兼容基准」（文件里明确写着「不得为了让测试变绿而改它」），
+ *    把 spawn git 的门禁塞进 cmdUpload 会污染它「execFileSync 零调用」的断言。
  *
  * 🔴 失败就 exit 1，不给「继续出码」的口子。只有两个显式口子，且都留痕：
  *    --skip-preflight（整体跳过，打印风险自负）/ --allow-any-dir（**只**降 P4 目录白名单，打印告警行）。
@@ -487,32 +497,48 @@ function writeCliMeta(outPath, meta) {
  * 🔴 expectVersion 必须透传：preflight.js 支持 opts.expectVersion（P1 版本一致性），
  *    但只传 expectSha / requireDir 的话，最常用的出码入口上「期望版本」这一项**静默失效**
  *    —— 能力在、调用方没接线，等于没有。缺的是调用方，不是能力。
+ *
+ * @returns {object} runGateOrExit 的结果（ok / skipped）；**cmdPreview / cmdUpload 要用它**
+ *          来判断「下游入口还要不要再跑门禁」，见 childGateState。
  */
 function preflightGate(opts, sub) {
-  if (opts.skipPreflight) {
-    console.warn('[Preflight] ⚠️ 已跳过出码前检查，风险自负（--skip-preflight）');
-    return;
-  }
-  const result = preflight.runPreflight({
+  return preflight.runGateOrExit({
     mode: resolveMode(opts.mode),
     expectVersion: opts.expectVersion,
     expectSha: opts.expectSha,
     requireDir: opts.requireDir,
     allowDirty: opts.allowDirty,
     allowAnyDir: opts.allowAnyDir,
-    forUpload: sub === 'upload',
-  });
-  preflight.printReport(result);
-  if (!result.ok) process.exit(1);
+    skipPreflight: opts.skipPreflight,
+  }, sub);
 }
 
-function cmdPreview(opts) {
+/**
+ * 拼给子进程的门禁状态（spawn scripts/preview.js / upload.js 时用）。
+ *
+ * 🔴 只有**拿到门禁结果的调用方**才允许说「下游不用再跑」：
+ *    gate 为 undefined（例如单测直接调 cmdPreview / cmdUpload，或将来有人不经过 main
+ *    就调它们）→ 返回 undefined → 子进程自己跑门禁。绝不出现「谁都没跑却都说跑过」。
+ * 🔴 防止同一命令链上打印两份报表（两份报表 = 两个判据来源，迟早漂）。
+ */
+function childGateState(gate, opts) {
+  if (!gate) return undefined;
+  return opts.skipPreflight ? preflight.GATE_SKIP : preflight.GATE_DONE;
+}
+
+function cmdPreview(opts, gate) {
   const mode = resolveMode(opts.mode);
   if (mode === 'ci') {
     if (opts.page) process.env.PREVIEW_PAGE = opts.page;
     console.log('[Publish] 出预览码（miniprogram-ci 模式）…');
     try {
-      run('node', ['scripts/preview.js'], { cwd: ROOT, stdio: 'inherit' });
+      run('node', ['scripts/preview.js'], {
+        cwd: ROOT,
+        stdio: 'inherit',
+        // 🔴 门禁已在本进程跑过（main → preflightGate）；preview.js 本体也会跑门禁，
+        //    这里显式把状态传下去，让它「不重复执行」——同一链上只允许一份报表。
+        env: preflight.withGateState(process.env, childGateState(gate, opts)),
+      });
     } catch (e) {
       console.error('[Publish] ❌ 出码失败。最常见原因：本机出口 IP 不在公众平台 IP 白名单');
       console.error('[Publish]    处置：把报错里的 IP 加进 公众平台 → 开发管理 → 开发设置 → IP 白名单');
@@ -555,7 +581,7 @@ function cmdPreview(opts) {
   pushQr(outPath, opts.to);
 }
 
-function cmdUpload(opts) {
+function cmdUpload(opts, gate) {
   const mode = resolveMode(opts.mode);
   const pkg = require(path.join(ROOT, 'package.json'));
   const version = pkg.version || '1.0.0';
@@ -569,7 +595,12 @@ function cmdUpload(opts) {
     }
     console.log('[Publish] 上传开发版本（miniprogram-ci 模式）…');
     try {
-      run('node', ['scripts/upload.js'], { cwd: ROOT, stdio: 'inherit' });
+      run('node', ['scripts/upload.js'], {
+        cwd: ROOT,
+        stdio: 'inherit',
+        // 同 cmdPreview：门禁已在本进程跑过，upload.js 本体不重复执行（只出一份报表）
+        env: preflight.withGateState(process.env, childGateState(gate, opts)),
+      });
     } catch (e) {
       console.error('[Publish] ❌ 上传失败');
       process.exit(1);
@@ -665,16 +696,19 @@ function main(argv) {
   const opts = parseArgs(argv.slice(1));
 
   switch (sub) {
-    case 'preview':
+    case 'preview': {
       // 出码前硬门禁：站错目录 / 带私钥 / 版本不对，一律跑不起来（--skip-preflight 可显式跳过）
-      preflightGate(opts, 'preview');
-      cmdPreview(opts);
+      // gate 结果显式往下传：只有真跑过门禁，子进程才被允许「不再重复跑」
+      const gate = preflightGate(opts, 'preview');
+      cmdPreview(opts, gate);
       break;
-    case 'upload':
+    }
+    case 'upload': {
       // 同上；--skip-preflight 时打印「风险自负」后照旧走原逻辑
-      preflightGate(opts, 'upload');
-      cmdUpload(opts);
+      const gate = preflightGate(opts, 'upload');
+      cmdUpload(opts, gate);
       break;
+    }
     case 'push':
       cmdPush(opts);
       break;
@@ -723,6 +757,7 @@ if (require.main === module) {
 module.exports = {
   parseArgs,
   preflightGate,
+  childGateState,
   resolveMode,
   resolveTarget,
   resolveCliBinary,

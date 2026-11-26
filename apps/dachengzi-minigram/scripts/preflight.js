@@ -41,12 +41,16 @@
  *                    三者皆不可用 → 失败，且报错里列出**检查过的每一个路径**
  *                    （这是发布全程唯一的硬缺口：都找不到时 publish.js 回落字面量 'cli' → spawnSync ENOENT）
  *
- * 用法（一般不直接跑，由 publish.js 调）：
+ * 用法：
+ *   本文件是**唯一的判据实现**；四个入口都经 runGateOrExit() 调它（台账 9122）：
+ *     scripts/publish.js（preview / upload 子命令）、scripts/preview.js、scripts/upload.js、
+ *     以及本文件自身的 CLI。
  *   node scripts/preflight.js                                 以本包为根跑六项检查
  *   node scripts/preflight.js --mode ci
  *   node scripts/preflight.js --expect-sha 47f74ba8,019d282b
  *   node scripts/preflight.js --require-dir '^web_system-1018(-r2)?$'
  *   node scripts/preflight.js --allow-any-dir                  显式放开 P4 白名单（会打印告警行）
+ *   node scripts/preflight.js --skip-preflight                 整体跳过（打印风险自负，仅限已知异常场景）
  *   node scripts/preflight.js --root <路径>                    指定待检包根（只读，不改任何文件）
  *
  * 边界：零第三方依赖、只读（除 git / which 子进程外无副作用、不写文件）、
@@ -796,6 +800,91 @@ function printReport(result, io = {}) {
   err('[Preflight] 确认无误要硬出，可显式加 --skip-preflight（会打印「风险自负」提示）');
 }
 
+// ---------- 门禁的唯一执行入口 ----------
+
+/**
+ * 上游入口把「门禁已经处理过了」这件事传给下游子进程用的环境变量名。
+ *
+ * 🔴 只有**真的跑过门禁（或显式跳过）的上游**才配设它 —— 见 runGateOrExit。
+ */
+const GATE_ENV = 'MINIPROGRAM_PREFLIGHT_GATE';
+/** 上游已跑过门禁，且判定通过。 */
+const GATE_DONE = 'done';
+/** 上游已用 --skip-preflight 显式跳过门禁。 */
+const GATE_SKIP = 'skip';
+
+/**
+ * 给子进程用的 env：把「门禁状态」这一件事写进去（唯一实现，调用方别自己拼字符串）。
+ * state 为空 → 保证**不继承**父进程残留的状态（否则「谁都没跑却都说跑过」）。
+ */
+function withGateState(env, state) {
+  const next = { ...(env || {}) };
+  if (state) next[GATE_ENV] = state;
+  else delete next[GATE_ENV];
+  return next;
+}
+
+/**
+ * 出码门禁的**唯一**执行入口：跑一次 → 打印一份报告 → 不通过就退出。
+ *
+ * 🔴 为什么要有这个薄函数（台账 9122，真实缺口）：
+ *    「跑门禁 + 打印报告 + 失败退出」这段编排此前有**两份**：publish.js 的 preflightGate
+ *    一份、本文件 CLI 尾巴一份。而真正的出码载体 scripts/preview.js / scripts/upload.js
+ *    **一份都没有** —— 于是 `node scripts/preview.js` 这条直连路径把 P1–P6 全套绕过
+ *    （grep -c preflight scripts/preview.js 曾是 0）。判据只有 runPreflight 一份，
+ *    但「谁在什么时候调它」散在调用方，于是出现「门禁写着、路却绕得过」。
+ *    现在编排也只此一处：publish.js / preview.js / upload.js / 本文件 CLI 四个入口都调它。
+ *    🔴 判据仍然只有 runPreflight 一份 —— 本函数不含任何判定逻辑，别往里加。
+ *
+ * 🔴 防重复执行（同一条命令链上只允许出现一份报告）：
+ *    `publish.js preview --mode ci` 会先跑一次门禁，再 spawn scripts/preview.js，
+ *    而 preview.js 本体也跑门禁 —— 不去重就会打印**两份报表**，
+ *    出问题时没人分得清哪一份才是真判据（两份还可能因参数不同而结论不同）。
+ *    机制是显式环境变量（GATE_ENV），由真正跑过门禁的上游用 withGateState() 注入：
+ *      · GATE_DONE → 本入口只打一行「不重复执行」，不再判定、不再打印报表；
+ *      · GATE_SKIP → 上游已显式跳过，本入口同样跳过（并留一行痕，不静默）。
+ *    ⚠️ 不靠「反正跑两次也没坏处」：两份报表 = 两个判据来源 = 迟早漂。
+ *    ⚠️ 反过来更危险：上游没跑却设了 GATE_DONE 等于**开门**。所以注入方必须
+ *       手里真有门禁结果（见 publish.js cmdPreview/cmdUpload 的 gate 形参）。
+ *
+ * @param {object} [opts]  透传给 runPreflight 的选项；额外认 opts.skipPreflight（显式跳过）
+ * @param {'preview'|'upload'} [sub] 子命令（决定 forUpload 提示项）
+ * @param {{env?:object, log?:Function, warn?:Function, exit?:Function}} [ctx]
+ *        注入点（单测用）：env/log/warn/exit。默认真实 process / console。
+ * @returns {{ok:boolean, skipped?:boolean, failures?:Array, info?:object}}
+ */
+function runGateOrExit(opts = {}, sub = 'preview', ctx = {}) {
+  const env = ctx.env || process.env;
+  const log = ctx.log || console.log;
+  const warn = ctx.warn || console.warn;
+  const exit = ctx.exit || ((code) => process.exit(code));
+
+  // 1) 上游已跑过 / 已显式跳过 → 不重复判定，只留一行可 grep 的痕
+  const inherited = String((env && env[GATE_ENV]) || '').trim();
+  if (inherited === GATE_DONE) {
+    log(`[Preflight] ⏭ 上游入口已跑过门禁（${GATE_ENV}=${GATE_DONE}），本入口不重复执行`
+      + '（同一份判据只出一份报告，避免两次结论打架）');
+    return { ok: true, skipped: true, failures: [], info: {} };
+  }
+  if (inherited === GATE_SKIP) {
+    warn(`[Preflight] ⚠️ 上游入口已用 --skip-preflight 跳过门禁（${GATE_ENV}=${GATE_SKIP}），`
+      + '本入口不再检查，风险自负');
+    return { ok: true, skipped: true, failures: [], info: {} };
+  }
+
+  // 2) 本入口自己带 --skip-preflight：留痕但不判定（逃生口必须一直可用，否则调试彻底失能）
+  if (opts.skipPreflight === true) {
+    warn('[Preflight] ⚠️ 已跳过出码前检查，风险自负（--skip-preflight）');
+    return { ok: true, skipped: true, failures: [], info: {} };
+  }
+
+  // 3) 正常路径：跑一次 → 打印一份 → 不通过就退
+  const result = runPreflight({ ...opts, forUpload: sub === 'upload' });
+  printReport(result);
+  if (!result.ok) exit(1);
+  return result;
+}
+
 // ---------- CLI ----------
 
 function parsePreflightArgs(argv) {
@@ -812,22 +901,26 @@ function parsePreflightArgs(argv) {
     else if (a.startsWith('--require-dir=')) opts.requireDir = a.slice('--require-dir='.length);
     else if (a === '--allow-any-dir') opts.allowAnyDir = true;
     else if (a === '--allow-dirty') opts.allowDirty = true;
+    else if (a === '--skip-preflight') opts.skipPreflight = true;
     else opts._.push(a);
   }
   return opts;
 }
 
 if (require.main === module) {
-  const opts = parsePreflightArgs(process.argv.slice(2));
-  const result = runPreflight(opts);
-  printReport(result);
-  process.exit(result.ok ? 0 : 1);
+  // 走同一个薄函数（编排只此一份）：跑 → 打印 → 不通过 exit 1
+  runGateOrExit(parsePreflightArgs(process.argv.slice(2)), 'preview');
 }
 
 module.exports = {
   runPreflight,
   printReport,
+  runGateOrExit,
+  withGateState,
   parsePreflightArgs,
+  GATE_ENV,
+  GATE_DONE,
+  GATE_SKIP,
   isSameSha,
   readAppVersionConst,
   scanKeys,
