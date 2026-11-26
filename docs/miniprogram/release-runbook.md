@@ -13,6 +13,7 @@
 | 我要干什么 | 命令 |
 |---|---|
 | 出码 + 推企业微信（默认 cli 免白名单） | `npm run publish -- preview` |
+| **科豆**出预览码 / 上传（`apps/kedou-ai-minigram`，**无 `publish` script**） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run preview` / `npm run upload`（需 IP 白名单，见 §三） |
 | 🔴 **大橙子发版（唯一发布入口，六件事一条命令 + 一行机读 JSON）** | `./scripts/release-one-shot.sh --mode preview --version <x.y.z> --require-dir '<正则>'`（详见 §零之二） |
 | 出预览码（开发版，扫码即用，cli） | `npm run publish -- preview --no-push` |
 | 🔴 **验当前改动 / 本机多 worktree 共用 appid** | **第 0 步基线对齐 + cli 三步**（`cli open` → `cli cache --clean compile` → `npm run publish -- preview` 或 `cli preview`），详见下方「cli 三步与封装边界」 |
@@ -191,11 +192,16 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 > 走同一道 `preflightGate`（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 /
 > P6 CLI 可执行），只是 **P2、P6 换判据**（ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖；
 > P6 在 ci 模式直接 skip，因为不调开发者工具 CLI）。
-> **在大橙子（`apps/dachengzi-minigram`）里，直连 `node scripts/preview.js` /
-> `node scripts/upload.js` 与走 npm 入口过的是同一道门**（门禁已下沉到这两个文件的第一条动作，
-> 台账 9122）；逃生口与判据以该包 `scripts/preflight.js` 为准，本段不复述入口清单
-> （清单会变，复述就会过期）。其它包的脚本形态与门禁状态以各自 `scripts/` 为准 ——
-> 本手册第 3 行的「两包共用一份手册」**不等于两包脚本同形**。
+> **两个包现在都能这么说：直连 `node scripts/preview.js` / `node scripts/upload.js` 与走各自的
+> npm 入口，过的是同一道门** —— 门禁已下沉到这两个文件的第一条动作（大橙子台账 9122，
+> 科豆台账 9136）。**判据只有一份**，在仓库根共享层 `scripts/lib/miniprogram-preflight.js`；
+> app 侧只剩接线：大橙子 `scripts/preflight.js` 是薄壳（re-export + 注入本包根），
+> 科豆没有 preflight.js、由 `preview.js` / `upload.js` 直接调共享层的 `runGateOrExit()`。
+> 逃生口与各条判据说明以**共享层文件头**为准，本段不复述入口清单（清单会变，复述就会过期）。
+> ⚠️ 判据同形 ≠ **入口命令同形**：大橙子是 `npm run publish -- preview|upload`（有 `publish.js`
+> 编排层与 `trial` / `release` 子命令），科豆只有 `npm run preview` / `npm run upload`（**没有
+> `publish` script，也没有 `publish.js`**）。命令按包取，别跨包照抄 —— 本手册第 3 行的
+> 「两包共用一份手册」**不等于两包脚本同形**。
 
 实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
 21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
@@ -251,8 +257,14 @@ npm install miniprogram-ci@2.1.31 --no-audit --no-fund
 
 ```bash
 cd <repo>/apps/kedou-ai-minigram
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run preview   # 出预览码
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run upload    # 上传开发版本
 ```
+
+> 科豆**没有** `publish` script / `publish.js`（那是大橙子 `apps/dachengzi-minigram` 才有的编排层），
+> 照抄 `npm run publish -- preview` 会得到 `npm error Missing script: "publish"`。
+> 科豆的入口就是 `preview` 与 `upload` 两个 npm script；它们各自 `node scripts/<x>.js`，
+> 而门禁就是那个脚本的**第一条动作** —— 直连脚本与走 npm 入口过的是同一道门。
 
 两个脚本都支持这个环境变量；不传则回退到 `require('miniprogram-ci')`（在隔离环境未备好时会报错）。
 
@@ -261,11 +273,20 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 
 ---
 
-## 三、日常出码
+## 三、日常出码（科豆 `apps/kedou-ai-minigram`）
 
-> **默认走 cli 模式（免 IP 白名单）**：`npm run publish -- preview` / `npm run publish -- upload`。
-> 下面 §3.1 / §3.2 是 miniprogram-ci 路径（`--mode ci`），仅在
-> 「执行机固定出口 IP 已配白名单」时用。ci 模式**同样过 `preflightGate`**（见 §1.3 的红字）。
+> 🔴 **本节命令一律以科豆为口径。** 大橙子走 §零之二 `release-one-shot.sh`（唯一发布入口）
+> 或 §八 `publish.js` —— 两个包**判据同形、入口命令不同形**：科豆 `scripts/` 下只有
+> `preview.js` / `upload.js` / `svg2png.js`，没有 `publish.js`，`package.json` 也没有 `publish` script。
+>
+> 科豆的出码载体就是写 `miniprogram-ci` 的那两个脚本，**没有 cli 模式的载体**，
+> 所以本节 §3.1 / §3.2 都需要执行机出口 IP 在公众平台白名单内（§1.3）；「免白名单的 cli 模式」
+> 在本包不成立。
+>
+> 两个入口都**先过出码门禁**（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录白名单 /
+> P5 工作区干净 / P6 CLI 可执行 —— ci 模式 P6 skip），判据只有一份，在仓库根
+> `scripts/lib/miniprogram-preflight.js`。**直连 `node scripts/preview.js` 与走 `npm run preview`
+> 过的是同一道门**：门禁是脚本的第一条动作，绕不过也不需要绕。
 
 ### 3.1 出预览码（开发版，ci 模式 / miniprogram-ci）
 
@@ -273,9 +294,9 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 # ① 执行机上先对齐代码（防止基于旧源码构建）——统一走 §零之一「第 0 步 · 基线对齐」，不要用 git pull
 cd <repo> && git fetch origin master && git merge --ff-only origin/master
 
-# ② 出码（经 publish.js → 过 preflightGate；别直连 scripts/preview.js）
+# ② 出码（npm run preview 就是 node scripts/preview.js；门禁是它的第一条动作，见 §1.3）
 cd apps/kedou-ai-minigram
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run preview
 ```
 
 产物：`.ci-output/preview-qr.png` + **`.ci-output/preview-qr.html`**。
@@ -302,8 +323,9 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ### 3.2 上传开发版本（ci 模式 / miniprogram-ci）
 
 ```bash
-# 经 publish.js → 过 preflightGate；别直连 scripts/upload.js
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
+# 门禁（P1–P6）是 upload.js 的第一条动作；npm run upload 就是 node scripts/upload.js
+# 直连与走 npm 入口过的是同一道门（判据在仓库根 scripts/lib/miniprogram-preflight.js）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run upload
 ```
 
 上传产物是公众平台后台「**开发版本**」列表中的一条，**不是体验版**；
@@ -329,7 +351,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 - **完整后台入口**：`https://mp.weixin.qq.com/` → 管理 → 版本管理 → 开发版本 →
   选中目标版本 → 点击「设为体验版」。
 - **前置检查**：`package.json` 版本已递增（微信要求递增，重复会被拒）；开发版本已上传
-  （否则先 `npm run publish -- upload`）；`https://kedouai.com` 已在 request 合法域名登记。
+  （否则先 `npm run upload`）；`https://kedouai.com` 已在 request 合法域名登记。
 - **体验成员配置**：公众平台 → 管理 → 成员管理 → 体验成员 → 添加（微信号）；谁能扫、
   上限以微信侧为准。只有开发者本人 + 体验成员能扫。
 - **二维码**：用系统生成的标准二维码，**勿手填 path**：带 path 的旧码会一直生效，
@@ -339,7 +361,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 - **有效期**：体验版二维码以微信侧为准（官方口径 7 天）。
 - **失败怎么办**：扫码白屏先查二维码 path（是否手填、页面是否已注册/改名），
   再查 request 合法域名与 prod 后端是否可达；仍白屏才回到代码层。
-- 分步指引：`npm run publish -- trial`（纯打印，零副作用）。
+- 分步指引：大橙子有 `npm run publish -- trial`（纯打印，零副作用）；**科豆没有 `publish.js`**，
+  按上面逐条人工走（本包无等价打印命令，别跨包照抄）。
 
 ### 3.5 提交审核 → 发布正式版步骤（人工）
 
@@ -357,7 +380,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 - **小程序侧回滚**：审核中可在「审核版本」区撤回审核；已发布可在
   公众平台 → 管理 → 版本管理 → 线上版本 → 版本回退（回到上一线上版本）。
 - ⚠️ **后端服务回滚是另一条线**（§六：pm2 + `dist` 备份），不要与小程序版本回退混写。
-- 分步指引：`npm run publish -- release`（纯打印，零副作用）。
+- 分步指引：大橙子有 `npm run publish -- release`（纯打印，零副作用）；**科豆没有 `publish.js`**，
+  按上面逐条人工走（本包无等价打印命令，别跨包照抄）。
 
 ---
 
@@ -547,6 +571,7 @@ prod 落后时（曾落后 88 个提交）会出现「开发版有语音、体�
 | 2026-11-12 | trial 体验版 apiBase 由 dev 切到 prod（`resolveApiBase()`：trial/release → `https://kedouai.com`，develop/开发者工具保持 dev）；§3.4/§3.5/§5.3/§六/§9.1-9.3 与 `publish.js`/`preview.js`/README 体验版口径同步更新 |
 | 2026-11-20 | 新增 §零之一「cli 三步与封装边界」（`publish.js` 的 cli 模式只做第三步 `preview`，不代做 `cli open` / 清编译缓存）；速查表补「cli 三步」行；补「命令真源唯一」blockquote |
 | 2026-11-26 | 5 个出码 / 上传坑并入：§零之一 新增「第 0 步 · 基线对齐」（判据 `rev-parse HEAD` **严格等于** `origin/master`，锚点只认远端实时 ref）与 `spawn cli ENOENT` 判据（`export WECHAT_DEVTOOLS_CLI` 须与 `npm run publish` 同一条命令）；「动手前 4 项核对」①④ 判据化、去掉写死 worktree 数量；§3.1 / §四 弃 `git pull` 改 `fetch` + `merge --ff-only`；§3.2 / §8.1 版本复核留证、上传 receipt、禁「重传验版本」；§8.2 补 env 失败形态；§8.3 补「上传零落盘」；§9.2 补「上传成功 ≠ 有码可扫」 |
+| 2026-11-26 | §1.3 的门禁结论**由「只对大橙子成立」升级为「两包都成立」**（科豆台账 9136 已接同一份共享层判据，不是回退作用域限定）；§三 标题加 `科豆 apps/kedou-ai-minigram` 作用域，明说本包**无 `publish` script / 无 cli 载体**；§2.3 / §3.1 / §3.2 的 `npm run publish -- preview\|upload --mode ci` 全部换成科豆真实入口 `npm run preview` / `npm run upload`（原命令在科豆敲不出来：`npm error Missing script: "publish"`），并删掉「经 publish.js → 过 preflightGate / 别直连」这类对本包不成立的保证；§3.4 / §3.5 的 `upload` / `trial` / `release` 分步指引标注为大橙子专有；速查表补科豆一行 |
 
 ---
 
