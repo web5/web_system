@@ -144,25 +144,38 @@ export function toCommitId(ref?: string | null): string | undefined {
 }
 
 /**
+ * 版本指针列（`deploy_app_env_versions.*_version`）与提交入参的**单一版本段白名单**。
+ *
+ * 与 `SubmitPipelineDto` / `pipeline.service.ts:944` 的 `^[A-Za-z0-9._-]{4,64}$` 同口径：
+ * 7 位短 sha（prod shell 实测 `2ea0468`）与 40 位全 sha 都放行，`/` 不允许出现。
+ */
+export const COMMIT_REF_RE = /^[A-Za-z0-9._-]{4,64}$/;
+
+/**
  * 归一到**纯 commit**（`deploy_app_env_versions.current_version` 的列契约）。
  *
  * 与 {@link toCommitId} 的区别（**别拿来互相替换**）：
- * - `toCommitId` 是「取末段」的**宽松**解析，只切第一个 `/`，剩段仍原样保留
- *   （`a/b/c` → `b/c`）；它是产物目录引用的解析口径，`version` 允许含 `/`。
+ * - `toCommitId` 是「切第一个 `/`」的**宽松**解析，剩段原样保留（`a/b/c` → `b/c`）；
+ *   它是产物目录引用的解析口径，`version` 允许含 `/`（流水线命名空间 `default/<commit>`）。
  * - 本函数是**列的格式契约**：版本指针列只允许纯短哈希。整串按 `/` 切开取
- *   **最后一段**，因此多段前缀（`portal/prod/b6ec9950`）也能收敛；空值 → undefined。
+ *   **最后一段**，再多前缀（`portal/prod/b6ec9950`）也能收敛。
  *
- * 为什么必须有它：`current_version` 历史上被写成 `<templateKey>/<commit>`
- * （台账 #9027：`portal/b6ec9950`），gateway 靠 `toCommitId` 兜底才没 404。
- * 靠读取端容错不是设计 —— 任何一处改成字符串精确比对（回滚判断、缓存 key）
- * 就会误判。故在**写入端**（`ReleaseRegistryService` 落 `deploy_app_env_versions`
- * 的那一层）统一归一，让列里只剩一种拼写。
+ * 安全断言（写入端必经）：
+ * - 任一段是 `.` / `..` → 拒绝（`portal/../etc` 若「取末段」会静默改写成 `etc`）；
+ * - 末段不满足 {@link COMMIT_REF_RE} → 拒绝。
+ * - **归一失败一律返回 `undefined`，绝不回退原始串** —— 调用方必须自行拒绝，
+ *   否则最需要兜住的脏输入（`//`、空串）会原样落库。
  */
 export function normalizeCommitRef(ref?: string | null): string | undefined {
   const v = String(ref ?? '').trim();
   if (!v) return undefined;
-  const segs = v.split('/').map((s) => s.trim()).filter(Boolean);
-  return segs.length ? segs[segs.length - 1] : undefined;
+  const parts = v.split('/');
+  // 空段（`//`、`a/`、`/a`）是拼写错误，不做「跳过空段取末段」的静默改写
+  if (parts.some((s) => !s.trim())) return undefined;
+  const segs = parts.map((s) => s.trim());
+  if (segs.some((s) => s === '.' || s === '..')) return undefined;
+  const last = segs[segs.length - 1];
+  return COMMIT_REF_RE.test(last) ? last : undefined;
 }
 
 // ── Phase 2：CDN 布局（`<env>/<app>/<commit>`）─────────────────
