@@ -17,6 +17,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
   let registry: { setAppEnvPointer: jest.Mock; clearAppEnvPointer: jest.Mock; currentAppVersion: jest.Mock };
   let artifacts: {
     hasVersion: jest.Mock;
+    assertArtifactResolvable: jest.Mock;
     listVersions: jest.Mock;
     readPointer: jest.Mock;
     writePointer: jest.Mock;
@@ -92,6 +93,7 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     };
     artifacts = {
       hasVersion: jest.fn(async () => true),
+      assertArtifactResolvable: jest.fn(async () => undefined),
       listVersions: jest.fn(async () => []),
       readPointer: jest.fn(async () => null),
       writePointer: jest.fn(async () => ({ js: '/ws/x/index.js', css: null })),
@@ -209,6 +211,45 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     await expect(svc.switchVersion('shell', 'dev', 'missing', 'operator')).rejects.toThrow(/index.html/);
     expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
     expect(artifacts.writePointer).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 台账 #9087：`index.html` 存在 ≠ 能服务。
+   *
+   * 线上样本 `6e7b2690` / `4ea6d64` 的 index.html 引用 `/static/modules/shell/shell-dev/…`
+   * （prod 落点没有这个目录）⇒ 旧行为「切成功 → 页面白屏」。修复后必须「切不动 + 指针不动」。
+   */
+  it('#9087：shell 入口引用不可解析 → 400 且指针表不动（白屏前置拦截）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
+    artifacts.assertArtifactResolvable.mockRejectedValue(
+      new Error(
+        'ENTRY_UNRESOLVABLE: 入口引用的资源在落点上不存在，切过去会白屏：shell/prod/v3（本机 /ws/servers/gateway/public）缺 /ws/servers/gateway/public/static/modules/shell/shell-dev/v3/assets/index.abc.js',
+      ),
+    );
+    await expect(svc.switchVersion('shell', 'prod', 'v3', 'u1')).rejects.toThrow(/ENTRY_UNRESOLVABLE/);
+    expect(registry.setAppEnvPointer).not.toHaveBeenCalled();
+    expect(gatewayCache.notifyVersionChange).not.toHaveBeenCalled();
+  });
+
+  it('#9087：shell 入口可解析 → 正常切换，且校验发生在写指针之前', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'shell', kind: 'shell', deployMode: 'site-version' });
+    const order: string[] = [];
+    artifacts.assertArtifactResolvable.mockImplementation(async () => {
+      order.push('resolvable');
+    });
+    registry.setAppEnvPointer.mockImplementation(async () => {
+      order.push('db');
+      return { from: 'v1', previous: 'v0', unchanged: false };
+    });
+    const r = await svc.switchVersion('shell', 'prod', 'v3', 'u1');
+    expect(artifacts.assertArtifactResolvable).toHaveBeenCalledWith('prod', 'shell', 'v3');
+    expect(order).toEqual(['resolvable', 'db']);
+    expect(r.pointer).toBeNull();
+  });
+
+  it('#9087：env-dir 应用不走入口引用校验（只对 site-version shell）', async () => {
+    await svc.switchVersion('portal', 'prod', 'v2', 'u1');
+    expect(artifacts.assertArtifactResolvable).not.toHaveBeenCalled();
   });
 
   it('锁 owner 默认按 operator 派生（ui: 前缀，排障可见来源）', async () => {
