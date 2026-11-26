@@ -41,6 +41,12 @@ interface Failure {
   hint?: string;
 }
 
+interface CliCandidate {
+  path: string;
+  source: string;
+  note?: string;
+}
+
 interface PreflightInfo {
   root: string;
   pkgVersion: string;
@@ -54,12 +60,22 @@ interface PreflightInfo {
   projectName: string;
   dirAllowed: boolean;
   requiredDir: string;
+  allowAnyDir: boolean;
   mode: string;
   rootKeyHits: Hit[];
   deepKeyHits: Hit[];
   packIgnoreCoversKeys: boolean;
   dirty: { total: number; shipping: string[]; excluded: string[] };
-  cli: { ok: boolean; path: string; source: string; skipped: boolean };
+  cli: {
+    ok: boolean;
+    path: string;
+    source: string;
+    skipped: boolean;
+    /** 环境变量是否显式指定了（显式 = 唯一候选，不会回落默认路径） */
+    configured: boolean;
+    /** 实际检查过的候选清单（失败时用它列「到底找过哪儿」） */
+    checked: CliCandidate[];
+  };
   warnings: string[];
 }
 
@@ -76,9 +92,12 @@ interface PreflightOpts {
   expectSha?: string;
   requireDir?: string;
   allowDirty?: boolean;
+  allowAnyDir?: boolean;
   forUpload?: boolean;
   execFileSync?: (...args: unknown[]) => unknown;
   env?: Record<string, string | undefined>;
+  /** P6 官方默认安装路径的注入点：不注入就落到本机真实路径，测试会随「本机装没装工具」飘 */
+  defaultCliPaths?: string[];
 }
 
 interface PreflightModule {
@@ -92,6 +111,7 @@ interface PreflightModule {
     root?: string;
     expectSha?: string;
     expectVersion?: string;
+    allowAnyDir?: boolean;
   };
   isSameSha: (a: string, b: string) => boolean;
   isKeyFile: (name: string) => boolean;
@@ -100,7 +120,15 @@ interface PreflightModule {
   checkDevtoolsCli: (
     execFileSync: (...a: unknown[]) => unknown,
     env: Record<string, string | undefined>,
-  ) => { ok: boolean; path: string; source: string };
+    opts?: { defaultCliPaths?: string[] },
+  ) => {
+    ok: boolean;
+    path: string;
+    source: string;
+    configured: boolean;
+    checked: CliCandidate[];
+  };
+  DEFAULT_CLI_PATHS: string[];
   ALLOWED_DIR_NAME: RegExp;
 }
 
@@ -108,7 +136,15 @@ interface PreflightModule {
 
 const tmpDirs: string[] = [];
 
-/** 造一个「小程序包根」临时目录。opts 控制脏数据形态。 */
+/**
+ * 造一个「小程序包根」临时目录。opts 控制脏数据形态。
+ *
+ * 🔴 包根一律落在**白名单形态的顶层目录**下（默认 `web_system-1018-r2`）：
+ *    P4 自 2026-11-26 起默认硬拦「顶层名不在 web_system-<任务号> 内」，
+ *    若夹具直接用 `mkdtemp` 出来的 `preflight-xxxx` 当顶层名，则本文件里
+ *    所有与目录无关的用例（P1/P2/P3/P5/P6）都会被 P4 连带打红 ——
+ *    那是假红，会掩盖真正要断言的那一项。要测「目录名不对」请显式传 dirName。
+ */
 function mkFixture(opts: {
   version?: string;
   appVersion?: string;
@@ -118,15 +154,16 @@ function mkFixture(opts: {
   extraFiles?: string[];
   packIgnores?: unknown[];
   projectConfig?: boolean;
-  /** true 时按真实仓库布局造：<tmp>/web_system-1018-r2/apps/dachengzi-minigram */
+  /** true 时按真实仓库布局造：<tmp>/<dirName>/apps/dachengzi-minigram */
   repoLayout?: boolean;
+  /** worktree 顶层目录名（P4 判的就是它），默认 web_system-1018-r2 */
+  dirName?: string;
 }): string {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-'));
   tmpDirs.push(base);
-  const dir = opts.repoLayout
-    ? path.join(base, 'web_system-1018-r2', 'apps', 'dachengzi-minigram')
-    : base;
-  if (opts.repoLayout) fs.mkdirSync(dir, { recursive: true });
+  const top = path.join(base, opts.dirName ?? 'web_system-1018-r2');
+  const dir = opts.repoLayout ? path.join(top, 'apps', 'dachengzi-minigram') : top;
+  fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     path.join(dir, 'package.json'),
@@ -389,14 +426,19 @@ describe('P3 工作区身份（分支/sha）', () => {
   });
 });
 
-// ---------- ④ P4 目录白名单提示 ----------
+// ---------- ④ P4 目录白名单（默认硬拦 + 唯一逃生口） ----------
 
-describe('P4 目录白名单（只警告，不单独阻断）', () => {
-  it('web_system-1018-r2 这类发布 worktree → 不告警', () => {
+describe('P4 目录白名单（默认硬拦，--allow-any-dir 是唯一逃生口）', () => {
+  // 用 fakeGit 把 toplevel 钉到具体目录名 —— P4 判的是 worktree 顶层名，
+  // 夹具真实路径（<tmp>/web_system-1018-r2）在带 fakeGit 时并不参与判定。
+  const atDir = (name: string, branch = 'feat/some-branch', sha = 'abc1234') =>
+    fakeGit(branch, sha, `/Users/x/workspace/${name}`);
+
+  it('web_system-1018-r2 这类发布 worktree → 通过且无 P4 痕迹', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
-      execFileSync: fakeGit('release/dachengzi-1018-r2', '47f74ba8', '/Users/x/workspace/web_system-1018-r2'),
+      execFileSync: atDir('web_system-1018-r2', 'release/dachengzi-1018-r2', '47f74ba8'),
     });
 
     expect(r.info.projectName).toBe('web_system-1018-r2');
@@ -404,16 +446,63 @@ describe('P4 目录白名单（只警告，不单独阻断）', () => {
     expect(r.info.warnings.join('\n')).not.toContain('P4');
   });
 
-  it('web_system-dachengzi（危险目录的命名形态）→ 告警但不阻断', () => {
+  // 🔴 本条是 H3 的核心：无 --require-dir + 目录不在白名单 → **必须**失败。
+  //    改回「只警告」时这条会红（变异反证就靠它）。
+  it('无 --require-dir + 目录不在白名单（web_system-pkgkey）→ 失败，报告里是 P4', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, execFileSync: atDir('web_system-pkgkey') });
+
+    expect(r.ok).toBe(false);
+    expect(codes(r)).toEqual(['P4']);
+    const f = r.failures.find((x) => x.code === 'P4')!;
+    expect(f.title).toContain('web_system-pkgkey');
+    // 三行结构：现象（哪个目录名）/ 判据（白名单长什么样）/ 怎么办（可执行的下一步）
+    expect(f.title).toContain('不在出码白名单');
+    expect(f.detail).toContain('web_system-1018');
+    expect(f.hint).toContain('--require-dir');
+    expect(f.hint).toContain('--allow-any-dir');
+  });
+
+  it('危险目录 web_system-dachengzi（1.0.14 事故目录的命名形态）→ 失败，不再只是警告', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
-      execFileSync: fakeGit('devtools/dachengzi-preview', '4292aa45', '/Users/x/workspace/web_system-dachengzi'),
+      execFileSync: atDir('web_system-dachengzi', 'devtools/dachengzi-preview', '4292aa45'),
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.dirAllowed).toBe(false);
+    expect(r.failures.find((x) => x.code === 'P4')!.title).toContain('web_system-dachengzi');
+  });
+
+  it('同上 + allowAnyDir: true → 通过，且必须打显式告警行（不许静默降级）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      allowAnyDir: true,
+      execFileSync: atDir('web_system-pkgkey'),
     });
 
     expect(r.ok).toBe(true);
-    expect(r.info.dirAllowed).toBe(false);
-    expect(r.info.warnings.join('\n')).toContain('web_system-dachengzi');
+    expect(codes(r)).not.toContain('P4');
+    expect(r.info.allowAnyDir).toBe(true);
+    // 告警行要能被人一眼看到：点名开关 + 点名目录 + 说明风险仍成立
+    const w = r.info.warnings.join('\n');
+    expect(w).toContain('--allow-any-dir');
+    expect(w).toContain('web_system-pkgkey');
+    expect(w).toContain('风险');
+  });
+
+  it('allowAnyDir 但目录本来就在白名单内 → 通过，且如实说明该开关本次未生效', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      allowAnyDir: true,
+      execFileSync: atDir('web_system-1018-r2'),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.warnings.join('\n')).toContain('本次未生效');
   });
 
   it('ALLOWED_DIR_NAME：web_system / -1018 / -1018-r2 / -9027 收，-dachengzi / -pkgkey 不收', () => {
@@ -478,6 +567,7 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
   // 只 require 不执行：publish.js 入口有 require.main === module 保护。
   const publish = require('../scripts/publish') as {
     parseArgs: (argv: string[]) => Record<string, unknown>;
+    preflightGate: (opts: Record<string, unknown>, sub: 'preview' | 'upload') => void;
   };
 
   it('--skip-preflight → skipPreflight: true', () => {
@@ -496,6 +586,38 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
       noPush: true,
       skipPreflight: true,
     });
+  });
+
+  it('--allow-any-dir → allowAnyDir: true，且与 --skip-preflight 是两个独立开关', () => {
+    expect(publish.parseArgs(['--allow-any-dir'])).toEqual({ _: [], allowAnyDir: true });
+    // 关键：allowAnyDir 不许被实现成「等同 skip」——只放开 P4，其余各项照旧跑
+    expect(publish.parseArgs(['--allow-any-dir', '--skip-preflight'])).toEqual({
+      _: [],
+      allowAnyDir: true,
+      skipPreflight: true,
+    });
+  });
+
+  it('preflightGate 把 allowAnyDir 透传进 runPreflight（preview）', () => {
+    // 本文件不 jest.mock preflight（要测它的真判定逻辑），故这里用 spy 只观察调用参数，
+    // 让 runPreflight 返回 ok:true 以避免 process.exit。
+    const spy = jest.spyOn(preflight, 'runPreflight').mockReturnValue({
+      ok: true,
+      failures: [],
+      info: {} as PreflightInfo,
+    });
+    const printSpy = jest.spyOn(preflight, 'printReport').mockImplementation(() => undefined);
+    try {
+      publish.preflightGate({ allowAnyDir: true }, 'preview');
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ allowAnyDir: true, forUpload: false }));
+      // 未声明时不伪造 true（否则「默认放开」= 门禁白写）
+      publish.preflightGate({}, 'preview');
+      const arg = spy.mock.calls[1][0] as { allowAnyDir?: unknown };
+      expect(arg.allowAnyDir).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+      printSpy.mockRestore();
+    }
   });
 });
 
@@ -521,12 +643,13 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
       projectName: 'web_system-dachengzi',
       dirAllowed: false,
       requiredDir: '',
+      allowAnyDir: false,
       mode: 'cli',
       rootKeyHits: [],
       deepKeyHits: [],
       packIgnoreCoversKeys: false,
       dirty: { total: 0, shipping: [], excluded: [] },
-      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false },
+      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false, configured: true, checked: [] },
       warnings: [],
     },
   };
@@ -811,11 +934,31 @@ describe('P5 工作区干净：只拦「会进包的」未提交改动', () => {
 // ---------- ⑪ P6 开发者工具 CLI 可执行 ----------
 
 describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺口）', () => {
+  /**
+   * 造一个「可执行的假 cli」，并把它的绝对路径当作 P6 的官方默认安装路径注入。
+   *
+   * 🔴 为什么必须注入：默认路径是**本机真实路径**。本机装了开发者工具 → 默认路径存在；
+   *    CI 上没装 → 不存在。直接依赖本机路径会让同一条用例在两边得出相反结论。
+   */
+  function mkFakeDefaultCli(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-cli-'));
+    tmpDirs.push(dir);
+    const p = path.join(dir, 'wechatwebdevtools.app', 'Contents', 'MacOS', 'cli');
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(p, 0o755);
+    return p;
+  }
+
+  /** 一个「默认路径不存在」的注入值：证明不靠本机安装也能走到失败分支。 */
+  const NO_DEFAULT_CLI = '/nonexistent/wechatwebdevtools.app/Contents/MacOS/cli';
+
   it('WECHAT_DEVTOOLS_CLI 未设且 which cli 也找不到 → 失败（不是等到 spawnSync ENOENT）', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
       env: {},
+      defaultCliPaths: [NO_DEFAULT_CLI],
       execFileSync: (cmd: unknown, args: unknown) => {
         const a = (args as string[]).join(' ');
         if (String(cmd) === 'which') throw new Error('which: no cli in PATH');
@@ -833,6 +976,99 @@ describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺�
     expect(f!.hint).toContain('wechatwebdevtools.app');
   });
 
+  it('WECHAT_DEVTOOLS_CLI 未设 + 官方默认路径可执行 → 回落通过，并打印「已回落默认安装路径」', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({ root, env: {}, defaultCliPaths: [fakeDefaultCli] });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.cli.ok).toBe(true);
+    expect(r.info.cli.source).toBe('default');
+    expect(r.info.cli.path).toBe(fakeDefaultCli);
+    expect(r.info.cli.configured).toBe(false);
+    // 回落的唯一可视证据：一行能被 grep 到的提示
+    expect(r.info.warnings.join('\n')).toContain(`[P6] 已回落默认安装路径：${fakeDefaultCli}`);
+    // 且真的打进了报告（不只是躺在 info 里）
+    const out: string[] = [];
+    preflight.printReport(r, { log: (s: unknown) => out.push(String(s)), error: () => undefined });
+    expect(out.join('\n')).toContain(`[P6] 已回落默认安装路径：${fakeDefaultCli}`);
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 显式设了 → 只认它，即使默认路径也存在也不回落', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({
+      root,
+      env: { WECHAT_DEVTOOLS_CLI: process.execPath },
+      defaultCliPaths: [fakeDefaultCli],
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.cli.source).toBe('env');
+    expect(r.info.cli.path).toBe(process.execPath);
+    expect(r.info.cli.configured).toBe(true);
+    const all = r.info.warnings.join('\n');
+    expect(all).not.toContain('已回落');
+    // 显式命中时压根不该去查默认路径（省一次 stat，也避免「到底用了哪个」的歧义）
+    expect(r.info.cli.checked.map((c) => c.path)).toEqual([process.execPath]);
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 设了但不可执行 → 失败，不因默认路径可用就偷偷改用默认路径', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({
+      root,
+      env: { WECHAT_DEVTOOLS_CLI: '/nonexistent/cli' },
+      defaultCliPaths: [fakeDefaultCli],
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.cli.source).toBe('env');
+    const f = r.failures.find((x) => x.code === 'P6')!;
+    expect(f.detail).toContain('/nonexistent/cli');
+    // 关键：没有偷偷换成默认路径 —— 「我指错了」必须是响亮的失败，不是静默的另一个答案
+    expect(f.detail).not.toContain(fakeDefaultCli);
+    expect(r.info.cli.checked.map((c) => c.path)).toEqual(['/nonexistent/cli']);
+    expect(r.info.warnings.join('\n')).not.toContain('已回落');
+  });
+
+  it('三个候选（环境变量/默认路径/PATH）全不可用 → 失败，且报错列出检查过的每一个路径', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      env: {},
+      defaultCliPaths: [NO_DEFAULT_CLI],
+      execFileSync: (cmd: unknown, args: unknown) => {
+        const a = (args as string[]).join(' ');
+        if (String(cmd) === 'which') throw new Error('which: no cli in PATH');
+        if (a.includes('status')) return '';
+        if (a.includes('--abbrev-ref')) return 'main\n';
+        if (a.includes('--show-toplevel')) return '/Users/x/workspace/web_system-1018-r2\n';
+        if (a.includes('--short')) return '47f74ba8\n';
+        throw new Error(`unexpected: ${String(cmd)} ${a}`);
+      },
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P6')!;
+    expect(f.detail).toContain('检查过 2 个候选');
+    expect(f.detail).toContain(NO_DEFAULT_CLI);
+    expect(f.detail).toContain('官方默认安装路径');
+    expect(f.detail).toContain('PATH 里的 cli');
+    expect(f.hint).toContain('WECHAT_DEVTOOLS_CLI');
+  });
+
+  it('默认路径存在但是个目录 → 不算可用（目录也有 X_OK 位，只看 access 会假绿）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const dirAsCli = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-clidir-'));
+    tmpDirs.push(dirAsCli);
+    const r = preflight.runPreflight({ root, env: {}, defaultCliPaths: [dirAsCli] });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.cli.ok).toBe(false);
+    expect(r.failures.find((x) => x.code === 'P6')!.detail).toContain(dirAsCli);
+  });
+
   it('WECHAT_DEVTOOLS_CLI 指向不存在的路径 → 失败', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({ root, env: { WECHAT_DEVTOOLS_CLI: '/nonexistent/cli' } });
@@ -848,7 +1084,9 @@ describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺�
     expect(r.ok).toBe(true);
     expect(r.info.cli.ok).toBe(true);
     expect(r.info.cli.path).toBe(process.execPath);
+    expect(r.info.cli.source).toBe('env');
     expect(r.info.warnings.join('\n')).toContain('开发者工具 CLI 可执行');
+    expect(r.info.warnings.join('\n')).not.toContain('已回落');
   });
 
   it('ci 模式不需要开发者工具 CLI → P6 跳过（不会因没装工具而误杀 ci）', () => {

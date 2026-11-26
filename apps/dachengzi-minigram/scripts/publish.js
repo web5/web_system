@@ -30,7 +30,8 @@
  *      P1 版本真实性（package.json.version == utils/version.ts 的 APP_VERSION，缺 version.ts 即失败）
  *      P2 私钥不入包（包根出现 *.key / *.pem → 硬失败，P0 安全项）
  *      P3 工作区身份（打印分支@sha；给了 --expect-sha 就核对，不符即失败）
- *      P4 目录白名单提示（不在 web_system-<任务号> 命名内 → 只警告）
+ *      P4 目录白名单提示（不在 web_system-<任务号> 命名内 → 硬失败；
+ *         --allow-any-dir 显式放开并打印告警行，比 --skip-preflight 窄，只降 P4）
  *    失败即 exit 1，**先于任何 CLI 调用**；push / trial / release 三个子命令不受影响。
  *    --skip-preflight 显式跳过（打印「已跳过出码前检查，风险自负」），只留给已知异常场景。
  *    起因：web_system-dachengzi 这个分支名叫 devtools/dachengzi-preview 的 worktree 里
@@ -183,6 +184,7 @@ function parseArgs(argv) {
     else if (a === '--expect-version') opts.expectVersion = argv[++i];
     else if (a.startsWith('--expect-version=')) opts.expectVersion = a.slice('--expect-version='.length);
     else if (a === '--allow-dirty') opts.allowDirty = true;
+    else if (a === '--allow-any-dir') opts.allowAnyDir = true;
     else opts._.push(a);
   }
   return opts;
@@ -476,7 +478,8 @@ function writeCliMeta(outPath, meta) {
  *       「向后兼容基准」（文件里明确写着「不得为了让测试变绿而改它」），
  *       把 spawn git 的门禁塞进 cmdUpload 会污染它「execFileSync 零调用」的断言。
  *
- * 🔴 失败就 exit 1，不给「继续出码」的口子；唯一例外是显式 --skip-preflight（打印风险自负）。
+ * 🔴 失败就 exit 1，不给「继续出码」的口子。只有两个显式口子，且都留痕：
+ *    --skip-preflight（整体跳过，打印风险自负）/ --allow-any-dir（**只**降 P4 目录白名单，打印告警行）。
  *
  * mode 会透传进 preflight：cli 模式要求「包根无私钥 + 开发者工具 CLI 可执行」；
  * ci 模式（miniprogram-ci）则相反 —— 私钥是必需文件，改由 packOptions.ignore 兜底。
@@ -496,6 +499,7 @@ function preflightGate(opts, sub) {
     expectSha: opts.expectSha,
     requireDir: opts.requireDir,
     allowDirty: opts.allowDirty,
+    allowAnyDir: opts.allowAnyDir,
     forUpload: sub === 'upload',
   });
   preflight.printReport(result);
@@ -700,6 +704,8 @@ function main(argv) {
         '  --expect-sha <sha> 声明期望 HEAD sha，preflight 核对，不符即阻断；可用逗号给多个候选（019d282b,47f74ba8）。',
         '  --expect-version <ver> 声明期望版本号（如 1.0.18），preflight 与 package.json / utils/version.ts 对账，不符即阻断。',
         '  --require-dir <正则> 把「目录白名单」从警告升级为硬拦，发布轮次建议 ^web_system-1018(-r2)?$。',
+        '  --allow-any-dir   只放开 P4 的目录白名单（降回警告并打印告警行）。比 --skip-preflight 窄得多：',
+        '                    P1/P2/P3/P5/P6 照旧硬拦，别拿它当整体跳过用。',
         '  --allow-dirty     放行「会进包的未提交改动」（默认阻断，打印警告）。',
         '',
         '  边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，',
