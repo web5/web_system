@@ -29,6 +29,12 @@ jest.mock('../utils/tabbar', () => ({ setTabBarSelected: jest.fn(), TAB_INDEX: {
 jest.mock('../utils/daily', () => ({
   getDailyQuote: jest.fn(() => ({ cn: '他是一名工程师。', en: 'He is an engineer.' })),
   getDailyQuoteMeta: jest.fn(() => ({ book: 'NCE2', lessonId: 4 })),
+  // 2026-11-26 P1-1：页面改用「句子 + 出处一次性解析」的同源入口（句子与 book/lessonId
+  // 结构上不可能错源）。这里只补齐 mock 依赖面，既有断言一条未改；
+  // 「缺 book/lessonId」用例改为控制这个桩（见下方 loadQuoteWords 降级用例）。
+  getDailyQuoteSource: jest.fn(() => ({
+    cn: '他是一名工程师。', en: 'He is an engineer.', book: 'NCE2', lessonId: 4,
+  })),
   BOOK_LABEL: { NCE2: '新概念二册' },
 }));
 
@@ -36,13 +42,14 @@ import { getNceLesson } from '../services/nce';
 import { speakText, stopSpeak } from '../services/tts';
 import { collectGlossary } from '../services/glossary';
 import { isLoggedIn } from '../services/auth';
-import { getDailyQuoteMeta } from '../utils/daily';
+import { getDailyQuoteMeta, getDailyQuoteSource } from '../utils/daily';
 
 const getLessonMock = getNceLesson as unknown as jest.Mock;
 const speakTextMock = speakText as unknown as jest.Mock;
 const collectMock = collectGlossary as unknown as jest.Mock;
 const isLoggedInMock = isLoggedIn as unknown as jest.Mock;
 const metaMock = getDailyQuoteMeta as unknown as jest.Mock;
+const srcMock = getDailyQuoteSource as unknown as jest.Mock;
 
 let store: Record<string, unknown> = {};
 const wxMock = {
@@ -94,8 +101,9 @@ function makeThis() {
     _quoteSeq: 0,
     _speakingWord: '',
   };
-  // 页面内部方法（loadQuoteWords 会回调 _applyQuoteWords）
-  for (const k of ['_applyQuoteWords']) ctx[k] = pageConfig[k];
+  // 页面内部方法（loadQuoteWords 会回调 _applyQuote / _applyQuoteWords，收藏会走 _sourceMeta，
+  // 「再点同一词收起」走 closeQuoteTip —— 与页面实际调用面同步）
+  for (const k of ['_applyQuote', '_applyQuoteWords', '_sourceMeta', 'closeQuoteTip']) ctx[k] = pageConfig[k];
   return ctx;
 }
 
@@ -124,6 +132,8 @@ describe('生词表回查与降级', () => {
 
   it('缺 book/lessonId → 不发请求，整句降级为纯文本（全部 hasDef=false）', async () => {
     metaMock.mockReturnValue({});
+    // 同源入口同样没有出处（旧缓存行形态）——判据不变：不回查、不误标
+    srcMock.mockReturnValueOnce({ cn: '他是一名工程师。', en: 'He is an engineer.' });
     const ctx = makeThis();
     await pageConfig.loadQuoteWords.call(ctx);
     expect(getLessonMock).not.toHaveBeenCalled();
