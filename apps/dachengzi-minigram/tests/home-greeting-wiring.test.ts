@@ -170,13 +170,33 @@ describe('① 首页 hero 动态问候接线（昵称三态 / 本地时区 / 零
     await flush();
   });
 
-  it('未登录 onShow：整页 login-gate，fetchProfile 零调用，greetingText 保持占位', async () => {
+  it('未登录 onShow：整页 login-gate，fetchProfile 零调用，greetingText 置空串（不留「…」占位）', async () => {
     isLoggedInMock.mockReturnValue(false);
     const ctx = makePage();
     ctx.onShow();
     expect(fetchProfileMock).not.toHaveBeenCalled();
-    expect(ctx.data.greetingText).toBe(pageConfig.data.greetingText);
+    // P2-3：未登录是「确定的空态」，不是「加载中」。文本留空由 wxml 的 wx:if="{{loggedIn}}" 兜住，
+    // 不再靠「…」占位硬撑——否则登录态切换那一瞬会闪一个「…」。
+    expect(ctx.data.greetingText).toBe('');
     await flush();
+  });
+
+  it('P2-3 未登录 → onLogged 转换：空串收敛为真名，且 fetchProfile 只在 onLogged 之后才发', async () => {
+    isLoggedInMock.mockReturnValue(false);
+    const ctx = makePage();
+    ctx.onShow();
+    expect(ctx.data.greetingText).toBe('');
+    expect(fetchProfileMock).not.toHaveBeenCalled();
+
+    // 登录卡登录成功：登录态翻转后才有业务请求
+    isLoggedInMock.mockReturnValue(true);
+    readLocalNicknameMock.mockReturnValue('小橙');
+    fetchProfileMock.mockResolvedValue({ id: 1, username: 'u', nickname: '阿橙' });
+    ctx.onLogged();
+    expect(fetchProfileMock).toHaveBeenCalledTimes(1);
+    expect(ctx.data.greetingText).toBe('小橙，H10'); // 本地缓存秒显，不再是空串
+    await flush();
+    expect(ctx.data.greetingText).toBe('阿橙，H10'); // profile 收敛为真名
   });
 
   it('fetchProfile 收敛真昵称：isNicknameUnset 判非 unset → 用 info.nickname', async () => {
@@ -308,6 +328,30 @@ describe('④ 四个已知缺陷的回归锁（A 跨时段 / B 卸载后 setData
     await flush();
     expect(ctx.data.greetingText).toBe('小橙，H10');
     expect(setDataSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('⑤ P2-1 广播与在途响应竞态（profile:updated 先到 → 旧 fetchProfile 后到不得回跳）', () => {
+  // 现场：用户在「我的」页刚改完昵称 → 收「资料已更新」广播（新名字）→
+  // 之前 onShow 发出的 fetchProfile（携旧昵称）此刻才 resolve。
+  // 只清页面级 _greetSeq 不够：广播 handler 必须自己也推进序号，把在途响应判为过期，
+  // 否则文案会被旧响应刷回旧名（真 bug）。
+  it('广播(新昵称) → 旧 fetchProfile 后到(旧昵称)：最终必须停留在新昵称，不回跳', async () => {
+    let resolveProfile: (v: unknown) => void = () => undefined;
+    fetchProfileMock.mockImplementation(() => new Promise((r) => { resolveProfile = r; }));
+    const ctx = makePage();
+    ctx.onLoad();
+    ctx.onShow(); // 发起 fetchProfile（其响应携带的是旧昵称）
+    expect(fetchProfileMock).toHaveBeenCalledTimes(1);
+
+    const handler = (handlers['profile:updated'] || [])[0];
+    expect(handler).toBeDefined();
+    handler!({ nickname: '新昵称' });
+    expect(ctx.data.greetingText).toBe('新昵称，H10');
+
+    resolveProfile({ id: 1, username: 'u', nickname: '旧昵称' }); // 在途旧响应后到
+    await flush();
+    expect(ctx.data.greetingText).toBe('新昵称，H10'); // 必须是新名字，不得回跳
   });
 });
 

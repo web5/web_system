@@ -79,12 +79,44 @@ describe('formatGreeting（① 昵称三态 · 展示「<昵称>，<问候语>�
     }
   });
 
-  it('长昵称截断到 16 字符（PRD 默认 ①-2），不破版', () => {
+  it('长昵称截断到 16 码点（PRD 默认 ①-2），不破版 —— 断言精确 16（上下界都锁）', () => {
     const long = '一二三四五六七八九十一二三四五六七八'; // 18 字
     const s = formatGreeting(long, 6);
     expect(s.endsWith('，早上好')).toBe(true);
     const nick = s.slice(0, s.indexOf('，'));
-    expect(Array.from(nick).length).toBeLessThanOrEqual(16);
+    // 精确等号：只写 toBeLessThanOrEqual(16) 时，把实现里的 16 改成 4 也照样全绿（假绿）。
+    expect(Array.from(nick).length).toBe(16);
+    expect(nick).toBe('一二三四五六七八九十一二三四五六');
+  });
+
+  it('17 码点 → 恰好 16 码点；20 个 emoji → 16 码点且无 lone surrogate', () => {
+    const nick17 = 'abcdefghijklmnopq'; // 17 码点
+    const s17 = formatGreeting(nick17, 6);
+    const cut17 = s17.slice(0, s17.indexOf('，'));
+    expect(Array.from(cut17).length).toBe(16);
+    expect(cut17).toBe('abcdefghijklmnop');
+
+    // 20 个 emoji（每个都是代理对）→ 16 码点，且不得截出半个代理对
+    const emoji20 = '😀'.repeat(20);
+    const sEmoji = formatGreeting(emoji20, 6);
+    const cutEmoji = sEmoji.slice(0, sEmoji.indexOf('，'));
+    expect(Array.from(cutEmoji).length).toBe(16);
+    expect(cutEmoji).toBe('😀'.repeat(16));
+    // lone surrogate：高代理后不跟低代理 / 低代理前没有高代理
+    expect(cutEmoji).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(cutEmoji).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+  });
+
+  it('区域指示符（🇨🇳 由 2 个码点组成）截断 —— 记录【现状】，P2-2 口径待产品拍板', () => {
+    // 'a'×15 + '🇨🇳'(U+1F1E8 U+1F1F3) = 17 码点 > 16 → 按码点截断会切出半个旗帜
+    // （只剩 U+1F1E8）。这里只锁【当前实现】的行为，不做正确性判断：
+    // 是否改成「按字素簇（grapheme）截断」属 P2-2，需产品拍板后另行修改本用例。
+    const nick = 'a'.repeat(15) + '🇨🇳';
+    const s = formatGreeting(nick, 6);
+    const cut = s.slice(0, s.indexOf('，'));
+    expect(Array.from(cut).length).toBe(16);
+    expect(cut).toBe('a'.repeat(15) + '\u{1F1E8}');
+    expect(cut.endsWith('🇨🇳')).toBe(false); // 现状：旗帜被切掉一半（已知遗留 P2-2）
   });
 });
 

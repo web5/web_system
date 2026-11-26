@@ -32,6 +32,7 @@ const DISCOVER_PATH = '/pages/discover/index/index';
  * 昵称拉取中的中性 loading 占位（原型 114 加载态）。
  * 刻意不含昵称、不含逗号、不含时段文案：拉取中不编造昵称、不另抄文案表；
  * 真实展示串一律由 formatGreeting(nickname, getLocalHour()) 生成。
+ * 🔴 只用于 data 初值 / 登录态下的「拉取中」；未登录/登出是确定空态，用 ''（见 showGreetingPlaceholder）。
  */
 const GREETING_LOADING = '…';
 
@@ -114,7 +115,12 @@ Page({
       this._offProfileUpdated = (payload?: unknown) => {
         if (!this._alive) return;
         const p = (payload || {}) as { nickname?: string };
-        if (p.nickname) this.applyGreeting(p.nickname, getLocalHour());
+        if (!p.nickname) return;
+        // P2-1：广播携带的是「更新的权威值」。进入应用前先推进序号，把此前所有在途的
+        // refreshGreeting 响应（其 fetchProfile 携的是旧昵称）判为过期——否则
+        // 「广播(新名) → 旧响应后到(旧名)」会把刚改好的昵称刷回旧名（回跳）。
+        this._greetSeq += 1;
+        this.applyGreeting(p.nickname, getLocalHour());
       };
       __bus.on('profile:updated', this._offProfileUpdated);
     }
@@ -172,7 +178,8 @@ Page({
 
   /**
    * 动态问候（page-spec §2026-11-23 ① / 原型 114）：
-   *  - 🔴 未登录立即返回：整页 login-gate、零业务请求，greetingText 保持中性占位。
+   *  - 🔴 未登录立即返回：整页 login-gate、零业务请求，greetingText 置空串（''，确定的空态，
+   *    不是「…」加载态——P2-3：留占位会在登录态切换瞬间闪「…」）。
    *    fetchProfile() 绝不写进 Page({data}) 初始化，只在登录态的 onShow / onLogged 触发。
    *  - 昵称三态（照搬 pages/mine/index/index.ts 的既有范式）：
    *    本地 readLocalNickname() 秒显 → fetchProfile() 收敛 → isNicknameUnset() 判空/wx_ 占位
@@ -184,7 +191,7 @@ Page({
    */
   refreshGreeting() {
     if (!isLoggedIn()) {
-      // 登出：在途响应一律作废（序号推进），文案回到中性占位
+      // 登出：在途响应一律作废（序号推进），文案清空（''）
       this._greetSeq += 1;
       this.showGreetingPlaceholder();
       return;
@@ -225,12 +232,14 @@ Page({
     this.setData({ greetingText: text });
   },
 
-  /** 未登录 / 登出态：回到中性占位（同样做重绘去重） */
+  /** 未登录 / 登出态：回到确定的空态（''），同样做重绘去重 */
   showGreetingPlaceholder() {
     this._greetNick = '';
     this._greetHour = -1;
-    if (this.data.greetingText !== GREETING_LOADING) {
-      this.setData({ greetingText: GREETING_LOADING });
+    // P2-3：未登录是「确定的空态」而非「加载中」。空串由 index.wxml 的 wx:if="{{loggedIn}}" 兜住；
+    // 若这里仍写 GREETING_LOADING，未登录↔登录切换那一瞬会闪一个「…」。
+    if (this.data.greetingText !== '') {
+      this.setData({ greetingText: '' });
     }
   },
 
