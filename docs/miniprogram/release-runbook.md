@@ -13,13 +13,14 @@
 | 我要干什么 | 命令 |
 |---|---|
 | 出码 + 推企业微信（默认 cli 免白名单） | `npm run publish -- preview` |
+| 🔴 **大橙子发版（唯一发布入口，六件事一条命令 + 一行机读 JSON）** | `./scripts/release-one-shot.sh --mode preview --version <x.y.z> --require-dir '<正则>'`（详见 §零之二） |
 | 出预览码（开发版，扫码即用，cli） | `npm run publish -- preview --no-push` |
 | 🔴 **验当前改动 / 本机多 worktree 共用 appid** | **第 0 步基线对齐 + cli 三步**（`cli open` → `cli cache --clean compile` → `npm run publish -- preview` 或 `cli preview`），详见下方「cli 三步与封装边界」 |
 | 上传开发版本（cli，脚本到此为止） | `npm run publish -- upload`（上传前必做版本复核、上传后必留 receipt，见 §8.1） |
 | 打印「设为体验版」人工分步指引（零副作用） | `npm run publish -- trial` |
 | 打印「提交审核 → 发布正式版」人工分步指引（零副作用） | `npm run publish -- release` |
-| 出预览码（ci，需白名单） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
-| 上传开发版本（ci，脚本到此为止） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
+| 出预览码（ci，需白名单） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci` |
+| 上传开发版本（ci，脚本到此为止） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci` |
 
 ## 零之一、cli 三步与封装边界（2026-11-20 回流，验当前改动必读）
 
@@ -75,6 +76,80 @@ cli 模式走微信开发者工具登录态，**不需要 IP 白名单**；只�
 
 ---
 
+## 零之二、唯一发布入口 `release-one-shot.sh`（大橙子，出码/上传都走它）
+
+`apps/dachengzi-minigram/scripts/release-one-shot.sh` 是**唯一发布入口**：把「目录 / 版本 / sha /
+CLI / 门禁 / 留证」六件事压成一条命令，一个前置步骤 + S0–S6 任一步失败立刻退出，最后打**一行机读 JSON 结论**。
+
+```bash
+cd <workspace>/web_system-<本轮发布树>
+./apps/dachengzi-minigram/scripts/release-one-shot.sh \
+  --mode preview --version 1.0.18 \
+  --require-dir '^web_system-1018-r2$' \
+  --expect-sha 47f74ba8
+```
+
+### 步骤与留证
+
+| 步 | 做什么 | 说明 |
+|---|---|---|
+| 前置 | 补齐 / 校验 `WECHAT_DEVTOOLS_CLI`（未设则回落官方路径，且要求可执行） | **必须在 S1 之前**：P6 要求 CLI 可执行，而该变量默认就是「未设置」；顺序颠倒会把「缺环境变量」读成「出码失败」 |
+| S0 | 切到脚本自身所在 app 目录（无视外部 cwd），打印 `PWD=` / 模式 / 期望 sha / `HEAD` | 防「在别的树里跑这条命令」 |
+| S1 | `node scripts/preflight.js --root . --require-dir <正则> --expect-version <版本> [--expect-sha]` | 失败即退；**不透传 `--skip-preflight`**（脚本不提供跳过开关） |
+| S2 | 目录硬检：worktree **顶层名**必须匹配 `--require-dir` 的正则（判顶层名，不是 `apps/<pkg>`） | 连 S1 已判过也再判一次：脚本被拷到旧树里跑时，那边的 `preflight.js` 可能还不认 `--require-dir` |
+| S3 | 回报 CLI 就绪（只回报，不改状态） | — |
+| S4 | `node scripts/publish.js <mode> --require-dir <正则> [--desc] [--expect-sha] [--no-push]` | 同一条目录正则还给 `preflightGate`，否则 S1 放行的目录会在 S4 被二次判红 |
+| S5 | 真算二维码 `sha256` + 现算剩余有效期，打三行 `[QR] …` | 有效期**不当常量**：`.ci-output/cli-preview-qr.png` 这个固定路径 30 分钟被覆盖 3 次，任何写死分钟数/固定路径的凭证都会过期 |
+| S6 | 一行机读 JSON：`EVIDENCE_LOCKED` `mode` `version` `gitSha` `qr{path,sha256,expireAt}` `preflight` `requiredDir` `forcedDir` `reason` | 失败时同样打（`EVIDENCE_LOCKED:false` + `reason`）后 exit 1；下游（人 / 文档 / 聊天记录）核同一份事实 |
+
+### `--require-dir`：必填、**无默认**
+
+脚本**不接受默认值**，因为它没有能力从 `--version` 推出任务号/轮次（`1.0.18 → 1018` 只是巧合，
+工作区里还有 `web_system-9027` 这种不以版本号命名的树）。猜错比不猜更危险。
+
+```bash
+# ✅ 正例①：精确到轮次（推荐写法，轮次写死）
+--require-dir '^web_system-1018-r2$'
+
+# ✅ 正例②：放开同任务号（多个同任务号 worktree 都确实要发时才用）
+--require-dir '^web_system-1018(-r2)?$'
+#   ⚠️ 这条**也**匹配 web_system-1018（1.0.18 旧树 019d282b，包已提审）。
+#      用之前先 `ls -d ~/workspace/web_system-1018*` 核对工作区里有没有旧树；
+#      S1 也会打提示「本次 --require-dir 也匹配 web_system-1018（包已提审）」。
+
+# ❌ 反例：只写任务号 = 精确命中已提审的旧树
+--require-dir '^web_system-1018$'
+#   web_system-1018 是 1.0.18 第一版（019d282b），包已提审；从旧树再出码 = 事故。
+```
+
+正则会先在本脚本里编译一次（非法正则立刻报「你的正则写错了」，而不是走到 preflight 抛 JS 堆栈）。
+
+### `--force-dir`：会**同时**放开 preflight 的 P4
+
+`--force-dir "<为什么只能在这里出码>"`（至少 4 个字）不是「只跳过脚本自己的 S2」：
+
+- 跳过 **S2** 目录硬检；
+- 并给 S1 / S4 的 preflight 传 `--allow-any-dir`，把 **P4 目录白名单降为告警**（否则 S1 的 P4 会先把它拦掉，「跳过」就是假的）；
+- 理由原样写进 S6 的 `forcedDir` 字段，发布后若发现站错目录，据此追责。
+
+**用了就欠一个理由**，且这条理由会留在机读结论里。正常出路是**换到本轮发布 worktree 再跑**，不是加 `--force-dir`。
+
+### 其它参数
+
+| 参数 | 说明 |
+|---|---|
+| `--mode preview\|upload` | 必填 |
+| `--version <x.y.z>` | 必填；P1 会同时核 `package.json` 与 `utils/version.ts` 的 `APP_VERSION`，两者都必须等于它 |
+| `--expect-sha <短sha>` | **强烈建议**；P3 与 S4 各核一次 |
+| `--desc <文本>` | upload 的开发版本描述，原样透传 `publish.js` |
+| `--no-push` | preview 时透传，只出码不推企微群 |
+| `-h, --help` | 打印说明 |
+
+> 🔴 边界同全手册：本脚本只到「出预览码 / 上传开发版本」为止。设为体验版、提交审核、发布正式版
+> 微信不开放接口，必须人工在公众平台操作 —— 脚本不代做、也不自称已推进（见 §零之一 的能力边界）。
+
+---
+
 ## 一、一次性前置条件
 
 ### 1.1 CI 私钥 `private.key`
@@ -108,9 +183,15 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 **cli 模式（微信开发者工具 CLI，走登录态）不需要 IP 白名单** —— 本机/执行机公网 IP
 变了也不影响出码。日常开发、本机出码、免白名单，一律用 cli 模式（`publish.js` 默认）。
 
-**只有 miniprogram-ci 模式（`--mode ci` / 直接跑 `scripts/preview.js`、`scripts/upload.js`）
-才需要 IP 白名单**，且**用固定出口 IP 的执行机出码，不要用本机**：本机公网 IP 会变
+**只有 miniprogram-ci 模式（`publish.js --mode ci`）才需要 IP 白名单**，且**用固定出口 IP
+的执行机出码，不要用本机**：本机公网 IP 会变
 （家宽/办公网都是动态的），每次变都要改白名单，不可维护。执行机出口 IP 固定，加一次即可。
+
+> 🔴 ci 模式**不是**「绕过门的另一条路」：`node scripts/publish.js preview --mode ci` 与 cli 模式
+> 走同一道 `preflightGate`（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 /
+> P6 CLI 可执行），只是 **P2、P6 换判据**（ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖；
+> P6 在 ci 模式直接 skip，因为不调开发者工具 CLI）。**别直连 `node scripts/preview.js` /
+> `node scripts/upload.js`** —— 那是无门禁的底层实现，直连等于整道门都不跑。
 
 实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
 21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
@@ -166,7 +247,7 @@ npm install miniprogram-ci@2.1.31 --no-audit --no-fund
 
 ```bash
 cd <repo>/apps/kedou-ai-minigram
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ```
 
 两个脚本都支持这个环境变量；不传则回退到 `require('miniprogram-ci')`（在隔离环境未备好时会报错）。
@@ -179,8 +260,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 ## 三、日常出码
 
 > **默认走 cli 模式（免 IP 白名单）**：`npm run publish -- preview` / `npm run publish -- upload`。
-> 下面 §3.1 / §3.2 是 miniprogram-ci 路径（`--mode ci` / 直接跑 `scripts/*.js`），仅在
-> 「执行机固定出口 IP 已配白名单」时用。
+> 下面 §3.1 / §3.2 是 miniprogram-ci 路径（`--mode ci`），仅在
+> 「执行机固定出口 IP 已配白名单」时用。ci 模式**同样过 `preflightGate`**（见 §1.3 的红字）。
 
 ### 3.1 出预览码（开发版，ci 模式 / miniprogram-ci）
 
@@ -188,9 +269,9 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 # ① 执行机上先对齐代码（防止基于旧源码构建）——统一走 §零之一「第 0 步 · 基线对齐」，不要用 git pull
 cd <repo> && git fetch origin master && git merge --ff-only origin/master
 
-# ② 出码
+# ② 出码（经 publish.js → 过 preflightGate；别直连 scripts/preview.js）
 cd apps/kedou-ai-minigram
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ```
 
 产物：`.ci-output/preview-qr.png` + **`.ci-output/preview-qr.html`**。
@@ -217,7 +298,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 ### 3.2 上传开发版本（ci 模式 / miniprogram-ci）
 
 ```bash
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
+# 经 publish.js → 过 preflightGate；别直连 scripts/upload.js
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 ```
 
 上传产物是公众平台后台「**开发版本**」列表中的一条，**不是体验版**；
