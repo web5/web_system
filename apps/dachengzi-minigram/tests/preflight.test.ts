@@ -237,7 +237,11 @@ const codes = (r: PreflightResult) => r.failures.map((f) => f.code);
 // P6 会读 WECHAT_DEVTOOLS_CLI 判断「CLI 是否可执行」。测试里指向 node 自身（真实存在且可执行），
 // 这样本机没装微信开发者工具也不会让无关用例随机红；P6 的失败路径单独用 env:{} 显式构造。
 const realCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
-beforeAll(() => {
+// 🔴 用 beforeEach 而不是 beforeAll：注入点越靠近用例，越不可能被某组用例的 afterEach 抹掉之后
+//    传染给后面的兄弟 describe。曾经踩过 —— ⑥b 在 collection 期捕获到 undefined，afterEach 就
+//    把这里的注入 delete 掉，后 6 条 cli 模式用例的 P6 全部回落到「找默认 CLI 路径」：
+//    macOS 上默认路径真实存在 → 本地永远绿；Ubuntu runner 上 DEFAULT_CLI_PATHS 为空 → 必然红。
+beforeEach(() => {
   process.env.WECHAT_DEVTOOLS_CLI = process.execPath;
 });
 afterAll(() => {
@@ -640,6 +644,16 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
 
 // ---------- ⑥b 门禁顺序：门禁失败时「一次出码动作都不许调」 ----------
 
+/**
+ * ⑥b 每条用例进入时的 WECHAT_DEVTOOLS_CLI 真实值，供 afterEach 精确还原。
+ *
+ * 🔴 必须在 **beforeEach**（hook 期）捕获，不能在这里（collection 期）直接取
+ * `process.env.WECHAT_DEVTOOLS_CLI` 存成 const —— collection 期文件级 beforeEach 还没跑过注入，
+ * 拿到的是 undefined，afterEach 就会把「本该还原成 process.execPath」做成「delete 掉」，泄漏给
+ * 后面所有 describe。捕获点挪到 hook 期，捕获到的才是 beforeAll/beforeEach 注入后的真值。
+ */
+let savedCliEnv: string | undefined;
+
 describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGate）', () => {
   const publishMod = require('../scripts/publish') as { main: (argv: string[]) => void };
   const cp = require('child_process') as { execFileSync: (...a: unknown[]) => unknown };
@@ -649,9 +663,11 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   let logSpy: jest.SpyInstance;
   let errSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
-  const OLD_CLI_ENV = process.env.WECHAT_DEVTOOLS_CLI;
 
   beforeEach(() => {
+    // 🔴 第一行：先记下本条用例开始时的真值（此刻文件级 beforeEach 已注入 process.execPath），
+    //    再让下面的 spy 动手。顺序不能换 —— 挪到 collection 期就是老 bug。
+    savedCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`exit:${code}`);
     }) as never);
@@ -662,8 +678,8 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   });
 
   afterEach(() => {
-    if (OLD_CLI_ENV === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
-    else process.env.WECHAT_DEVTOOLS_CLI = OLD_CLI_ENV;
+    if (savedCliEnv === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = savedCliEnv;
     jest.restoreAllMocks();
   });
 
@@ -737,6 +753,21 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
     );
     // 走到了 CLI 层才失败（说明确实「跳过门禁继续出码」而不是静默什么都不做）
     expect(execSpy).toHaveBeenCalled();
+  });
+
+  /**
+   * 🔴 隔离性绊线：⑥b 跑完，WECHAT_DEVTOOLS_CLI 必须还是文件级 beforeEach 注入的 process.execPath。
+   *
+   * 为什么非要这一条：本组曾经把注入值 delete 掉，导致后面 6 条 cli 模式用例的 P6 回落到
+   * 「找默认 CLI 路径」——**只在 Linux + 没装开发者工具时才红**。macOS 上
+   * /Applications/wechatwebdevtools.app/.../cli 真实存在，回落恒通过，泄漏被彻底掩盖。
+   * 这条断言两个平台都读 process.execPath，修好时都绿、再漏时都红，mac 再也盖不住。
+   *
+   * 🔴 必须写在 afterAll（hook）里，不能写成一条 it()：文件级 beforeEach 会在每条用例前重新
+   *    注入，写成 it() 就等于在绊线前面先把泄漏补好，什么也绊不住。
+   */
+  afterAll(() => {
+    expect(process.env.WECHAT_DEVTOOLS_CLI).toBe(process.execPath);
   });
 });
 
