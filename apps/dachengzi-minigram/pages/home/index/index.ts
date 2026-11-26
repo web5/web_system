@@ -41,7 +41,7 @@ import { readWordsCache, writeWordsCache } from '../../../utils/quote-words';
 //   - 收藏 toast 文案是唯一纯函数 → `utils/line-actions.collectToastText`
 // 🔴 本页不得再写一份 `actionsOf` / ACTIONS 表：动作顺序（行=对象、列=动词）只有那一份真源，
 //    第二条真源必然漂移（tests/home-action-drawer.test.ts 有静态断言兜住）。
-import { collectToastText } from '../../../utils/line-actions';
+import { collectToastText, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
@@ -96,7 +96,7 @@ interface FeatureTapEvent {
 }
 
 interface QuoteTapEvent {
-  currentTarget: { dataset: { w?: string; hasdef?: boolean | string } };
+  currentTarget: { dataset: { w?: string; hasdef?: boolean | string; k?: number | string } };
 }
 
 /**
@@ -166,6 +166,19 @@ Page({
     quotePlaying: false,
     /** 正在朗读的单词（'' = 无），驱动词卡「朗读/停止」文案 */
     quoteWordPlaying: '',
+    /**
+     * 词卡朗读按钮的 `aria-label`（AC-3.4：随形态在「朗读单词 / 停止朗读」间切换）。
+     * 文案真源在 `utils/line-actions`（与详情页共用一份，页面里不写动作文案字面量）。
+     */
+    ariaPlayWord: ARIA_WORD_PLAY,
+    ariaStopWord: ARIA_WORD_STOP,
+    /**
+     * E4 后半（盲测 D-4）：当前**按下的词**的 token idx（-1 = 没有）。
+     * 驱动词节点的 `dw-pressed` 浅蓝底 —— 长按 350ms 期间用户要看到「按住了」。
+     * 为什么不用 CSS：`<text>` 不支持 `hover-class`（官方仅 view/button/navigator），
+     * 裸 `.dw:active` 又被「点非生词不得有词级高亮」的既有守卫禁止，故走长按态 class。
+     */
+    pressedWordKey: -1,
     /** 册别角标文案（方案①浅青 pill；book 缺失时为空串 → WXML 隐藏） */
     bookBadge: bookBadgeText(),
     /** 角标开关（默认开；灰度/回滚可置 false 隐藏角标，不影响取句） */
@@ -294,6 +307,8 @@ Page({
     // 抽屉会「自己回来」（必现）。所以这里与组件 `pageLifetimes.hide` 双重归零：
     // 组件那边清的是抽屉内部局部态（下滑位移 / busy / 按下高亮），业务浮层只能由页面清。
     if (this.data.overlay) this.setData({ overlay: null });
+    // K9 同源：按下高亮也是「页面局部态」，切走必须清（否则回来时某个词还亮着蓝底）
+    if (this.data.pressedWordKey >= 0) this.setData({ pressedWordKey: -1 });
   },
 
   onShow() {
@@ -514,6 +529,26 @@ Page({
     }
     // 一次 setData 完成「关抽屉 + 开词卡 + 复位按钮态」，不留中间帧（T9/T10）
     this.openOverlay({ ...lookupWord(w, this._quoteWords), kind: 'wordtip' }, { quoteWordPlaying: '' });
+  },
+
+  /**
+   * E4 后半（盲测 D-4）：按下某词 → 该词浅蓝高亮（`dw-pressed`），touchend / touchcancel 撤销。
+   * 为什么是「长按态 class」而不是 hover-class / `:active`：
+   *  ① 微信 `<text>` **不支持** hover-class（仅 view / button / navigator 支持，官方 text 属性表无此项）；
+   *  ② 裸 `.dw:active` 被「点非生词不得有任何词级高亮」的既有静态守卫禁止；
+   *  ③ 本方案不新增任何业务请求，只是给 350ms 长按窗口一个「按住了」的反馈（E4 明确要求
+   *     「长按瞬间按下高亮」，这是反馈而非暗示 —— 静态点线仍然只给生词）。
+   */
+  onWordPressStart(e: QuoteTapEvent) {
+    const key = Number((e.currentTarget.dataset || {}).k);
+    if (!isFinite(key) || key < 0) return;
+    if (this.data.pressedWordKey === key) return; // 同词重复 touchstart 不重复 setData
+    this.setData({ pressedWordKey: key });
+  },
+
+  /** 松手 / 手势被打断 → 撤掉按下高亮（浮层升起时词已被遮住，同样要清干净） */
+  onWordPressEnd() {
+    if (this.data.pressedWordKey >= 0) this.setData({ pressedWordKey: -1 });
   },
 
   /** 关闭词卡：顺手停掉「词卡朗读」（P2-4，与详情页 closeTip 同口径）。

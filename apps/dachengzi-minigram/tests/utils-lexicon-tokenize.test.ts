@@ -34,11 +34,17 @@ describe('V7 切词：撇号 / 连字符 / 标点 / 空串（反例：don\u2019t
     expect(t.filter((x) => x.w).map((x) => x.w)).toEqual(['it\u2019s', 'fine']);
   });
 
-  it('连字符拆成 词-符号-词（token 拼接后必须原样还原句子）', () => {
+  it('连字符词整词一个 token（BB16：well-known 不得拆成 well-符号-known）', () => {
     const en = 'A well-known fact.';
     const t = tokenize(en, {});
+    // 片段拼接必须原样还原句子（这条与拆不拆词无关，一直成立）
     expect(t.map((x) => x.t).join('')).toBe(en);
-    expect(t.filter((x) => x.w).map((x) => x.w)).toEqual(['a', 'well', 'known', 'fact']);
+    // 🔴 2026-11-26 盲测 D-5（BB16）口径修正：本用例原来断言 ['a','well','known','fact']
+    //   （把 well-known 切成三片），与 `需求口径确认-B版.md` BB16「一个 token 里含连字符/撇号
+    //   → 整词作为一个 token」直接冲突 —— 等于把实现偏差固化成契约，掩盖了真机上的
+    //   「长按 well-known 只读 well，两个半词各弹一次四项抽屉」缺陷。
+    //   现按 BB16 改为整词；这不是放宽断言，而是把断言改回需求真源（见盲测报告 §② D-5）。
+    expect(t.filter((x) => x.w).map((x) => x.w)).toEqual(['a', 'well-known', 'fact']);
   });
 
   it('首字母大写保留展示原文、查词用小写', () => {
