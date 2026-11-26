@@ -188,7 +188,7 @@ describe('需求② V9/V10/V11：非生词不高亮但可展开；生词全档�
     const ctx = await loaded({ readMode: 'tap' });
     ctx.toggleLine({ currentTarget: { dataset: { i: '1' } } });
     expect(ctx.data.expandedIdx).toBe(1);
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('V9 再点同一句收起；点另一句替换（至多 1 句）', async () => {
@@ -216,91 +216,111 @@ describe('需求② V9/V10/V11：非生词不高亮但可展开；生词全档�
   it('V10 沉浸档点生词也出词卡（口径：全档放宽）', async () => {
     const ctx = await loaded({ readMode: 'immersion' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
-    expect(ctx.data.tipWord && ctx.data.tipWord.word).toBe('play');
-    expect(ctx.data.tipWord.none).toBe(false);
-    expect(ctx.data.tipWord.def).toBe('戏剧');
+    expect(ctx.data.overlay && ctx.data.overlay.word).toBe('play');
+    expect(ctx.data.overlay.none).toBe(false);
+    expect(ctx.data.overlay.def).toBe('戏剧');
   });
 
   it('V10 再点同一词收起；点另一个生词替换内容', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'the', hasdef: true } } });
-    expect(ctx.data.tipWord.word).toBe('the');
+    expect(ctx.data.overlay.word).toBe('the');
   });
 
   it('反例：非生词走兜底分发（若别处误调 onWordTap）不得出词卡', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'good', hasdef: false } } });
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     expect(ctx.data.expandedIdx).toBe(0); // 等同点句子空白
   });
 
   it('反例：hasdef 以字符串 "false" 传入时不得被当成生词', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'good', hasdef: 'false' } } });
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('生词表外词（hasDef=true 但词表里查不到）→ 词卡「暂无释义」且保留可点', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'nonexistent', hasdef: true } } });
-    expect(ctx.data.tipWord.none).toBe(true);
-    expect(ctx.data.tipWord.word).toBe('nonexistent');
+    expect(ctx.data.overlay.none).toBe(true);
+    expect(ctx.data.overlay.word).toBe('nonexistent');
   });
 });
 
-describe('需求③ V12~V18：长按生词气泡（朗读单词 / 收藏单词）', () => {
-  it('V12 长按生词 → 出单词气泡，带 word/lineIdx/left/top', async () => {
+/**
+ * 需求③ 2026-11-26 变体 B 改写：长按气泡 → 底部动作抽屉（组件）+ 页面单槽位 overlay。
+ *
+ * 被删/被改的断言与理由：
+ *  - V12 的 `left=200 / top=408`（`pageX·750/windowWidth`、`+8`）：**锚点整块消失**（V-B2），
+ *    改为断言 `overlay` 的 kind/scope/word/lineIndex/hasDef。
+ *  - V17 四条（`clamp(750-340)=410` / `pageX=0 → left=0,top=8` / `touches` 缺失不抛 /
+ *    `windowWidth=0` 不算 NaN）：被断对象（坐标换算）已从架构删除 → 整条删；
+ *    反向补一条「长按不读 touches、不产生任何坐标字段」，防止锚点回归。
+ *  - V13/V16「两气泡互斥」：语义不变，判据从「两个字段」改为「一个 overlay 字段被覆盖」。
+ *  - V14/V15/V18：入口从 `onWordBubbleSpeak()/collectWord()` 改为抽屉事件 handler，断言内容不变。
+ */
+describe('需求③ V12~V18：长按单词 → 抽屉（朗读单词 / 收藏单词）', () => {
+  it('V12 长按生词 → overlay = drawer/word，带 word/lineIndex/hasDef/phonetic', async () => {
     const ctx = await loaded({ readMode: 'immersion' });
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '1', w: 'Play' } }, touches: [{ pageX: 100, pageY: 200 }] });
-    expect(ctx.data.wordBubble.word).toBe('play'); // 统一小写
-    expect(ctx.data.wordBubble.lineIdx).toBe(1);
-    expect(ctx.data.wordBubble.left).toBe(200);  // 100px * (750/375)
-    expect(ctx.data.wordBubble.top).toBe(408);   // 200px * 2 + 8
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '1', w: 'Play', hasdef: true } } });
+    expect(ctx.data.overlay).toMatchObject({
+      kind: 'drawer', scope: 'word', word: 'play', lineIndex: 1, hasDef: true, phonetic: '/pleɪ/',
+    });
+    // 标题区展示的上下文 = 该词所在句原文
+    expect(ctx.data.overlay.lineText).toBe('He plays well.');
   });
 
-  it('V13 先长按句子再长按单词 → 句子气泡必须关掉（互斥）', async () => {
+  it('V12 反例：长按普通词（hasDef=false）同样是 drawer/word —— 只是标题区没有音标', async () => {
+    const ctx = await loaded({ readMode: 'immersion' });
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '1', w: 'well', hasdef: false } } });
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word', word: 'well', hasDef: false });
+    expect(ctx.data.overlay.phonetic).toBe('');
+  });
+
+  it('V13 先长按句子再长按单词 → 单槽位被覆盖（不会两浮层并存）', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onLongPress({ currentTarget: { dataset: { i: '0' } } });
-    expect(ctx.data.bubbleIdx).toBe(0);
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    expect(ctx.data.wordBubble).not.toBeNull();
-    expect(ctx.data.bubbleIdx).toBe(-1);
-    expect(ctx.data.bubblePos).toBeNull();
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 0 });
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
+    // 旧锚点字段根本不存在（不是 null）
+    expect('bubblePos' in ctx.data).toBe(false);
+    expect('bubbleIdx' in ctx.data).toBe(false);
   });
 
-  it('V16 先长按单词再长按句子 → 单词气泡关掉，句子气泡两项照旧', async () => {
+  it('V16 先长按单词再长按句子 → 单槽位被覆盖回 line 档', async () => {
     const ctx = await loaded({ readMode: 'tap' });
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.onLongPress({ currentTarget: { dataset: { i: '1' } } });
-    expect(ctx.data.wordBubble).toBeNull();
-    expect(ctx.data.bubbleIdx).toBe(1);
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 1 });
   });
 
   it('V13 长按单词时同时收起词卡（同一时刻只有一个浮层）', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
-    expect(ctx.data.tipWord).not.toBeNull();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    expect(ctx.data.tipWord).toBeNull();
-    expect(ctx.data.wordBubble).not.toBeNull();
+    expect(ctx.data.overlay.kind).toBe('wordtip');
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    expect(ctx.data.overlay.kind).toBe('drawer');   // 同一个字段被覆盖 → 词卡不可能还在
+    expect(ctx.data.overlay.scope).toBe('word');
   });
 
-  it('V14 点「朗读单词」→ speakText(该词) 恰好一次，气泡收起', async () => {
+  it('V14 点「朗读单词」→ speakText(该词) 恰好一次，抽屉收起（V-B11）', async () => {
     const ctx = await loaded();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    ctx.onWordBubbleSpeak();
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    ctx.onDrawerSpeakWord({ detail: { word: 'play', lineIndex: 0 } });
     expect(mockTts.speakCalls).toEqual(['play']);
-    expect(ctx.data.wordBubble).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('V15 点「收藏单词」→ collectGlossary tag=word 且 meta 字段齐备', async () => {
     const ctx = await loaded();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    await ctx.collectWord();
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    await ctx.onDrawerCollectWord({ detail: { word: 'play', lineIndex: 0, hasDef: true } });
     expect(mockGlossary.calls).toHaveLength(1);
     const p = mockGlossary.calls[0];
     expect(p.tag).toBe('word');
@@ -310,54 +330,40 @@ describe('需求③ V12~V18：长按生词气泡（朗读单词 / 收藏单词�
     expect(p.sourceText).toContain('Lesson 7');
   });
 
-  it('V15 反例：收藏接口失败 → 不抛、不崩、气泡已收起', async () => {
+  it('V15 反例：收藏接口失败 → 不抛、不崩、抽屉已收起', async () => {
     const ctx = await loaded();
     mockGlossary.reject = true;
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    await expect(ctx.collectWord()).resolves.toBeUndefined();
-    expect(ctx.data.wordBubble).toBeNull();
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    await expect(ctx.onDrawerCollectWord({ detail: { word: 'play', lineIndex: 0, hasDef: true } })).resolves.toBeUndefined();
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('V18 未登录收藏单词 → 弹「请先登录」，不调接口', async () => {
     const ctx = await loaded();
     mockAuth.loggedIn = false;
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    await ctx.collectWord();
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
+    await ctx.onDrawerCollectWord({ detail: { word: 'play', lineIndex: 0, hasDef: true } });
     expect(mockGlossary.calls).toHaveLength(0);
     expect(ctx.data.guestLoginShow).toBe(true);
   });
 
-  it('V17 右边缘夹紧：pageX=740/375 → left 不超过 750-340=410', async () => {
+  it('V17′（替代原四条坐标用例）：长按不读 touches、overlay 里没有任何几何量', async () => {
     const ctx = await loaded();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 740, pageY: 50 }] });
-    expect(ctx.data.wordBubble.left).toBe(410);
+    // 即使合成事件带 touches（含异常值），也不得影响结果 —— 说明实现根本没读它
+    ctx.onWordLongPress({
+      currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } },
+      touches: [{ pageX: 740, pageY: 200 }],
+    } as any);
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word', word: 'play' });
+    for (const k of ['left', 'top', 'x', 'y', 'rect']) {
+      expect(k in ctx.data.overlay).toBe(false);
+    }
   });
 
-  it('V17 pageX=0 → left 不小于 0', async () => {
+  it('反例：长按空 data-w（脏 token）→ 不产生浮层', async () => {
     const ctx = await loaded();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 0, pageY: 0 }] });
-    expect(ctx.data.wordBubble.left).toBe(0);
-    expect(ctx.data.wordBubble.top).toBe(8);
-  });
-
-  it('V17 反例：touches 缺失（老基础库/合成事件）→ 不抛异常，退回左上角', async () => {
-    const ctx = await loaded();
-    expect(() => ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } } })).not.toThrow();
-    expect(ctx.data.wordBubble.left).toBe(0);
-  });
-
-  it('V17 反例：windowWidth 异常为 0 → 不得算出 Infinity/NaN 坐标', async () => {
-    const ctx = await loaded();
-    mockWx.getSystemInfoSync.mockReturnValueOnce({ windowWidth: 0, windowHeight: 0 });
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 100, pageY: 100 }] });
-    expect(Number.isFinite(ctx.data.wordBubble.left)).toBe(true);
-    expect(Number.isFinite(ctx.data.wordBubble.top)).toBe(true);
-  });
-
-  it('反例：长按空 data-w（脏 token）→ 不产生气泡', async () => {
-    const ctx = await loaded();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: '' } }, touches: [{ pageX: 10, pageY: 10 }] });
-    expect(ctx.data.wordBubble).toBeNull();
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: '' } } });
+    expect(ctx.data.overlay).toBeNull();
   });
 });
 
@@ -406,7 +412,7 @@ describe('需求④ V19~V22：词卡朗读按钮', () => {
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'the', hasdef: true } } }); // 切到 the（tipPlaying 被置 false）
     const before = mockTts.stopCalls;
     ctx.closeTip();                            // 关卡片
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     expect(mockTts.stopCalls).toBeGreaterThan(before); // 期望：关卡片即停
   });
 
@@ -414,11 +420,11 @@ describe('需求④ V19~V22：词卡朗读按钮', () => {
     const ctx = await loaded();
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.speakTipWord();
-    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play' } }, touches: [{ pageX: 10, pageY: 10 }] });
+    ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     mockNce.detail = { ...mockNce.detail, id: 8 };
     await ctx.goLesson({ currentTarget: { dataset: { delta: '1' } } });
     expect(mockTts.playingText).toBe('');
-    expect(ctx.data.wordBubble).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     expect(ctx.data.tipPlaying).toBe(false);
     expect(ctx.data.wordPlaying).toBe('');
   });
@@ -429,7 +435,7 @@ describe('需求④ V19~V22：词卡朗读按钮', () => {
     ctx.speakTipWord();
     ctx.setReadMode({ currentTarget: { dataset: { mode: 'immersion' } } });
     expect(ctx.data.tipPlaying).toBe(false);
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
   });
 });
 
@@ -437,7 +443,7 @@ describe('回归：切页/回前台后的播放态残留（onHide 先退订再 s
   it('朗读中切后台再回来 → 句子高亮 / 词卡按钮态必须复位', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onShow(); // 订阅
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '0' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
     expect(ctx.data.readingLineIdx).toBe(0);
     ctx.onHide();  // 退订 + stopSpeak
     ctx.onShow();  // 回来再订阅
@@ -460,22 +466,22 @@ describe('回归：切页/回前台后的播放态残留（onHide 先退订再 s
 describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）', () => {
   it('气泡「朗读此句」→ speakText(line.en) 恰好一次，仅该句高亮', async () => {
     const ctx = await loaded();
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '1' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
     expect(mockTts.speakCalls).toEqual(['He plays well.']);
     expect(ctx.data.readingLineIdx).toBe(1);
   });
 
   it('再点同句 → 停止，高亮复位', async () => {
     const ctx = await loaded();
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '1' } } });
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '1' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
     expect(ctx.data.readingLineIdx).toBe(-1);
     expect(mockTts.playingText).toBe('');
   });
 
   it('读单词时不得把「句子高亮」点亮 / 读句子时不得把「词卡按钮」点亮', async () => {
     const ctx = await loaded();
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '0' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
     expect(ctx.data.wordPlaying).toBe('');
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.speakTipWord();
@@ -485,16 +491,16 @@ describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）'
 
   it('句子 A 播放中再朗读句子 B → B 必须高亮（切句不断高亮）', async () => {
     const ctx = await loaded();
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '0' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
     expect(ctx.data.readingLineIdx).toBe(0);
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '2' } } });
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 2, text: LINES[2].en } });
     expect(ctx.data.readingLineIdx).toBe(2); // 期望：高亮跟随到新的朗读句
     expect(ctx.data.readingPhase).toBe('playing');
   });
 
   it('句子播放中从词卡点「朗读」→ 词卡按钮必须进入「停止」态', async () => {
     const ctx = await loaded();
-    ctx.onBubbleSpeak({ currentTarget: { dataset: { i: '0' } } }); // 先有语音在播
+    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } }); // 先有语音在播
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.speakTipWord();
     expect(ctx.data.tipPlaying).toBe(true); // 期望：正在读该词 → 按钮显示「停止」
@@ -502,22 +508,21 @@ describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）'
 
   it('收藏整句 tag=nce，meta 带 lessonId/lineIndex（旧契约不变）', async () => {
     const ctx = await loaded();
-    await ctx.collectLine({ currentTarget: { dataset: { i: '2' } } });
+    await ctx.onDrawerCollectLine({ detail: { lineIndex: 2, text: LINES[2].en } });
     const p = mockGlossary.calls[0];
     expect(p.tag).toBe('nce');
     expect(p.enMain).toBe('Do you like plays');
     expect(p.meta).toMatchObject({ book: 'NCE2', lessonId: 7, lineIndex: 2 });
   });
 
-  it('load 后所有浮层/播放态归零（换课不残留旧坐标与旧词卡）', async () => {
+  it('load 后所有浮层/播放态归零（换课不残留旧浮层、旧词卡与旧坐标字段）', async () => {
     const ctx = await loaded();
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.onLongPress({ currentTarget: { dataset: { i: '0' } } });
     await ctx.load();
-    expect(ctx.data.tipWord).toBeNull();
-    expect(ctx.data.bubbleIdx).toBe(-1);
-    expect(ctx.data.bubblePos).toBeNull();
-    expect(ctx.data.wordBubble).toBeNull();
+    expect(ctx.data.overlay).toBeNull();              // 单槽位归零
+    expect('bubblePos' in ctx.data).toBe(false);      // 旧锚点字段不存在
+    expect('tipWord' in ctx.data).toBe(false);        // 旧词卡字段不存在
     expect(ctx.data.tipPlaying).toBe(false);
     expect(ctx.data.expandedIdx).toBe(-1);
   });

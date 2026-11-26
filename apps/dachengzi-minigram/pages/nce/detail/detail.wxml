@@ -34,23 +34,36 @@
         <text>通篇阅读视图</text>
         <text class="sub">D1 主定义 · 英文全文不打断</text>
       </view>
-      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，逐句换行；整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；点生词看释义，长按生词朗读/收藏单词，长按句子朗读/收藏整句</view>
+      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，逐句换行；整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；点生词看释义，长按任意单词朗读/收藏单词，长按句子空白朗读/收藏整句</view>
 
       <view class="sentences">
         <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
-          id="line-{{si}}"
           class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
           data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
           <view class="sline">
             <view class="sn">{{si + 1}}</view>
             <view class="stx">
               <view class="en">
-                <!-- 2026-11-26 ②：只有课文生词挂事件（点=词卡，长按=单词气泡）；
-                     非生词是纯文本，点击冒泡到句子节点 → 点按档展开该句译文，无词级高亮 -->
+                <!-- 🔴 2026-11-26 R-READ-04（AC-B.28 / V-B17）：**所有**英文单词都渲染成节点。
+                     原来 wx:if 的条件是「tk.w 且 tk.hasDef」，非生词走 wx:else 纯文本、根本没有节点
+                     → 普通词物理上无法长按。现在：
+                       · wx:if 只判 tk.w（是否英文词），has-def 点线改由插值控制；
+                       · catchlongpress 挂**全部**单词（长按任意词 → 抽屉四项，含普通词）；
+                       · catchtap 也挂全部，函数首行用 hasDef 守卫回落成「点句子」（E1：
+                         点普通词不弹词卡，点按档仍展开该句译文）；
+                       · 普通词**不加任何静态视觉标记**（无点线 / 无下划线 / 无色差，E4）——
+                         可长按这件事只通过手势结果（抽屉升起）表达。 -->
                 <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
-                  <text wx:if="{{tk.w && tk.hasDef}}" class="w has-def" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap" catchlongpress="onWordLongPress">{{tk.t}}</text>
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap" catchlongpress="onWordLongPress">{{tk.t}}</text>
                   <text wx:else>{{tk.t}}</text>
                 </block>
+                <!-- 🔴 U1（2026-11-26 19:15 用户拍板）：句子朗读中，在该句**行尾**显示一个极小的 ■ 停止按钮。
+                     只在 readingLineIdx === si 时渲染（不播放时节点不存在），点击 = stopSpeak()。
+                     与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突：①只在播放中渲染、非常驻；
+                     ②它是「停止」而不是「播放 / 收藏」入口；③它替代的正是 B 变体删掉的唯一停止路径
+                     （长按气泡「朗读此句」再点一次 = 停），没有它用户点完朗读就再也停不下来。
+                     详见 detail.ts 的 stopLineSpeak() 注释。 -->
+                <text wx:if="{{readingLineIdx === si}}" class="sent-stop" catchtap="stopLineSpeak">■</text>
               </view>
             </view>
           </view>
@@ -78,36 +91,44 @@
   </block>
 
   <!-- 19:11 ③ 点词中文 tip = 移动端底部统一浮层（position:fixed / bottom:0），作废 16:30「就近锚定」。
-       word-tip 不再绑定 tipPos 的 left/top；tipPos 字段保留但不得驱动本浮层。
-       关闭：右上 ✕ / 点浮层外（句子空白按既有 _applyLineTap 清 tipWord）/ 再点其它词替换内容。
-       word / phonetic / pos / def / example 缺失省略；表外词「暂无释义」且保留可点。 -->
-  <view wx:if="{{tipWord}}" class="word-tip on">
+       2026-11-26 变体 B：浮层收敛到**单槽位** `overlay`（kind='wordtip'），与动作抽屉互斥；
+       本节点不绑任何 left/top（抽屉与词卡都不测坐标）。关闭：右上 ✕ / 点句子空白（_applyLineTap
+       清 overlay）/ 再点其它词替换内容。word / phonetic / pos / def / example 缺失省略；
+       表外词「暂无释义」且保留可点。 -->
+  <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="word-tip on">
     <view class="wt-head">
-      <view class="wt-w">{{tipWord.word}}</view>
+      <view class="wt-w">{{overlay.word}}</view>
       <view class="wt-tools">
         <!-- 2026-11-26 ④：词卡直接朗读该词；再点停止（播放态由 onSpeakState 回流） -->
         <view class="wt-play {{tipPlaying ? 'on' : ''}}" catchtap="speakTipWord">{{tipPlaying ? '停止' : '朗读'}}</view>
         <view class="wt-x" catchtap="closeTip">✕</view>
       </view>
     </view>
-    <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
-    <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
-    <view wx:if="{{tipWord.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
-    <view wx:elif="{{tipWord.def}}" class="wt-def">{{tipWord.def}}</view>
-    <view wx:if="{{tipWord.example}}" class="wt-ex">{{tipWord.example}}</view>
+    <view wx:if="{{overlay.phonetic}}" class="wt-p">{{overlay.phonetic}}</view>
+    <view wx:if="{{overlay.pos}}" class="wt-pos">{{overlay.pos}}</view>
+    <view wx:if="{{overlay.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
+    <view wx:elif="{{overlay.def}}" class="wt-def">{{overlay.def}}</view>
+    <view wx:if="{{overlay.example}}" class="wt-ex">{{overlay.example}}</view>
   </view>
 
-  <!-- V4 / D-02 长按气泡：锚定被长按句的浮层，含且仅含「朗读此句」「收藏」两动作 -->
-  <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" style="left:{{bubblePos ? bubblePos.left : 0}}rpx;top:{{bubblePos ? bubblePos.top : 0}}rpx" catchtap="closeBubble">
-    <view class="bi" data-bubble-act="play" data-i="{{bubbleIdx}}" catchtap="onBubbleSpeak">朗读此句</view>
-    <view class="bi" data-bubble-act="fav" data-i="{{bubbleIdx}}" catchtap="collectLine">收藏</view>
-  </view>
-
-  <!-- 2026-11-26 ③ 长按生词气泡：含且仅含「朗读单词」「收藏单词」，与句子气泡互斥 -->
-  <view wx:if="{{wordBubble}}" class="bubble word-bubble on" style="left:{{wordBubble.left}}rpx;top:{{wordBubble.top}}rpx" catchtap="closeWordBubble">
-    <view class="bi" data-word-act="play" catchtap="onWordBubbleSpeak">朗读单词</view>
-    <view class="bi" data-word-act="fav" catchtap="collectWord">收藏单词</view>
-  </view>
+  <!-- 2026-11-26 变体 B：长按动作抽屉（句空白两项 / 任意单词四项）。
+       组件只抛事件，页面调 services（朗读 / 收藏 / 未登录守卫 / toast 全在本页，见 detail.ts）。
+       🔴 原「长按气泡」两个节点（.bubble / .word-bubble，带内联锚点坐标）已整体删除 ——
+       抽屉贴底通栏、不测任何坐标。 -->
+  <action-drawer
+    visible="{{overlay && overlay.kind === 'drawer'}}"
+    scope="{{overlay && overlay.kind === 'drawer' ? overlay.scope : ''}}"
+    line-text="{{overlay && overlay.kind === 'drawer' ? overlay.lineText : ''}}"
+    line-index="{{overlay && overlay.kind === 'drawer' ? overlay.lineIndex : -1}}"
+    word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
+    word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
+    phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+    bind:speak-line="onDrawerSpeakLine"
+    bind:speak-word="onDrawerSpeakWord"
+    bind:collect-line="onDrawerCollectLine"
+    bind:collect-word="onDrawerCollectWord"
+    bind:close="onDrawerClose"
+  />
 
   <!-- 需求① T1 从未登录守卫（内联 modal-login「请先登录」；三态分离，不弹会话过期弹窗） -->
   <view wx:if="{{guestLoginShow}}" class="modal" id="modal-login">

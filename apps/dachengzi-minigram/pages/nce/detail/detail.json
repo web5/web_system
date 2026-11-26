@@ -4,6 +4,7 @@
   "navigationBarTextStyle": "black",
   "backgroundColor": "#FFFFFF",
   "usingComponents": {
-    "login-gate": "/components/login-gate/index"
+    "login-gate": "/components/login-gate/index",
+    "action-drawer": "/components/action-drawer/index"
   }
 }
