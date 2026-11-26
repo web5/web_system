@@ -457,9 +457,12 @@ export class ReleaseRegistryService {
       const explicitRef = requireCommitRef(explicit, '回滚目标');
       // 「回滚到当前版本」= 退化操作。`explicit` 分支**没有回落路径**（不像 previous 分支
       // 还能继续找更早版本），留着必被下游吃掉：app 链 `unchanged: true` 静默成功
-      // （apps.service.ts:585，线上一个字没改却报成功）；后端链虽有 deploy.service.ts:1193-1194
-      // 的守卫，但那是**精确**比较，跨拼写（`b6ec9950` vs `portal/b6ec9950`）会漏网。
-      // 故此处用归一值判等后直接 400；文案要与上面格式校验的 400 区分开，便于排查。
+      // （apps.service.ts:585，线上一个字没改却报成功）。
+      // 🔴 适用面：本判等只在「指针表有该模块行」时生效（app / env-dir 链）。
+      //    后端模块在 deploy_app_env_versions 无行 → fromCommit = undefined → 本判等恒 false，
+      //    故**对后端链不生效**；后端仍靠 deploy.service.ts:1193 的精确比较，
+      //    跨拼写时最终由 deploy.service.ts:613 的 !fs.existsSync(src) 响亮失败（非静默）。
+      //    文案要与上面格式校验的 400 区分开，便于排查。
       if (explicitRef === fromCommit) {
         throw new BadRequestException(`回滚失败: ${explicit} 就是当前版本（${from}），无需回滚`);
       }
