@@ -191,9 +191,11 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 > 走同一道 `preflightGate`（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 /
 > P6 CLI 可执行），只是 **P2、P6 换判据**（ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖；
 > P6 在 ci 模式直接 skip，因为不调开发者工具 CLI）。
-> **直连 `node scripts/preview.js` / `node scripts/upload.js` 与走 npm 入口过的是同一道门**
-> （门禁已下沉到这两个文件的第一条动作，台账 9122）；逃生口与判据以 `scripts/preflight.js` 为准，
-> 本段不复述入口清单（清单会变，复述就会过期）。
+> **在大橙子（`apps/dachengzi-minigram`）里，直连 `node scripts/preview.js` /
+> `node scripts/upload.js` 与走 npm 入口过的是同一道门**（门禁已下沉到这两个文件的第一条动作，
+> 台账 9122）；逃生口与判据以该包 `scripts/preflight.js` 为准，本段不复述入口清单
+> （清单会变，复述就会过期）。其它包的脚本形态与门禁状态以各自 `scripts/` 为准 ——
+> 本手册第 3 行的「两包共用一份手册」**不等于两包脚本同形**。
 
 实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
 21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
