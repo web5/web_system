@@ -57,6 +57,7 @@ interface PublishModule {
     to?: string;
     page?: string;
     mode?: string;
+    desc?: string;
     noPush?: boolean;
     notify?: boolean;
   };
@@ -70,8 +71,17 @@ interface PublishModule {
   gitShortSha: () => string;
   cliPreviewArgs: (appRoot: string, outPath: string) => string[];
   cliUploadArgs: (appRoot: string, version: string, desc: string) => string[];
+  sanitizeDesc: (raw?: string | null) => string;
+  buildUploadDesc: (
+    version: string,
+    gitSha: string,
+    customDesc?: string | null,
+  ) => { desc: string; text: string; base: string; truncated: boolean };
+  DESC_MAX_LEN: number;
   buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
   writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
+  readAppVersionConst: () => string;
+  assertVersionConsistent: (version: string) => void;
   pushQr: (pngPath: string, toName?: string) => void;
   uploadMedia: (filePath: string, type?: string) => {
     media_id?: string;
@@ -82,7 +92,7 @@ interface PublishModule {
   };
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
-  cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean }) => void;
+  cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean; desc?: string }) => void;
   cmdTrial: () => void;
   cmdRelease: () => void;
   NOTIFY_UPLOAD: (version: string) => string;
@@ -128,6 +138,26 @@ describe('parseArgs', () => {
 
   it('未知 flag 不进 flag 字段，按位置参数保留', () => {
     expect(publish.parseArgs(['--unknown', 'x'])).toEqual({ _: ['--unknown', 'x'] });
+  });
+
+  it('--desc <文本> 与 --desc=<文本> 两种写法都进 desc 字段', () => {
+    expect(publish.parseArgs(['upload', '--desc', '首页动态问候'])).toEqual({
+      _: ['upload'],
+      desc: '首页动态问候',
+    });
+    expect(publish.parseArgs(['upload', '--desc=首页动态问候'])).toEqual({
+      _: ['upload'],
+      desc: '首页动态问候',
+    });
+  });
+
+  it('--desc 与其它 flag 共存，互不覆盖', () => {
+    expect(publish.parseArgs(['--desc=首页动态问候', '--notify', '--to', '公司群'])).toEqual({
+      _: [],
+      desc: '首页动态问候',
+      to: '公司群',
+      notify: true,
+    });
   });
 });
 
@@ -283,6 +313,75 @@ describe('cli 命令参数拼装', () => {
       '-d',
       'cli 上传 v1.2.3',
     ]);
+  });
+});
+
+describe('buildUploadDesc（--desc 拼接；不传时向后兼容）', () => {
+  // 🔒 向后兼容基准：改造前 cmdUpload 里的字面量。**不得为了让测试变绿而改它**。
+  const BASE = 'cli 上传 v1.2.3 @ abc1234';
+
+  it('不传 --desc → 与改造前逐字符一致，且拼进 cliUploadArgs 的 -d 就是它', () => {
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').desc).toBe(BASE);
+    // 四种「没传」等价形态都回到同一字面量
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', undefined).desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', null).desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', '').desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', '   ').desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').truncated).toBe(false);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').text).toBe('');
+
+    const args = publish.cliUploadArgs(
+      '/repo/app',
+      '1.2.3',
+      publish.buildUploadDesc('1.2.3', 'abc1234').desc,
+    );
+    expect(args[args.indexOf('-d') + 1]).toBe(BASE);
+  });
+
+  it('传 --desc「首页动态问候」→ -d 含该文本 + 版本号 + sha', () => {
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '首页动态问候');
+    expect(r.desc).toBe('首页动态问候 | v1.2.3 @ abc1234');
+    expect(r.desc).toContain('首页动态问候');
+    expect(r.desc).toContain('v1.2.3');
+    expect(r.desc).toContain('abc1234');
+    expect(r.truncated).toBe(false);
+
+    const args = publish.cliUploadArgs('/repo/app', '1.2.3', r.desc);
+    const d = args[args.indexOf('-d') + 1];
+    expect(d).toContain('首页动态问候');
+    expect(d).toContain('v1.2.3');
+    expect(d).toContain('abc1234');
+  });
+
+  it('换行 / 制表符 / 连续空白压成单空格（微信描述是单行字段）', () => {
+    expect(publish.sanitizeDesc('首页\n动态\t问候')).toBe('首页 动态 问候');
+    expect(publish.sanitizeDesc('  首页   动态  ')).toBe('首页 动态');
+    expect(publish.sanitizeDesc(null)).toBe('');
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', 'a\r\nb');
+    expect(r.desc).toBe('a b | v1.2.3 @ abc1234');
+    expect(r.desc).not.toContain('\n');
+  });
+
+  it('超长 → 截断到 DESC_MAX_LEN（含 … 标记），版本与 sha 不被截掉', () => {
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '功'.repeat(200));
+    expect(publish.DESC_MAX_LEN).toBe(60);
+    expect(r.truncated).toBe(true);
+    expect(r.desc.length).toBe(publish.DESC_MAX_LEN);
+    // 有自定义文案时后缀是 tail（v + sha），不含缺省前缀「cli 上传」
+    expect(r.desc.endsWith('v1.2.3 @ abc1234')).toBe(true);
+    expect(r.desc.endsWith(BASE)).toBe(false);
+    expect(r.desc).toContain('…');
+  });
+
+  it('截断按码点切，不切坏 emoji 代理对', () => {
+    // 用 200 个 emoji 确保必然超长（tail 比缺省 base 短，40 个已装得下、不会触发截断）
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '🎉'.repeat(200));
+    expect(r.truncated).toBe(true);
+    expect(Array.from(r.desc).length).toBe(publish.DESC_MAX_LEN);
+    // 没有落单的高位代理（切半 emoji）
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(r.desc)).toBe(false);
+    // 去掉尾部 … 后剩下的全是完整 emoji
+    expect(Array.from(r.text.slice(0, -1)).every((c) => c === '🎉')).toBe(true);
   });
 });
 
@@ -752,5 +851,74 @@ describe('cmdTrial / cmdRelease：纯打印人工分步指引（零副作用）'
     expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_TRIAL(pkg.version));
     publish.cmdRelease();
     expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_RELEASE(pkg.version));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 版本号一致性硬校验（1.0.18 · 关于页 v1.0.0 事故的脚本侧防线）
+//
+// 背景：1.0.17 的包 version=1.0.17，但关于页模板写死 v1.0.0 —— 两处版本当初没有任何
+// 联动。现在 package.json.version 与 utils/version.ts 的 APP_VERSION 必须一致，
+// 不一致时上传必须硬失败，绝不把「界面版本号错位」的包发出去。
+// ---------------------------------------------------------------------------
+describe('assertVersionConsistent（上传前版本号漂移硬校验）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it('readAppVersionConst 从 utils/version.ts 读出 APP_VERSION，且与 package.json 相等', () => {
+    const declared = publish.readAppVersionConst();
+    expect(declared).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(declared).toBe(pkg.version);
+  });
+
+  it('一致时放行：不 exit、不报错（正常上传不被误拦）', () => {
+    publish.assertVersionConsistent(pkg.version);
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+
+  it('不一致时 exit 1，且把两边的值都打印出来（便于定位改哪边）', () => {
+    const declared = publish.readAppVersionConst();
+    const drifted = '0.0.1';
+    expect(declared).not.toBe(drifted);
+
+    expect(() => publish.assertVersionConsistent(drifted)).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const printed = errSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(printed).toContain(`package.json=${drifted}`);
+    expect(printed).toContain(declared);
+  });
+
+  it('cmdUpload 在漂移时先 exit 1，绝不发起上传（校验必须在上传命令之前）', () => {
+    const realRead = fsCore.readFileSync;
+    const spy = jest
+      .spyOn(fsCore, 'readFileSync')
+      .mockImplementation(((p: unknown, enc?: unknown) => {
+        if (String(p).endsWith(path.join('utils', 'version.ts'))) {
+          return "export const APP_VERSION = '0.0.1';\n";
+        }
+        return (realRead as (a: unknown, b?: unknown) => unknown)(p, enc);
+      }) as never);
+
+    try {
+      expect(() => publish.cmdUpload({})).toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(mockChildProcess.execFileSync).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

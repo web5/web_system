@@ -6,8 +6,15 @@
  *   node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]
  *       出预览码；默认生成后推企业微信（推给第一个群，如公司群；--to 指定会话名）。
  *       默认 cli 模式（微信开发者工具 CLI，走登录态，免 IP 白名单）。
- *   node scripts/publish.js upload [--to <会话名>] [--notify] [--mode cli|ci]
+ *   node scripts/publish.js upload [--desc <文本>] [--to <会话名>] [--notify] [--mode cli|ci]
  *       上传开发版本（脚本到此为止）；--notify 时推一条 markdown 通知。
+ *       --desc 自定义「开发版本描述」（公众平台开发版本列表里的备注），支持
+ *       `--desc 首页动态问候` 与 `--desc=首页动态问候` 两种写法：
+ *         · 不传 → 保持默认 `cli 上传 v<版本> @ <sha>`（与历史完全一致）
+ *         · 传了 → `<文本> | v<版本> @ <sha>`（版本与 sha 一律保留，便于审计）
+ *       换行/制表符压成单空格；全文超 60 字符截断自定义文本并打印一行提示。
+ *       仅 cli 模式生效（ci 模式描述由 upload.js 自行生成）。
+ *       例：node scripts/publish.js upload --desc 首页动态问候 --notify
  *   node scripts/publish.js push <二维码png> [--to <会话名>]
  *       把已生成的二维码推送到企业微信。
  *   node scripts/publish.js trial
@@ -40,6 +47,10 @@ const ROOT = path.join(__dirname, '..');
 const CI_OUT = path.join(ROOT, '.ci-output');
 // 预览码有效期（分钟），与 preview.js 的默认口径一致（微信官方口径 25 分钟）
 const PREVIEW_TTL_MIN = 25;
+// 上传描述（开发版本备注）总长上限。微信官方未公布 desc 的硬上限
+// （ci.upload 的 desc 只标「自定义备注」、cli upload -d 只标「备注」），
+// 故按团队保守阈值自限 60 字符：超长截断自定义文本并打印一行提示，见 buildUploadDesc。
+const DESC_MAX_LEN = 60;
 // 默认直达页（app.json 注册的首页）。cli preview 出的是默认入口页二维码，不接收直达页参数。
 const DEFAULT_PAGE = 'pages/home/index/index';
 
@@ -148,6 +159,8 @@ function parseArgs(argv) {
     if (a === '--to') opts.to = argv[++i];
     else if (a === '--page') opts.page = argv[++i];
     else if (a === '--mode') opts.mode = argv[++i];
+    else if (a === '--desc') opts.desc = argv[++i];
+    else if (a.startsWith('--desc=')) opts.desc = a.slice('--desc='.length);
     else if (a === '--no-push') opts.noPush = true;
     else if (a === '--notify') opts.notify = true;
     else opts._.push(a);
@@ -314,6 +327,53 @@ function cliUploadArgs(appRoot, version, desc) {
 }
 
 /**
+ * 归一化用户自定义上传描述：微信「开发版本描述」是单行字段，
+ * 换行 / 制表符会被后台吞掉或让 cli 报错，故一律压成单空格并去首尾空白。
+ * 纯空白等价于「没传」。
+ */
+function sanitizeDesc(raw) {
+  if (raw == null) return '';
+  return String(raw)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * 拼 cli upload 的 `-d` 描述。**纯函数**：不打印、不读环境、不跑 git，
+ * 版本与 sha 由调用方传入（便于单测注入）。
+ *
+ * - 未传自定义描述（customDesc 为 null/undefined/纯空白）→ 保持历史格式，逐字符不变：
+ *     `cli 上传 v<version> @ <sha>`
+ *   —— 这是向后兼容的硬要求，别改这行字面量。
+ * - 传了 → `<自定义文本> | v<version> @ <sha>`，版本与 sha 一律保留（后台审计需要）。
+ *
+ * 总长超过 DESC_MAX_LEN 时只截断自定义文本（base 不动），末尾补 `…` 标记，
+ * 并把 truncated 置 true 交由调用方打印提示。按 Unicode 码点截断，不会切坏代理对。
+ *
+ * @returns {{desc: string, text: string, base: string, truncated: boolean}}
+ */
+function buildUploadDesc(version, gitSha, customDesc) {
+  // tail = 版本 + sha，自定义文案与默认文案共用（后台审计必须能追到版本与 commit）
+  const tail = `v${version} @ ${gitSha}`;
+  // base = 缺省文案。🔒 这行字面量是向后兼容基准，不得改动（历史 desc 逐字符一致）
+  const base = `cli 上传 ${tail}`;
+  const text = sanitizeDesc(customDesc);
+  if (!text) return { desc: base, text: '', base, truncated: false };
+
+  const SEP = ' | ';
+  const budget = DESC_MAX_LEN - tail.length - SEP.length;
+  // tail 自身已占满上限（版本号/sha 异常长）→ 退回默认描述，不产出超长或空文本
+  if (budget < 2) return { desc: base, text, base, truncated: true };
+
+  const chars = Array.from(text);
+  if (chars.length <= budget) return { desc: `${text}${SEP}${tail}`, text, base, truncated: false };
+
+  const kept = chars.slice(0, budget - 1).join('').trim() + '…';
+  return { desc: `${kept}${SEP}${tail}`, text: kept, base, truncated: true };
+}
+
+/**
  * 拼 cli 出码的 meta（cli 不生成 meta.json，需脚本自拼，供 push 说明文案使用）。
  * 版本取 package.json.version、git sha 取 git rev-parse --short HEAD、有效期按 25 分钟口径。
  * opts 可注入 version/gitSha/ttlMinutes/now，便于单测与复用。
@@ -405,7 +465,14 @@ function cmdUpload(opts) {
   const mode = resolveMode(opts.mode);
   const pkg = require(path.join(ROOT, 'package.json'));
   const version = pkg.version || '1.0.0';
+  // 上传前先锁死「包版本 = 关于页显示版本」，不一致直接 exit 1（preview 不走这里）
+  assertVersionConsistent(version);
   if (mode === 'ci') {
+    // ci 模式走 scripts/upload.js，描述由它自行生成（上传时间口径）；
+    // 用户传了 --desc 就明说被忽略，不做静默丢弃。
+    if (sanitizeDesc(opts.desc)) {
+      console.log('[Publish] ⚠️ --desc 仅对 cli 模式生效；--mode ci 的描述由 scripts/upload.js 生成，本次忽略');
+    }
     console.log('[Publish] 上传开发版本（miniprogram-ci 模式）…');
     try {
       run('node', ['scripts/upload.js'], { cwd: ROOT, stdio: 'inherit' });
@@ -416,9 +483,13 @@ function cmdUpload(opts) {
   } else {
     console.log('[Publish] 上传开发版本（cli 模式，免 IP 白名单）…');
     const cli = resolveCliBinary();
-    const desc = `cli 上传 v${version} @ ${gitShortSha()}`;
+    // 不传 --desc 时 desc 与历史完全一致：`cli 上传 v<version> @ <sha>`
+    const descInfo = buildUploadDesc(version, gitShortSha(), opts.desc);
+    if (descInfo.truncated) {
+      console.log(`[Publish] ⚠️ --desc 超长，已截断到 ${DESC_MAX_LEN} 字符（保留版本与 sha）：${descInfo.desc}`);
+    }
     try {
-      run(cli, cliUploadArgs(ROOT, version, desc), { stdio: 'inherit' });
+      run(cli, cliUploadArgs(ROOT, version, descInfo.desc), { stdio: 'inherit' });
     } catch (e) {
       console.error(`[Publish] ❌ cli 上传失败。排查：微信开发者工具已登录、版本号已递增（当前 v${version}）。`);
       process.exit(1);
@@ -443,6 +514,41 @@ function cmdUpload(opts) {
 function readVersion() {
   const pkg = require(path.join(ROOT, 'package.json'));
   return pkg.version || '1.0.0';
+}
+
+/**
+ * 读 utils/version.ts 里的 APP_VERSION 字面量（上传前的漂移校验用）。
+ *
+ * 🔴 用正则读源码而不是 require：`.ts` 文件 Node 直接 require 不了。
+ *    返回 '' 表示没找到 —— 由调用方当成「不一致」处理（宁可不传，也不传一个界面会显示错的包）。
+ */
+function readAppVersionConst() {
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'version.ts'), 'utf-8');
+    const m = src.match(/APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+    return m ? m[1] : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 上传前硬校验：关于页展示的版本号必须与包版本号一致。
+ *
+ * 1.0.17 的「包是 1.0.17、界面显示 v1.0.0」就是这么漏出去的 —— 两处版本没有任何联动。
+ * 不一致直接 exit 1：宁可上传失败，也不要把一个界面版本号错位的包发给用户。
+ * 只挂在 upload 上（preview 不受影响，出预览码不需要版本号吻合）。
+ */
+function assertVersionConsistent(version) {
+  const declared = readAppVersionConst();
+  if (declared !== version) {
+    console.error(
+      `[Publish] ❌ 版本号不一致：package.json=${version}，utils/version.ts=${declared || '(未找到 APP_VERSION)'}`,
+    );
+    console.error('[Publish]    后果：关于页显示的版本号会与包版本号不符（1.0.17 的 v1.0.0 事故）');
+    console.error('[Publish]    处置：把 utils/version.ts 的 APP_VERSION 改成与 package.json.version 一致后重试');
+    process.exit(1);
+  }
 }
 
 function cmdTrial() {
@@ -483,13 +589,17 @@ function main(argv) {
       console.log([
         '用法:',
         '  node scripts/publish.js preview [--page <page>] [--to <会话名>] [--no-push] [--mode cli|ci]',
-        '  node scripts/publish.js upload [--notify] [--mode cli|ci]',
+        '  node scripts/publish.js upload [--desc <文本>] [--notify] [--to <会话名>] [--mode cli|ci]',
         '  node scripts/publish.js push <二维码png> [--to <会话名>]',
         '  node scripts/publish.js trial                 打印「设为体验版」人工分步指引（零副作用）',
         '  node scripts/publish.js release               打印「提交审核 → 发布正式版」人工分步指引（零副作用）',
         '',
         '  --mode cli  默认。微信开发者工具 CLI 出码，免 IP 白名单（需已登录）。',
         '  --mode ci   miniprogram-ci 出码，需固定出口 IP 白名单（执行机场景）。',
+        '',
+        '  --desc <文本>  upload 专用。自定义开发版本描述（后台备注），可写 `--desc=文本`。',
+        '                不传则用默认格式「cli 上传 v<版本> @ <sha>」；',
+        '                传了则「<文本> | v<版本> @ <sha>」，版本与 sha 一律保留便于审计。',
         '',
         '  边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，',
         '        微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。',
@@ -512,8 +622,13 @@ module.exports = {
   fmt,
   cliPreviewArgs,
   cliUploadArgs,
+  sanitizeDesc,
+  buildUploadDesc,
+  DESC_MAX_LEN,
   buildCliMeta,
   writeCliMeta,
+  readAppVersionConst,
+  assertVersionConsistent,
   pushQr,
   uploadMedia,
   sendMarkdown,

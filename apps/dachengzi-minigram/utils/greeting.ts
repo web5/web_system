@@ -166,9 +166,17 @@ function getGraphemeSegmenter(): GraphemeSegmenterLike | null {
 function splitGraphemes(input: string): string[] {
   const segmenter = getGraphemeSegmenter();
   if (segmenter) {
-    const out: string[] = [];
-    for (const part of segmenter.segment(input)) out.push(part.segment);
-    return out;
+    // 🔴 segment() 的**调用与迭代**必须和构造一样被 try 兜住：
+    // 构造成功 ≠ 切分可用。ICU 被裁剪、运行时拒绝 granularity、迭代器中途抛错
+    // 等情况只会在 segment()/next() 时才暴露，异常若冒出去会一路穿透
+    // resolveNickname → 首页 hero 渲染（白屏/报错）。此处一律静默回退，绝不外抛。
+    try {
+      const out: string[] = [];
+      for (const part of segmenter.segment(input)) out.push(part.segment);
+      return out;
+    } catch {
+      // 静默回退：不记日志（小程序逻辑层无稳定日志通道，且不影响正确性）
+    }
   }
   return splitGraphemesFallback(input);
 }

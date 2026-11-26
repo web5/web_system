@@ -3,7 +3,7 @@
   <view class="brand">
     <view class="logo">橙</view>
     <view class="name">大橙子英语</view>
-    <view class="ver">v1.0.0</view>
+    <view class="ver">v{{appVersion}}</view>
   </view>
 
   <view class="card">
