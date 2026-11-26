@@ -8,8 +8,12 @@
 #      照抄 = 从旧树出旧包。命令一旦被复制到别处，就再也追不上代码。
 #   2. **站错目录**：工作区里 `web_system-dachengzi`（分支 devtools/dachengzi-preview，
 #      内容 1.0.14，包根有真实 private.key）名字最像「该出码的地方」。已有人在那改过文件。
-#   3. **门禁能被绕过**：`npm run preview` / `npm run upload` 直连 scripts/preview.js /
-#      scripts/upload.js，不经过 scripts/publish.js 里的 preflight 检查。
+#   3. **门禁覆盖面会漏**：preflight 只挂在发布链路上时，入口一多就有人从旁边过去 ——
+#      `npm run preview` / `npm run upload` 一度直连 scripts/preview.js / upload.js 绕过它。
+#      现在这两个 npm 脚本已经是 `node scripts/publish.js <mode>`，**是**过 preflightGate 的
+#      （publish.js:665-676；tests/preflight-wiring.test.ts 的绊线钉着 npm 层这条口径）。
+#      🔴 别把本段当入口清单：门禁正在下沉到 preview.js / upload.js 本体，哪条路仍绕
+#         以 scripts/preflight.js 的入口清单与那条绊线测试为准（条目会变，本段不追）。
 #   4. **二维码文件名固定**：`.ci-output/cli-preview-qr.png` 30 分钟内被覆盖 3 次，
 #      任何引用该路径的文档/消息瞬间过期（"我扫了怎么还是旧版本"）。
 #
