@@ -465,6 +465,8 @@ function cmdUpload(opts) {
   const mode = resolveMode(opts.mode);
   const pkg = require(path.join(ROOT, 'package.json'));
   const version = pkg.version || '1.0.0';
+  // 上传前先锁死「包版本 = 关于页显示版本」，不一致直接 exit 1（preview 不走这里）
+  assertVersionConsistent(version);
   if (mode === 'ci') {
     // ci 模式走 scripts/upload.js，描述由它自行生成（上传时间口径）；
     // 用户传了 --desc 就明说被忽略，不做静默丢弃。
@@ -512,6 +514,41 @@ function cmdUpload(opts) {
 function readVersion() {
   const pkg = require(path.join(ROOT, 'package.json'));
   return pkg.version || '1.0.0';
+}
+
+/**
+ * 读 utils/version.ts 里的 APP_VERSION 字面量（上传前的漂移校验用）。
+ *
+ * 🔴 用正则读源码而不是 require：`.ts` 文件 Node 直接 require 不了。
+ *    返回 '' 表示没找到 —— 由调用方当成「不一致」处理（宁可不传，也不传一个界面会显示错的包）。
+ */
+function readAppVersionConst() {
+  try {
+    const src = fs.readFileSync(path.join(ROOT, 'utils', 'version.ts'), 'utf-8');
+    const m = src.match(/APP_VERSION\s*=\s*['"]([^'"]+)['"]/);
+    return m ? m[1] : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 上传前硬校验：关于页展示的版本号必须与包版本号一致。
+ *
+ * 1.0.17 的「包是 1.0.17、界面显示 v1.0.0」就是这么漏出去的 —— 两处版本没有任何联动。
+ * 不一致直接 exit 1：宁可上传失败，也不要把一个界面版本号错位的包发给用户。
+ * 只挂在 upload 上（preview 不受影响，出预览码不需要版本号吻合）。
+ */
+function assertVersionConsistent(version) {
+  const declared = readAppVersionConst();
+  if (declared !== version) {
+    console.error(
+      `[Publish] ❌ 版本号不一致：package.json=${version}，utils/version.ts=${declared || '(未找到 APP_VERSION)'}`,
+    );
+    console.error('[Publish]    后果：关于页显示的版本号会与包版本号不符（1.0.17 的 v1.0.0 事故）');
+    console.error('[Publish]    处置：把 utils/version.ts 的 APP_VERSION 改成与 package.json.version 一致后重试');
+    process.exit(1);
+  }
 }
 
 function cmdTrial() {
@@ -590,6 +627,8 @@ module.exports = {
   DESC_MAX_LEN,
   buildCliMeta,
   writeCliMeta,
+  readAppVersionConst,
+  assertVersionConsistent,
   pushQr,
   uploadMedia,
   sendMarkdown,
