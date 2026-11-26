@@ -59,18 +59,26 @@ Page({
     radiusClass: '',
     /**
      * 动态问候：严格「<昵称>，<问候语>」，由 formatGreeting(nickname, getLocalHour()) 生成。
-     * 初值为中性 loading 占位，绝不在 Page({data}) 初始化阶段调用 fetchProfile()——
+     * 🔴 data 初值即首帧渲染状态，必须与登录态一致，不依赖 onShow 时序兜住：
+     *    已登录 → 中性 loading 占位 GREETING_LOADING（拉取中不编造昵称）；
+     *    未登录 → ''（确定的空态，首帧就不出现「…」）。
+     *    故用三元而非写死：写死占位会让未登录冷启动闪一帧「…」。
+     * 绝不在 Page({data}) 初始化阶段调用 fetchProfile()——
      * 拉取只能在 onShow 登录态下触发，守住「未登录整页 login-gate、零业务请求」。
      */
-    greetingText: GREETING_LOADING,
+    greetingText: isLoggedIn() ? GREETING_LOADING : '',
     /** 今日一句（本地文案池按日期取模，同天稳定、隔天自动换） */
     quote: getDailyQuote(),
     /** 册别角标文案（方案①浅青 pill；book 缺失时为空串 → WXML 隐藏） */
     bookBadge: bookBadgeText(),
     /** 角标开关（默认开；灰度/回滚可置 false 隐藏角标，不影响取句） */
     showBookBadge: true,
-    /** 登录态：false 时整页渲染登录引导卡（login-gate），不发起任何业务请求 */
-    loggedIn: true,
+    /**
+     * 登录态：false 时整页渲染登录引导卡（login-gate），不发起任何业务请求。
+     * 🔴 data 初值即首帧渲染状态，必须与登录态一致（isLoggedIn 是纯同步 storage 读），
+     *    不依赖 onShow 里的 setData 时序兜住——写死 true 会让未登录冷启动闪一帧 hero。
+     */
+    loggedIn: isLoggedIn(),
     /** 常用功能（pinned 项，读 utils/features 注册表） */
     features: [] as FeatureDef[],
   },
