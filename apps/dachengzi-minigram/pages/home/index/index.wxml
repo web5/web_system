@@ -16,14 +16,42 @@
 
     <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换
          册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill；
-         book 缺失时 bookBadge 为空串 → wx:if 隐藏，不显 undefined -->
-    <view class="daily">
+         book 缺失时 bookBadge 为空串 → wx:if 隐藏，不显 undefined
+         2026-11-26 ⑤：点整句朗读（bindtap），生词可点开词卡；词卡内可朗读/收藏单词 -->
+    <view class="daily" bindtap="speakQuote">
       <view class="daily-top">
         <view class="daily-k">今日一句</view>
         <view class="badge-pill" wx:if="{{showBookBadge && bookBadge}}">{{bookBadge}}</view>
       </view>
       <view class="daily-cn">{{quote.cn}}</view>
-      <view class="daily-en">{{quote.en}}</view>
+      <view class="daily-en">
+        <!-- 只有课文生词挂事件（下点线 + 可点）；表外词是纯文本，点击冒泡到卡片 → 朗读整句 -->
+        <block wx:for="{{quoteTokens}}" wx:key="idx">
+          <text wx:if="{{tk.w && tk.hasDef}}" class="dw has-def" data-w="{{tk.w}}" catchtap="onQuoteWordTap">{{tk.t}}</text>
+          <text wx:else>{{tk.t}}</text>
+        </block>
+      </view>
+      <view class="daily-foot">
+        <view class="dq-act {{quotePlaying ? 'on' : ''}}" catchtap="speakQuote">{{quotePlaying ? '■ 停止' : '▶ 朗读'}}</view>
+        <view class="dq-act" catchtap="collectQuote">☆ 收藏</view>
+      </view>
+    </view>
+
+    <!-- 今日一句词卡：底部浮层（跟课文详情页同一形态，独立 .q-tip 前缀避免跨页样式耦合） -->
+    <view wx:if="{{quoteTip}}" class="q-tip">
+      <view class="q-tip-head">
+        <view class="q-tip-w">{{quoteTip.word}}</view>
+        <view class="q-tip-tools">
+          <view class="q-tip-btn {{quoteWordPlaying ? 'on' : ''}}" catchtap="speakQuoteWord">{{quoteWordPlaying ? '停止' : '朗读'}}</view>
+          <view class="q-tip-btn" catchtap="collectQuoteWord">收藏</view>
+          <view class="q-tip-x" catchtap="closeQuoteTip">✕</view>
+        </view>
+      </view>
+      <view wx:if="{{quoteTip.phonetic}}" class="q-tip-p">{{quoteTip.phonetic}}</view>
+      <view wx:if="{{quoteTip.pos}}" class="q-tip-pos">{{quoteTip.pos}}</view>
+      <view wx:if="{{quoteTip.none}}" class="q-tip-none">暂无释义（课文词汇表未收录该词）</view>
+      <view wx:elif="{{quoteTip.def}}" class="q-tip-def">{{quoteTip.def}}</view>
+      <view wx:if="{{quoteTip.example}}" class="q-tip-ex">{{quoteTip.example}}</view>
     </view>
 
     <!-- 常用功能：注册表 pinned 项（默认 NCE 常驻；收藏可在发现页「添加常用」） -->

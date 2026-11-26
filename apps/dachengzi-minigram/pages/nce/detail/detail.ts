@@ -33,22 +33,23 @@
  *    页面层不再自行弹失败 toast / 不再做 hasHttpResponse 判定，只保留 console.error 排障留痕。
  *    services/tts.ts / services/auth.ts 仍零改动；speakText/stopSpeak/onSpeakState、
  *    loginFromGate、collectGlossary 既有契约不变。
+ *
+ * 2026-11-26 阅读体验 5 项（用户口径，cli-preview 可验）：
+ *  - ① 沉浸档由「整段连排」改为「逐句一行」（仍整篇连续阅读），文末参考译文同步逐句换行；
+ *  - ② 非课文生词点击不再有任何词级高亮（.w:active 只对 .has-def 生效），
+ *       事件也只在生词节点上挂 —— 点非生词等同点句子空白（点按档仍展开该句中文）；
+ *  - ③ 新增长按生词 → 自绘气泡「朗读单词 / 收藏单词」（长按句子气泡两项行为不变）；
+ *  - ④ 底部生词词卡新增「朗读」按钮（读该词，再点停止）。
+ *  - 生词点按开词卡的档位由「仅 tap 档」放宽为全档（沉浸/双语也可查词），
+ *    非生词在任何档位都不出词卡。
  */
-import { getNceLesson, type NceLessonDetail, type NceWord } from '../../../services/nce';
+import { getNceLesson, type NceLessonDetail } from '../../../services/nce';
 import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
 import { speakText, onSpeakState, stopSpeak, type SpeakState } from '../../../services/tts';
 import { collectGlossary } from '../../../services/glossary';
 import { isLoggedIn, loginFromGate } from '../../../services/auth';
-
-interface WordToken {
-  idx: number;
-  /** 展示片段（单词或标点/空白） */
-  t: string;
-  /** 可点单词（小写）；非单词为 '' */
-  w: string;
-  /** D-06：词汇表收录词显示点线；非可点片段恒 false */
-  hasDef: boolean;
-}
+import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
+import { lookupWord, type WordLookup } from '../../../utils/lexicon';
 
 /** D-01/D-02：浮层锚定坐标（rpx，页面坐标；null = 收起 / 未定位） */
 interface FloatPos {
@@ -67,18 +68,24 @@ interface NceLineView {
   tokens: WordToken[];
 }
 
-interface WordTipView {
+/** 词卡视图 = utils/lexicon 的查词结果（详情页与首页共用同一形状） */
+type WordTipView = WordLookup;
+
+/** 长按生词气泡（2026-11-26 ③）：含且仅含「朗读单词」「收藏单词」 */
+interface WordBubble {
+  /** 小写词形（查词 / 朗读 / 收藏用） */
   word: string;
-  phonetic?: string;
-  pos?: string;
-  def?: string;
-  example?: string;
-  /** 表外词：暂无释义且保留可点 */
-  none: boolean;
+  /** 所属句下标（收藏 meta.lineIndex） */
+  lineIdx: number;
+  /** 气泡左上角（rpx，页面坐标） */
+  left: number;
+  top: number;
 }
 
 interface NceTapEvent {
   currentTarget: { dataset: Record<string, string | number | boolean | undefined> };
+  /** 长按事件带原生触点（pageX/pageY 为页面坐标，px）：用于长按生词气泡定位 */
+  touches?: Array<{ pageX?: number; pageY?: number; clientX?: number; clientY?: number }>;
 }
 
 /** V21+ 阅读三档：沉浸（连排通读）/ 双语（中文常显）/ 点按=精读（逐句展开 + 生词 tip）。默认沉浸。 */
@@ -90,28 +97,17 @@ function normalizeMode(v: unknown): ReadMode {
 }
 
 /**
- * 把英文句子切成「单词 / 非单词」片段，供 V3 点词 tip 使用。
- * D-06：known 为词汇表小写词集合，仅直收词置 hasDef=true 显示点线；
- * 表外词 / 标点仍产出可点 token（hasDef=false），形态变化词由 _lookupWord 的 R3 兜底查释义。
+ * 切词与查表已抽到 utils/tokenize.ts / utils/lexicon.ts（2026-11-26）：
+ * 首页「今日一句」与详情页共用同一套 hasDef 判定与 R3 规则表，避免两处口径漂移。
  */
-function tokenize(en: string, known?: Record<string, boolean>): WordToken[] {
-  const re = /[A-Za-z]+(?:['’][A-Za-z]+)*|[^A-Za-z]+/g;
-  const out: WordToken[] = [];
-  let m: RegExpExecArray | null;
-  let k = 0;
-  while ((m = re.exec(en)) !== null) {
-    const t = m[0];
-    const w = /^[A-Za-z]/.test(t) ? t.toLowerCase() : '';
-    out.push({ idx: k++, t, w, hasDef: !!w && !!known && known[w] === true });
-  }
-  return out;
-}
 
 Page({
   /** 朗读状态订阅的退订函数（onHide / onUnload 时调用） */
   _offSpeakState: null as null | (() => void),
   /** 当前正在朗读的句下标（-1 = 无） */
   _playingIdx: -1,
+  /** 当前正在朗读的单词（'' = 本次朗读不是单词；仅用于词卡/单词气泡按钮态） */
+  _speakingWord: '' as string,
   /** auth 事件订阅退订（V18 成对，页面级；组件内不订阅） */
   _offAuthExpired: null as null | (() => void),
   _offAuthLogged: null as null | (() => void),
@@ -143,6 +139,12 @@ Page({
     bubbleIdx: -1,
     /** V3 点词 tip（null = 收起） */
     tipWord: null as WordTipView | null,
+    /** 2026-11-26 ④：词卡「朗读」按钮播放态（true = 正在朗读该词） */
+    tipPlaying: false,
+    /** 2026-11-26 ③ 长按生词气泡（null = 收起） */
+    wordBubble: null as WordBubble | null,
+    /** 2026-11-26 ③ 正在朗读的单词（'' = 无）：驱动词卡/单词气泡按钮文案 */
+    wordPlaying: '',
     /** 19:11：tipPos 字段保留（切档/换课/收起时仍清），但不再驱动底部浮层 word-tip */
     tipPos: null as FloatPos | null,
     /** D-02 长按气泡锚定坐标（rpx；null = 收起） */
@@ -235,21 +237,23 @@ Page({
         return;
       }
       // D-06：仅词汇表直收词带点线标记；换课时清空两个浮层锚点，避免残留旧坐标
-      const words: NceWord[] = d.words || [];
-      const known: Record<string, boolean> = {};
-      words.forEach((x) => { known[String(x.word || '').toLowerCase()] = true; });
+      const known = buildKnown(d.words || []);
       const lines: NceLineView[] = (d.lines || []).map((l, i) => ({
         idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en, known),
       }));
-      // V24 参考译文 = 整篇 lines[].cn 拼接（跳过空值）；全部为空时给兜底文案。
+      // V24 参考译文 = 整篇 lines[].cn 按句拼接（跳过空值）。
+      // 2026-11-26 ①：分隔符由 '' 改 '\n' —— 配合 .cn-fold-c 的 white-space: pre-wrap，
+      // 译文与英文一样「一句一行」，不再挤成一段。
       const cnParts = lines.map((l) => (l.cn || '').trim()).filter((s) => s.length > 0);
-      const fullCn = cnParts.length ? cnParts.join('') : '（本课暂无参考译文）';
+      const fullCn = cnParts.length ? cnParts.join('\n') : '（本课暂无参考译文）';
       wx.setNavigationBarTitle({ title: `Lesson ${d.id} · ${d.title}` });
       this.setData({
         detail: d, lines, readingLineIdx: -1, readingPhase: 'idle',
         expandedIdx: -1, bubbleIdx: -1, tipWord: null, tipPos: null,
         bubblePos: null, fullCn, cnExpanded: false, loading: false,
+        wordBubble: null, wordPlaying: '', tipPlaying: false,
       });
+      this._speakingWord = '';
     } catch {
       // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗
       if (this.data.authExpired) return;
@@ -272,6 +276,7 @@ Page({
       readMode: mode,
       expandedIdx: -1, bubbleIdx: -1,
       tipWord: null, tipPos: null, bubblePos: null,
+      wordBubble: null, tipPlaying: false,
     });
   },
 
@@ -289,7 +294,7 @@ Page({
   _applyLineTap(i: number) {
     const line = this.data.lines[i];
     if (!line) return;
-    const clear = { bubbleIdx: -1, tipWord: null, tipPos: null, bubblePos: null };
+    const clear = { bubbleIdx: -1, tipWord: null, tipPos: null, bubblePos: null, wordBubble: null, tipPlaying: false };
     if (this.data.readMode === 'tap') {
       this.setData({ ...clear, expandedIdx: this.data.expandedIdx === i ? -1 : i });
     } else {
@@ -325,84 +330,129 @@ Page({
   },
 
   /**
-   * V23/V26′ 点词热区分发（27 §3.3 按档分发不变；19:11 ③ 生词 tip 改底部统一浮层）：
-   * .w 始终 catchtap="onWordTap"，档位判定全放这里，WXML 不按档动态切 bind/catch。
-   * - readMode !== 'tap' 或该 token 无 hasDef（含空白/非生词文字）→ 与 toggleLine 同语义：_applyLineTap(i)；
-   * - 仅 tap 档 + hasDef 生词 → 只出底部浮层 tipWord（复用 _lookupWord），
-   *   🔴 不再调用 _anchorFloat 就近锚定，不写 tipPos，也不展开该句中文；再点同一词收起、
-   *   再点其它词替换浮层内容。tipPos 字段保留但不得驱动 word-tip。
-   * 生词 tip 仅 tap 档生效。
+   * 点词热区分发（2026-11-26 ② 口径变更）：
+   * - 非生词（hasDef=false，含标点/空白）→ 不产生任何词级反馈，语义等同点句子空白（_applyLineTap）；
+   *   WXML 侧非生词节点已不挂事件，这里是兜底，防止别处直接调用时行为漂移。
+   * - 生词 → 任意阅读档都出底部词卡（不再限 tap 档）：沉浸/双语阅读中也可随时查词；
+   *   再点同一词收起、再点其它词替换内容。词卡不展开该句中文、不锚定、不写 tipPos。
    */
   onWordTap(e: NceTapEvent) {
     const ds = e.currentTarget.dataset;
     const i = Number(ds.i ?? 0);
     const hasDef = ds.hasdef === true || ds.hasdef === 'true';
-    if (this.data.readMode !== 'tap' || !hasDef) {
+    const raw = String(ds.w || '');
+    if (!hasDef || !raw) {
       this._applyLineTap(i);
       return;
     }
-    const raw = String(ds.w || '');
-    if (!raw) return;
     const w = raw.toLowerCase();
     const cur = this.data.tipWord;
     if (cur && cur.word === w) {
-      this.setData({ tipWord: null, tipPos: null });
+      this.setData({ tipWord: null, tipPos: null, tipPlaying: false });
       return;
     }
     // 19:11 ③：底部浮层由 tipWord 驱动；不取 anchor、不调 _anchorFloat、不写 tipPos。
-    this.setData({ tipWord: this._lookupWord(w), tipPos: null, bubbleIdx: -1, bubblePos: null });
+    this.setData({
+      tipWord: this._lookupWord(w), tipPos: null, tipPlaying: false,
+      bubbleIdx: -1, bubblePos: null, wordBubble: null,
+    });
   },
 
-  closeTip() { this.setData({ tipWord: null, tipPos: null }); },
+  /** 关闭词卡：顺手停掉「词卡朗读」，避免关掉卡片还在放音。 */
+  closeTip() {
+    if (this.data.tipPlaying) {
+      stopSpeak();
+      this._speakingWord = '';
+    }
+    this.setData({ tipWord: null, tipPos: null, tipPlaying: false });
+  },
 
   /**
-   * V3-A 封闭规则表 R3（02 §1.4 :110-118，实现期不得扩充）：
-   * R3-1 小写化 → R3-2 -s/-es → R3-3 -ed → R3-4 -ing → R3-5 不规则词封闭枚举
-   * → R3-6 候选集固定顺序 [w, 词元, 词元+'e', w去s, 词元+'s'] 查 d.words[]，
-   * 首个命中即返回该词条；全部未命中一律「暂无释义」且保留可点。
+   * 2026-11-26 ④ 词卡「朗读」：读当前单词；再点同词由 speakText 的 same-text 语义停止。
+   * 播放态经 onSpeakState 回流（wordPlaying / tipPlaying），页面不自己猜结束时机。
+   */
+  speakTipWord() {
+    const tip = this.data.tipWord;
+    if (!tip || !tip.word) return;
+    this._speakingWord = tip.word;
+    this._playingIdx = -1;
+    void speakText(tip.word);
+  },
+
+  /**
+   * 2026-11-26 ③ 长按生词 → 自绘气泡「朗读单词 / 收藏单词」。
+   * 定位用长按原生的 pageX/pageY（页面坐标 px）直接换算 rpx，不做 SelectorQuery，
+   * 避免与句子气泡的 _anchorFloat 抢同一份坐标状态；长按句子仍是原两项气泡。
+   */
+  onWordLongPress(e: NceTapEvent) {
+    const ds = e.currentTarget.dataset;
+    const i = Number(ds.i ?? 0);
+    const w = String(ds.w || '').toLowerCase();
+    if (!w) return;
+    const t = (e.touches && e.touches[0]) || null;
+    const px2rpx = 750 / (wx.getSystemInfoSync().windowWidth || 375);
+    const px = Number((t && (t.pageX !== undefined ? t.pageX : t.clientX)) || 0);
+    const py = Number((t && (t.pageY !== undefined ? t.pageY : t.clientY)) || 0);
+    // 气泡宽 340rpx：右边界夹紧，避免长按行尾词时气泡出屏
+    const left = Math.max(0, Math.min(Math.round(px * px2rpx), 750 - 340));
+    const top = Math.round(py * px2rpx + 8);
+    this.setData({
+      wordBubble: { word: w, lineIdx: i, left, top },
+      bubbleIdx: -1, bubblePos: null,
+      tipWord: null, tipPos: null, tipPlaying: false,
+    });
+  },
+
+  closeWordBubble() { this.setData({ wordBubble: null }); },
+
+  /** 单词气泡「朗读单词」：读该词并收起气泡 */
+  onWordBubbleSpeak() {
+    const wb = this.data.wordBubble;
+    if (!wb) return;
+    this.setData({ wordBubble: null });
+    this._speakingWord = wb.word;
+    this._playingIdx = -1;
+    void speakText(wb.word);
+  },
+
+  /**
+   * 单词气泡「收藏单词」：沿用 collectGlossary 契约，tag='word'。
+   * note 存「词性 + 释义」便于收藏页直接读；meta 带 word/phonetic/lineIndex 供溯源。
+   * 未登录同句子收藏：弹 modal-login「请先登录」。
+   */
+  async collectWord() {
+    const wb = this.data.wordBubble;
+    if (!wb) return;
+    this.setData({ wordBubble: null });
+    if (!isLoggedIn()) {
+      this.setData({ guestLoginShow: true });
+      return;
+    }
+    const info = this._lookupWord(wb.word);
+    const { id, book, detail } = this.data;
+    const note = [info.pos, info.def].filter(Boolean).join(' ');
+    try {
+      const res = await collectGlossary({
+        tag: 'word',
+        enMain: info.word || wb.word,
+        note,
+        sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
+        meta: { book, lessonId: id, lineIndex: wb.lineIdx, word: info.word || wb.word, phonetic: info.phonetic || '' },
+      });
+      wx.showToast({ title: res.existed ? '已在生词本' : '已收藏', icon: 'none' });
+    } catch (err) {
+      // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
+      console.error('[nce/collectWord]', err);
+    }
+  },
+
+  /**
+   * V3-A 查词：实现在 utils/lexicon.ts（R3 封闭规则表，与首页今日一句共用）。
+   * 保留本方法作页面内统一入口，测试与后续调用点不变。
    */
   _lookupWord(w: string): WordTipView {
     const detail = this.data.detail;
-    const words: NceWord[] = (detail && detail.words) || [];
-    const byKey = (k: string): NceWord | undefined =>
-      words.find((x) => String(x.word).toLowerCase() === k);
-
-    // R3-5 不规则词封闭枚举（映射后仍查 d.words[]）
-    const IRREG: Record<string, string> = {
-      has: 'have', have: 'have', had: 'have',
-      been: 'be', is: 'be', am: 'be', are: 'be', was: 'be', were: 'be',
-      does: 'do', do: 'do', did: 'do',
-      gone: 'go', went: 'go',
-      received: 'receive',
-    };
-
-    // R3-2 / R3-3 / R3-4 词形还原（单一词元）
-    let stem = w;
-    if (/ies$/.test(stem)) stem = stem.replace(/ies$/, 'y');
-    else if (/(ches|shes|sses|xes)$/.test(stem)) stem = stem.replace(/es$/, '');
-    else if (/ied$/.test(stem)) stem = stem.replace(/ied$/, 'y');
-    else if (/ed$/.test(stem)) stem = stem.replace(/ed$/, '');
-    else if (/ing$/.test(stem)) stem = stem.replace(/ing$/, '');
-    else if (/s$/.test(stem) && !/ss$/.test(stem)) stem = stem.replace(/s$/, '');
-
-    const lemma = IRREG[w] || stem;
-    // R3-6 候选集固定顺序
-    const candidates = [w, lemma, lemma + 'e', w.replace(/s$/, ''), lemma + 's'];
-    for (const c of candidates) {
-      const hit = byKey(c);
-      if (hit) {
-        return {
-          word: hit.word,
-          phonetic: hit.phonetic,
-          pos: hit.pos,
-          def: hit.def,
-          example: hit.example,
-          none: false,
-        };
-      }
-    }
-    // 表外词：暂无释义且保留可点
-    return { word: w, none: true };
+    return lookupWord(w, (detail && detail.words) || []);
   },
 
   /** V4 平台原生 bindlongpress 长按气泡（与 bindtap 同句节点，平台互斥分发）+ D-02 锚点 */
@@ -410,7 +460,10 @@ Page({
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
-    this.setData({ bubbleIdx: i, expandedIdx: -1, tipWord: null, tipPos: null });
+    this.setData({
+      bubbleIdx: i, expandedIdx: -1, tipWord: null, tipPos: null,
+      wordBubble: null, tipPlaying: false,
+    });
     this._anchorFloat(`#line-${i}`, 'bubblePos');
   },
 
@@ -429,6 +482,7 @@ Page({
       return;
     }
     this._playingIdx = i;
+    this._speakingWord = ''; // 读句子：清掉「单词朗读」标记，避免词卡按钮态串味
     this.setData({ readingLineIdx: i, readingPhase: 'loading', bubbleIdx: -1, bubblePos: null });
     void speakText(line.en);
   },
@@ -489,23 +543,28 @@ Page({
       return;
     }
     stopSpeak();
-    this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle' });
+    this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle', wordBubble: null, wordPlaying: '', tipPlaying: false });
+    this._speakingWord = '';
     void this.load();
     wx.pageScrollTo({ scrollTop: 0, duration: 200 });
   },
 
   onRetry() { void this.load(); },
 
-  /** 朗读状态：null 复位；非 null 高亮跟随当前朗读句（V5 单句朗读态） */
+  /** 朗读状态：null 复位；非 null 高亮跟随当前朗读句（V5 单句朗读态）+ 单词朗读按钮态 */
   _onSpeakState(s: SpeakState | null) {
     if (!s) {
       this._playingIdx = -1;
-      this.setData({ readingLineIdx: -1, readingPhase: 'idle' });
+      this._speakingWord = '';
+      this.setData({ readingLineIdx: -1, readingPhase: 'idle', wordPlaying: '', tipPlaying: false });
       return;
     }
+    const tip = this.data.tipWord;
     this.setData({
       readingPhase: s.phase === 'loading' ? 'loading' : 'playing',
       readingLineIdx: this._playingIdx,
+      wordPlaying: this._speakingWord,
+      tipPlaying: !!this._speakingWord && !!tip && tip.word === this._speakingWord,
     });
   },
 

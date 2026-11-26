@@ -28,9 +28,12 @@
  *
  * ── 守护强度（不是只盯 private.key 一个文件名）──────────────────────
  * · 规则存在性：两个包都必须声明 private.key 规则；
- * · 覆盖完整性：扫**包根所有 *.key**（`upload.key`、`apiclient.key`… 任意名字），
- *   逐个用与引擎等价的匹配器判定必须被 ignore 覆盖 —— 将来谁在包根多放一把 key，
- *   这里立刻变红，逼人显式决定；
+ * · 覆盖完整性：扫**包根所有密钥文件**（扩展名见 SECRET_EXTENSIONS：`.key` / `.pem`，
+ *   含 `upload.key`、`apiclient.key`、`cert.pem`… 任意名字），逐个用与引擎等价的
+ *   匹配器判定必须被 ignore 覆盖 —— 将来谁在包根多放一把密钥，这里立刻变红，
+ *   逼人显式决定；
+ * · 不误报：`.example` 模板（`private.key.example`）不是密钥，**不进**扫描集，
+ *   避免被"名字里带 key"的模板文件刷成假红；
  * · include 抵消：packOptions 的 isIgnoredByRules = !isFileIncluded && isFileIgnored，
  *   被 include 命中的文件即使躺在 ignore 里也会进包，所以一并守住；
  * · 存量规则不回退：本次改动只允许追加，不允许把既有条目删掉/替换。
@@ -64,6 +67,14 @@ const REQUIRED_APPS = ['dachengzi-minigram', 'kedou-ai-minigram'];
 
 /** 本次补的规则字面量（守护它没被改名/改 type） */
 const PRIVATE_KEY_RULE: IgnoreRule = { type: 'file', value: 'private.key' };
+
+/**
+ * 密钥文件的扩展名集合 —— 按**真实后缀**判定，不用 `名字里带 key/private` 的宽正则。
+ * 反面教材：`project.private.config.json` 是微信开发者工具的本地私有配置（本来就该
+ * 在 ignore 里），用 /key|private/i 扫会把它当成"私钥规则"造出假阳性；
+ * `private.key.example` 是模板、不含密钥，也不该进扫描集。
+ */
+const SECRET_EXTENSIONS = ['.key', '.pem'];
 
 /**
  * 本次改动前的存量 ignore 条目快照（逐个抄自 origin/master 998910c5 的
@@ -174,11 +185,11 @@ interface AppAudit {
   configPath: string;
   ignoreRules: IgnoreRule[];
   includeRules: IgnoreRule[];
-  /** 包根实际存在的 *.key 文件名（无则空数组） */
-  keyFiles: string[];
-  /** 没被任何 ignore 规则覆盖的 key 文件 */
+  /** 包根实际存在的密钥文件名（扩展名见 SECRET_EXTENSIONS；无则空数组） */
+  secretFiles: string[];
+  /** 没被任何 ignore 规则覆盖的密钥文件 */
   uncovered: string[];
-  /** 被 include 规则命中（会抵消 ignore）的 key 文件 */
+  /** 被 include 规则命中（会抵消 ignore）的密钥文件 */
   includeOverridden: string[];
   hasPrivateKeyRule: boolean;
 }
@@ -188,11 +199,13 @@ function readProjectConfig(configPath: string): ProjectConfig {
   return JSON.parse(raw) as ProjectConfig;
 }
 
-/** 包根（非递归）的 *.key 文件 */
-function listRootKeyFiles(appDir: string): string[] {
+/** 包根（非递归）的密钥文件：扩展名命中 SECRET_EXTENSIONS */
+function listRootSecretFiles(appDir: string): string[] {
   return fs
     .readdirSync(appDir, { withFileTypes: true })
-    .filter((d) => d.isFile() && d.name.toLowerCase().endsWith('.key'))
+    .filter(
+      (d) => d.isFile() && SECRET_EXTENSIONS.some((ext) => d.name.toLowerCase().endsWith(ext)),
+    )
     .map((d) => d.name)
     .sort();
 }
@@ -203,7 +216,7 @@ function auditAppDir(appName: string, appDir: string): AppAudit {
   const config = readProjectConfig(configPath);
   const ignoreRules = config.packOptions?.ignore ?? [];
   const includeRules = config.packOptions?.include ?? [];
-  const keyFiles = listRootKeyFiles(appDir);
+  const secretFiles = listRootSecretFiles(appDir);
 
   return {
     app: appName,
@@ -211,9 +224,9 @@ function auditAppDir(appName: string, appDir: string): AppAudit {
     configPath,
     ignoreRules,
     includeRules,
-    keyFiles,
-    uncovered: keyFiles.filter((f) => !matchesAny(f, ignoreRules)),
-    includeOverridden: keyFiles.filter((f) => matchesAny(f, includeRules)),
+    secretFiles,
+    uncovered: secretFiles.filter((f) => !matchesAny(f, ignoreRules)),
+    includeOverridden: secretFiles.filter((f) => matchesAny(f, includeRules)),
     hasPrivateKeyRule: ignoreRules.some(
       (r) => r.type === PRIVATE_KEY_RULE.type && String(r.value).toLowerCase() === PRIVATE_KEY_RULE.value,
     ),
@@ -237,7 +250,7 @@ function listMinigramApps(): string[] {
 function makeFixtureDir(opts: {
   ignore: IgnoreRule[];
   include?: IgnoreRule[];
-  keyFiles: string[];
+  secretFiles: string[];
 }): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pack-ignore-'));
   fs.writeFileSync(
@@ -248,7 +261,7 @@ function makeFixtureDir(opts: {
       2,
     ),
   );
-  opts.keyFiles.forEach((f) => fs.writeFileSync(path.join(dir, f), 'fake-key-bytes'));
+  opts.secretFiles.forEach((f) => fs.writeFileSync(path.join(dir, f), 'fake-key-bytes'));
   return dir;
 }
 
@@ -273,16 +286,16 @@ describe('packOptions.ignore 覆盖包根密钥（微信包体闸门）', () => 
     expect(audit.hasPrivateKeyRule).toBe(true);
   });
 
-  it.each(REQUIRED_APPS)('%s：包根所有 *.key 都被 ignore 覆盖，且未被 include 抵消', (app) => {
+  it.each(REQUIRED_APPS)('%s：包根所有密钥文件（*.key / *.pem）都被 ignore 覆盖，且未被 include 抵消', (app) => {
     const audit = auditApp(app);
-    // audit.keyFiles 是包根实测到的 key 文件清单；失败时它随断言差异一起打印出来
+    // audit.secretFiles 是包根实测到的密钥文件清单；失败时它随断言差异一起打印出来
     expect({ uncovered: audit.uncovered, includeOverridden: audit.includeOverridden }).toEqual({
       uncovered: [],
       includeOverridden: [],
     });
   });
 
-  it('apps/ 下所有 *-minigram 包（含将来新增）包根 key 均被覆盖', () => {
+  it('apps/ 下所有 *-minigram 包（含将来新增）包根密钥文件均被覆盖', () => {
     const violations = listMinigramApps().map((app) => {
       const audit = auditApp(app);
       return { app, uncovered: audit.uncovered, includeOverridden: audit.includeOverridden };
@@ -319,7 +332,7 @@ describe('负例：闸门缺失时必须报出违规', () => {
   }
 
   it('规则缺失（ignore 为空）→ hasPrivateKeyRule=false 且 private.key 落在 uncovered', () => {
-    const dir = fixture({ ignore: [], keyFiles: ['private.key'] });
+    const dir = fixture({ ignore: [], secretFiles: ['private.key'] });
     const audit = auditAppDir('fixture', dir);
     expect(audit.hasPrivateKeyRule).toBe(false);
     expect(audit.uncovered).toEqual(['private.key']);
@@ -328,18 +341,52 @@ describe('负例：闸门缺失时必须报出违规', () => {
   it('规则只写 private.key → 换一个名字的 key（apiclient.key）仍必须变红（不是只盯一个文件名）', () => {
     const dir = fixture({
       ignore: [PRIVATE_KEY_RULE],
-      keyFiles: ['private.key', 'apiclient.key', 'upload.key'],
+      secretFiles: ['private.key', 'apiclient.key', 'upload.key'],
     });
     const audit = auditAppDir('fixture', dir);
     expect(audit.hasPrivateKeyRule).toBe(true);
     expect(audit.uncovered).toEqual(['apiclient.key', 'upload.key']);
   });
 
+  it('🔴 *.pem 也在射程内：规则只写 private.key 时，cert.pem / server.pem 必须变红', () => {
+    const dir = fixture({
+      ignore: [PRIVATE_KEY_RULE],
+      secretFiles: ['private.key', 'cert.pem', 'server.pem'],
+    });
+    const audit = auditAppDir('fixture', dir);
+    expect(audit.secretFiles).toEqual(['cert.pem', 'private.key', 'server.pem']);
+    expect(audit.uncovered).toEqual(['cert.pem', 'server.pem']);
+  });
+
+  it('不误报：.example 模板（private.key.example / cert.pem.example）不是密钥，不进扫描集', () => {
+    const dir = fixture({
+      ignore: [PRIVATE_KEY_RULE],
+      secretFiles: ['private.key.example', 'cert.pem.example', 'private.key'],
+    });
+    const audit = auditAppDir('fixture', dir);
+    // 只有真实密钥文件被扫到；两个 .example 模板不参与判定 → 不制造假红
+    expect(audit.secretFiles).toEqual(['private.key']);
+    expect(audit.uncovered).toEqual([]);
+  });
+
+  it('不误报：project.private.config.json（名字带 private）不是密钥文件', () => {
+    const dir = fixture({
+      ignore: [PRIVATE_KEY_RULE],
+      secretFiles: ['project.private.config.json'],
+    });
+    const audit = auditAppDir('fixture', dir);
+    expect(audit.secretFiles).toEqual([]);
+    expect(audit.uncovered).toEqual([]);
+    // 反过来：用宽正则 /key|private/i 会把它当成"已有 key 规则"，这正是要避免的假阳性
+    expect(/key|private/i.test('project.private.config.json')).toBe(true);
+    expect(SECRET_EXTENSIONS.some((ext) => 'project.private.config.json'.endsWith(ext))).toBe(false);
+  });
+
   it('ignore 命中但 include 也命中 → 计入 includeOverridden（引擎里 include 会抵消 ignore）', () => {
     const dir = fixture({
       ignore: [PRIVATE_KEY_RULE],
       include: [PRIVATE_KEY_RULE],
-      keyFiles: ['private.key'],
+      secretFiles: ['private.key'],
     });
     const audit = auditAppDir('fixture', dir);
     expect(audit.uncovered).toEqual([]);

@@ -405,9 +405,10 @@ describe('② 每日一句：中英配对展示 + 注入能力保持', () => {
     expect(pageConfig.data.quote.en).toBeTruthy();
   });
 
-  it('wxml 保留 {{quote.cn}} / {{quote.en}} 双行，真实 UI 无「NCE 课文句」误导文案', () => {
+  it('wxml 保留中文 {{quote.cn}} + 按词渲染英文（quoteTokens ← quote.en），无「NCE 课文句」误导文案', () => {
     expect(homeWxml).toContain('{{quote.cn}}');
-    expect(homeWxml).toContain('{{quote.en}}');
+    // 2026-11-26 ⑤：英文按词渲染以支持点词/朗读，展示内容仍是今日一句原文
+    expect(homeWxml).toMatch(/wx:for="\{\{quoteTokens\}\}"/);
     expect(homeWxml).not.toMatch(/来自 ?NCE|NCE 课文句/);
   });
 

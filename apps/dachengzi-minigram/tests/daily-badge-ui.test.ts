@@ -22,9 +22,12 @@ describe('方案① 角标 WXML（R11）', () => {
     expect(WXML).toMatch(/class="daily-top"/);
     expect(WXML).toMatch(/class="badge-pill" wx:if="\{\{showBookBadge && bookBadge\}\}"/);
   });
-  it('主句显示 {{quote.cn}}/{{quote.en}} 不变（角标不喧宾夺主）', () => {
+  it('主句显示 {{quote.cn}} + 按词渲染的英文（quoteTokens ← quote.en），角标不喧宾夺主', () => {
     expect(WXML).toContain('{{quote.cn}}');
-    expect(WXML).toContain('{{quote.en}}');
+    // 2026-11-26 ⑤：英文由整串改为按词切分渲染（点词/朗读），展示内容仍是今日一句原文
+    expect(WXML).toMatch(/wx:for="\{\{quoteTokens\}\}"/);
+    expect(WXML).toContain('{{tk.t}}');
+    expect(TS).toMatch(/quoteTokens: tokenize\(INITIAL_QUOTE\.en\)/);
   });
 });
 
