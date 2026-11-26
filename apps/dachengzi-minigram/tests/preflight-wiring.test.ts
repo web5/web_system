@@ -4,10 +4,10 @@
  *
  * 只测两件事，**不测 preflight 的判定逻辑**（那由 preflight.test.ts 负责）：
  *
- *   H1 · 入口接线：`npm run preview` / `npm run upload` 必须落到 publish.js，
- *        不能直连 scripts/preview.js / scripts/upload.js —— 门禁只挂在 publish.js 里，
- *        直连文件就等于绕过门禁。这一类的病根不是「没写门禁」而是「门禁没接线」：
- *        改一处 package.json 胜过三处文档提醒，所以用机器断言钉住。
+ *   H1 · 入口接线：`npm run preview` / `npm run upload` 必须落到 publish.js ——
+ *        **不再是因为「直连会绕过门禁」**（那份门禁已在 9122 下沉到 preview.js / upload.js 本体），
+ *        而是因为 publish.js 还要负责推送、--desc、控制台指引等 npm 层语义：
+ *        一处入口 = 一处参数口径。改一处 package.json 胜过三处文档提醒。
  *
  *   H2 · 参数透传：publish.js 调门禁时必须带 expectVersion。
  *        preflight.js 侧本来支持 opts.expectVersion（P1 版本一致性），
@@ -17,9 +17,17 @@
  *        —— 那会让「跑/打印/退出」出现第二份。编排只在 preflight.runGateOrExit 一份，
  *        publish.js 只允许调它。本组断言用「runPreflight 调用次数为 0」把这条钉死。
  *
+ *   H4 · 出码载体快照（台账 9122）：凡是驱动 miniprogram-ci 出码/上传的脚本，必须自己过门禁。
+ *        绊线从「谁不许直连」搬到了「谁出码谁必须过门 —— 新增出码脚本会让快照先红」，
+ *        因为「直连」这个概念在门禁下沉后已经没有安全含义了。
+ *
  * 隔离：jest.mock 掉 child_process（publish.js 唯一外部调用出口）与 ../scripts/preflight，
  *       断言 runGateOrExit 的入参而不真跑 git / 不碰真包。
+ *       H4 例外：它只读 scripts/*.js 源码（不执行），不引入任何真实副作用。
  */
+
+import * as fs from 'fs';
+import * as path from 'path';
 
 jest.mock('child_process', () => ({
   execFileSync: jest.fn(),
@@ -72,7 +80,7 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------- H1 入口接线
 
-describe('H1 · npm 出码入口必须经过 publish.js（门禁唯一挂载点）', () => {
+describe('H1 · npm 出码入口必须经过 publish.js（npm 层参数口径唯一）', () => {
   it('`npm run preview` 走 publish.js preview 子命令', () => {
     expect(pkg.scripts.preview).toBe('node scripts/publish.js preview');
   });
@@ -82,12 +90,15 @@ describe('H1 · npm 出码入口必须经过 publish.js（门禁唯一挂载点�
   });
 
   /**
-   * 绊线：npm 脚本层面不允许再有人直连 preview.js / upload.js。
+   * 绊线：npm 脚本层面统一经 publish.js（不直连 preview.js / upload.js）。
    * 一旦有人加回 `"xxx": "node scripts/preview.js"`，本断言即红。
    *
-   * ⚠️ 本条只覆盖 npm 入口。scripts/preview-push.js 内部用 spawnSync 调 preview.js，
-   *    它不是 npm 入口，断言不到 —— 那条路的安全由「门禁已下沉到 preview.js 本体」保证
-   *    （台账 9122；用例见 tests/preflight-entry-sink.test.ts）。
+   * 🔴 这条**在 9122 之后换了个理由，仍然保留**：
+   *    原来是因为「直连绕过门禁」—— 那个理由已经作废（门禁已下沉到两个脚本本体，
+   *    直连也过同一道门，见 tests/preflight-entry-sink.test.ts 的 E1 组）。
+   *    现在钉的是「npm 入口统一经 publish.js」：推送、--desc、控制台指引这些 npm 层语义
+   *    只有 publish.js 有，另开一个 npm 入口 = 第二套参数口径。
+   *    真正的安全属性已搬去 H4（谁出码谁必须自己过门禁）。
    */
   it('除 preview / upload 外，没有任何 npm 脚本直连 preview.js / upload.js', () => {
     const direct = Object.entries(pkg.scripts)
@@ -95,6 +106,39 @@ describe('H1 · npm 出码入口必须经过 publish.js（门禁唯一挂载点�
       .map(([name]) => name)
       .sort();
     expect(direct).toEqual([]);
+  });
+});
+
+// ------------------------------------------------- H4 出码载体快照（台账 9122）
+
+/** 去掉注释后再判（「注释里写着」不算代码；`(^|[^:])` 避开 https:// 被当行注释切掉）。 */
+const codeOnly = (src: string) => src
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
+const readScript = (file: string) => fs.readFileSync(path.join(SCRIPTS_DIR, file), 'utf-8');
+
+/**
+ * 「出码载体」= 源码里 `new Project(` 的脚本 —— 那是 miniprogram-ci 出码/上传的必需构造，
+ * 比「文件里提到 miniprogram-ci」精确（preview-push.js 只是 require.resolve 探可加载性，不出码）。
+ */
+const outputScripts = (): string[] => fs.readdirSync(SCRIPTS_DIR)
+  .filter((f) => f.endsWith('.js'))
+  .filter((f) => codeOnly(readScript(f)).includes('new Project('))
+  .sort();
+
+describe('H4 · 谁驱动 miniprogram-ci 出码，谁就必须自己过门禁', () => {
+  it('当前出码载体就是 preview.js / upload.js 两个（新增出码脚本时这条先红）', () => {
+    expect(outputScripts()).toEqual(['preview.js', 'upload.js']);
+  });
+
+  it('每个出码载体都调 runGateOrExit，且门禁排在 new Project( 之前（先判定再动手）', () => {
+    for (const file of outputScripts()) {
+      const code = codeOnly(readScript(file));
+      expect(code).toContain('runGateOrExit(');
+      expect(code.indexOf('runGateOrExit(')).toBeLessThan(code.indexOf('new Project('));
+    }
   });
 });
 

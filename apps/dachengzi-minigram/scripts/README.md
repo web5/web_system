@@ -104,8 +104,9 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ```
 
 > 🔴 **门禁已下沉到 `scripts/preview.js` / `scripts/upload.js` 本体**（台账 9122）：
-> 直连 `node scripts/preview.js` 与走 `npm run preview`（publish.js）过的是**同一道门**
-> （P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 / P6 CLI），
+> 这两个文件**历史上**是「无门禁的底层实现」（H1 之前 `npm run preview` / `npm run upload`
+> 也直连它们）；现在两者本体在出码前已跑同一道门禁 —— **直连与 npm 入口过的是同一道门**。
+> 门禁判据是 P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 / P6 CLI，
 > 判据只有 `scripts/preflight.js` 一份、编排只有 `preflight.runGateOrExit` 一份。
 > ci 模式经 `publish.js --mode ci` 走的是同一道门，只是 P2 / P6 换判据
 > （ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖、P6 不判开发者工具 CLI）——
@@ -118,6 +119,10 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 > `npm run preview:push`（scripts/preview-push.js）**不再自带门禁**：它把上面这些参数原样
 > 透传给 `scripts/preview.js`，判据仍只有一份。它自查的只有推送前置（wecom-cli 授权 /
 > miniprogram-ci 可加载）。
+>
+> 📌 **「哪些入口要过门禁」以代码为准，不以本文为准**：入口清单见 `scripts/preflight.js`
+> 头注释；「凡驱动 miniprogram-ci 出码的脚本都必须自己过门禁」由
+> `tests/preflight-wiring.test.ts` 的绊线测试钉住。改入口时改那两处，别改本文。
 
 预览成功后二维码落在 `.ci-output/cli-preview-qr.png`（cli）或 `.ci-output/preview-qr.png`（ci），
 用微信扫码即可预览。

@@ -42,16 +42,20 @@ const preflight = require('./preflight');
 
 /* ---------- 0. 出码前门禁：本文件的**第一条动作**（台账 9122） ----------
  *
- * 🔴 为什么必须在这里、且排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
- *    本文件是「出码」这件事的真载体。此前门禁只挂在 scripts/publish.js 外层，
- *    而 `node scripts/preview.js` 这种直连（preview-push.js 就这么干）会把 P1 版本对账、
- *    P2 私钥、P4 目录白名单全套绕过 —— 门禁写着，路却绕得过。
- *    现在「直连 js 文件」与「走 npm / publish.js」是同一道门。
+ * 🔴 本文件是「出码」这件事的真载体：谁调它都过**同一道门禁** —— 直接
+ *    `node scripts/preview.js`、经 npm 入口、还是经别的包装脚本，走的都是这一处。
+ *    门禁排在这里而不是「外层某个脚本里」，是因为外层可以有很多个，载体只有一个。
  *
- * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）。
- *    这里只是「调用 + 打印 + 不通过就退」，且**不带自己的判据**（复制即违规）。
+ * 🔴 为什么排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
+ *    站错目录 / 版本不对 / 包根带私钥时，要先看到真判据，而不是先看到下游的连带错误
+ *    （例如「缺少私钥」会把「站错目录」这颗雷盖住）。
  *
- * 🔴 防重复执行：由 publish.js 经 MINIPROGRAM_PREFLIGHT_GATE=done 声明「上游已跑过」，
+ * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）；「哪些入口要过门禁」的
+ *    清单也只在 preflight.js 头注释与 tests/preflight-wiring.test.ts 里。
+ *    本文件只做「调用 + 打印 + 不通过就退」，且**不带自己的判据**（复制即违规）。
+ *    ⚠️ 别在注释里写「哪条路仍绕过」这类清单 —— 那种清单必然过期，以 preflight.js 为准。
+ *
+ * 🔴 防重复执行：由上游经 MINIPROGRAM_PREFLIGHT_GATE=done 声明「已跑过」，
  *    runGateOrExit 会只打一行「不重复执行」而不判定；未经上游直接跑本文件时它照常判定。
  *
  * 🔴 逃生口：--skip-preflight（打印风险自负）/ --allow-any-dir（只降 P4）/ --expect-version /

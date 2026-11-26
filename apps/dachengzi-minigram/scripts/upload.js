@@ -20,13 +20,19 @@ const preflight = require('./preflight');
 
 /* ---------- 0. 出码前门禁：本文件的**第一条动作**（台账 9122） ----------
  *
- * 🔴 为什么必须排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
- *    本文件是「上传开发版本」这件事的真载体。此前门禁只挂在 scripts/publish.js 外层，
- *    直连本文件就能把 P1 版本对账 / P4 目录白名单 全套绕过。
- *    门禁若排在「读私钥」之后，缺私钥的场景会先报「缺少私钥」而看不到真正的雷。
+ * 🔴 本文件是「上传开发版本」这件事的真载体：谁调它都过**同一道门禁** —— 直接
+ *    `node scripts/upload.js`、经 npm 入口、还是经别的包装脚本，走的都是这一处。
  *
- * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）。这里只调用、打印、失败即退。
- * 🔴 防重复执行：publish.js 会以 MINIPROGRAM_PREFLIGHT_GATE=done 声明「上游已跑过」，
+ * 🔴 为什么排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
+ *    门禁若排在「读私钥」之后，缺私钥的场景会先报「缺少私钥」而看不到真正的雷
+ *    （站错目录 / 版本不对 / 包根带私钥）。
+ *
+ * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）；「哪些入口要过门禁」的
+ *    清单也只在 preflight.js 头注释与 tests/preflight-wiring.test.ts 里。本文件只调用、
+ *    打印、失败即退，不带自己的判据（复制即违规）。
+ *    ⚠️ 别在注释里写「哪条路仍绕过」这类清单 —— 那种清单必然过期，以 preflight.js 为准。
+ *
+ * 🔴 防重复执行：上游会以 MINIPROGRAM_PREFLIGHT_GATE=done 声明「已跑过」，
  *    此时只打一行痕、不重复判定（同一链上只要一份报表）。
  */
 const gateOpts = preflight.parsePreflightArgs(process.argv.slice(2));

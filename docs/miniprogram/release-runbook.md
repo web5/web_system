@@ -188,10 +188,15 @@ git log --oneline --all -- apps/kedou-ai-minigram/private.key  # 必须为空
 （家宽/办公网都是动态的），每次变都要改白名单，不可维护。执行机出口 IP 固定，加一次即可。
 
 > 🔴 ci 模式**不是**「绕过门的另一条路」：`node scripts/publish.js preview --mode ci` 与 cli 模式
-> 走同一道 `preflightGate`（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 /
+> 走同一道门禁（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 /
 > P6 CLI 可执行），只是 **P2、P6 换判据**（ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖；
-> P6 在 ci 模式直接 skip，因为不调开发者工具 CLI）。**别直连 `node scripts/preview.js` /
-> `node scripts/upload.js`** —— 那是无门禁的底层实现，直连等于整道门都不跑。
+> P6 在 ci 模式直接 skip，因为不调开发者工具 CLI）。
+>
+> `scripts/preview.js` / `scripts/upload.js` **历史上**是「无门禁的底层实现」（H1 之前 npm 入口也
+> 直连它们），所以老文档会写「别直连」；台账 9122 起**两者本体在出码前已跑同一道门禁** ——
+> 直连与 npm 入口过的是同一道门，不再有「知道文件名就能跳过整道门」这条路。
+> 判据只有 `scripts/preflight.js` 一份；「哪些入口要过门禁」以该文件头注释与
+> `apps/dachengzi-minigram/tests/preflight-wiring.test.ts` 的绊线测试为准（本文不复述清单，避免过期）。
 
 实测证据：同一台开发机在 2026-10-10 当天，17:32 时出口 IP 是 `14.17.22.245`，
 21:53 再跑变成了 `14.153.59.150` —— **不到半天换了一次**，白名单当场失效。
