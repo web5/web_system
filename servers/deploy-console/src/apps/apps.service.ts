@@ -17,7 +17,7 @@ import { DeployModuleEntity } from '../entities/deploy-module.entity';
 import { EnvsService } from '../envs/envs.service';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
 import { ReleaseRegistryService } from '../registry/release-registry.service';
-import { defaultReleaseWorkspace, cdnAssetUrl, cdnLayoutMode, resolveCdnOrigin, toCommitId } from '../pipeline/release-paths';
+import { defaultReleaseWorkspace, cdnAssetUrl, cdnLayoutMode, normalizeCommitRef, resolveCdnOrigin, toCommitId } from '../pipeline/release-paths';
 import {
   APP_KINDS,
   AppRouteDto,
@@ -474,6 +474,8 @@ export class AppsService implements OnModuleInit {
     const available = htmlSite
       ? await this.artifacts.listVersions(envId, appKey, 'index.html')
       : app.deployMode === 'env-dir' ? await this.artifacts.listVersions(envId, appKey) : [];
+    const current = normalizeCommitRef(row?.currentVersion);
+    const previous = normalizeCommitRef(row?.previousVersion);
     return {
       appKey,
       envId,
@@ -481,8 +483,10 @@ export class AppsService implements OnModuleInit {
       previousVersion: row?.previousVersion ?? null,
       availableVersions: available.map((v) => ({
         ref: v,
-        isCurrent: v === row?.currentVersion,
-        isPrevious: v === row?.previousVersion,
+        // 两侧都归一后比对（台账 #9027）：磁盘目录名可能是 `prod/<commit>`/`portal/<commit>`，
+        // 而表里已是纯 commit —— 直接字符串比会让「当前/上一版本」标记全部丢光。
+        isCurrent: !!current && normalizeCommitRef(v) === current,
+        isPrevious: !!previous && normalizeCommitRef(v) === previous,
       })),
     };
   }

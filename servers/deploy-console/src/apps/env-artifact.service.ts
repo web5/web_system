@@ -95,29 +95,76 @@ export class EnvArtifactService {
     entry: 'index.js' | 'index.html' = 'index.js',
   ): Promise<boolean> {
     // Phase 2：微前端（index.js）走入口机 `<env>/<app>/<commit>` 布局（去指针化，无磁盘指针）。
-    // shell 基座（index.html）不进 CDN，仍走下方 legacy 布局。
+    // shell 基座（index.html）不进 CDN，仍走 legacy 布局。
+    return (await this.resolveVersion(env, appKey, version, entry)) !== null;
+  }
+
+  /**
+   * 版本在落点上的**实际目录名**（台账 #9027 核验修正）。
+   *
+   * legacy 布局磁盘是 `<app>/<env>/<version>`，历史上有两种拼写：
+   * - 干净值：纯 commit（`b6ec9950`）
+   * - 脏值：`<templateKey>/<commit>`（`portal/b6ec9950`，`deploy_app_env_versions` 的存量）
+   *
+   * 取候选顺序 **原始值 → `toCommitId` 归一值**：
+   * - 原始值优先，保住流水线命名空间目录（`default/<commit>`）等既有可用路径，零回归；
+   * - 归一值兜底，让「DB 里还留着 `portal/b6ec9950`」的回滚 / 指针修复不再落空。
+   * CDN 布局本来就只用 `toCommitId`，两边口径一致。
+   *
+   * @returns 命中的版本目录名；都不存在返回 null
+   */
+  async resolveVersion(
+    env: string,
+    appKey: string,
+    version: string,
+    entry: 'index.js' | 'index.html' = 'index.js',
+  ): Promise<string | null> {
     if (this.isCdnLayout() && entry === 'index.js') {
       const commit = toCommitId(version);
-      if (!commit) return false;
+      if (!commit) return null;
       const t = resolveCdnTarget(this.cfg, env);
-      const abs = `${cdnAssetDir(t.root, env, appKey, commit)}/index.js`;
-      if (!t.sshTarget) return fs.existsSync(abs);
-      const r = await this.command.execAsync(
-        `${sshPrefix(t.sshTarget)} "test -f '${abs}'"`,
-        process.cwd(),
-        {},
-        REMOTE_TIMEOUT_MS,
-      );
-      return r.ok;
+      return (await this.existsAtCdn(t, env, appKey, commit)) ? commit : null;
     }
 
     const t = this.target(env);
+    for (const v of legacyVersionCandidates(version)) {
+      if (await this.existsAtLegacy(t, appKey, env, v, entry)) return v;
+    }
+    return null;
+  }
+
+  /** legacy 落点的存在性探活（本机 fs / 远端 test -f） */
+  private async existsAtLegacy(
+    t: StaticTarget,
+    appKey: string,
+    env: string,
+    version: string,
+    entry: string,
+  ): Promise<boolean> {
     if (!t.sshTarget) {
       return fs.existsSync(
         path.join(envArtifactsDir(t.root, appKey, env), version, entry),
       );
     }
     const abs = `${t.root}/${path.posix.join(envArtifactsRel(appKey, env), version, entry)}`;
+    const r = await this.command.execAsync(
+      `${sshPrefix(t.sshTarget)} "test -f '${abs}'"`,
+      process.cwd(),
+      {},
+      REMOTE_TIMEOUT_MS,
+    );
+    return r.ok;
+  }
+
+  /** CDN 落点的存在性探活（本机 fs / 远端 test -f） */
+  private async existsAtCdn(
+    t: { root: string; sshTarget: string | null },
+    env: string,
+    appKey: string,
+    commit: string,
+  ): Promise<boolean> {
+    const abs = `${cdnAssetDir(t.root, env, appKey, commit)}/index.js`;
+    if (!t.sshTarget) return fs.existsSync(abs);
     const r = await this.command.execAsync(
       `${sshPrefix(t.sshTarget)} "test -f '${abs}'"`,
       process.cwd(),
@@ -216,7 +263,10 @@ export class EnvArtifactService {
       throw new Error('CDN 布局下不存在磁盘入口指针（去指针化），不应调用 writePointer');
     }
     const t = this.target(env);
-    if (!t.sshTarget) return writeEnvEntryPointer(t.root, appKey, env, version);
+    // 历史脏值（DB 里 `portal/b6ec9950`）→ 落到磁盘实际目录名；
+    // 否则指针会写成 `./portal/b6ec9950/index.js` 指向一个不存在的目录（回滚静默失效）。
+    const target = (await this.resolveVersion(env, appKey, version)) ?? version;
+    if (!t.sshTarget) return writeEnvEntryPointer(t.root, appKey, env, target);
 
     const dir = `${t.root}/${envArtifactsRel(appKey, env)}`;
     const script = [
@@ -226,11 +276,11 @@ export class EnvArtifactService {
       `  [ -f '${dir}/$f' ] && cp -f '${dir}/$f' '${dir}/$f.bak-'$(date +%s) || true`,
       `done`,
       `cat > '${dir}/index.js' <<'WS_EOF'`,
-      entryPointerJs(version).trimEnd(),
+      entryPointerJs(target).trimEnd(),
       `WS_EOF`,
-      `if [ -f '${dir}/${version}/index.css' ]; then`,
+      `if [ -f '${dir}/${target}/index.css' ]; then`,
       `  cat > '${dir}/index.css' <<'WS_EOF'`,
-      entryPointerCss(version).trimEnd(),
+      entryPointerCss(target).trimEnd(),
       `WS_EOF`,
       `  echo WS_HAS_CSS`,
       `fi`,
@@ -257,6 +307,26 @@ export class EnvArtifactService {
 /** base64（远端脚本传递用，避免多层引号转义） */
 function b64(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64');
+}
+
+/**
+ * legacy 版本目录的候选名（台账 #9027 核验修正）。
+ *
+ * 顺序即优先级：**原始值在前**（保住流水线命名空间 `default/<commit>` 等既有目录，
+ * 零回归），`toCommitId` 归一值兜底（救 DB 里的 `<templateKey>/<commit>` 脏值）。
+ * 含空段 / `.` / `..` 的候选直接丢弃，避免拼出越界路径。
+ */
+export function legacyVersionCandidates(version: string): string[] {
+  const out: string[] = [];
+  const add = (v: string | undefined) => {
+    if (!v) return;
+    const segs = v.split('/');
+    if (segs.some((s) => !s || s === '.' || s === '..')) return;
+    if (!out.includes(v)) out.push(v);
+  };
+  add((version ?? '').trim());
+  add(toCommitId(version));
+  return out;
 }
 
 /**

@@ -1,7 +1,11 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { EnvArtifactService, listCdnCommitDirs } from './env-artifact.service';
+import {
+  EnvArtifactService,
+  legacyVersionCandidates,
+  listCdnCommitDirs,
+} from './env-artifact.service';
 
 /**
  * 落点路由的正确性（诊断 #3）：
@@ -31,6 +35,57 @@ describe('EnvArtifactService（按环境路由产物读写）', () => {
     const versions = await svc.listVersions('dev', 'portal');
     expect(versions).toEqual([]);
     expect(execAsync).not.toHaveBeenCalled();
+  });
+
+  // ── #9027 核验修正：legacy 分支归一兜底（救 DB 里的 <templateKey>/<commit> 脏值）──
+
+  it('#9027：带前缀输入经 legacy 归一命中单级目录（prod 真实形态 <app>/<env>/<commit>）', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-artifact-'));
+    const dir = path.join(root, 'static/modules/portal/prod/b6ec9950');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.js'), 'x');
+    const { svc, execAsync } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+
+    expect(await svc.resolveVersion('prod', 'portal', 'portal/b6ec9950')).toBe('b6ec9950');
+    expect(await svc.hasVersion('prod', 'portal', 'portal/b6ec9950')).toBe(true);
+    expect(await svc.hasVersion('prod', 'portal', 'b6ec9950')).toBe(true);
+    expect(await svc.hasVersion('prod', 'portal', 'portal/deadbeef')).toBe(false);
+    expect(execAsync).not.toHaveBeenCalled();
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('#9027：原始值优先 —— 流水线命名空间目录 default/<commit> 不被归一拆坏', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-artifact-'));
+    const dir = path.join(root, 'static/modules/portal/prod/default/abc1234');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.js'), 'x');
+    const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+
+    expect(await svc.resolveVersion('prod', 'portal', 'default/abc1234')).toBe('default/abc1234');
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('#9027：writePointer 用磁盘实际目录名（脏值不写出指向不存在目录的指针）', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-artifact-'));
+    const dir = path.join(root, 'static/modules/portal/prod/b6ec9950');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.js'), 'x');
+    const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+
+    await svc.writePointer('prod', 'portal', 'portal/b6ec9950');
+    const js = fs.readFileSync(path.join(root, 'static/modules/portal/prod/index.js'), 'utf8');
+    expect(js).toContain('./b6ec9950/index.js');
+    expect(js).not.toContain('portal/b6ec9950');
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('legacyVersionCandidates：原始值优先、归一兜底、拒绝越界段', () => {
+    expect(legacyVersionCandidates('portal/b6ec9950')).toEqual(['portal/b6ec9950', 'b6ec9950']);
+    expect(legacyVersionCandidates('b6ec9950')).toEqual(['b6ec9950']);
+    expect(legacyVersionCandidates('default/abc1234')).toEqual(['default/abc1234', 'abc1234']);
+    expect(legacyVersionCandidates('portal/../etc')).toEqual([]);
   });
 
   it('远端环境：校验产物 → 静态根 + ssh 目标 + 版本目录（prod 真实形态）', async () => {
@@ -106,7 +161,10 @@ describe('EnvArtifactService（按环境路由产物读写）', () => {
     expect(r.js).toBe(`${PROD_ROOT}/static/modules/portal/prod/index.js`);
     expect(r.css).toBe(`${PROD_ROOT}/static/modules/portal/prod/index.css`);
 
-    const cmd = execAsync.mock.calls[0][0] as string;
+    // 先有一次 test -f 探活（版本的磁盘实际目录名），写指针是第二个 ssh 调用
+    const cmd = execAsync.mock.calls
+      .map((c) => c[0] as string)
+      .find((c) => c.includes('base64 -d')) as string;
     const b64 = cmd.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d/);
     const script = Buffer.from(b64![1], 'base64').toString('utf-8');
     expect(script).toContain(`mkdir -p '${PROD_ROOT}/static/modules/portal/prod'`);

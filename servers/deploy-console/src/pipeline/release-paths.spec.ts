@@ -107,9 +107,11 @@ describe('normalizeCommitRef（版本指针列 → 纯 commit）', () => {
     expect(normalizeCommitRef(undefined)).toBeUndefined();
   });
 
-  it('末尾多余分隔符 → 取最后一个有效段', () => {
-    expect(normalizeCommitRef('/b6ec9950/')).toBe('b6ec9950');
-    expect(normalizeCommitRef('portal//b6ec9950')).toBe('b6ec9950');
+  it('非法拼写（空段 / 多余分隔符）→ undefined，不静默改写', () => {
+    expect(normalizeCommitRef('/b6ec9950/')).toBeUndefined();
+    expect(normalizeCommitRef('portal//b6ec9950')).toBeUndefined();
+    expect(normalizeCommitRef('portal/')).toBeUndefined();
+    expect(normalizeCommitRef('/portal/b6ec9950')).toBeUndefined();
   });
 
   it('归一结果通过 commit 白名单（不含 /）', () => {
@@ -117,6 +119,62 @@ describe('normalizeCommitRef（版本指针列 → 纯 commit）', () => {
     for (const ref of ['portal/b6ec9950', 'portal/prod/b6ec9950', 'admin-dev/d3b7a1c2']) {
       expect(re.test(normalizeCommitRef(ref) as string)).toBe(true);
     }
+  });
+
+  // ── 核验修正（team-lead 2026-11-26）：路径安全 + 不回退脏值 ──
+
+  it('7 位短 sha 必须放行（prod shell 实测 2ea0468 / a6013f8）', () => {
+    expect(normalizeCommitRef('2ea0468')).toBe('2ea0468');
+    expect(normalizeCommitRef('a6013f8')).toBe('a6013f8');
+    expect(normalizeCommitRef('portal/2ea0468')).toBe('2ea0468');
+  });
+
+  it('显式拒绝 . 与 ..（含中间段），不做「取末段」静默改写', () => {
+    expect(normalizeCommitRef('.')).toBeUndefined();
+    expect(normalizeCommitRef('..')).toBeUndefined();
+    expect(normalizeCommitRef('portal/../etc')).toBeUndefined();
+    expect(normalizeCommitRef('portal/./b6ec9950')).toBeUndefined();
+  });
+
+  it('不满足白名单的末段 → undefined（不是回退原值）', () => {
+    expect(normalizeCommitRef('portal/')).toBeUndefined();
+    expect(normalizeCommitRef('portal/ab')).toBeUndefined(); // 2 位，短于 4
+    expect(normalizeCommitRef('portal/has space')).toBeUndefined();
+    expect(normalizeCommitRef(`portal/${'a'.repeat(65)}`)).toBeUndefined(); // 超 64
+  });
+
+  it('`//` / 全空白 → undefined（调用方必须拒绝，不得回退脏值）', () => {
+    expect(normalizeCommitRef('//')).toBeUndefined();
+    expect(normalizeCommitRef('/')).toBeUndefined();
+    expect(normalizeCommitRef('   /   ')).toBeUndefined();
+  });
+
+  /**
+   * 边界逐条锁死（台账 #9027 第二轮核验指定清单）。
+   * 单独成块是为了让「这批断言是否真的在跑、是否真有判别力」可被变异验证直接对准。
+   */
+  it('#9027 边界清单：9 条归一/拒绝断言逐条核对', () => {
+    // 放行：前缀收敛 + 7 位短 sha（prod shell 实测 2ea0468 / a6013f8）
+    expect(normalizeCommitRef('portal/b6ec9950')).toBe('b6ec9950');
+    expect(normalizeCommitRef('portal/prod/b6ec9950')).toBe('b6ec9950');
+    expect(normalizeCommitRef('2ea0468')).toBe('2ea0468');
+    // 拒绝：任一段是 . / ..（`portal/../etc` 取末段会静默变 etc，比拒绝更危险）
+    expect(normalizeCommitRef('portal/../etc')).toBeUndefined();
+    expect(normalizeCommitRef('..')).toBeUndefined();
+    expect(normalizeCommitRef('.')).toBeUndefined();
+    // 拒绝：空段（`a//b` 取末段会静默变 b）
+    expect(normalizeCommitRef('a//b')).toBeUndefined();
+    // 拒绝：空值
+    expect(normalizeCommitRef('')).toBeUndefined();
+    expect(normalizeCommitRef(undefined)).toBeUndefined();
+
+    // 🔴 判别力补强（变异验证发现）：上面 `'..'` / `'a//b'` / `'portal/../etc'` 三条
+    // 「恰好」也会被 COMMIT_REF_RE 的 `{4,64}` 长度下界挡掉（`..`=2位、`b`=1位、`etc`=3位），
+    // 所以**它们不能证明 `. / ..` 与空段守卫真的存在** —— 把守卫删掉它们仍然绿。
+    // 下面两条的末段本身是合法 commit 形态（`blocked`=7位、`portal`=6位），
+    // 只有 `. / ..` 或空段守卫能拒绝它们；删守卫 → 静默改写成 `blocked` / `portal`。
+    expect(normalizeCommitRef('portal/../blocked')).toBeUndefined();
+    expect(normalizeCommitRef('a//portal')).toBeUndefined();
   });
 });
 
