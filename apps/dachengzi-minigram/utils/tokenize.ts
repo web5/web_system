@@ -22,10 +22,19 @@ export interface WordToken {
 
 /**
  * 把英文句子切成「单词 / 非单词」片段。
- * 支持撇号词（don't / It’s）：连字符、标点、空格都并入非单词片段原样展示。
+ *
+ * BB16（2026-11-26 盲测 D-5 修）：**撇号词与连字符词都整词一个 token**。
+ *  - 撇号：`don't` / `It’s`（U+2019）—— 早已支持；
+ *  - 连字符：`well-known` / `state-of-the-art` —— 本轮补上。
+ *    此前正则只有 `['’]` 分支，`well-known` 被切成 `well` `-` `known` 三片：
+ *    用户长按 `well-known` 只读「well」，且两个半词各弹一次四项抽屉。
+ *    口径真源：`需求口径确认-B版.md` BB16「一个 token 里含连字符/撇号 → 整词作为一个 token」。
+ *
+ * 🔴 词内部连接符只认 `'` `’` `-` 三种；其余标点仍是独立「非单词」片段
+ *    （`a,b` 里的 `,` 不并进词，BB14 的取词干口径靠这一条）。
  */
 export function tokenize(en: string, known?: Record<string, boolean>): WordToken[] {
-  const re = /[A-Za-z]+(?:['’][A-Za-z]+)*|[^A-Za-z]+/g;
+  const re = /[A-Za-z]+(?:['’-][A-Za-z]+)*|[^A-Za-z]+/g;
   const out: WordToken[] = [];
   let m: RegExpExecArray | null;
   let k = 0;

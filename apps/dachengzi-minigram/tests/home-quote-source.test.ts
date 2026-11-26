@@ -440,7 +440,10 @@ describe('需求⑤ WXML 事件绑定静态判据', () => {
     // 普通词也有节点（长按载体），下点线由 has-def 类而不是 wx:if 控制。
     // → 旧断言值 {{tk.w && tk.hasDef}} 已被需求作废（本文件唯一改动的既有断言，理由见回执）。
     expect((tag as RegExpExecArray)[0]).toContain('{{tk.w}}');
-    expect((tag as RegExpExecArray)[0]).toContain('class="dw {{tk.hasDef ? \'has-def\' : \'\'}}"');
+    // 2026-11-26 盲测 D-4（E4 按下高亮）后 class 末尾多了一个按下态修饰类，
+    // 故判据由「class 全等」改为「has-def 插值仍是第一个修饰类 + 允许追加其它修饰类」。
+    // 意图不变：**有没有点线只由 tk.hasDef 决定**（新增的 dw-pressed 只在按下瞬间出现）。
+    expect((tag as RegExpExecArray)[0]).toMatch(/class="dw \{\{tk\.hasDef \? 'has-def' : ''\}\}(?:[^"]*)?"/);
     expect((tag as RegExpExecArray)[0]).toContain('catchlongpress="onQuoteWordLongPress"');
   });
 

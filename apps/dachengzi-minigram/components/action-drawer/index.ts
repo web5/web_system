@@ -32,6 +32,23 @@ import { EVT, actionsOf, type ActionItem } from '../../utils/line-actions';
 const SWIPE_CLOSE_RPX = 48;
 /** 动作后 busy 锁时长（ms）：防连点重复请求（方案 §3.2 契约 2） */
 const BUSY_MS = 300;
+/**
+ * 动作区高度（rpx）：2 行 × 96rpx（AC-B.20，小屏 2 × 104rpx 更矮的那侧取小值更保守）。
+ * 抽屉贴视口底、动作区是抽屉最底部的一块，所以「触点距视口底 ≤ 动作区高度」等价于
+ * 「手指落在按钮上」—— 这一带**不起拖拽**（BB6）。
+ */
+const ACTS_ZONE_RPX = 192;
+/**
+ * 首页 tabBar 让位高度（rpx）：与 `custom-tab-bar/index.wxss` 的 `.tb { height: 100rpx }` 同源。
+ * 只在 `liftBottom=true` 时叠加进「动作区高度带」判定 —— 抽屉被整体抬高 100rpx 后，
+ * 按钮带距视口底的距离也整体增加了这 100rpx；不补上就会把按钮带的上半截误判成
+ * 「可以起拖」，BB6 第 2 层逻辑兜底随之失效（第 1 层 `.ad-acts` 的 catchtouchstart 仍在）。
+ */
+const TABBAR_LIFT_RPX = 100;
+/** 取不到 windowHeight 时的兜底逻辑高（iPhone 8 / 常见最小屏，仅用于「距底距离」换算） */
+const FALLBACK_WINDOW_H = 667;
+/** 取不到 windowWidth 时的兜底（与 _pxToRpx 同一口径） */
+const FALLBACK_WINDOW_W = 375;
 
 interface TouchPoint { clientY?: number; pageY?: number; }
 interface TouchEventLike { touches?: TouchPoint[]; }
@@ -53,6 +70,29 @@ Component({
     wordHasDef: { type: Boolean, value: false },
     /** wordHasDef=true 时显示的音标 */
     phonetic: { type: String, value: '' },
+    /**
+     * 首页（tabBar 页）让位开关：true → 抽屉与遮罩整体抬到自定义 tabBar 之上。默认 false。
+     *
+     * 🔴 为什么必须让位：微信**自定义 tabBar 是框架层独立根节点**（`custom-tab-bar/` 由框架
+     * 单独挂载，不在本页面节点树里），层级恒在页面内任何 `position: fixed` 元素之上 ——
+     * z-index 提到多少都压不过它。所以「抽屉底部按钮被遮住 / 点不到」只能靠把抽屉抬到
+     * tabBar 高度之上来解决，不能靠调 z-index。
+     *
+     * 🔴 属性选型：Boolean `liftBottom`，**不用**数值型 `bottomInset`（rpx）。三条理由：
+     *  1. 要表达的是「本页有自定义 tabBar」这一**页面事实**，不是「抬多少」这个**几何量**。
+     *     100rpx 这个值来自 tabBar 自身样式（`custom-tab-bar/index.wxss` 的 `.tb { height }`），
+     *     是项目级不变量；做成数值属性等于把这个不变量复制到每个调用点，将来改 tabBar 高度
+     *     必然漏改，也没有任何东西拦得住某页传个 300rpx。
+     *  2. 不破本组件红线 3（`index.wxml` 顶部：「不要出现 left:{{…}}rpx / top:{{…}}rpx 之类
+     *     坐标绑定」）。数值属性只能靠内联 `style="bottom: {{bottomInset}}rpx"` 落地，正好踩线；
+     *     Boolean 走 class 切换（`.ad-lift`），几何量全部留在 wxss 一处。
+     *  3. 可测：抬高规则在 wxss 里只有一条字面量，测试能对它做正/反向字符串断言（见
+     *     `tests/drawer-tabbar-lift-1126.test.ts`）。
+     *
+     * 🔴 只有 tabBar 页能传：详情页（`pages/nce/detail/detail`）是 `navigateTo` 打开的普通页，
+     * 没有 tabBar —— 传了会凭空多出一条 100rpx 空白，且遮罩盖不到那条带。
+     */
+    liftBottom: { type: Boolean, value: false },
   },
 
   data: {
@@ -125,10 +165,18 @@ Component({
     /** 点右上 ✕ → 只抛信号 */
     onCloseTap() { this._emitClose('close'); },
 
+    /**
+     * 下滑手势起点。🔴 BB6（盲测 D-6）：**触点落在动作按钮区时不起拖拽** ——
+     * 「想点按却把抽屉拖走」比「拖不动抽屉」糟得多（前者误关，后者只是少一条手势通道，
+     * 下滑之外还有遮罩 / ✕ 两个关闭通道，D4 三通道不受影响）。
+     * 第 1 层是 wxml 结构（.ad-acts catchtouchstart），这里是第 2 层逻辑兜底。
+     */
     onTouchStart(e: TouchEventLike) {
       const t = (e.touches && e.touches[0]) || null;
       if (!t) return;
-      this.data._startY = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0;
+      const startY = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0;
+      if (this._startedInActsZone(startY)) return;
+      this.data._startY = startY;
       this.data._hasStart = true;
       this.setData({ dragging: true, swipeY: 0 });
     },
@@ -220,19 +268,44 @@ Component({
     },
 
     /**
+     * 触点是否落在「动作按钮带」里（BB6）。判据：距视口底部 ≤ 动作区高度（px）。
+     * 抽屉 `position:fixed; bottom:0` + 动作区在最底部 ⇒ 这一带就是按钮所在带（含安全区时会略窄，
+     * 保守方向是「少拦一点」，不会把标题区的下滑误拦掉）。
+     * 首页开了 `liftBottom` 时抽屉整体上移，按钮带距视口底的距离同步 +`TABBAR_LIFT_RPX`，
+     * 判定带必须跟着加宽，否则按钮带的上半截会被当成可起拖区（BB6 第 2 层失效）。
+     * 坐标脏值（0 / NaN / 负）一律**放行**：宁可允许拖拽（阈值/回弹仍然生效），也不让下关闭失灵。
+     */
+    _startedInActsZone(clientY: number): boolean {
+      const y = Number(clientY);
+      if (!isFinite(y) || y <= 0) return false;
+      const wh = this._windowSize('windowHeight', FALLBACK_WINDOW_H);
+      const zoneRpx = ACTS_ZONE_RPX + (this.data.liftBottom ? TABBAR_LIFT_RPX : 0);
+      return wh - y <= this._rpxToPx(zoneRpx);
+    },
+
+    /** 读 getSystemInfoSync 的某个尺寸；取值异常时返回兜底值（绝不让 NaN 进入判定） */
+    _windowSize(key: 'windowWidth' | 'windowHeight', fallback: number): number {
+      let v = 0;
+      try {
+        v = Number((wx.getSystemInfoSync() as unknown as Record<string, unknown>)[key]) || 0;
+      } catch {
+        v = 0;
+      }
+      return v > 0 && isFinite(v) ? v : fallback;
+    },
+
+    /** rpx → px（与 _pxToRpx 反向，同一套 windowWidth 兜底口径） */
+    _rpxToPx(rpx: number): number {
+      return (Number(rpx) || 0) * this._windowSize('windowWidth', FALLBACK_WINDOW_W) / 750;
+    },
+
+    /**
      * px → rpx。下滑阈值口径是 48rpx（AC-B.13），而原生 touch 给的是 px，必须换算。
      * 兜底：windowWidth 异常（0 / NaN / 取值抛错）时按 375 算，**不得算出 NaN/Infinity**
      * （否则阈值判定永远为假 → 下滑关不掉）。
      */
     _pxToRpx(px: number): number {
-      let ww = 0;
-      try {
-        ww = Number(wx.getSystemInfoSync().windowWidth) || 0;
-      } catch {
-        ww = 0;
-      }
-      if (!ww || !isFinite(ww)) ww = 375;
-      return (Number(px) || 0) * 750 / ww;
+      return (Number(px) || 0) * 750 / this._windowSize('windowWidth', FALLBACK_WINDOW_W);
     },
   },
 });

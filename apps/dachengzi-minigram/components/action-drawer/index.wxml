@@ -9,8 +9,12 @@
   动作顺序由 utils/line-actions.actionsOf 固定：
     第 1 行 朗读此句 | 收藏此句（2 项档只渲染这一行）
     第 2 行 朗读单词 | 收藏单词
+
+  🔴 tabBar 让位（liftBottom）：开 `ad-lift` 由 **wxss** 把 `.ad-mask` / `.ad-drawer` 的 bottom
+     抬到 `calc(100rpx + env(safe-area-inset-bottom))`。这里只切一个 class、**不写任何内联坐标**，
+     原因见 index.ts 的 `liftBottom` 属性注释（红线 3：wxml 里不许出现坐标绑定）。
 -->
-<view wx:if="{{visible}}" class="ad">
+<view wx:if="{{visible}}" class="ad {{liftBottom ? 'ad-lift' : ''}}">
   <!-- 遮罩：点它 = 关（via='mask'）；catchtouchmove 用于拦页面滚动穿透（K4，未验证方案，见回执） -->
   <view class="ad-mask" catchtap="onMaskTap" catchtouchmove="noop"></view>
 
@@ -51,7 +55,13 @@
 
     <view class="ad-sep"></view>
 
-    <view class="ad-acts">
+    <!-- 🔴 BB6（盲测 D-6 修）：动作按钮区**不参与下滑拖拽**。
+         第 1 层（结构）：本容器 catchtouchstart/catchtouchmove 吞掉触摸事件，抽屉根节点收不到
+         → 手指落在按钮上下拉，不会把抽屉拖走（想点按却关掉抽屉的误操作）。
+         按钮自身的 catchtap 不受影响（tap 与 touchmove 是两条事件流）。
+         第 2 层（逻辑）：`onTouchStart` 里还有一道「触点落在动作区高度带内就拒绝起拖」的兜底，
+         覆盖「事件绕过本容器直接进根节点」的情形（详见 index.ts 的 _startedInActsZone）。 -->
+    <view class="ad-acts" catchtouchstart="noop" catchtouchmove="noop">
       <view
         wx:for="{{acts}}"
         wx:key="key"

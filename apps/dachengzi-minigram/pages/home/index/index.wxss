@@ -119,10 +119,15 @@ page {
   color: var(--t1);
   line-height: 1.65;
 }
+/* 🔴 AC-1.2（盲测 D-3 / P1）：英文句「看着像没有」的**可见层**根因。
+   原来是 `font-size: 23rpx; color: var(--t3)` —— `--t3` 是 rgba(60,60,67,.34)（app.wxss:41），
+   半透明灰合成白底 ≈ #C2C2C4，WCAG 对比度实测 1.88:1（阈值 4.5:1），字号也低于 26rpx 下限。
+   现在：字号 26rpx + 正文近黑 #1A1A1F（与详情页英文正文 .w 同一色）→ 对比度 ≈17:1。
+   🔴 只改本页「今日一句」的英文句，**不动全局 --t3**（它还被别处灰字依赖，改它会连带改一片）。 */
 .daily-en {
   margin-top: 12rpx;
-  font-size: 23rpx;
-  color: var(--t3);
+  font-size: 26rpx;
+  color: #1A1A1F;
   line-height: 1.6;
 }
 
@@ -135,6 +140,12 @@ page {
   border-bottom: 1rpx dotted rgba(37, 99, 235, .55);
 }
 .dw.has-def:active { opacity: .6; }
+/* E4 后半（盲测 D-4）：**普通词也要有按下反馈** —— 按下瞬间浅蓝底，松手 / 出抽屉即消失。
+   这不是静态暗示（点线/下划线/色差仍然只给生词），只是「按了有反应」的兜底。
+   hover-class 见 index.wxml 的 .dw 节点（hover-start-time=0 不延迟，覆盖 350ms 长按窗口）。 */
+.dw-pressed { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
+/* 真机兜底：万一 hover-class 在内联 <text> 上不生效，:active 也给出同一个按下态 */
+.dw:active { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
 /* 首页**不实现** U1 行尾 .sent-stop（2026-11-26 去重）：停止入口只保留页脚 .dq-act，
    两个 ■ 同屏会让用户困惑。详情页 detail.wxss 的 .sent-stop 是那边唯一停止入口，保留。 */
 .daily-foot {
@@ -195,6 +206,16 @@ page {
   white-space: nowrap;
 }
 .q-tip-btn.on { background: rgba(37, 99, 235, .10); }
+/* 🔴 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮改**圆形播放图标**（原型 .btn-icon 同形）。
+   与同排「收藏」文字胶囊的区别只在 .q-tip-play 这一层：热区 88rpx（≥88rpx 下限）⊃ 视觉圆 60rpx
+   ⊃ 图标 ≈32rpx；未播 ▶ 三角、播放中 ■ 方块，全部 CSS 画（不引图片/不加依赖）。 */
+.q-tip-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; line-height: 1; }
+.q-tip-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.q-tip-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+.q-tip-play.on { background: transparent; }
+.q-tip-play.on .q-tip-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
+.q-tip-play.on .q-tip-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
+.q-tip-play-hv .q-tip-ico { background: #EFF6FF; }
 .q-tip-x { font-size: 30rpx; line-height: 1.2; color: var(--t3); padding: 0 6rpx; }
 .q-tip-p { font-size: 24rpx; color: var(--t3); margin-top: 6rpx; }
 .q-tip-pos { font-size: 22rpx; color: var(--brand-txt); margin-top: 8rpx; }

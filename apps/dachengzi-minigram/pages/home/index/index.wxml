@@ -37,13 +37,26 @@
              🔴 wx:for-item="tk" 必须保留：漏写时迭代变量恒为 item，循环体内 tk.* 全部求值
                 undefined → 整段英文渲染为空（P0 缺陷，见 tests/wxml-for-item-scope.test.ts）。 -->
         <block wx:for="{{quoteTokens}}" wx:key="idx" wx:for-item="tk">
+          <!-- E4 后半（盲测 D-4）·长按瞬间按下高亮 = 反馈，不是暗示：
+               · `<text>` **不支持** hover-class（微信仅 view / button / navigator 支持，
+                 官方文档 text 属性表里没有该项），故不能只靠 hover-class；
+               · 裸 `.dw:active` 又被「点非生词不得有词级高亮」的既有守卫禁止；
+               · 故用「长按态 class」：touchstart 记下当前词 key、touchend/cancel 清空，
+                 wxml 按 key 插值出 dw-pressed（浅蓝底），松手 / 出抽屉即消失。 -->
           <text
             wx:if="{{tk.w}}"
-            class="dw {{tk.hasDef ? 'has-def' : ''}}"
+            class="dw {{tk.hasDef ? 'has-def' : ''}} {{pressedWordKey === tk.idx ? 'dw-pressed' : ''}}"
             data-w="{{tk.w}}"
             data-hasdef="{{tk.hasDef}}"
+            data-k="{{tk.idx}}"
             catchtap="onQuoteWordTap"
             catchlongpress="onQuoteWordLongPress"
+            bindtouchstart="onWordPressStart"
+            bindtouchend="onWordPressEnd"
+            bindtouchcancel="onWordPressEnd"
+            hover-class="dw-pressed"
+            hover-start-time="0"
+            hover-stay-time="600"
           >{{tk.t}}</text>
           <text wx:else>{{tk.t}}</text>
         </block>
@@ -65,7 +78,15 @@
       <view class="q-tip-head">
         <view class="q-tip-w">{{overlay.word}}</view>
         <view class="q-tip-tools">
-          <view class="q-tip-btn {{quoteWordPlaying ? 'on' : ''}}" catchtap="speakQuoteWord">{{quoteWordPlaying ? '停止' : '朗读'}}</view>
+          <!-- 🔴 AC-3.1 / AC-3.3 / AC-3.4（2026-11-26 盲测 D-1 修）：词卡朗读按钮是圆形播放图标，
+               不是文字「朗读 / 停止」。形态照原型 `.btn-icon`：未播 ▶ 三角、播放中 ■ 方块，CSS 画。
+               热区 88rpx ⊃ 视觉圆 60rpx ⊃ 图标 ≈32rpx；aria-label 随形态切换
+               （文案真源 utils/line-actions 的 ARIA_WORD_PLAY / ARIA_WORD_STOP）。 -->
+          <view class="q-tip-btn q-tip-play {{quoteWordPlaying ? 'on' : ''}}" catchtap="speakQuoteWord"
+                hover-class="q-tip-play-hv" aria-role="button"
+                aria-label="{{quoteWordPlaying ? ariaStopWord : ariaPlayWord}}">
+            <view class="q-tip-ico"></view>
+          </view>
           <view class="q-tip-btn" catchtap="collectQuoteWord">收藏</view>
           <view class="q-tip-x" catchtap="closeQuoteTip">✕</view>
         </view>
@@ -80,8 +101,13 @@
     <!-- 长按动作抽屉（变体 B）：**复用** components/action-drawer，本页不画任何抽屉结构。
          7 个属性 + 5 个事件与方案 §3.1/§3.2 契约逐字对齐；hidden 由 overlay 单槽位驱动。
          🔴 不要在页面里出现第二份 .ad-* 结构 / 第二份 ACTIONS 表：
-            动作顺序（朗读此句 → 收藏此句 → 朗读单词 → 收藏单词）只有 utils/line-actions 一份真源。 -->
+            动作顺序（朗读此句 → 收藏此句 → 朗读单词 → 收藏单词）只有 utils/line-actions 一份真源。
+         🔴 `lift-bottom` 只在本页开：首页是 tabBar 页，自定义 tabBar 是框架层独立根节点，
+            z-index 压不过它，只能把抽屉与遮罩一起抬到 tabBar 高度之上（细节见
+            components/action-drawer/index.wxss 的 .ad-lift 段）。
+            **详情页不许跟着开** —— 详情页无 tabBar，抬高会凭空多出一条空白且遮罩盖不住那条带。 -->
     <action-drawer
+      lift-bottom="{{true}}"
       visible="{{overlay && overlay.kind === 'drawer'}}"
       scope="{{overlay && overlay.kind === 'drawer' ? overlay.scope : ''}}"
       line-text="{{overlay && overlay.kind === 'drawer' ? overlay.lineText : ''}}"
