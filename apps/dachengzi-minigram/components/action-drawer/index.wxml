@@ -1,0 +1,65 @@
+<!--
+  长按动作抽屉（变体 B）— 结构：遮罩 + 底部抽屉（把手 + 标题区 + 2×2 动作区）
+
+  🔴 三处「不要」：
+   1. 不要在这里绑任何 services / 业务逻辑 —— 组件只 catchtap 后 triggerEvent；
+   2. 不要用 wx:if 之外的方式控制显隐（visible=false 时整棵子树都不渲染 = 遮罩与抽屉同开同关）；
+   3. 不要出现 left:{{…}}rpx / top:{{…}}rpx 之类坐标绑定（B 变体不测任何坐标）。
+
+  动作顺序由 utils/line-actions.actionsOf 固定：
+    第 1 行 朗读此句 | 收藏此句（2 项档只渲染这一行）
+    第 2 行 朗读单词 | 收藏单词
+-->
+<view wx:if="{{visible}}" class="ad">
+  <!-- 遮罩：点它 = 关（via='mask'）；catchtouchmove 用于拦页面滚动穿透（K4，未验证方案，见回执） -->
+  <view class="ad-mask" catchtap="onMaskTap" catchtouchmove="noop"></view>
+
+  <!-- 抽屉本体：固定视口底，不测任何坐标；下滑手势用原生 touch 事件（不引库） -->
+  <view
+    class="ad-drawer {{dragging ? 'ad-dragging' : ''}}"
+    style="transform: translateY({{swipeY}}px)"
+    catchtap="noop"
+    bindtouchstart="onTouchStart"
+    bindtouchmove="onTouchMove"
+    bindtouchend="onTouchEnd"
+    bindtouchcancel="onTouchEnd"
+  >
+    <view class="ad-grab"></view>
+
+    <view class="ad-head">
+      <view class="ad-head-main">
+        <!-- 词档：词 +（音标 / 「暂无释义」灰字，同一行）+ 所在句原文 -->
+        <block wx:if="{{scope === 'word'}}">
+          <view class="ad-row1">
+            <text class="ad-word">{{word}}</text>
+            <text class="ad-meta">
+              <text wx:if="{{wordHasDef}}" class="ad-phon">{{phonetic}}</text>
+              <text wx:else class="ad-none">暂无释义</text>
+              <text class="ad-lineno"> · 第 {{lineIndex + 1}} 句</text>
+            </text>
+          </view>
+          <view class="ad-ctx">{{lineText}}</view>
+        </block>
+        <!-- 句档：「第 N 句」+ 整句原文（最多 2 行省略，不撑高抽屉） -->
+        <block wx:else>
+          <view class="ad-lineno">第 {{lineIndex + 1}} 句</view>
+          <view class="ad-ctx ad-ctx-serif">{{lineText}}</view>
+        </block>
+      </view>
+      <view class="ad-close" catchtap="onCloseTap" aria-role="button" aria-label="关闭">✕</view>
+    </view>
+
+    <view class="ad-sep"></view>
+
+    <view class="ad-acts">
+      <view
+        wx:for="{{acts}}"
+        wx:key="key"
+        class="ad-act {{pressedKey === item.key ? 'ad-act-pressed' : ''}}"
+        data-key="{{item.key}}"
+        aria-role="button"
+        catchtap="onActionTap"
+      >{{item.label}}</view>
+    </view>
+  </view>
+</view>

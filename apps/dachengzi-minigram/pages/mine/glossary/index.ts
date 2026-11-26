@@ -13,9 +13,26 @@
  */
 import { listGlossary, removeGlossary, GlossaryItem } from '../../../services/glossary';
 
+/**
+ * E3 灰标文案（唯一真源）：口径 `需求口径确认-B版.md` E3 选项 B
+ * 「加『未收录』灰标记」—— 解释「为什么这个词没有释义」，避免用户以为收藏坏了。
+ * 与抽屉标题区的「暂无释义」（E2）是**两处不同措辞**：抽屉说的是「没有释义内容」，
+ * 列表说的是「这个词没进课文词表」，不要为了「统一文案」擅自改成同一句。
+ */
+const UNLISTED_TEXT = '未收录';
+
 interface GlossaryViewItem extends GlossaryItem {
   /** meta 展示文本：nce 来源「Lesson N · 第 M 句」，旧 tone/direction 兜底 */
   metaText: string;
+  /**
+   * E3（2026-11-26 19:15 用户拍板）：「未收录」灰标文案；`''` = 不渲染该标。
+   *
+   * 🔴 判据只认 `meta.hasDef === false`（收藏时明确标记为「课文词表外普通词」）：
+   *    - `tag='word'` 且 `hasDef === false` → 显示「未收录」（解释「为什么这个词没有释义」）；
+   *    - `hasDef` **缺失**（`undefined`，本轮之前的历史收藏）→ **不显示**。
+   *      用 `!m.hasDef` / `m.hasDef !== true` 之类的写法会把全部历史收藏标成未收录 —— 那是数据诬陷。
+   */
+  unlistedText: string;
 }
 
 Page({
@@ -104,6 +121,11 @@ Page({
         lineIndex?: number;
         /** 2026-11-26：单词收藏（tag='word'）来源锚点 */
         word?: string;
+        /**
+         * 2026-11-26 E3：该词是否是课文词表直收词。
+         * 只有 `false` 是明确信号（普通词 → 未收录灰标）；`undefined` = 老数据，不可推定。
+         */
+        hasDef?: boolean;
       };
       let metaText = '';
       if (m.word) {
@@ -123,7 +145,11 @@ Page({
         ].filter(Boolean);
         metaText = parts.join(' · ');
       }
-      return { ...it, metaText };
+      // E3：`tag='word'` 且 **严格** `hasDef === false` 才标。
+      // tag 条件不是多余的：`hasDef` 是词维度字段，句收藏里出现它属于异常数据，
+      // 不该在句子上冒出一个「未收录」词标（灰标的语义是「这个词没进课文词表」）。
+      const unlistedText = it.tag === 'word' && m.hasDef === false ? UNLISTED_TEXT : '';
+      return { ...it, metaText, unlistedText };
     });
     this.setData({ items, empty: items.length === 0, loading: false });
   },

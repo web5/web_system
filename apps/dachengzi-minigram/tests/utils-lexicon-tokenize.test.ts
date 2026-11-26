@@ -217,23 +217,41 @@ describe('V1/V3/V5 需求①：沉浸档逐句换行的 CSS 判据（静态，�
   });
 });
 
-describe('V7 需求②：非生词节点不得挂任何事件（WXML 静态判据）', () => {
+/**
+ * 2026-11-26 R-READ-04（AC-B.28 / V-B17）口径变更 —— 原「V7 需求②：非生词节点不得挂任何事件」
+ * 的三条断言**已被用户拍板作废**，保留本节作变更痕迹（不静默删除）：
+ *   旧：「长按对象 = 仅生词」→ wx:if 条件含 hasDef、非生词是纯文本，因此断言「框里含 hasDef」。
+ *   新：「长按对象 = 任意英文单词」（18:05 用户追加）→ 所有 tk.w 都渲染成节点，
+ *       hasDef 只控制点线（class 插值），不再控制「是否渲染 / 是否挂事件」。
+ *   → 判据必须改成新口径，否则「普通词能否长按」这条需求在静态层完全没有护栏。
+ *   注意：「点按普通词无反应」这条**没有放松** —— 它由 onWordTap 首行 hasDef 守卫保证，
+ *      行为断言见 tests/nce-detail-drawer.test.ts 与 tests/nce-detail-word-ux.test.ts。
+ */
+describe('V7′ 需求②（R-READ-04 改口径）：所有英文词都是节点，hasDef 只控制点线', () => {
   const wxml = read('pages/nce/detail/detail.wxml');
 
-  it('生词节点同时挂 catchtap + catchlongpress，且条件里含 hasDef', () => {
+  it('单词节点：条件只判 tk.w，has-def 由插值控制，catchtap + catchlongpress 都在', () => {
     const m = /<text[^>]*catchtap="onWordTap"[^>]*>/.exec(wxml);
     expect(m).not.toBeNull();
     const tag = (m as RegExpExecArray)[0];
     expect(tag).toContain('catchlongpress="onWordLongPress"');
-    expect(tag).toContain('{{tk.w && tk.hasDef}}');
+    // 🔴 新口径：渲染条件不含 hasDef（否则普通词没有节点 → 物理上无法长按）
+    expect(tag).toContain('{{tk.w}}');
+    expect(tag).not.toContain('tk.w && tk.hasDef');
+    // hasDef 只降级为「点线类名」的插值
+    expect(tag).toContain("{{tk.hasDef ? 'has-def' : ''}}");
+    // data-hasdef 仍随节点带出（onWordTap 守卫 / onWordLongPress 的 hasDef 来源）
+    expect(tag).toContain('data-hasdef="{{tk.hasDef}}"');
   });
 
-  it('else 分支是纯文本 text，不带任何事件属性', () => {
+  it('else 分支仍是纯文本 text（非单词 token：标点 / 空格），不带任何事件属性', () => {
     const m = /<text wx:else>([^<]*)<\/text>/.exec(wxml);
     expect(m).not.toBeNull();
+    expect((m as RegExpExecArray)[0]).not.toMatch(/catch|bind/);
   });
 
-  it('全文只有 1 处 catchtap="onWordTap"（非生词不得复用同一事件）', () => {
+  it('全文只有 1 处 catchtap="onWordTap" 与 1 处 catchlongpress="onWordLongPress"（同一模板覆盖生词与普通词）', () => {
     expect(wxml.split('catchtap="onWordTap"').length - 1).toBe(1);
+    expect(wxml.split('catchlongpress="onWordLongPress"').length - 1).toBe(1);
   });
 });

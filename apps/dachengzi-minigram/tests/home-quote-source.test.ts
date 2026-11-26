@@ -310,15 +310,17 @@ describe('需求⑤ 朗读：整句 / 词卡朗读 / 再点停止', () => {
 
   it('点生词不得触发整句朗读（事件必须被 catch 掉）', () => {
     const ctx = makeCtx();
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     expect(mockTts.speakCalls).toEqual([]);
-    expect(ctx.data.quoteTip && ctx.data.quoteTip.word).toBe('never');
+    // 2026-11-26 step2：浮层收敛成单槽位 overlay，词卡是 kind='wordtip'（原 quoteTip 字段已删）
+    expect(ctx.data.overlay && ctx.data.overlay.kind).toBe('wordtip');
+    expect(ctx.data.overlay && ctx.data.overlay.word).toBe('never');
   });
 
   it('词卡「朗读」→ speakText(该词)；再点 → 停止', () => {
     const ctx = makeCtx();
     ctx._quoteWords = [{ word: 'never', def: '从不' }];
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     ctx.speakQuoteWord();
     expect(mockTts.speakCalls).toEqual(['never']);
     expect(ctx.data.quoteWordPlaying).toBe('never');
@@ -331,7 +333,7 @@ describe('需求⑤ 朗读：整句 / 词卡朗读 / 再点停止', () => {
     const ctx = makeCtx();
     ctx.speakQuote(); // 整句在播
     ctx._quoteWords = [{ word: 'never', def: '从不' }];
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     ctx.speakQuoteWord(); // 改读单词
     expect(mockTts.playingText).toBe('never');
     expect(ctx.data.quoteWordPlaying).toBe('never'); // 期望：单词按钮显示「停止」
@@ -341,7 +343,7 @@ describe('需求⑤ 朗读：整句 / 词卡朗读 / 再点停止', () => {
   it('反例：关词卡时必须停掉词卡朗读（与详情页词卡口径一致）', () => {
     const ctx = makeCtx();
     ctx._quoteWords = [{ word: 'never', def: '从不' }];
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     ctx.speakQuoteWord();
     const before = mockTts.stopCalls;
     ctx.closeQuoteTip();
@@ -373,7 +375,7 @@ describe('需求⑤ 收藏：整句 / 单词 payload 与收藏页 metaText 对�
   it('收藏单词 tag=word，meta.word 必填（收藏页 metaText 靠它区分「单词」与「第 N 句」）', async () => {
     const ctx = makeCtx();
     ctx._quoteWords = [{ word: 'never', phonetic: '/ˈnevə/', pos: 'adv.', def: '从不' }];
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     await ctx.collectQuoteWord();
     const p = mockGlossary.calls[0];
     expect(p.tag).toBe('word');
@@ -421,7 +423,7 @@ describe('需求⑤ 收藏：整句 / 单词 payload 与收藏页 metaText 对�
     mockGlossary.reject = true;
     const ctx = makeCtx();
     ctx._quoteWords = [{ word: 'never', def: '从不' }];
-    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never' } } });
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'never', hasdef: true } } });
     await expect(ctx.collectQuoteWord()).resolves.toBeUndefined();
     await expect(ctx.collectQuote()).resolves.toBeUndefined();
   });
@@ -431,10 +433,15 @@ describe('需求⑤ WXML 事件绑定静态判据', () => {
   const read = (p: string) => require('fs').readFileSync(require('path').resolve(__dirname, '..', p), 'utf8');
   const wxml = read('pages/home/index/index.wxml');
 
-  it('生词节点 catchtap 阻止冒泡到卡片（否则点词会顺带朗读整句）', () => {
+  it('单词节点 catchtap 阻止冒泡到卡片（否则点词会顺带朗读整句），且普通词同样有节点', () => {
     const tag = /<text[^>]*catchtap="onQuoteWordTap"[^>]*>/.exec(wxml);
     expect(tag).not.toBeNull();
-    expect((tag as RegExpExecArray)[0]).toContain('{{tk.w && tk.hasDef}}');
+    // 2026-11-26 step2 渲染结构改造（方案 K12）：节点条件从「是生词」放宽到「是英文单词」，
+    // 普通词也有节点（长按载体），下点线由 has-def 类而不是 wx:if 控制。
+    // → 旧断言值 {{tk.w && tk.hasDef}} 已被需求作废（本文件唯一改动的既有断言，理由见回执）。
+    expect((tag as RegExpExecArray)[0]).toContain('{{tk.w}}');
+    expect((tag as RegExpExecArray)[0]).toContain('class="dw {{tk.hasDef ? \'has-def\' : \'\'}}"');
+    expect((tag as RegExpExecArray)[0]).toContain('catchlongpress="onQuoteWordLongPress"');
   });
 
   it('卡片整句朗读用 bindtap（点空白也读整句），底部两个动作按钮用 catchtap', () => {
