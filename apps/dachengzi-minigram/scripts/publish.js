@@ -178,6 +178,9 @@ function parseArgs(argv) {
     else if (a === '--skip-preflight') opts.skipPreflight = true;
     else if (a === '--expect-sha') opts.expectSha = argv[++i];
     else if (a.startsWith('--expect-sha=')) opts.expectSha = a.slice('--expect-sha='.length);
+    else if (a === '--require-dir') opts.requireDir = argv[++i];
+    else if (a.startsWith('--require-dir=')) opts.requireDir = a.slice('--require-dir='.length);
+    else if (a === '--allow-dirty') opts.allowDirty = true;
     else opts._.push(a);
   }
   return opts;
@@ -472,13 +475,22 @@ function writeCliMeta(outPath, meta) {
  *       把 spawn git 的门禁塞进 cmdUpload 会污染它「execFileSync 零调用」的断言。
  *
  * 🔴 失败就 exit 1，不给「继续出码」的口子；唯一例外是显式 --skip-preflight（打印风险自负）。
+ *
+ * mode 会透传进 preflight：cli 模式要求「包根无私钥 + 开发者工具 CLI 可执行」；
+ * ci 模式（miniprogram-ci）则相反 —— 私钥是必需文件，改由 packOptions.ignore 兜底。
  */
-function preflightGate(opts) {
+function preflightGate(opts, sub) {
   if (opts.skipPreflight) {
     console.warn('[Preflight] ⚠️ 已跳过出码前检查，风险自负（--skip-preflight）');
     return;
   }
-  const result = preflight.runPreflight({ expectSha: opts.expectSha });
+  const result = preflight.runPreflight({
+    mode: resolveMode(opts.mode),
+    expectSha: opts.expectSha,
+    requireDir: opts.requireDir,
+    allowDirty: opts.allowDirty,
+    forUpload: sub === 'upload',
+  });
   preflight.printReport(result);
   if (!result.ok) process.exit(1);
 }
@@ -644,12 +656,12 @@ function main(argv) {
   switch (sub) {
     case 'preview':
       // 出码前硬门禁：站错目录 / 带私钥 / 版本不对，一律跑不起来（--skip-preflight 可显式跳过）
-      preflightGate(opts);
+      preflightGate(opts, 'preview');
       cmdPreview(opts);
       break;
     case 'upload':
       // 同上；--skip-preflight 时打印「风险自负」后照旧走原逻辑
-      preflightGate(opts);
+      preflightGate(opts, 'upload');
       cmdUpload(opts);
       break;
     case 'push':
@@ -677,8 +689,10 @@ function main(argv) {
         '                不传则用默认格式「cli 上传 v<版本> @ <sha>」；',
         '                传了则「<文本> | v<版本> @ <sha>」，版本与 sha 一律保留便于审计。',
         '',
-        '  --skip-preflight  preview / upload 跳过出码前四项检查（打印「风险自负」，仅限已知异常场景）。',
-        '  --expect-sha <sha> 声明期望 HEAD 短 sha，preflight 会核对，不符即阻断（也可写 --expect-sha=xxx）。',
+        '  --skip-preflight  preview / upload 跳过出码前检查（打印「风险自负」，仅限已知异常场景）。',
+        '  --expect-sha <sha> 声明期望 HEAD sha，preflight 核对，不符即阻断；可用逗号给多个候选（019d282b,47f74ba8）。',
+        '  --require-dir <正则> 把「目录白名单」从警告升级为硬拦，发布轮次建议 ^web_system-1018(-r2)?$。',
+        '  --allow-dirty     放行「会进包的未提交改动」（默认阻断，打印警告）。',
         '',
         '  边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，',
         '        微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。',
