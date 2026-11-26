@@ -13,6 +13,7 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployAppEntity } from '../entities/deploy-app.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
+import { normalizeCommitRef } from '../pipeline/release-paths';
 
 export interface RegisterVersionInput {
   env: string;
@@ -226,6 +227,8 @@ export class ReleaseRegistryService {
 
   private async syncAppEnvPointerInner(input: SetPointerInput): Promise<void> {
     let written = false;
+    // 列契约（台账 #9027）：本表版本列只允许纯 commit，写入与镜像统一用归一后的值。
+    const currentVersion = normalizeCommitRef(input.currentVersion) ?? input.currentVersion;
     try {
       const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
       if (!app) return; // 后端服务 / 未登记模块：新模型无此实体（legacy 仍是唯一指针）
@@ -236,11 +239,13 @@ export class ReleaseRegistryService {
         })) ?? this.appVersionRepo.create();
       if (!row.appKey) row.appKey = input.moduleKey;
       if (!row.envId) row.envId = input.env;
-      // 旧版本留作回滚目标
-      if (row.currentVersion !== input.currentVersion) {
-        row.previousVersion = row.currentVersion ?? null;
+      // 旧值同样归一：避免出现「current=b6ec9950、previous=portal/b6ec9950」这种同版本自指。
+      const fromCommit = normalizeCommitRef(row.currentVersion);
+      if (fromCommit !== currentVersion) {
+        // 旧版本留作回滚目标
+        row.previousVersion = fromCommit ?? row.currentVersion ?? null;
       }
-      row.currentVersion = input.currentVersion;
+      row.currentVersion = currentVersion;
       row.status = 'deployed';
       row.deployedAt = new Date();
       row.deployedBy = input.deployedBy;
@@ -257,7 +262,7 @@ export class ReleaseRegistryService {
     if (!written) return;
 
     // 分流：prod 的指针镜像到云库（prod gateway 的读取源）。失败按严格语义抛出。
-    await this.splitWriter.mirrorPointer(input);
+    await this.splitWriter.mirrorPointer({ ...input, currentVersion });
   }
 
   /**
@@ -304,13 +309,22 @@ export class ReleaseRegistryService {
       );
     }
 
-    const unchanged = from === input.currentVersion;
+    // 列契约（台账 #9027）：本表版本列只允许纯 commit。上游 versionTag 可能是
+    // `<templateKey>/<commit>`（如 portal/b6ec9950），落库前归一；previous 同口径。
+    const currentVersion = normalizeCommitRef(input.currentVersion) ?? input.currentVersion;
+    const unchanged = from === currentVersion;
 
     if (!unchanged) {
       if (!row.appKey) row.appKey = input.moduleKey;
       if (!row.envId) row.envId = input.env;
-      row.previousVersion = input.previousVersion !== undefined ? input.previousVersion : from;
-      row.currentVersion = input.currentVersion;
+      const prevRaw =
+        input.previousVersion !== undefined
+          ? input.previousVersion
+          : normalizeCommitRef(from) === currentVersion
+            ? previous // 只是历史拼写差异（portal/b6ec9950 vs b6ec9950），不是真变更
+            : from;
+      row.previousVersion = normalizeCommitRef(prevRaw) ?? prevRaw;
+      row.currentVersion = currentVersion;
       row.status = 'deployed';
       row.deployedAt = new Date();
       row.deployedBy = input.deployedBy;
@@ -320,7 +334,7 @@ export class ReleaseRegistryService {
 
     // 分流：prod 必须镜像到云库（gateway 的读取源）。strict 下失败即抛。
     if (!unchanged) {
-      await this.splitWriter.mirrorPointer(input);
+      await this.splitWriter.mirrorPointer({ ...input, currentVersion });
     }
 
     return { from, previous, unchanged };

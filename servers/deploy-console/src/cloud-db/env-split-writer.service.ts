@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { CloudDbService } from './cloud-db.service';
 import { redactSecretsAndAddress } from '../common/redact';
+import { normalizeCommitRef } from '../pipeline/release-paths';
 
 export interface MirrorPointerInput {
   env: string;
@@ -60,6 +61,11 @@ export class EnvSplitWriterService {
     }
 
     try {
+      // 列契约（台账 #9027）：云库版本列同样只接受纯 commit。这里作为镜像的最后一道，
+      // 无论调用方传什么（含 `portal/b6ec9950`）都归一；云库历史脏值一并归一，
+      // 否则「同版本重复镜像」会把 previous_version 写成带前缀的自指值。
+      const currentVersion = normalizeCommitRef(input.currentVersion) ?? input.currentVersion;
+
       // 先取旧值，保证云库的 previous_version 与本地语义一致（旧 current → previous）。
       // 不做「ON DUPLICATE 里引用自身列」的写法：赋值顺序语义依赖 MySQL 版本，易踩坑。
       const rows = await this.cloud.query<Array<{ current_version: string | null; previous_version: string | null }>>(
@@ -67,9 +73,11 @@ export class EnvSplitWriterService {
         [input.moduleKey, input.env],
       );
       const existing = rows?.[0];
-      const previous = existing?.current_version === input.currentVersion
-        ? existing.previous_version ?? null
-        : existing?.current_version ?? null;
+      const existingCurrent =
+        normalizeCommitRef(existing?.current_version) ?? existing?.current_version ?? null;
+      const existingPrevious =
+        normalizeCommitRef(existing?.previous_version) ?? existing?.previous_version ?? null;
+      const previous = existingCurrent === currentVersion ? existingPrevious : existingCurrent;
 
       await this.cloud.query(
         `INSERT INTO deploy_app_env_versions
@@ -85,7 +93,7 @@ export class EnvSplitWriterService {
         [
           input.moduleKey,
           input.env,
-          input.currentVersion,
+          currentVersion,
           previous,
           new Date(),
           input.deployedBy ?? null,
@@ -93,7 +101,7 @@ export class EnvSplitWriterService {
         ],
       );
       this.logger.log(
-        `prod 指针已同步云库：${input.moduleKey} → ${input.currentVersion}` +
+        `prod 指针已同步云库：${input.moduleKey} → ${currentVersion}` +
           (previous ? `（previous=${previous}）` : ''),
       );
       return { outcome: 'ok' };

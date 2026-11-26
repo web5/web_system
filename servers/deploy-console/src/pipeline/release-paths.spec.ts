@@ -6,6 +6,7 @@ import {
   moduleArtifactUrl,
   manifestUrl,
   toCommitId,
+  normalizeCommitRef,
   CDN_ROOT,
   cdnAssetDir,
   cdnAssetUrl,
@@ -69,6 +70,53 @@ describe('toCommitId（入参 commit 归一化）', () => {
   it('归一化结果应能通过提交白名单（不含 /）', () => {
     const re = /^[A-Za-z0-9._-]{4,64}$/;
     expect(re.test(toCommitId('default/91f744b') as string)).toBe(true);
+  });
+});
+
+/**
+ * 版本指针列的格式契约（台账 #9027）。
+ *
+ * `deploy_app_env_versions.current_version` 只允许纯 commit，但上游 versionTag 是
+ * `<templateKey>/<commit>`；gateway 靠 `toCommitId` 取末段兜底才没 404。
+ * 归一必须在**写入端**做 —— 这里锁死的是列契约，不是读取端容错。
+ */
+describe('normalizeCommitRef（版本指针列 → 纯 commit）', () => {
+  it('纯 commit 原样返回', () => {
+    expect(normalizeCommitRef('b6ec9950')).toBe('b6ec9950');
+    expect(normalizeCommitRef('d3b7a1c2')).toBe('d3b7a1c2');
+  });
+
+  it('单段模板前缀（<templateKey>/<commit>）→ 末段', () => {
+    expect(normalizeCommitRef('portal/b6ec9950')).toBe('b6ec9950');
+    expect(normalizeCommitRef('admin-dev/d3b7a1c2')).toBe('d3b7a1c2');
+  });
+
+  it('多段前缀（<templateKey>/<env>/<commit>）也能收敛', () => {
+    expect(normalizeCommitRef('portal/prod/b6ec9950')).toBe('b6ec9950');
+  });
+
+  it('前后空格 / 段内空格 → 去掉后取末段', () => {
+    expect(normalizeCommitRef('  portal/b6ec9950  ')).toBe('b6ec9950');
+    expect(normalizeCommitRef('portal / b6ec9950')).toBe('b6ec9950');
+  });
+
+  it('空串 / 全空格 / null / undefined → undefined（不写空值进列）', () => {
+    expect(normalizeCommitRef('')).toBeUndefined();
+    expect(normalizeCommitRef('   ')).toBeUndefined();
+    expect(normalizeCommitRef(null)).toBeUndefined();
+    expect(normalizeCommitRef(undefined)).toBeUndefined();
+  });
+
+  it('末尾多余分隔符 → 取最后一个有效段', () => {
+    expect(normalizeCommitRef('/b6ec9950/')).toBe('b6ec9950');
+    expect(normalizeCommitRef('portal//b6ec9950')).toBe('b6ec9950');
+  });
+
+  it('归一结果通过 commit 白名单（不含 /）', () => {
+    const re = /^[A-Za-z0-9._-]{4,64}$/;
+    for (const ref of ['portal/b6ec9950', 'portal/prod/b6ec9950', 'admin-dev/d3b7a1c2']) {
+      expect(re.test(normalizeCommitRef(ref) as string)).toBe(true);
+    }
   });
 });
 
