@@ -9,7 +9,7 @@
     <view class="hero">
       <view class="logo">橙</view>
       <view class="hero-tx">
-        <view class="hi">下午好</view>
+        <view class="hi">{{greetingText}}</view>
         <view class="hi-sub">今天想学哪一课？</view>
       </view>
     </view>
