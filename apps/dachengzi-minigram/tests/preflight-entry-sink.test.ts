@@ -252,6 +252,48 @@ describe('E2 · publish.js preview --mode ci：同一条链上门禁只跑一次
   });
 });
 
+// ============================================================ E3 preview-push 去重
+
+describe('E3 · preview-push.js 不再自带门禁判据（只剩透传 + 推送运行时前置）', () => {
+  const src = fs.readFileSync(path.join(APP_ROOT, 'scripts', 'preview-push.js'), 'utf-8');
+
+  it('不出现任何判据标识符（P1 版本对账 / P4 目录白名单 / 私钥判据）', () => {
+    expect(src).not.toContain('runPreflight');
+    expect(src).not.toContain('printReport');
+    expect(src).not.toContain('ALLOWED_DIR_NAME');
+    expect(src).not.toContain('expectVersion');
+    expect(src).not.toContain('isKeyFile');
+    expect(src).not.toContain('KEY_EXT');
+    // 目录白名单的形态（web_system-<四位任务号>）不再出现在这里
+    expect(src).not.toMatch(/web_system-\d{4}/);
+  });
+
+  it('也不再自己查私钥（P2 的事；preview.js 本体与 preflight.js 各管一段，不在这里第三份）', () => {
+    expect(src).not.toContain('private.key');
+    expect(src).not.toMatch(/\.key\b/);
+  });
+
+  it('但保留推送链路的运行时前置检查（wecom-cli 授权 / miniprogram-ci 可加载）', () => {
+    expect(src).toContain('wecom-cli');
+    expect(src).toContain('auth');
+    expect(src).toContain('miniprogram-ci');
+    expect(src).toContain('checkPushRuntime');
+  });
+
+  it('把门禁参数**透传**给 preview.js（本脚本不解释、不判定）', () => {
+    expect(src).toContain('--expect-version');
+    expect(src).toContain('--expect-sha');
+    expect(src).toContain('--require-dir');
+    expect(src).toContain('--allow-any-dir');
+    expect(src).toContain('--skip-preflight');
+    expect(src).toContain('gateArgs');
+  });
+
+  it('不把自己没跑过的门禁说成「跑过了」（必须清掉 GATE_ENV 残留）', () => {
+    expect(src).toContain('delete env[GATE_ENV]');
+  });
+});
+
 // ============================================================ 判据唯一性（结构性绊线）
 
 describe('判据只有一份：入口只调 runGateOrExit，不复制判据', () => {
