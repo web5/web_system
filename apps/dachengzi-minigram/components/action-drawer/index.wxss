@@ -6,6 +6,7 @@
    - D2 排布：2×2（行 = 对象：上句 / 下词；列 = 动词：左朗读 / 右收藏）+ 顶部标题区
    - D6 配色：不透明白底 #FFFFFF + 遮罩 rgba(17,24,39,.34)（沉浸档也**不**半透明）
    - D7 安全区：底部内边距 calc(24rpx + env(safe-area-inset-bottom))
+     （**tabBar 页**开启 `liftBottom` 后安全区项由 tabBar 让出，内边距降为 24rpx —— 见 .ad-lift）
    - AC-B.20 热区：格高 96rpx（375 屏 ≈48pt）；<360px 补到 104rpx（≈44.4pt）
    - AC-B.16 关闭动效只改 transform，不改定位方式
 
@@ -49,6 +50,42 @@
 }
 /* 拖拽中：关掉 transition，抽屉跟手（松手后再开回来做回弹 / 收起动画） */
 .ad-drawer.ad-dragging { transition: none; }
+
+/* ═══ 首页（tabBar 页）让位：整体抬到自定义 tabBar 之上 ═══
+   仅 `liftBottom=true` 时生效（`.ad-lift` 由 index.wxml 挂在根节点 `.ad` 上）。
+
+   🔴 为什么是「抬高」而不是「提 z-index」：微信**自定义 tabBar 是框架层独立根节点**
+   （`custom-tab-bar/` 由框架单独挂载，不在页面节点树里），层级恒在页面内任何
+   `position: fixed` 之上 —— z-index 提到 9999 也压不过它。要让抽屉底部的动作按钮
+   可见可点，唯一出路是把抽屉抬到 tabBar 高度之上。
+
+   🔴 100rpx 的来源（与 tabBar 同源，改 tabBar 高度时要一起改这里）：
+   `custom-tab-bar/index.wxss` → `.tabbar { padding-bottom: env(safe-area-inset-bottom) }`
+   + `.tb { height: 100rpx }` ⇒ tabBar 占位 = 100rpx + 安全区。故这里写
+   `calc(100rpx + env(safe-area-inset-bottom, 0px))`。
+
+   🔴 遮罩**必须一起抬**（不能只抬抽屉）：tabBar 那条带要露出来、可见且可点。
+   点 tabBar 切页 → 页面 `onHide` → 抽屉走既有归零逻辑（方案 §5.3），是**正常路径**；
+   若遮罩继续盖住 tabBar，用户点不动会以为整页卡死，比原缺陷（按钮被遮）体验更差。
+   反之遮罩留在 `bottom:0` 也做不到「只盖到 tabBar 上沿」——遮罩 z-index 1000 同样在
+   tabBar 之下，那 100rpx 依旧是黑的死区。 */
+.ad-lift .ad-mask,
+.ad-lift .ad-drawer {
+  bottom: calc(100rpx + env(safe-area-inset-bottom, 0px));
+}
+
+/* 抬高后底部安全区已由 tabBar 让出：抽屉底边现在位于 home indicator 之上
+   「100rpx + 安全区」，按钮离屏幕物理底边已经足够远，原 `padding-bottom` 里的
+   `env(safe-area-inset-bottom)` 若原样留着，底部会白多出一截（刘海屏 ≈ 68rpx，
+   叠加 24rpx 呼吸量后动作区离抽屉下沿过远、看着像没对齐）。
+   推算依据（原型 D7：内边距 = 24rpx 呼吸量 + 安全区）：
+     - 24rpx 呼吸量保留（设计稿定的按钮与抽屉下沿间距，与 tabBar 无关）；
+     - `env(safe-area-inset-bottom)` 项去掉（该职责已由 tabBar 自身的
+       `padding-bottom: env(safe-area-inset-bottom)` 承担，仍被整体抬高 100rpx）。
+   ⇒ padding-bottom = 24rpx（小屏 20rpx，见文件末尾 media 块）。 */
+.ad-lift .ad-drawer {
+  padding-bottom: 24rpx;
+}
 @keyframes ad-rise {
   from { transform: translateY(80rpx); opacity: .55; }
   to { transform: translateY(0); opacity: 1; }
@@ -158,6 +195,9 @@
    40vh 在 320×568 装不下四项（C-B1），max-height 放宽到 48vh */
 @media (max-width: 359px) {
   .ad-drawer { max-height: 48vh; padding: 0 28rpx calc(20rpx + env(safe-area-inset-bottom, 0px)); }
+  /* 小屏 + 首页让位：同 `.ad-lift` 口径去掉安全区项，保留小屏更紧的 20rpx 呼吸量。
+     特异度与上面那条 `.ad-drawer` 相同（0,2,0 > 0,1,0 已胜出），此处按源序再收一次尺寸。 */
+  .ad-lift .ad-drawer { padding: 0 28rpx 20rpx; }
   .ad-act { height: 104rpx; font-size: 24rpx; }
   .ad-word { font-size: 36rpx; }
   .ad-head { padding: 16rpx 0 20rpx; }
