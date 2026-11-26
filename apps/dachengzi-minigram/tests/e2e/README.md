@@ -8,6 +8,7 @@
 | B | —（未迁移） | — | **暂缓**：目标页已随 AI 能力整改废弃，重写走用例卡流程单独立项 |
 | E | cases/E-radius-persist.js | V42 | 圆角设置持久化（E3 跨进程持久化判 BLOCKED，见基建 README 已知限制①） |
 | F | cases/F-clear-cache.js | V45 | 清缓存白名单 |
-| G | cases/G-login-gate.js | 台账 9045/9053 | 未登录态首页：只有 login-gate、hero 不渲染、greetingText 空串 |
+| G | cases/G-login-gate.js | 台账 9045/9053/9085 | 未登录态首页：只有 login-gate、hero 不渲染、greetingText 空串；G3 静态判据只在 `Page({data})` 块内取值——`loggedIn` 必须是 `isLoggedIn()` 调用，`greetingText` 三元**false 分支必须空串**（实现 `lib/init-state-check.js`，负例矩阵 `tests/init-state-check.test.ts`） |
+| I | cases/I-about-version.js | 台账 9060 | 关于页版本号渲染：`.ver` 含 `v{APP_VERSION}`（真源 utils/version.ts），非 `v1.0.0` |
 
 已知限制（automator 选择器边界等）统一记在基建 README `## ⑤ 已知限制`，本仓库不再另立一份。
