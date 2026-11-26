@@ -10,6 +10,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { checkHomeInitState } = require('../lib/init-state-check');
 
 /** 清场断言用：token 是真实凭据，只报「有无」，不把值打到日志里 */
 const redact = (v) => (v ? '<set>' : '<empty>');
@@ -60,23 +61,17 @@ module.exports = {
     });
 
     // ── G3 静态判据：data 初值 = 首帧状态，必须是「未登录时为 false / 空串」
+    // 🔴 判据实现抽在 lib/init-state-check.js（纯函数，单测负例矩阵见 tests/init-state-check.test.ts）：
+    //    只在 `Page({ data: {...} })` 的对象字面量内取值，且要求 greetingText 三元的 false 分支为空串。
+    //    早年这里是两行全文正则（取全文第一个 `loggedIn:` + 只校验含 isLoggedIn），实测两处回退可绕过：
+    //    ① 删掉 data 里的初值行 → 正则命中 onShow 的 setData；② 三元两支都写占位 → 仍 PASS（台账 9085）。
     await ctx.run('G3 源码判据：data 初值未登录时必为 loggedIn=false 且 greetingText 空串', async () => {
       const src = fs.readFileSync(path.join(__dirname, '../../../pages/home/index/index.ts'), 'utf8');
-      const loggedInInit = /loggedIn:\s*([^,\n]+)/.exec(src);
-      const greetInit = /greetingText:\s*([^,\n]+)/.exec(src);
-      ctx.assertOk(!!loggedInInit, '能定位 loggedIn 初值');
-      ctx.assertOk(!!greetInit, '能定位 greetingText 初值');
-      const lv = loggedInInit[1].trim();
-      const gv = greetInit[1].trim();
+      const res = checkHomeInitState(src);
       ctx.assertOk(
-        /isLoggedIn\s*\(/.test(lv),
-        'loggedIn 初值必须是同步求值 isLoggedIn()（写死 true 会让未登录冷启动闪 hero 帧）',
-        `actual=${lv}`,
-      );
-      ctx.assertOk(
-        /isLoggedIn\s*\(/.test(gv) || gv === "''" || gv === '""',
-        'greetingText 初值必须区分登录态（写死 GREETING_LOADING 会让未登录冷启动闪「…」）',
-        `actual=${gv}`,
+        res.ok,
+        'Page({data}) 初值按登录态求值：loggedIn 是 isLoggedIn() 调用、greetingText 三元 false 分支为空串',
+        `problems=${JSON.stringify(res.problems)} actual=${JSON.stringify(res.values)}`,
       );
     });
 
