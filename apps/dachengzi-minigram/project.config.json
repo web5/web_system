@@ -49,6 +49,10 @@
       {
         "type": "file",
         "value": "project.private.config.json"
+      },
+      {
+        "type": "file",
+        "value": "private.key"
       }
     ],
     "include": []

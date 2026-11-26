@@ -12,7 +12,8 @@
       { "type": "file", "value": "package.json" },
       { "type": "file", "value": "package-lock.json" },
       { "type": "file", "value": "jest.config.js" },
-      { "type": "file", "value": "project.private.config.json" }
+      { "type": "file", "value": "project.private.config.json" },
+      { "type": "file", "value": "private.key" }
     ],
     "include": []
   },
