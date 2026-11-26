@@ -26,7 +26,7 @@
       <view class="daily-cn">{{quote.cn}}</view>
       <view class="daily-en">
         <!-- 只有课文生词挂事件（下点线 + 可点）；表外词是纯文本，点击冒泡到卡片 → 朗读整句 -->
-        <block wx:for="{{quoteTokens}}" wx:key="idx">
+        <block wx:for="{{quoteTokens}}" wx:key="idx" wx:for-item="tk">
           <text wx:if="{{tk.w && tk.hasDef}}" class="dw has-def" data-w="{{tk.w}}" catchtap="onQuoteWordTap">{{tk.t}}</text>
           <text wx:else>{{tk.t}}</text>
         </block>
