@@ -117,7 +117,8 @@ export class EnvArtifactService {
    * 文件存在 ≠ 可服务，这一层把 fail-open 改成 fail-closed：**切不动，指针不动**。
    *
    * 只判 `.js` / `.css`（决定页面能否起来的那两个）；图片 404 不致白屏，不拦。
-   * 非 `/static/` 的绝对路径（如 `/shell/…` 由 gateway 拼装）不属版本产物，跳过。
+   * `/static/…` 落静态根；`/shell/…` 落「版本目录 ∪ 固定 `shell/` 目录」（与网关两条解析
+   * 路径同口径）；其余 `/…`（如 `/assets/…`）不属版本产物，跳过。
    * html 读不到 / ssh 不可达 → 抛错（不允许静默通过）；引用全可解析 → 静默返回。
    *
    * @throws Error 消息以 {@link ENTRY_UNRESOLVABLE} 开头（调用方转 400）
@@ -134,10 +135,15 @@ export class EnvArtifactService {
     const html = await this.readTextAt(t, `${versionDir}/index.html`);
 
     const refs = extractEntryAssetRefs(html);
+    // 一条引用 → 一组候选磁盘路径（OR 语义：任一存在即可服务）。
+    // 为什么是「组」而不是「单值」：`/shell/…` 在网关有两条解析路径（见 resolveEntryRefPaths）。
+    const groups: string[][] = [];
     const probed: string[] = [];
     for (const ref of refs) {
-      const abs = resolveEntryRefPath(t.root, versionDir, ref);
-      if (abs && !probed.includes(abs)) probed.push(abs);
+      const cands = resolveEntryRefPaths(t.root, versionDir, ref);
+      if (cands.length === 0) continue;
+      groups.push(cands);
+      for (const c of cands) if (!probed.includes(c)) probed.push(c);
     }
     // 无可判定引用（纯内联脚本页面 / 全部为外链）：不阻断，避免误杀
     if (probed.length === 0) return;
@@ -147,9 +153,14 @@ export class EnvArtifactService {
       : probed.filter((p) => !fs.existsSync(p));
     if (missing.length === 0) return;
 
+    // 只有「本条引用的所有候选都不存在」才算不可解析；候选里有一个在就放行
+    const unresolved = groups.filter((g) => g.every((p) => missing.includes(p)));
+    if (unresolved.length === 0) return;
+
     throw new Error(
       `${ENTRY_UNRESOLVABLE}: 入口引用的资源在落点上不存在，切过去会白屏：` +
-        `${appKey}/${env}/${version}（${describeStaticTarget(t)}）缺 ${missing.join(', ')}`,
+        `${appKey}/${env}/${version}（${describeStaticTarget(t)}）缺 ` +
+        `${unresolved.flat().join(', ')}`,
     );
   }
 
@@ -196,10 +207,13 @@ export class EnvArtifactService {
         `入口资源校验失败（无法访问 ${sshTarget}）：${r.stderr || r.stdout}`,
       );
     }
+    // 只认「入参里的路径」当缺失项：远端 stdout 若掺入 banner / 登录提示 / 告警行，
+    // 原样当路径返回就会把「其实都在」误判成缺失（误杀）。
+    const known = new Set(paths);
     return r.stdout
       .split('\n')
       .map((l) => l.trim())
-      .filter(Boolean);
+      .filter((l) => Boolean(l) && known.has(l));
   }
 
   /**
@@ -437,28 +451,45 @@ export function extractEntryAssetRefs(html: string): string[] {
 }
 
 /**
- * 入口引用 → 落点上的磁盘绝对路径（台账 #9087）。返回 null 表示**不判定**。
+ * 一条引用的**候选**磁盘绝对路径（台账 #9087；OR 语义：任一存在即可服务）。
+ * 返回空数组表示**不判定**（该形态不属版本产物）。
  *
  * - `/static/…`：本站静态根下的绝对路径 → `<root>/static/…`
  *   （跨环境引用 `…/shell/shell-dev/…` 正是白屏成因，必须落到同一台落点机上判）
- * - 其他 `/…`：`/shell/…` 之类由 gateway 自行拼装，不属版本产物 → 跳过（不误杀）
+ * - `/shell/…`：基座静态资源。网关有**两条**解析路径（`main.ts` + `resolveShellAssetPath`）：
+ *   ① 版本目录 `<版本目录>/<rel>`（`resolveShellDir` 按 `<env>/<当前版本>` 解析，命中即用）
+ *   ② 固定目录 `<root>/shell/<rel>`（① 解析不到 → `next()` 交给 ServeStatic 的 `PUBLIC_ROOT`）
+ *   ⇒ **两处都缺 = 一定 404**（引用的正是入口 js/css，等于白屏）。只判①会误杀老部署，
+ *   只判②会漏杀版本目录内的正常产物，故给候选组。`/shell/assets/index.<hash>.js` 是
+ *   存量基座产物最常见的形态（`2ea0468` / `a6013f8` 实测），跳过不判等于本单白做。
+ * - 其他 `/…`：`/assets/…` 等由 ServeStatic 按 `<root>/<path>` 兜，但该形态不在本单
+ *   诊断范围内、且与平台路由无法静态区分 → 跳过（不误杀，见方案 §2「明确不做」）
  * - 相对路径：相对版本目录；`normalize` 后越出版本目录（`../`）→ 跳过
  */
-export function resolveEntryRefPath(
-  root: string,
-  versionDir: string,
-  ref: string,
-): string | null {
+export function resolveEntryRefPaths(root: string, versionDir: string, ref: string): string[] {
   const clean = (ref ?? '').split(/[?#]/)[0].trim();
-  if (!clean) return null;
+  if (!clean) return [];
   const base = root.replace(/\/+$/, '');
+  const vdir = versionDir.replace(/\/+$/, '');
   if (clean.startsWith('/static/')) {
     const abs = path.posix.normalize(`${base}${clean}`);
-    return abs.startsWith(`${base}/static/`) ? abs : null;
+    return abs.startsWith(`${base}/static/`) ? [abs] : [];
   }
-  if (clean.startsWith('/')) return null;
-  const abs = path.posix.normalize(path.posix.join(versionDir, clean));
-  return abs.startsWith(`${versionDir.replace(/\/+$/, '')}/`) ? abs : null;
+  if (clean.startsWith('/shell/')) {
+    // 目录穿越防护与网关同口径（`resolveShellAssetPath` 的禁用项）
+    const rel = clean.slice('/shell/'.length);
+    if (!rel || rel.includes('\0') || rel.startsWith('/') || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) {
+      return [];
+    }
+    const inVersion = path.posix.normalize(path.posix.join(vdir, rel));
+    if (!inVersion.startsWith(`${vdir}/`)) return [];
+    const inFixed = path.posix.normalize(`${base}/shell/${rel}`);
+    if (!inFixed.startsWith(`${base}/shell/`)) return [inVersion];
+    return inVersion === inFixed ? [inVersion] : [inVersion, inFixed];
+  }
+  if (clean.startsWith('/')) return [];
+  const abs = path.posix.normalize(path.posix.join(vdir, clean));
+  return abs.startsWith(`${vdir}/`) ? [abs] : [];
 }
 
 /**
