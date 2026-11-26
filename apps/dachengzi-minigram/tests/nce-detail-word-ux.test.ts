@@ -99,7 +99,9 @@ function makeThis() {
     _speakingWord: '',
     _offSpeakState: null,
   };
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', '_anchorFloat', '_subscribeReading']) {
+  // 页面内部方法桩：把这些方法显式挂上（onWordTap 依赖 _lookupWord / _applyLineTap；
+  // 播放态回流依赖 _lineIdxOf / _resetPlayingState —— 与页面实际调用面保持同步）
+  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', '_anchorFloat', '_subscribeReading', '_lineIdxOf', '_resetPlayingState']) {
     ctx[k] = pageConfig[k];
   }
   return ctx;

@@ -85,9 +85,46 @@ function dayIndex(): number {
   );
 }
 
+/**
+ * 「今日一句」的完整来源 = 屏幕上的句子 + 它的出处。
+ * 🔴 两者由**同一次池子读取 + 同一次取模**产生（P1-1 修复点）：
+ *    句子与 book/lessonId 结构上不可能指向不同的课文，调用方无需（也不得）分别重算。
+ */
+export type DailyQuoteSource = DailyQuote & DailyQuoteMeta;
+
+/**
+ * 从句池按天取模取「一行」（唯一实现：pickNceLine / getDailyQuoteSource 都走这里）。
+ *  - 过滤脏行（cn / en 任一为空即丢），保证中英出自同一行；
+ *  - 空池 / 全脏 → 回落 FALLBACK_QUOTES 同天那一条，出处取它的 source（真实锚点，非编造）；
+ *  - 注入行没带 book/lessonId（旧缓存）→ 出处字段为 undefined，不编造课号。
+ */
+function pickSourceLine(dayNumber: number, lines: readonly DailyQuote[]): DailyQuoteSource {
+  const pool = (Array.isArray(lines) ? lines : []).filter(
+    (l) => !!l && typeof l.cn === 'string' && l.cn.length > 0
+      && typeof l.en === 'string' && l.en.length > 0,
+  );
+  if (pool.length === 0) {
+    const q = FALLBACK_QUOTES[normalizeIndex(dayNumber, FALLBACK_QUOTES.length)];
+    return { cn: q.cn, en: q.en, book: q.source.book, lessonId: q.source.lessonId };
+  }
+  const picked = pool[normalizeIndex(dayNumber, pool.length)];
+  // 池行可能携带 book/lessonId（MetaQuote），也可能没有（纯 {cn,en} 注入池）
+  const meta = picked as MetaQuote;
+  return { cn: picked.cn, en: picked.en, book: meta.book, lessonId: meta.lessonId };
+}
+
+/**
+ * 一次性解析「今日一句」的句子与出处（唯一取模实现，读本地缓存池）。
+ * 首页用它取「屏幕上这句话 + 它的课文」，词表按这句话的 book/lessonId 回查 —— 同源。
+ */
+export function getDailyQuoteSource(): DailyQuoteSource {
+  return pickSourceLine(dayIndex(), readCachedPool());
+}
+
 /** 今日一句（签名 { cn, en } 与「同天稳定 / 隔天换」行为完全不变）。 */
 export function getDailyQuote(): DailyQuote {
-  return pickNceLine(dayIndex(), readCachedPool());
+  const { cn, en } = getDailyQuoteSource();
+  return { cn, en };
 }
 
 /**
@@ -96,16 +133,8 @@ export function getDailyQuote(): DailyQuote {
  * 兜底路径恒 NCE2，取兜底句的 source.book/lessonId（真实锚点，非编造）。
  */
 export function getDailyQuoteMeta(): DailyQuoteMeta {
-  const pool = readCachedPool().filter(
-    (l) => typeof l.cn === 'string' && l.cn.length > 0 && typeof l.en === 'string' && l.en.length > 0,
-  );
-  const day = dayIndex();
-  if (pool.length === 0) {
-    const fb = FALLBACK_QUOTES[normalizeIndex(day, FALLBACK_QUOTES.length)];
-    return { book: fb.source.book, lessonId: fb.source.lessonId };
-  }
-  const picked = pool[normalizeIndex(day, pool.length)];
-  return { book: picked.book, lessonId: picked.lessonId };
+  const { book, lessonId } = getDailyQuoteSource();
+  return { book, lessonId };
 }
 
 /** 把任意 dayNumber 归一化为 [0, len) 下标：负数 / 超大 / 小数 / 非有限值均安全，不抛异常。 */
@@ -116,27 +145,16 @@ function normalizeIndex(dayNumber: number, len: number): number {
 }
 
 /**
- * 句池选取纯函数。
- * 由调用方注入 lines（中英已配对的句池）；getDailyQuote() 注入本地缓存池：
+ * 句池选取纯函数（对外签名不变；实现收敛到 pickSourceLine，与线上取句同一套规则）。
+ * 由调用方注入 lines（中英已配对的句池）：
  *  - 过滤掉 cn / en 任一为空的脏行，只保留同时非空的行；
  *  - 保证 cn 与 en 来自**同一个**注入行（配对性，不允许中英各取一句）；
  *  - 按 dayNumber 确定性取模（同天稳定、隔天换、按句池长度 N 轮回）；
  *  - 空池 / 全脏行 / 单元素 / dayNumber 负数或超大 → 回落 FALLBACK_QUOTES（10 条 NCE 逐字句），
  *    确定性、不抛异常、不弹 toast；
- *  - 返回恒为 { cn, en } 两字段结构，source 仅留痕不进 UI。
+ *  - 返回恒为 { cn, en } 两字段结构，出处（book/lessonId）不进本函数返回值。
  */
 export function pickNceLine(dayNumber: number, lines: readonly DailyQuote[]): DailyQuote {
-  const pool = (Array.isArray(lines) ? lines : []).filter(
-    (l) => !!l && typeof l.cn === 'string' && l.cn.length > 0
-      && typeof l.en === 'string' && l.en.length > 0,
-  );
-
-  if (pool.length === 0) {
-    const q = FALLBACK_QUOTES[normalizeIndex(dayNumber, FALLBACK_QUOTES.length)];
-    return { cn: q.cn, en: q.en };
-  }
-
-  const picked = pool[normalizeIndex(dayNumber, pool.length)];
-  // 只取同一行的 cn/en，构造新对象 → 结构上保证配对、且恒为 { cn, en }
-  return { cn: picked.cn, en: picked.en };
+  const { cn, en } = pickSourceLine(dayNumber, lines);
+  return { cn, en };
 }
