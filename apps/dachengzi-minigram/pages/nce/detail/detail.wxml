@@ -134,7 +134,7 @@
        🔴 原「长按气泡」两个节点（.bubble / .word-bubble，带内联锚点坐标）已整体删除 ——
        抽屉贴底通栏、不测任何坐标。
        🔴 **本页不传 `lift-bottom`**（保持默认 false = bottom: 0）：详情页是 navigateTo 打开的
-       普通页，**没有 tabBar**，抬高 100rpx 只会在底部凭空多出一条空白，且遮罩盖不到那条带
+       普通页，**没有 tabBar**，抬高 107rpx 只会在底部凭空多出一条空白，且遮罩盖不到那条带
        （点空白处关不掉抽屉）。首页是 tabBar 页，才需要开启让位。 -->
   <action-drawer
     visible="{{overlay && overlay.kind === 'drawer'}}"

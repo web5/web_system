@@ -39,12 +39,14 @@ const BUSY_MS = 300;
  */
 const ACTS_ZONE_RPX = 192;
 /**
- * 首页 tabBar 让位高度（rpx）：与 `custom-tab-bar/index.wxss` 的 `.tb { height: 100rpx }` 同源。
- * 只在 `liftBottom=true` 时叠加进「动作区高度带」判定 —— 抽屉被整体抬高 100rpx 后，
- * 按钮带距视口底的距离也整体增加了这 100rpx；不补上就会把按钮带的上半截误判成
+ * 首页 tabBar 让位高度（rpx）：**107rpx** = `.tb` 内容盒 100rpx + `.tb` 的 `padding-bottom: 6rpx`
+ * + `.tabbar` 的 `border-top: 1rpx`（`custom-tab-bar/index.wxss`；安全区由 CSS 的 `env()` 另叠）。
+ * 只在 `liftBottom=true` 时叠加进「动作区高度带」判定 —— 抽屉被整体抬高 107rpx 后，
+ * 按钮带距视口底的距离也整体增加了这 107rpx；不补上就会把按钮带的上半截误判成
  * 「可以起拖」，BB6 第 2 层逻辑兜底随之失效（第 1 层 `.ad-acts` 的 catchtouchstart 仍在）。
+ * 🔴 与 `index.wxss` 的 `.ad-lift` 规则必须同值，测试已把两处绑在一起（改一处就红）。
  */
-const TABBAR_LIFT_RPX = 100;
+const TABBAR_LIFT_RPX = 107;
 /** 取不到 windowHeight 时的兜底逻辑高（iPhone 8 / 常见最小屏，仅用于「距底距离」换算） */
 const FALLBACK_WINDOW_H = 667;
 /** 取不到 windowWidth 时的兜底（与 _pxToRpx 同一口径） */
@@ -80,9 +82,9 @@ Component({
      *
      * 🔴 属性选型：Boolean `liftBottom`，**不用**数值型 `bottomInset`（rpx）。三条理由：
      *  1. 要表达的是「本页有自定义 tabBar」这一**页面事实**，不是「抬多少」这个**几何量**。
-     *     100rpx 这个值来自 tabBar 自身样式（`custom-tab-bar/index.wxss` 的 `.tb { height }`），
-     *     是项目级不变量；做成数值属性等于把这个不变量复制到每个调用点，将来改 tabBar 高度
-     *     必然漏改，也没有任何东西拦得住某页传个 300rpx。
+     *     107rpx（= `.tb` 100rpx + `padding-bottom` 6rpx + `.tabbar` 的 `border-top` 1rpx）
+     *     这个值来自 tabBar 自身样式，是项目级不变量；做成数值属性等于把这个不变量复制到
+     *     每个调用点，将来改 tabBar 尺寸必然漏改，也没有任何东西拦得住某页传个 300rpx。
      *  2. 不破本组件红线 3（`index.wxml` 顶部：「不要出现 left:{{…}}rpx / top:{{…}}rpx 之类
      *     坐标绑定」）。数值属性只能靠内联 `style="bottom: {{bottomInset}}rpx"` 落地，正好踩线；
      *     Boolean 走 class 切换（`.ad-lift`），几何量全部留在 wxss 一处。
@@ -90,7 +92,7 @@ Component({
      *     `tests/drawer-tabbar-lift-1126.test.ts`）。
      *
      * 🔴 只有 tabBar 页能传：详情页（`pages/nce/detail/detail`）是 `navigateTo` 打开的普通页，
-     * 没有 tabBar —— 传了会凭空多出一条 100rpx 空白，且遮罩盖不到那条带。
+     * 没有 tabBar —— 传了会凭空多出一条 107rpx 空白，且遮罩盖不到那条带。
      */
     liftBottom: { type: Boolean, value: false },
   },

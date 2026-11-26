@@ -11,7 +11,7 @@
     第 2 行 朗读单词 | 收藏单词
 
   🔴 tabBar 让位（liftBottom）：开 `ad-lift` 由 **wxss** 把 `.ad-mask` / `.ad-drawer` 的 bottom
-     抬到 `calc(100rpx + env(safe-area-inset-bottom))`。这里只切一个 class、**不写任何内联坐标**，
+     抬到 `calc(107rpx + env(safe-area-inset-bottom))`。这里只切一个 class、**不写任何内联坐标**，
      原因见 index.ts 的 `liftBottom` 属性注释（红线 3：wxml 里不许出现坐标绑定）。
 -->
 <view wx:if="{{visible}}" class="ad {{liftBottom ? 'ad-lift' : ''}}">
