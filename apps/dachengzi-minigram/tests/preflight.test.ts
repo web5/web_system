@@ -54,6 +54,7 @@ interface PreflightInfo {
   projectName: string;
   dirAllowed: boolean;
   requiredDir: string;
+  allowAnyDir: boolean;
   mode: string;
   rootKeyHits: Hit[];
   deepKeyHits: Hit[];
@@ -76,6 +77,7 @@ interface PreflightOpts {
   expectSha?: string;
   requireDir?: string;
   allowDirty?: boolean;
+  allowAnyDir?: boolean;
   forUpload?: boolean;
   execFileSync?: (...args: unknown[]) => unknown;
   env?: Record<string, string | undefined>;
@@ -92,6 +94,7 @@ interface PreflightModule {
     root?: string;
     expectSha?: string;
     expectVersion?: string;
+    allowAnyDir?: boolean;
   };
   isSameSha: (a: string, b: string) => boolean;
   isKeyFile: (name: string) => boolean;
@@ -108,7 +111,15 @@ interface PreflightModule {
 
 const tmpDirs: string[] = [];
 
-/** 造一个「小程序包根」临时目录。opts 控制脏数据形态。 */
+/**
+ * 造一个「小程序包根」临时目录。opts 控制脏数据形态。
+ *
+ * 🔴 包根一律落在**白名单形态的顶层目录**下（默认 `web_system-1018-r2`）：
+ *    P4 自 2026-11-26 起默认硬拦「顶层名不在 web_system-<任务号> 内」，
+ *    若夹具直接用 `mkdtemp` 出来的 `preflight-xxxx` 当顶层名，则本文件里
+ *    所有与目录无关的用例（P1/P2/P3/P5/P6）都会被 P4 连带打红 ——
+ *    那是假红，会掩盖真正要断言的那一项。要测「目录名不对」请显式传 dirName。
+ */
 function mkFixture(opts: {
   version?: string;
   appVersion?: string;
@@ -118,15 +129,16 @@ function mkFixture(opts: {
   extraFiles?: string[];
   packIgnores?: unknown[];
   projectConfig?: boolean;
-  /** true 时按真实仓库布局造：<tmp>/web_system-1018-r2/apps/dachengzi-minigram */
+  /** true 时按真实仓库布局造：<tmp>/<dirName>/apps/dachengzi-minigram */
   repoLayout?: boolean;
+  /** worktree 顶层目录名（P4 判的就是它），默认 web_system-1018-r2 */
+  dirName?: string;
 }): string {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-'));
   tmpDirs.push(base);
-  const dir = opts.repoLayout
-    ? path.join(base, 'web_system-1018-r2', 'apps', 'dachengzi-minigram')
-    : base;
-  if (opts.repoLayout) fs.mkdirSync(dir, { recursive: true });
+  const top = path.join(base, opts.dirName ?? 'web_system-1018-r2');
+  const dir = opts.repoLayout ? path.join(top, 'apps', 'dachengzi-minigram') : top;
+  fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     path.join(dir, 'package.json'),
@@ -389,14 +401,19 @@ describe('P3 工作区身份（分支/sha）', () => {
   });
 });
 
-// ---------- ④ P4 目录白名单提示 ----------
+// ---------- ④ P4 目录白名单（默认硬拦 + 唯一逃生口） ----------
 
-describe('P4 目录白名单（只警告，不单独阻断）', () => {
-  it('web_system-1018-r2 这类发布 worktree → 不告警', () => {
+describe('P4 目录白名单（默认硬拦，--allow-any-dir 是唯一逃生口）', () => {
+  // 用 fakeGit 把 toplevel 钉到具体目录名 —— P4 判的是 worktree 顶层名，
+  // 夹具真实路径（<tmp>/web_system-1018-r2）在带 fakeGit 时并不参与判定。
+  const atDir = (name: string, branch = 'feat/some-branch', sha = 'abc1234') =>
+    fakeGit(branch, sha, `/Users/x/workspace/${name}`);
+
+  it('web_system-1018-r2 这类发布 worktree → 通过且无 P4 痕迹', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
-      execFileSync: fakeGit('release/dachengzi-1018-r2', '47f74ba8', '/Users/x/workspace/web_system-1018-r2'),
+      execFileSync: atDir('web_system-1018-r2', 'release/dachengzi-1018-r2', '47f74ba8'),
     });
 
     expect(r.info.projectName).toBe('web_system-1018-r2');
@@ -404,16 +421,63 @@ describe('P4 目录白名单（只警告，不单独阻断）', () => {
     expect(r.info.warnings.join('\n')).not.toContain('P4');
   });
 
-  it('web_system-dachengzi（危险目录的命名形态）→ 告警但不阻断', () => {
+  // 🔴 本条是 H3 的核心：无 --require-dir + 目录不在白名单 → **必须**失败。
+  //    改回「只警告」时这条会红（变异反证就靠它）。
+  it('无 --require-dir + 目录不在白名单（web_system-pkgkey）→ 失败，报告里是 P4', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, execFileSync: atDir('web_system-pkgkey') });
+
+    expect(r.ok).toBe(false);
+    expect(codes(r)).toEqual(['P4']);
+    const f = r.failures.find((x) => x.code === 'P4')!;
+    expect(f.title).toContain('web_system-pkgkey');
+    // 三行结构：现象（哪个目录名）/ 判据（白名单长什么样）/ 怎么办（可执行的下一步）
+    expect(f.title).toContain('不在出码白名单');
+    expect(f.detail).toContain('web_system-1018');
+    expect(f.hint).toContain('--require-dir');
+    expect(f.hint).toContain('--allow-any-dir');
+  });
+
+  it('危险目录 web_system-dachengzi（1.0.14 事故目录的命名形态）→ 失败，不再只是警告', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
-      execFileSync: fakeGit('devtools/dachengzi-preview', '4292aa45', '/Users/x/workspace/web_system-dachengzi'),
+      execFileSync: atDir('web_system-dachengzi', 'devtools/dachengzi-preview', '4292aa45'),
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.dirAllowed).toBe(false);
+    expect(r.failures.find((x) => x.code === 'P4')!.title).toContain('web_system-dachengzi');
+  });
+
+  it('同上 + allowAnyDir: true → 通过，且必须打显式告警行（不许静默降级）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      allowAnyDir: true,
+      execFileSync: atDir('web_system-pkgkey'),
     });
 
     expect(r.ok).toBe(true);
-    expect(r.info.dirAllowed).toBe(false);
-    expect(r.info.warnings.join('\n')).toContain('web_system-dachengzi');
+    expect(codes(r)).not.toContain('P4');
+    expect(r.info.allowAnyDir).toBe(true);
+    // 告警行要能被人一眼看到：点名开关 + 点名目录 + 说明风险仍成立
+    const w = r.info.warnings.join('\n');
+    expect(w).toContain('--allow-any-dir');
+    expect(w).toContain('web_system-pkgkey');
+    expect(w).toContain('风险');
+  });
+
+  it('allowAnyDir 但目录本来就在白名单内 → 通过，且如实说明该开关本次未生效', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      allowAnyDir: true,
+      execFileSync: atDir('web_system-1018-r2'),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.warnings.join('\n')).toContain('本次未生效');
   });
 
   it('ALLOWED_DIR_NAME：web_system / -1018 / -1018-r2 / -9027 收，-dachengzi / -pkgkey 不收', () => {
@@ -478,6 +542,7 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
   // 只 require 不执行：publish.js 入口有 require.main === module 保护。
   const publish = require('../scripts/publish') as {
     parseArgs: (argv: string[]) => Record<string, unknown>;
+    preflightGate: (opts: Record<string, unknown>, sub: 'preview' | 'upload') => void;
   };
 
   it('--skip-preflight → skipPreflight: true', () => {
@@ -496,6 +561,38 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
       noPush: true,
       skipPreflight: true,
     });
+  });
+
+  it('--allow-any-dir → allowAnyDir: true，且与 --skip-preflight 是两个独立开关', () => {
+    expect(publish.parseArgs(['--allow-any-dir'])).toEqual({ _: [], allowAnyDir: true });
+    // 关键：allowAnyDir 不许被实现成「等同 skip」——只放开 P4，其余各项照旧跑
+    expect(publish.parseArgs(['--allow-any-dir', '--skip-preflight'])).toEqual({
+      _: [],
+      allowAnyDir: true,
+      skipPreflight: true,
+    });
+  });
+
+  it('preflightGate 把 allowAnyDir 透传进 runPreflight（preview）', () => {
+    // 本文件不 jest.mock preflight（要测它的真判定逻辑），故这里用 spy 只观察调用参数，
+    // 让 runPreflight 返回 ok:true 以避免 process.exit。
+    const spy = jest.spyOn(preflight, 'runPreflight').mockReturnValue({
+      ok: true,
+      failures: [],
+      info: {} as PreflightInfo,
+    });
+    const printSpy = jest.spyOn(preflight, 'printReport').mockImplementation(() => undefined);
+    try {
+      publish.preflightGate({ allowAnyDir: true }, 'preview');
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ allowAnyDir: true, forUpload: false }));
+      // 未声明时不伪造 true（否则「默认放开」= 门禁白写）
+      publish.preflightGate({}, 'preview');
+      const arg = spy.mock.calls[1][0] as { allowAnyDir?: unknown };
+      expect(arg.allowAnyDir).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+      printSpy.mockRestore();
+    }
   });
 });
 
@@ -521,6 +618,7 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
       projectName: 'web_system-dachengzi',
       dirAllowed: false,
       requiredDir: '',
+      allowAnyDir: false,
       mode: 'cli',
       rootKeyHits: [],
       deepKeyHits: [],

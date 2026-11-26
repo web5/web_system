@@ -22,8 +22,8 @@
  *      规则被谁删掉都会立刻变红 —— 两道闸从此互为证据，而不是各说各话。）
  *
  * 🔴 设计取向：宁可跑不起来，也不发错包。
- *    P1/P2/P3/P5/P6 失败 = 硬阻断（exit 1），不是警告；P4 默认只警告（目录命名没法单独当判据，
- *    但可用 `--require-dir` 升级为硬拦）。
+ *    P1/P2/P3/P4/P5/P6 失败 = 硬阻断（exit 1），不是警告。
+ *    （P4 自 2026-11-26 起默认硬拦；唯一逃生口是显式的 `--allow-any-dir`，且它会打印告警行。）
  *
  * 🔴 六项检查（顺序即打印顺序；**不短路**，一次把全部问题列出来，避免「改一条又冒一条」）：
  *    P1 版本真实性   package.json.version == utils/version.ts 的 APP_VERSION，且都 == 期望版本；
@@ -32,7 +32,8 @@
  *                    ci 模式：包根私钥是**必需的**（preview.js:54 / upload.js:31 硬编码路径，无 env 覆盖），
  *                    故不阻断，但必须满足「packOptions.ignore 已覆盖私钥」→ 否则失败（那才是真会随包外发）
  *    P3 工作区身份   打印 分支@sha；给了 --expect-sha 就核对（支持逗号分隔的多个候选 sha），不符即失败
- *    P4 目录白名单   worktree 顶层名不在 web_system-<任务号> 内 → 警告；`--require-dir <正则>` 可升级为硬拦
+ *    P4 目录白名单   worktree 顶层名不在 web_system-<任务号> 内 → **失败**；
+ *                    `--require-dir <正则>` 收紧到本轮发布轮次；`--allow-any-dir` 是唯一逃生口（降回警告+告警行）
  *    P5 工作区干净   `git status --short` 里有**会进包**的未提交改动 → 失败（`--allow-dirty` 显式放行）
  *    P6 CLI 可执行   cli 模式：`WECHAT_DEVTOOLS_CLI` 存在且可执行，否则回退 `which cli`，都没有 → 失败
  *                    （这是发布全程唯一的硬缺口：不设该变量时 publish.js 回落字面量 'cli' → spawnSync ENOENT）
@@ -42,6 +43,7 @@
  *   node scripts/preflight.js --mode ci
  *   node scripts/preflight.js --expect-sha 47f74ba8,019d282b
  *   node scripts/preflight.js --require-dir '^web_system-1018(-r2)?$'
+ *   node scripts/preflight.js --allow-any-dir                  显式放开 P4 白名单（会打印告警行）
  *   node scripts/preflight.js --root <路径>                    指定待检包根（只读，不改任何文件）
  *
  * 边界：零第三方依赖、只读（除 git / which 子进程外无副作用、不写文件）、
@@ -315,6 +317,7 @@ function checkDevtoolsCli(execFileSync, env) {
  * @param {string} [opts.expectVersion] 期望版本；缺省从 package.json.version 推导
  * @param {string} [opts.expectSha]     期望 HEAD sha；支持逗号分隔多个候选（命中任一即通过）
  * @param {string|RegExp} [opts.requireDir] 收紧 P4：worktree 顶层名不匹配即**失败**
+ * @param {boolean} [opts.allowAnyDir] 放宽 P4：无 requireDir 且目录不在白名单时降回警告（打印告警行）
  * @param {boolean} [opts.allowDirty]   放行「会进包的未提交改动」（P5 降级为警告）
  * @param {Function} [opts.execFileSync] 注入点（单测用），默认 child_process.execFileSync
  * @param {object} [opts.env]           注入点（单测用），默认 process.env
@@ -487,13 +490,24 @@ function runPreflight(opts = {}) {
     warnings.push(`P3 未声明 --expect-sha：只打印分支/sha，不做判定（当前 ${git.branch}@${git.sha}）`);
   }
 
-  // ---------- P4 目录白名单（默认警告；--require-dir 升级为硬拦） ----------
+  // ---------- P4 目录白名单（默认硬拦；--allow-any-dir 是唯一逃生口） ----------
   // 判的是 **worktree 顶层名**（web_system-dachengzi），不是包目录名（apps/dachengzi-minigram，
   // 后者在每个 worktree 里都一样，判它等于不判）。
+  //
+  // 🔴 2026-11-26 由「默认警告」改为「默认硬拦」：
+  //    `web_system-dachengzi` 事故里，P4 当时只 warning，于是「顺手出个预览码」照样跑下去 ——
+  //    一条只会出现在滚动日志里、退出码仍是 0 的警告，等于没有闸门。
+  //    现在三种情形分开：
+  //      ① 给了 --require-dir 且不匹配        → 硬失败（调用方显式声明的期望，必须尊重）
+  //      ② 没给 --require-dir 且不在白名单    → 硬失败（默认口径）
+  //      ③ 同② + --allow-any-dir              → 降回 warning，但**必须打印显式告警行**
+  //    ① 与 ③ 的优先级：--allow-any-dir **不能**盖掉 ①，
+  //    否则「显式要求匹配 X + 显式放行任意目录」会静默取后者，等于把 --require-dir 变成摆设。
   const projectName = pickProjectName(root, git.toplevel);
   const requireDir = opts.requireDir
     ? (opts.requireDir instanceof RegExp ? opts.requireDir : new RegExp(String(opts.requireDir)))
     : null;
+  const allowAnyDir = opts.allowAnyDir === true;
   const dirAllowed = ALLOWED_DIR_NAME.test(projectName);
   const dirMatchesRequired = requireDir ? requireDir.test(projectName) : dirAllowed;
   if (requireDir && !dirMatchesRequired) {
@@ -501,13 +515,36 @@ function runPreflight(opts = {}) {
       'P4',
       `项目目录不匹配 --require-dir：${projectName}`,
       `当前 worktree 顶层名=${projectName}，要求匹配 /${requireDir.source}/`,
-      '发布轮次只允许在指定 worktree 出码。换目录，或确认要放开就改 --require-dir / 用 --skip-preflight',
+      '发布轮次只允许在指定 worktree 出码。换目录到匹配的 worktree；'
+        + '或确认本轮就该在这个目录出口径相同的包，再用 --require-dir 精确匹配它（如 --require-dir '
+        + `'^${projectName}$'）。--allow-any-dir 只放开默认白名单，盖不掉你显式声明的 --require-dir`,
     );
   } else if (!dirMatchesRequired) {
+    if (allowAnyDir) {
+      // 逃生口也留痕：门禁被降级这件事必须能在日志里被看见，不能静默
+      warnings.push(
+        `P4 ⚠️ 已用 --allow-any-dir 显式放行白名单外目录：${projectName}`
+          + '（白名单形如 web_system-1018 / web_system-1018-r2）。'
+          + '本次不阻断，但「目录不在发布轮次命名内」这条风险**依然成立** —— 出了错无法归因到门禁。',
+      );
+    } else {
+      fail(
+        'P4',
+        `项目目录不在出码白名单：${projectName}`,
+        `当前 worktree 顶层名=${projectName}，不匹配默认白名单 /${ALLOWED_DIR_NAME.source}/`
+          + `（形如 web_system / web_system-1018 / web_system-1018-r2）`,
+        '发布类 worktree 用任务号命名 —— 分支名好听不代表代码是对的（web_system-dachengzi 这起事故'
+          + '就是分支叫 devtools/dachengzi-preview、里面却是 1.0.14 老码 + 真私钥）。'
+          + "处置：① 换到本轮的发布 worktree；② 本轮确实要用这个目录，用 --require-dir 精确匹配它"
+          + "（如 --require-dir '^web_system-1018(-r2)?$'）；③ 明知风险仍要放开白名单，"
+          + '显式加 --allow-any-dir（会打印告警行）',
+      );
+    }
+  } else if (allowAnyDir) {
+    // 没用上也要说清：避免下次有人以为「我加了这个开关，所以刚才那次是放行的」
     warnings.push(
-      `P4 项目目录不在出码白名单内：${projectName}（白名单形如 web_system-1018 / web_system-1018-r2）。`
-        + '发布类 worktree 用任务号命名 —— 分支名好听不代表代码是对的。'
-        + "要硬拦请显式加 --require-dir '^web_system-1018(-r2)?$'",
+      `P4 已声明 --allow-any-dir，但当前目录 ${projectName} 本就在白名单内 → 该开关本次未生效`
+        + '（它只用于放开白名单外的目录）。',
     );
   }
 
@@ -590,6 +627,7 @@ function runPreflight(opts = {}) {
     projectName,
     dirAllowed: dirMatchesRequired,
     requiredDir: requireDir ? requireDir.source : '',
+    allowAnyDir,
     rootKeyHits: keyScan.rootHits,
     deepKeyHits: keyScan.deepHits,
     packIgnoreOk: packCfg.ok,
@@ -680,6 +718,7 @@ function parsePreflightArgs(argv) {
     else if (a.startsWith('--expect-version=')) opts.expectVersion = a.slice('--expect-version='.length);
     else if (a === '--require-dir') opts.requireDir = argv[++i];
     else if (a.startsWith('--require-dir=')) opts.requireDir = a.slice('--require-dir='.length);
+    else if (a === '--allow-any-dir') opts.allowAnyDir = true;
     else if (a === '--allow-dirty') opts.allowDirty = true;
     else opts._.push(a);
   }
