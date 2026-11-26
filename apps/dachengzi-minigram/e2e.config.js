@@ -14,6 +14,7 @@ module.exports = {
     refreshToken: 'refresh_token', // 真源: utils/request.ts REFRESH_TOKEN_KEY（模块私有常量）
     loggedOut: 'account_logged_out', // 真源: utils/request.ts LOGGED_OUT_KEY（模块私有常量）
     apiBase: 'api_base', // 真源: utils/request.ts 行内字面量（getStorageSync('api_base')）
+    nickname: 'kd_profile_nickname', // 真源: services/account.ts NICKNAME_STORAGE_KEY（模块私有常量）
     featurePinned: 'feature_pinned', // 真源: utils/features.ts PINNED_KEY
     nceFont: 'nce-font', // 真源: pages/nce/detail/detail.ts 行内字面量（get/setStorageSync('nce-font')）
   },
