@@ -41,6 +41,12 @@ interface Failure {
   hint?: string;
 }
 
+interface CliCandidate {
+  path: string;
+  source: string;
+  note?: string;
+}
+
 interface PreflightInfo {
   root: string;
   pkgVersion: string;
@@ -60,7 +66,16 @@ interface PreflightInfo {
   deepKeyHits: Hit[];
   packIgnoreCoversKeys: boolean;
   dirty: { total: number; shipping: string[]; excluded: string[] };
-  cli: { ok: boolean; path: string; source: string; skipped: boolean };
+  cli: {
+    ok: boolean;
+    path: string;
+    source: string;
+    skipped: boolean;
+    /** 环境变量是否显式指定了（显式 = 唯一候选，不会回落默认路径） */
+    configured: boolean;
+    /** 实际检查过的候选清单（失败时用它列「到底找过哪儿」） */
+    checked: CliCandidate[];
+  };
   warnings: string[];
 }
 
@@ -81,6 +96,8 @@ interface PreflightOpts {
   forUpload?: boolean;
   execFileSync?: (...args: unknown[]) => unknown;
   env?: Record<string, string | undefined>;
+  /** P6 官方默认安装路径的注入点：不注入就落到本机真实路径，测试会随「本机装没装工具」飘 */
+  defaultCliPaths?: string[];
 }
 
 interface PreflightModule {
@@ -103,7 +120,15 @@ interface PreflightModule {
   checkDevtoolsCli: (
     execFileSync: (...a: unknown[]) => unknown,
     env: Record<string, string | undefined>,
-  ) => { ok: boolean; path: string; source: string };
+    opts?: { defaultCliPaths?: string[] },
+  ) => {
+    ok: boolean;
+    path: string;
+    source: string;
+    configured: boolean;
+    checked: CliCandidate[];
+  };
+  DEFAULT_CLI_PATHS: string[];
   ALLOWED_DIR_NAME: RegExp;
 }
 
@@ -624,7 +649,7 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
       deepKeyHits: [],
       packIgnoreCoversKeys: false,
       dirty: { total: 0, shipping: [], excluded: [] },
-      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false },
+      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false, configured: true, checked: [] },
       warnings: [],
     },
   };
@@ -909,11 +934,31 @@ describe('P5 工作区干净：只拦「会进包的」未提交改动', () => {
 // ---------- ⑪ P6 开发者工具 CLI 可执行 ----------
 
 describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺口）', () => {
+  /**
+   * 造一个「可执行的假 cli」，并把它的绝对路径当作 P6 的官方默认安装路径注入。
+   *
+   * 🔴 为什么必须注入：默认路径是**本机真实路径**。本机装了开发者工具 → 默认路径存在；
+   *    CI 上没装 → 不存在。直接依赖本机路径会让同一条用例在两边得出相反结论。
+   */
+  function mkFakeDefaultCli(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-cli-'));
+    tmpDirs.push(dir);
+    const p = path.join(dir, 'wechatwebdevtools.app', 'Contents', 'MacOS', 'cli');
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(p, 0o755);
+    return p;
+  }
+
+  /** 一个「默认路径不存在」的注入值：证明不靠本机安装也能走到失败分支。 */
+  const NO_DEFAULT_CLI = '/nonexistent/wechatwebdevtools.app/Contents/MacOS/cli';
+
   it('WECHAT_DEVTOOLS_CLI 未设且 which cli 也找不到 → 失败（不是等到 spawnSync ENOENT）', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({
       root,
       env: {},
+      defaultCliPaths: [NO_DEFAULT_CLI],
       execFileSync: (cmd: unknown, args: unknown) => {
         const a = (args as string[]).join(' ');
         if (String(cmd) === 'which') throw new Error('which: no cli in PATH');
@@ -931,6 +976,99 @@ describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺�
     expect(f!.hint).toContain('wechatwebdevtools.app');
   });
 
+  it('WECHAT_DEVTOOLS_CLI 未设 + 官方默认路径可执行 → 回落通过，并打印「已回落默认安装路径」', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({ root, env: {}, defaultCliPaths: [fakeDefaultCli] });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.cli.ok).toBe(true);
+    expect(r.info.cli.source).toBe('default');
+    expect(r.info.cli.path).toBe(fakeDefaultCli);
+    expect(r.info.cli.configured).toBe(false);
+    // 回落的唯一可视证据：一行能被 grep 到的提示
+    expect(r.info.warnings.join('\n')).toContain(`[P6] 已回落默认安装路径：${fakeDefaultCli}`);
+    // 且真的打进了报告（不只是躺在 info 里）
+    const out: string[] = [];
+    preflight.printReport(r, { log: (s: unknown) => out.push(String(s)), error: () => undefined });
+    expect(out.join('\n')).toContain(`[P6] 已回落默认安装路径：${fakeDefaultCli}`);
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 显式设了 → 只认它，即使默认路径也存在也不回落', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({
+      root,
+      env: { WECHAT_DEVTOOLS_CLI: process.execPath },
+      defaultCliPaths: [fakeDefaultCli],
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.cli.source).toBe('env');
+    expect(r.info.cli.path).toBe(process.execPath);
+    expect(r.info.cli.configured).toBe(true);
+    const all = r.info.warnings.join('\n');
+    expect(all).not.toContain('已回落');
+    // 显式命中时压根不该去查默认路径（省一次 stat，也避免「到底用了哪个」的歧义）
+    expect(r.info.cli.checked.map((c) => c.path)).toEqual([process.execPath]);
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 设了但不可执行 → 失败，不因默认路径可用就偷偷改用默认路径', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const fakeDefaultCli = mkFakeDefaultCli();
+    const r = preflight.runPreflight({
+      root,
+      env: { WECHAT_DEVTOOLS_CLI: '/nonexistent/cli' },
+      defaultCliPaths: [fakeDefaultCli],
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.cli.source).toBe('env');
+    const f = r.failures.find((x) => x.code === 'P6')!;
+    expect(f.detail).toContain('/nonexistent/cli');
+    // 关键：没有偷偷换成默认路径 —— 「我指错了」必须是响亮的失败，不是静默的另一个答案
+    expect(f.detail).not.toContain(fakeDefaultCli);
+    expect(r.info.cli.checked.map((c) => c.path)).toEqual(['/nonexistent/cli']);
+    expect(r.info.warnings.join('\n')).not.toContain('已回落');
+  });
+
+  it('三个候选（环境变量/默认路径/PATH）全不可用 → 失败，且报错列出检查过的每一个路径', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      env: {},
+      defaultCliPaths: [NO_DEFAULT_CLI],
+      execFileSync: (cmd: unknown, args: unknown) => {
+        const a = (args as string[]).join(' ');
+        if (String(cmd) === 'which') throw new Error('which: no cli in PATH');
+        if (a.includes('status')) return '';
+        if (a.includes('--abbrev-ref')) return 'main\n';
+        if (a.includes('--show-toplevel')) return '/Users/x/workspace/web_system-1018-r2\n';
+        if (a.includes('--short')) return '47f74ba8\n';
+        throw new Error(`unexpected: ${String(cmd)} ${a}`);
+      },
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P6')!;
+    expect(f.detail).toContain('检查过 2 个候选');
+    expect(f.detail).toContain(NO_DEFAULT_CLI);
+    expect(f.detail).toContain('官方默认安装路径');
+    expect(f.detail).toContain('PATH 里的 cli');
+    expect(f.hint).toContain('WECHAT_DEVTOOLS_CLI');
+  });
+
+  it('默认路径存在但是个目录 → 不算可用（目录也有 X_OK 位，只看 access 会假绿）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const dirAsCli = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-clidir-'));
+    tmpDirs.push(dirAsCli);
+    const r = preflight.runPreflight({ root, env: {}, defaultCliPaths: [dirAsCli] });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.cli.ok).toBe(false);
+    expect(r.failures.find((x) => x.code === 'P6')!.detail).toContain(dirAsCli);
+  });
+
   it('WECHAT_DEVTOOLS_CLI 指向不存在的路径 → 失败', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({ root, env: { WECHAT_DEVTOOLS_CLI: '/nonexistent/cli' } });
@@ -946,7 +1084,9 @@ describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺�
     expect(r.ok).toBe(true);
     expect(r.info.cli.ok).toBe(true);
     expect(r.info.cli.path).toBe(process.execPath);
+    expect(r.info.cli.source).toBe('env');
     expect(r.info.warnings.join('\n')).toContain('开发者工具 CLI 可执行');
+    expect(r.info.warnings.join('\n')).not.toContain('已回落');
   });
 
   it('ci 模式不需要开发者工具 CLI → P6 跳过（不会因没装工具而误杀 ci）', () => {

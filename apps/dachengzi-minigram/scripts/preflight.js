@@ -35,8 +35,11 @@
  *    P4 目录白名单   worktree 顶层名不在 web_system-<任务号> 内 → **失败**；
  *                    `--require-dir <正则>` 收紧到本轮发布轮次；`--allow-any-dir` 是唯一逃生口（降回警告+告警行）
  *    P5 工作区干净   `git status --short` 里有**会进包**的未提交改动 → 失败（`--allow-dirty` 显式放行）
- *    P6 CLI 可执行   cli 模式：`WECHAT_DEVTOOLS_CLI` 存在且可执行，否则回退 `which cli`，都没有 → 失败
- *                    （这是发布全程唯一的硬缺口：不设该变量时 publish.js 回落字面量 'cli' → spawnSync ENOENT）
+ *    P6 CLI 可执行   cli 模式：候选顺序 = `WECHAT_DEVTOOLS_CLI`（显式指定，命中即用，**不再往下找**）
+ *                    → 官方默认安装路径（macOS /Applications/wechatwebdevtools.app/Contents/MacOS/cli）
+ *                    → `which cli`；回落默认路径会打印一行「已回落默认安装路径」
+ *                    三者皆不可用 → 失败，且报错里列出**检查过的每一个路径**
+ *                    （这是发布全程唯一的硬缺口：都找不到时 publish.js 回落字面量 'cli' → spawnSync ENOENT）
  *
  * 用法（一般不直接跑，由 publish.js 调）：
  *   node scripts/preflight.js                                 以本包为根跑六项检查
@@ -276,34 +279,108 @@ function readGitIdentity(root, execFileSync) {
 }
 
 /**
+ * P6 的「官方默认安装路径」候选（按平台）。
+ *
+ * 🔴 为什么要有它（真实卡点，台账 9142）：此前 P6 只认 `WECHAT_DEVTOOLS_CLI`（外加 `which cli`），
+ *    而官方安装包**不会**把 cli 放进 PATH、安装时也**不会**替你设这个环境变量。
+ *    于是「工具明明装着、cli 就在默认位置」时 P6 照样红 —— 只能靠 release-one-shot.sh 里那段
+ *    「前置补齐 CLI」（把变量设成官方默认路径再跑）绕过；任何不走 one-shot 的路径
+ *    （`npm run preview` / `publish.js preview|upload`）仍然红。把官方默认位置变成正式候选，
+ *    绕过逻辑就变成冗余而不再是必需品。
+ *
+ * 来源（只列**实测过**的平台）：macOS 官方安装包（.dmg → /Applications/wechatwebdevtools.app）内
+ * 可执行文件位置。本机实测 `ls -l …/Contents/MacOS/cli` → 1794 B、`-rwxr-xr-x`。
+ * Windows 官方安装目录随版本/语言在 `Program Files` / `Program Files (x86)` 与
+ * 「微信web开发者工具」/「wechatwebdevtools」之间变化，未实测故**不猜** ——
+ * 猜错的路径会以「检查过的路径」出现在报错里，反而误导下一个人。
+ * Windows / Linux 请显式 export WECHAT_DEVTOOLS_CLI（Linux 官方无开发者工具）。
+ */
+const DEFAULT_CLI_PATHS = process.platform === 'darwin'
+  ? ['/Applications/wechatwebdevtools.app/Contents/MacOS/cli']
+  : [];
+
+/** P6 报错/提示里给人看的候选来源名（报错文案会原样打印，别随手改）。 */
+const CLI_SOURCE_LABEL = {
+  env: '环境变量 WECHAT_DEVTOOLS_CLI（显式指定）',
+  default: '官方默认安装路径',
+  which: 'PATH 探测（which cli）',
+  missing: '无候选',
+};
+
+/**
  * 检查微信开发者工具 CLI 是否可用（P6）。只查文件可执行位，**不**执行它
  * （出码前预检不得产生任何出码副作用；登录态请出码后人工看 cli islogin）。
+ *
+ * 候选顺序（🔴 显式环境变量永远第一，否则「我明明指了另一个 CLI」会被默认路径盖掉）：
+ *   1. `WECHAT_DEVTOOLS_CLI` —— 设了就**只**认它。指错（不存在 / 不可执行 / 是目录）→ 直接失败，
+ *      **不**回落默认路径：那种「静默换一个答案」会让人以为自己指对了。
+ *   2. 官方默认安装路径（DEFAULT_CLI_PATHS，按平台）。
+ *   3. `which cli`（PATH 探测）。
+ * 命中第 2 条时 source === 'default'，调用方据此打印「已回落默认安装路径」提示行。
+ *
+ * @param {Function} execFileSync 注入点（单测不许跑真实子进程）
+ * @param {object} env            注入点（单测不许读真实 process.env）
+ * @param {{defaultCliPaths?: string[]}} [opts]
+ *        默认路径注入点：单测传假路径，**绝不**依赖本机装没装开发者工具（否则 CI 与本机结论相反）
+ * @returns {{ok:boolean, path:string, source:string, configured:boolean,
+ *            checked:Array<{path:string, source:string, note?:string}>}}
  */
-function checkDevtoolsCli(execFileSync, env) {
+function checkDevtoolsCli(execFileSync, env, opts = {}) {
   const configured = String((env && env.WECHAT_DEVTOOLS_CLI) || '').trim();
-  const candidates = [];
+  const defaultPaths = Array.isArray(opts.defaultCliPaths) ? opts.defaultCliPaths : DEFAULT_CLI_PATHS;
+  /** 检查过的每一个候选（失败时报错要原样列出来，人才知道自己到底被找过哪儿）。 */
+  const checked = [];
+
+  // 通过条件 = 可执行 **且是文件**。目录也有 X_OK 位，只看 access 会把「路径存在但是个目录」
+  // 判成可用 → 假绿之后 spawnSync 才炸，正是 P6 要拦的那类事故。
+  const probe = (p, source) => {
+    checked.push({ path: p, source });
+    try {
+      if (!fs.statSync(p).isFile()) return null;
+      fs.accessSync(p, fs.constants.X_OK);
+      return { ok: true, path: p, source, configured: Boolean(configured), checked };
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) 显式指定 = 唯一候选：指错就报错，不静默改用别的路径
   if (configured) {
-    candidates.push({ path: configured, source: 'env' });
-  } else {
-    try {
-      const found = String(execFileSync('which', ['cli'], {
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }) || '').trim();
-      if (found) candidates.push({ path: found, source: 'which' });
-    } catch {
-      /* cli 不在 PATH */
-    }
+    return probe(configured, 'env')
+      || { ok: false, path: configured, source: 'env', configured: true, checked };
   }
-  for (const c of candidates) {
-    try {
-      fs.accessSync(c.path, fs.constants.X_OK);
-      return { ok: true, path: c.path, source: c.source };
-    } catch {
-      /* 不可执行，继续看下一个 */
-    }
+
+  // 2) 官方默认安装路径
+  for (const p of defaultPaths) {
+    const hit = probe(p, 'default');
+    if (hit) return hit;
   }
-  return { ok: false, path: configured, source: configured ? 'env' : 'missing' };
+
+  // 3) PATH 探测
+  try {
+    const found = String(execFileSync('which', ['cli'], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }) || '').trim();
+    if (found) {
+      const hit = probe(found, 'which');
+      if (hit) return hit;
+    } else {
+      checked.push({ path: '(PATH 里的 cli)', source: 'which', note: '未找到' });
+    }
+  } catch {
+    checked.push({ path: '(PATH 里的 cli)', source: 'which', note: '未找到' });
+  }
+
+  return { ok: false, path: '', source: 'missing', configured: false, checked };
+}
+
+/** 把「检查过的候选」渲染成报错里给人看的多行清单。 */
+function formatCheckedCliCandidates(checked) {
+  if (!checked || checked.length === 0) return '(没有任何候选可查)';
+  return checked
+    .map((c) => `${c.path}（来源：${CLI_SOURCE_LABEL[c.source] || c.source}${c.note ? `，${c.note}` : ''}）`)
+    .join('\n        ');
 }
 
 // ---------- 主体 ----------
@@ -321,6 +398,9 @@ function checkDevtoolsCli(execFileSync, env) {
  * @param {boolean} [opts.allowDirty]   放行「会进包的未提交改动」（P5 降级为警告）
  * @param {Function} [opts.execFileSync] 注入点（单测用），默认 child_process.execFileSync
  * @param {object} [opts.env]           注入点（单测用），默认 process.env
+ * @param {string[]} [opts.defaultCliPaths] P6 的「官方默认安装路径」候选注入点（单测用）；
+ *        缺省用 DEFAULT_CLI_PATHS（按平台）。🔴 单测必须注入假路径，否则本机装了开发者工具
+ *        与 CI 没装会得出相反结论。
  * @returns {{ok:boolean, failures:Array, info:object}}
  */
 function runPreflight(opts = {}) {
@@ -580,20 +660,30 @@ function runPreflight(opts = {}) {
   }
 
   // ---------- P6 微信开发者工具 CLI 可执行（cli 模式专有） ----------
-  let cli = { ok: true, path: '', source: 'n/a', skipped: mode === 'ci' };
+  let cli = { ok: true, path: '', source: 'n/a', skipped: mode === 'ci', configured: false, checked: [] };
   if (mode === 'cli') {
-    cli = checkDevtoolsCli(execFileSync, env);
+    cli = checkDevtoolsCli(execFileSync, env, { defaultCliPaths: opts.defaultCliPaths });
     if (!cli.ok) {
+      // 报错三要素：现象 / 检查过的每一个路径 / 怎么办（下一个人要能自己解决，不用猜）
+      const head = cli.configured
+        ? `WECHAT_DEVTOOLS_CLI=${cli.path}（显式指定 → 唯一候选，指错了就报错，不会静默改用默认路径）`
+        : 'WECHAT_DEVTOOLS_CLI=(未设置)';
       fail(
         'P6',
         '微信开发者工具 CLI 不可用',
-        `WECHAT_DEVTOOLS_CLI=${String((env && env.WECHAT_DEVTOOLS_CLI) || '(未设置)')}`
-          + ` · 回退 which cli 也未找到可执行文件 · 实际解析路径=${cli.path || '(无)'}`,
-        '不设该变量时 publish.js 会回落字面量 "cli"，随后 spawnSync cli ENOENT —— 与代码内容无关。'
-          + 'export WECHAT_DEVTOOLS_CLI=/Applications/wechatwebdevtools.app/Contents/MacOS/cli，'
-          + '并确认该路径可执行（必须在**同一条 shell** 里 export，别只在另一个窗口设）',
+        `${head} · 检查过 ${cli.checked.length} 个候选，均不可用（不存在 / 不是文件 / 无执行权限）：\n`
+          + `        ${formatCheckedCliCandidates(cli.checked)}`,
+        '二选一：① 装上微信开发者工具（官方默认安装即可，P6 会自动认 '
+          + '/Applications/wechatwebdevtools.app/Contents/MacOS/cli，不必设变量）；'
+          + '② 显式 export WECHAT_DEVTOOLS_CLI=<cli 绝对路径>，并确认它是**可执行文件**而不是目录。'
+          + '两种都要在**同一条 shell** 里生效（别只在另一个窗口设）。'
+          + '若确实没有开发者工具，别硬出：不设变量时 publish.js 会回落字面量 "cli"，'
+          + '随后 spawnSync cli ENOENT —— 与代码内容无关',
       );
     } else {
+      // 回落默认路径必须留一行**可 grep 的**证据：这是本条修复从红变绿的唯一可视凭据
+      if (cli.source === 'default') warnings.push(`[P6] 已回落默认安装路径：${cli.path}`);
+      else if (cli.source === 'which') warnings.push(`[P6] 已回落 PATH 里的 cli：${cli.path}`);
       warnings.push(`P6 开发者工具 CLI 可执行：${cli.path}（来源 ${cli.source}）`);
     }
   }
@@ -682,7 +772,9 @@ function printReport(result, io = {}) {
   log(`[Preflight]   身份   ${info.gitOk ? `${info.branch}@${info.headSha}` : '(读不到 git 身份)'}`);
   log(`[Preflight]   CLI    ${info.cli.skipped
     ? 'ci 模式不需要开发者工具 CLI'
-    : info.cli.ok ? `${info.cli.path}（可执行）` : '不可用'}`);
+    : info.cli.ok
+      ? `${info.cli.path}（可执行 · 来源 ${info.cli.source}）`
+      : '不可用'}`);
   log(`[Preflight]   私钥   ${info.rootKeyHits.length === 0
     ? '包根无密钥文件'
     : `包根有 ${info.rootKeyHits.map((h) => h.name).join(', ')}`
@@ -744,8 +836,11 @@ module.exports = {
   readPackIgnores,
   dirtyEntryShipsPackage,
   checkDevtoolsCli,
+  formatCheckedCliCandidates,
   pickProjectName,
   DEFAULT_ROOT,
+  DEFAULT_CLI_PATHS,
+  CLI_SOURCE_LABEL,
   ALLOWED_DIR_NAME,
   KEY_EXT,
   KEY_TEMPLATE,
