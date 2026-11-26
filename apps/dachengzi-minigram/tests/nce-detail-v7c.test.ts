@@ -445,13 +445,16 @@ describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', 
 });
 
 describe('选项 A · D-06 词点线 / hasDef 标记', () => {
-  it('WXML 仅 tk.hasDef 带 has-def，补 .w.hit 命中态；WXSS 有极轻点线', () => {
+  it('WXML 只有生词挂事件（has-def 点线），非生词是纯文本；WXSS 词级高亮只作用于 .has-def', () => {
     const w = src('pages/nce/detail/detail.wxml');
     const css = src('pages/nce/detail/detail.wxss');
-    expect(w).toMatch(/class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}/);
-    expect(w).toMatch(/'hit'/);
+    // 2026-11-26 ②：事件与点线只挂在 hasDef 生词分支
+    expect(w).toMatch(/wx:if="\{\{tk\.w && tk\.hasDef\}\}" class="w has-def"/);
     expect(css).toMatch(/\.w\.has-def\s*\{[^}]*border-bottom:\s*1rpx dotted #3B82F6/);
-    expect(css).toMatch(/\.w\.hit\s*\{/);
+    // 🔴 非生词不高亮：全局 .w:active 与废弃的 .w.hit 都必须不存在
+    expect(css).not.toMatch(/\.w:active\s*\{/);
+    expect(css).not.toMatch(/\.w\.hit\s*\{/);
+    expect(w).not.toMatch(/'hit'/);
   });
 
   it('tokenize 产出 hasDef：词汇表收录词 true、表外词 false，全部 token 带布尔标记', async () => {
@@ -655,7 +658,7 @@ describe('V23 · tap 档点句任意位置展开/收起该句中文（catchtap �
 
 /** V24 沉浸点句不展开 + 参考译文折叠区 */
 describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠区', () => {
-  it('immersion 点空白 / 点生词文字都不设 expandedIdx、不弹 tip、不锚定浮层', () => {
+  it('immersion 点空白不展开；点生词仍可查词（2026-11-26 全档可查词，但不锚定浮层）', () => {
     const ctx = makeThis();
     ctx.data.readMode = 'immersion';
     ctx.data.lines = mockLines();
@@ -666,12 +669,12 @@ describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠
     expect(ctx.data.tipWord).toBeNull();
 
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
-    expect(ctx.data.expandedIdx).toBe(-1);           // 🔴 沉浸点生词也不展开
-    expect(ctx.data.tipWord).toBeNull();             // 🔴 沉浸不弹生词 tip
+    expect(ctx.data.expandedIdx).toBe(-1);           // 🔴 沉浸点生词不展开该句中文
+    expect(ctx.data.tipWord).toBeTruthy();           // 🔴 但仍出底部词卡（不再限 tap 档）
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
   });
 
-  it('toggleCnSection 开合 cnExpanded（默认收起）；load() 拼整篇 fullCn + 空值兜底', async () => {
+  it('toggleCnSection 开合 cnExpanded（默认收起）；load() 拼整篇 fullCn（按句换行）+ 空值兜底', async () => {
     const ctx = makeThis();
     expect(ctx.data.cnExpanded).toBe(false);
     expect(typeof pageConfig.toggleCnSection).toBe('function');
@@ -685,7 +688,8 @@ describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠
       lines: [{ en: 'A', cn: '第一句。' }, { en: 'B', cn: '第二句。' }, { en: 'C', cn: '' }],
     });
     await pageConfig.load.call(ctx);
-    expect(ctx.data.fullCn).toBe('第一句。第二句。');
+    // 2026-11-26 ①：译文与英文一样一句一行（pre-wrap 生效），不再挤成一段
+    expect(ctx.data.fullCn).toBe('第一句。\n第二句。');
     expect(ctx.data.fullCn).not.toMatch(/第三|undefined|null/);
     expect(ctx.data.cnExpanded).toBe(false);          // 换课重置折叠区
 
@@ -706,9 +710,13 @@ describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠
     expect(w).toMatch(/\{\{fullCn\}\}/);
     expect(w).toMatch(/wx:if="\{\{readMode === 'immersion'\}\}" class="cn-fold"/);
     expect(css).toMatch(/\.mode-immersion \.sentences \.sn\s*\{[^}]*display:\s*none/);  // 去 .sn 序号
-    expect(css).toMatch(/\.mode-immersion \.sentences \.sent\s*\{[^}]*display:\s*inline/); // 连排成段
+    // 2026-11-26 ①：沉浸档逐句换行（display:block），不再是 inline 连排
+    expect(css).toMatch(/\.mode-immersion \.sentences \.sent\s*\{[^}]*display:\s*block/);
+    expect(css).not.toMatch(/\.mode-immersion \.sentences \.sent\s*\{[^}]*display:\s*inline/);
+    expect(css).toMatch(/\.mode-immersion \.sentences \.en\s*\{[^}]*display:\s*block/);
+    expect(css).toMatch(/\.cn-fold-c\s*\{[^}]*white-space:\s*pre-wrap/);              // 译文按句换行
     expect(css).toMatch(/\.mode-immersion \.card\s*\{[^}]*border:\s*none/);             // 去卡片边框
-    expect(css).toMatch(/\.mode-immersion \.sentences \.en\s*\{[^}]*line-height:\s*2\.15/); // 行距更宽
+    expect(css).toMatch(/\.mode-immersion \.sentences \.en\s*\{[^}]*line-height:\s*2\.05/); // 行距
   });
 });
 
@@ -729,7 +737,7 @@ describe('V25 · 双语档全部中文常显、点句不 toggle expandedIdx', ()
     expect(ctx.data.tipWord).toBeNull();
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
     expect(ctx.data.expandedIdx).toBe(-1);           // 不 toggle
-    expect(ctx.data.tipWord).toBeNull();             // 双语不弹生词 tip
+    expect(ctx.data.tipWord).toBeTruthy();           // 2026-11-26：双语档也可点生词查释义
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
   });
 });
@@ -775,7 +783,7 @@ describe('V26′ · 生词 tip 仅 tap 档生效，改为底部统一浮层（�
     spy.mockRestore();
   });
 
-  it('非 tap 档（immersion / bilingual）点同一生词 → 底部浮层不触发、_anchorFloat 不调用', () => {
+  it('非 tap 档（immersion / bilingual）点同一生词 → 也出底部词卡；_anchorFloat 不调用、不写 tipPos', () => {
     for (const m of ['immersion', 'bilingual']) {
       const ctx = makeThis();
       ctx.data.readMode = m;
@@ -786,7 +794,8 @@ describe('V26′ · 生词 tip 仅 tap 档生效，改为底部统一浮层（�
       pageConfig.onWordTap.call(ctx, {
         currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
       });
-      expect(ctx.data.tipWord).toBeNull();
+      expect(ctx.data.tipWord).toBeTruthy();          // 2026-11-26：全档可查词
+      expect(ctx.data.tipPos).toBeNull();             // 仍不做就近锚定
       expect(spy).not.toHaveBeenCalled();
       expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
       spy.mockRestore();
@@ -856,11 +865,12 @@ describe('19:11 · 三处 UI 优化静态判据（读源码文本 + 必然失败
   const wxml = () => src('pages/nce/detail/detail.wxml');
   const ts = () => src('pages/nce/detail/detail.ts');
 
-  /** 判据①：.w.hit 默认色为 #1A1A1F（不含 #1D4ED8） */
-  const normalBlack = (css: string): boolean => {
-    const hit = (/\.w\.hit\s*\{[^}]*\}/.exec(css) || [''])[0];
-    return /color:\s*#1A1A1F/.test(hit) && !/#1D4ED8/.test(hit);
-  };
+  /** 判据①（2026-11-26 ② 口径）：词级按下高亮只作用于 .has-def；
+   *  全局 .w:active 与废弃的 .w.hit 必须不存在 —— 否则点非生词也会变色/高亮。 */
+  const onlyWordHit = (css: string): boolean =>
+    !/\.w:active\s*\{/.test(css) &&
+    !/\.w\.hit\s*\{/.test(css) &&
+    /\.w\.has-def:active\s*\{[^}]*color:\s*#3B82F6/.test(css);
   /** 判据②：.sent-cn.show 无 border-left 色条（.sent.expanded 亦无蓝左边框色），且 .sent 占位边框仍 transparent */
   const noLeftBar = (css: string): boolean => {
     const cn = (/\.sent-cn\.show\s*\{[^}]*\}/.exec(css) || [''])[0];
@@ -882,13 +892,13 @@ describe('19:11 · 三处 UI 优化静态判据（读源码文本 + 必然失败
       !/_anchorFloat\s*\(/.test(onWordTapBody(t));
   };
 
-  it('① 正例：.w.hit 默认色 #1A1A1F，整篇英文正文正常黑（不含 #1D4ED8）', () => {
-    expect(normalBlack(wxss())).toBe(true);
+  it('① 正例：词级高亮只给 .has-def（点非生词无任何高亮）', () => {
+    expect(onlyWordHit(wxss())).toBe(true);
   });
-  it('① 反例：回退成蓝色正文 #1D4ED8 → 判据失败', () => {
-    const reverted = wxss().replace(/(\.w\.hit\s*\{[^}]*?color:\s*)#1A1A1F/, '$1#1D4ED8');
+  it('① 反例：把全局 .w:active 加回去 → 判据失败', () => {
+    const reverted = wxss() + '\n.w:active { color: #3B82F6; }\n';
     expect(reverted).not.toBe(wxss());
-    expect(normalBlack(reverted)).toBe(false);
+    expect(onlyWordHit(reverted)).toBe(false);
   });
 
   it('② 正例：.sent-cn.show 无左侧色条、.sent.expanded 无蓝左边框色、.sent 占位边框仍 transparent', () => {

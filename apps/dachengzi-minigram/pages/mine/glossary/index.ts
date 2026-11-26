@@ -102,9 +102,17 @@ Page({
         book?: string;
         lessonId?: number;
         lineIndex?: number;
+        /** 2026-11-26：单词收藏（tag='word'）来源锚点 */
+        word?: string;
       };
       let metaText = '';
-      if (typeof m.lessonId === 'number') {
+      if (m.word) {
+        // 单词收藏：Lesson N · 单词 xxx（没有再落「第 M 句」，避免把词收藏说得像句子收藏）
+        metaText = [
+          typeof m.lessonId === 'number' ? `Lesson ${m.lessonId}` : '',
+          `单词 ${m.word}`,
+        ].filter(Boolean).join(' · ');
+      } else if (typeof m.lessonId === 'number') {
         const parts = [`Lesson ${m.lessonId}`];
         if (typeof m.lineIndex === 'number') parts.push(`第 ${m.lineIndex + 1} 句`);
         metaText = parts.join(' · ');

@@ -7,6 +7,13 @@
  *
  * 为什么首页必须自己登记 tabBar 高亮：自定义 tabBar 组件在每个页面是独立实例，
  * selected 会回到初始值，权威做法见 utils/tabbar.ts 的 setTabBarSelected。
+ *
+ * 2026-11-26 今日一句交互（用户口径 ⑤）：
+ *  - 英文按句切词，只有**当前课文生词**可点（点线下划 + 可点），点开底部词卡看释义；
+ *  - 词卡/句子都可朗读：点整句朗读整句、词卡「朗读」读该词；再点同一段即停止；
+ *  - 收藏：整句收藏（tag='nce'）与单词收藏（tag='word'）都落 collectGlossary。
+ *  - 生词表来源：今日一句缓存只带 book/lessonId，需回查课文详情（utils/quote-words 缓存 7 天）；
+ *    取不到词表时降级为「只保留整句朗读/收藏」，不把表外词当生词乱标下划线。
  */
 import { isLoggedIn } from '../../../services/auth';
 import { readLocalNickname, fetchProfile, isNicknameUnset } from '../../../services/account';
@@ -14,6 +21,12 @@ import { formatGreeting, getLocalHour } from '../../../utils/greeting';
 import { getDailyQuote, getDailyQuoteMeta, BOOK_LABEL } from '../../../utils/daily';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { FEATURES, getPinned, FEATURES_UPDATED_EVENT, type FeatureDef } from '../../../utils/features';
+import { speakText, onSpeakState, stopSpeak, type SpeakState } from '../../../services/tts';
+import { getNceLesson, type NceWord } from '../../../services/nce';
+import { collectGlossary } from '../../../services/glossary';
+import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
+import { lookupWord, type WordLookup } from '../../../utils/lexicon';
+import { readWordsCache, writeWordsCache } from '../../../utils/quote-words';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
@@ -36,6 +49,9 @@ const DISCOVER_PATH = '/pages/discover/index/index';
  */
 const GREETING_LOADING = '…';
 
+/** 今日一句初值：data 初值与切词共用同一份，避免同日两次取模拿到不同行。 */
+const INITIAL_QUOTE = getDailyQuote();
+
 /**
  * 跨时段重算的心跳周期（ms）。tabBar 页常驻不销毁，
  * 11:50 停到 12:10 若不重算就还挂着「早上好」——靠这个 tick 兜住。
@@ -53,6 +69,10 @@ interface FeatureTapEvent {
   currentTarget: { dataset: { path?: string } };
 }
 
+interface QuoteTapEvent {
+  currentTarget: { dataset: { w?: string } };
+}
+
 Page({
   data: {
     /** 圆角风格：页面根节点叠加的 class（app.wxss 的 .radius-* 覆盖类驱动） */
@@ -67,8 +87,16 @@ Page({
      * 拉取只能在 onShow 登录态下触发，守住「未登录整页 login-gate、零业务请求」。
      */
     greetingText: isLoggedIn() ? GREETING_LOADING : '',
-    /** 今日一句（本地文案池按日期取模，同天稳定、隔天自动换） */
-    quote: getDailyQuote(),
+    /** 今日一句（本地文案池按日期取模，同天稳定、隔天自动换）—— 形状保持 { cn, en } 不变 */
+    quote: INITIAL_QUOTE,
+    /** 今日一句英文切词结果（无词表时 hasDef 全 false → 全部纯文本，仅整句可操作） */
+    quoteTokens: tokenize(INITIAL_QUOTE.en) as WordToken[],
+    /** 今日一句点词词卡（null = 收起） */
+    quoteTip: null as WordLookup | null,
+    /** 整句朗读中（true = 正在读今日一句） */
+    quotePlaying: false,
+    /** 正在朗读的单词（'' = 无），驱动词卡「朗读/停止」文案 */
+    quoteWordPlaying: '',
     /** 册别角标文案（方案①浅青 pill；book 缺失时为空串 → WXML 隐藏） */
     bookBadge: bookBadgeText(),
     /** 角标开关（默认开；灰度/回滚可置 false 隐藏角标，不影响取句） */
@@ -88,6 +116,14 @@ Page({
   _offFeaturesUpdated: null as (() => void) | null,
   /** 「资料已更新」广播退订函数（onUnload 调用）：昵称改动即时重算问候 */
   _offProfileUpdated: null as (() => void) | null,
+  /** 今日一句朗读状态订阅退订（onUnload） */
+  _offSpeakState: null as (() => void) | null,
+  /** 今日一句所在课文的词表（点词查释义 / hasDef 判定） */
+  _quoteWords: [] as NceWord[],
+  /** 本次朗读是否为单词（'' = 整句或无）；驱动词卡按钮态 */
+  _speakingWord: '' as string,
+  /** 词表拉取序号：切走再回来 / 隔天换句时丢弃过期响应 */
+  _quoteSeq: 0 as number,
 
   /**
    * 卸载守卫：onLoad 置 true、onUnload 置 false。
@@ -132,12 +168,20 @@ Page({
       };
       __bus.on('profile:updated', this._offProfileUpdated);
     }
+    // 今日一句朗读状态：播放结束/中断由 tts 推 null，页面据此复位按钮态
+    this._offSpeakState = onSpeakState((s) => this._onSpeakState(s));
   },
 
   onUnload() {
     // 先关闸：卸载后任何晚到的异步回调都不许再 setData
     this._alive = false;
     this.stopGreetingTicker();
+    stopSpeak();
+    if (this._offSpeakState) {
+      this._offSpeakState();
+      this._offSpeakState = null;
+    }
+    this._speakingWord = '';
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
     if (__bus) {
@@ -163,6 +207,9 @@ Page({
   /** 切走 tab 时停表：不占后台定时器，回来 onShow 再起 */
   onHide() {
     this.stopGreetingTicker();
+    // 切走即停朗读：首页是 tab 页常驻，后台继续出声会打扰
+    stopSpeak();
+    this._speakingWord = '';
   },
 
   onShow() {
@@ -174,6 +221,7 @@ Page({
     this.refreshPinned();
     this.startGreetingTicker();
     this.refreshGreeting();
+    void this.loadQuoteWords();
   },
 
   /** 登录卡登录成功后回调：刷新登录态与常用功能 */
@@ -275,6 +323,134 @@ Page({
     const hour = getLocalHour();
     if (hour === this._greetHour) return;
     this.applyGreeting(this._greetNick, hour);
+  },
+
+  /* ─────────────── 今日一句：点词 / 朗读 / 收藏（2026-11-26 ⑤） ─────────────── */
+
+  /**
+   * 取今日一句所在课文的词表：有缓存直接用，无缓存回查课文详情（结果写入 utils/quote-words 缓存）。
+   * 取不到（缺 book/lessonId、请求失败）→ 空词表：今日一句退化为「纯文本 + 整句朗读/收藏」，
+   * 绝不把表外词错标成生词（否则违背「非生词不高亮」）。
+   */
+  async loadQuoteWords() {
+    const en = this.data.quote.en;
+    const { book, lessonId } = getDailyQuoteMeta();
+    const seq = (this._quoteSeq += 1);
+    if (!book || !Number.isInteger(lessonId)) {
+      this._applyQuoteWords(en, []);
+      return;
+    }
+    const id = Number(lessonId);
+    const cached = readWordsCache(book, id);
+    if (cached) {
+      this._applyQuoteWords(en, cached);
+      return;
+    }
+    try {
+      const detail = await getNceLesson(id, book);
+      if (!this._alive || seq !== this._quoteSeq) return;
+      const words = (detail && detail.words) || [];
+      writeWordsCache(book, id, words);
+      this._applyQuoteWords(en, words);
+    } catch {
+      if (!this._alive || seq !== this._quoteSeq) return;
+      this._applyQuoteWords(en, []);
+    }
+  },
+
+  /** 写词表并重切今日一句（hasDef 只认词表直收词） */
+  _applyQuoteWords(en: string, words: NceWord[]) {
+    this._quoteWords = words;
+    this.setData({ quoteTokens: tokenize(en, buildKnown(words)) });
+  },
+
+  /** 点生词 → 底部词卡；再点同一词收起、点其它词替换内容 */
+  onQuoteWordTap(e: QuoteTapEvent) {
+    const w = String((e.currentTarget.dataset.w) || '').toLowerCase();
+    if (!w) return;
+    const cur = this.data.quoteTip;
+    if (cur && cur.word === w) {
+      this.setData({ quoteTip: null, quoteWordPlaying: '' });
+      return;
+    }
+    this.setData({ quoteTip: lookupWord(w, this._quoteWords), quoteWordPlaying: '' });
+  },
+
+  closeQuoteTip() { this.setData({ quoteTip: null, quoteWordPlaying: '' }); },
+
+  /** 点整句（英文空白/卡片空白）→ 朗读整句；再点同句由 speakText 的 same-text 语义停止 */
+  speakQuote() {
+    this._speakingWord = '';
+    void speakText(this.data.quote.en);
+  },
+
+  /** 词卡「朗读」→ 读该词；再点停止 */
+  speakQuoteWord() {
+    const tip = this.data.quoteTip;
+    if (!tip || !tip.word) return;
+    this._speakingWord = tip.word;
+    void speakText(tip.word);
+  },
+
+  /** 收藏整句：tag='nce'，与课文详情页句子收藏同一契约（收藏页显示 Lesson · 第 N 句） */
+  async collectQuote() {
+    if (!isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    const q = this.data.quote;
+    const { book, lessonId } = getDailyQuoteMeta();
+    const src = `今日一句${book ? ` · ${book}` : ''}${Number.isInteger(lessonId) ? ` · Lesson ${lessonId}` : ''}`;
+    try {
+      const res = await collectGlossary({
+        tag: 'nce',
+        enMain: q.en,
+        note: q.cn,
+        sourceText: src,
+        meta: { book, lessonId, from: 'daily' },
+      });
+      wx.showToast({ title: res.existed ? '已在收藏中' : '已收藏', icon: 'none' });
+    } catch (err) {
+      // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
+      console.error('[home/collectQuote]', err);
+    }
+  },
+
+  /** 收藏单词：tag='word'，与详情页长按「收藏单词」同一契约 */
+  async collectQuoteWord() {
+    const tip = this.data.quoteTip;
+    if (!tip || !tip.word) return;
+    if (!isLoggedIn()) {
+      wx.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    const { book, lessonId } = getDailyQuoteMeta();
+    const note = [tip.pos, tip.def].filter(Boolean).join(' ');
+    try {
+      const res = await collectGlossary({
+        tag: 'word',
+        enMain: tip.word,
+        note,
+        sourceText: `今日一句${Number.isInteger(lessonId) ? ` · Lesson ${lessonId}` : ''}`,
+        meta: { book, lessonId, word: tip.word, phonetic: tip.phonetic || '', from: 'daily' },
+      });
+      wx.showToast({ title: res.existed ? '已在生词本' : '已收藏', icon: 'none' });
+    } catch (err) {
+      console.error('[home/collectQuoteWord]', err);
+    }
+  },
+
+  /** 朗读状态：null 复位；非 null 时按「本次读的是整句还是单词」点亮对应按钮 */
+  _onSpeakState(s: SpeakState | null) {
+    if (!s) {
+      this._speakingWord = '';
+      this.setData({ quotePlaying: false, quoteWordPlaying: '' });
+      return;
+    }
+    this.setData({
+      quotePlaying: !this._speakingWord,
+      quoteWordPlaying: this._speakingWord,
+    });
   },
 
   refreshPinned() {
