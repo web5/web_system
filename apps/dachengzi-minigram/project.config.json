@@ -27,6 +27,10 @@
         "value": "node_modules"
       },
       {
+        "type": "folder",
+        "value": ".ci-output"
+      },
+      {
         "type": "file",
         "value": "tsconfig.json"
       },
