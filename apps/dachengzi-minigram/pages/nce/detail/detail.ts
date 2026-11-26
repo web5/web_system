@@ -104,10 +104,12 @@ function normalizeMode(v: unknown): ReadMode {
 Page({
   /** 朗读状态订阅的退订函数（onHide / onUnload 时调用） */
   _offSpeakState: null as null | (() => void),
-  /** 当前正在朗读的句下标（-1 = 无） */
+  /** 当前正在朗读的句下标（-1 = 无）—— 仅作「事件未携带文本」时的兜底意图标记 */
   _playingIdx: -1,
-  /** 当前正在朗读的单词（'' = 本次朗读不是单词；仅用于词卡/单词气泡按钮态） */
+  /** 当前正在朗读的单词（'' = 本次朗读不是单词）—— 同上，仅作兜底意图标记 */
   _speakingWord: '' as string,
+  /** 真实播放文本（'' = 空闲）：只由 tts 的 onSpeakState 回流，页面不自己猜（P2-1/P2-2/P2-3） */
+  _playingText: '' as string,
   /** auth 事件订阅退订（V18 成对，页面级；组件内不订阅） */
   _offAuthExpired: null as null | (() => void),
   _offAuthLogged: null as null | (() => void),
@@ -163,17 +165,28 @@ Page({
     const __app = getApp<IAppOption>();
     const __cls = __app.radiusClassOf ? __app.radiusClassOf() : '';
     if (__cls !== this.data.radiusClass) this.setData({ radiusClass: __cls });
+    // P2-2：回前台先把播放态归零 —— 后台期间朗读已停，残留的「播放中高亮 / 停止按钮」是假状态
+    // （点它还会因为 tts.playingText 已清空而变成「重新开始播放」）。订阅放在复位之后。
+    this._resetPlayingState();
     this._subscribeReading();
   },
 
   onHide() {
-    this._unsubscribeReading();
+    // P2-2：顺序很关键 —— 先 stopSpeak（此时仍订阅，能收到它推的 null）→ 再显式归零
+    // （不依赖 null 一定被收到）→ 最后退订。旧实现先退订再 stopSpeak，null 无人接收，
+    // 播放态就永久留在页面上。
     stopSpeak();
+    this._resetPlayingState();
+    this._unsubscribeReading();
   },
 
   onUnload() {
     this._unsubscribeReading();
     stopSpeak();
+    // 页面已销毁：只清私有播放态，不再 setData（onUnload 里 setData 无意义且可能告警）
+    this._playingText = '';
+    this._playingIdx = -1;
+    this._speakingWord = '';
     // V18：页面级退订（与 onLoad 成对，同一 handler 引用 off；组件内不订阅）
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
@@ -348,7 +361,8 @@ Page({
     const w = raw.toLowerCase();
     const cur = this.data.tipWord;
     if (cur && cur.word === w) {
-      this.setData({ tipWord: null, tipPos: null, tipPlaying: false });
+      // 收起卡片 = 关卡片：与 closeTip 同口径（P2-3，正在读这个词就停掉）
+      this.closeTip();
       return;
     }
     // 19:11 ③：底部浮层由 tipWord 驱动；不取 anchor、不调 _anchorFloat、不写 tipPos。
@@ -358,11 +372,20 @@ Page({
     });
   },
 
-  /** 关闭词卡：顺手停掉「词卡朗读」，避免关掉卡片还在放音。 */
+  /**
+   * 关闭词卡：顺手停掉「词卡朗读」，避免关掉卡片还在放音（P2-3）。
+   * 🔴 判据用「当前真实在播的文本是不是句子」——不能用 tipPlaying：
+   *    朗读中点「另一个生词」会把 tipPlaying 置 false，而上一段语音还在播，
+   *    于是关卡片时判定落空、语音不停，页面上已无任何可停止的控件。
+   *    真正在播整句时不停（用户可能想继续听整句）。
+   */
   closeTip() {
-    if (this.data.tipPlaying) {
+    const playing = this._playingText;
+    const wordOnAir = !!playing && this._lineIdxOf(playing) < 0;
+    if (wordOnAir || this.data.tipPlaying) {
       stopSpeak();
       this._speakingWord = '';
+      this._playingText = '';
     }
     this.setData({ tipWord: null, tipPos: null, tipPlaying: false });
   },
@@ -551,20 +574,56 @@ Page({
 
   onRetry() { void this.load(); },
 
-  /** 朗读状态：null 复位；非 null 高亮跟随当前朗读句（V5 单句朗读态）+ 单词朗读按钮态 */
+  /** 某个文本对应的句子下标（-1 = 不是本课任何一句 → 说明在播的是单词） */
+  _lineIdxOf(text: string): number {
+    const t = String(text || '').trim();
+    if (!t) return -1;
+    const lines = this.data.lines || [];
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i] && String(lines[i].en || '').trim() === t) return i;
+    }
+    return -1;
+  },
+
+  /** 播放态归零（切后台 / 回前台 / 播完共用一处，避免各处漏字段） */
+  _resetPlayingState() {
+    this._playingText = '';
+    this._playingIdx = -1;
+    this._speakingWord = '';
+    this.setData({ readingLineIdx: -1, readingPhase: 'idle', wordPlaying: '', tipPlaying: false });
+  },
+
+  /**
+   * 朗读状态（唯一写入口）：null → 全部归零；非 null → **按 tts 推来的权威文本**算播放态（P2-1）。
+   * 🔴 不能用 _playingIdx / _speakingWord 反推：speakText 内部会先 stopSpeak() 推一次 null，
+   *    页面收到 null 就把这两个意图标记清零，紧随其后的 loading/playing 再用它们算 →
+   *    永远点不亮（句子 A 播着点句子 B、句子播着点词卡朗读、首页整句播着点单词，全是这一根因）。
+   *    以 s.text 判定：命中本课某句 → 该句高亮；否则视为单词朗读 → 词卡按钮亮。
+   */
   _onSpeakState(s: SpeakState | null) {
     if (!s) {
-      this._playingIdx = -1;
-      this._speakingWord = '';
-      this.setData({ readingLineIdx: -1, readingPhase: 'idle', wordPlaying: '', tipPlaying: false });
+      this._resetPlayingState();
       return;
     }
+    const text = String(s.text || '').trim();
+    this._playingText = text;
+    let lineIdx: number;
+    let word: string;
+    if (text) {
+      lineIdx = this._lineIdxOf(text);
+      word = lineIdx >= 0 ? '' : text;
+    } else {
+      // 事件未携带文本（兼容老调用方）：退回意图标记，行为与改动前一致
+      lineIdx = this._playingIdx;
+      word = this._speakingWord;
+    }
     const tip = this.data.tipWord;
+    const tipOn = !!word && !!tip && String(tip.word || '').toLowerCase() === word.toLowerCase();
     this.setData({
       readingPhase: s.phase === 'loading' ? 'loading' : 'playing',
-      readingLineIdx: this._playingIdx,
-      wordPlaying: this._speakingWord,
-      tipPlaying: !!this._speakingWord && !!tip && tip.word === this._speakingWord,
+      readingLineIdx: lineIdx,
+      wordPlaying: word,
+      tipPlaying: tipOn,
     });
   },
 
