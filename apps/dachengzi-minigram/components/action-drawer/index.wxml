@@ -76,11 +76,17 @@
          覆盖「touchstart 冒泡到根节点」的情形（详见 index.ts 的 _startedInActsZone）。
          两层串联后的完整行为：手指按在按钮上 → touchstart 冒泡到根 → 判定在动作区内 → 不置
          `_hasStart` → touchmove 又被本容器 catch 掉 → 抽屉纹丝不动、tap 正常派发。
-         🔴 「本容器不得出现 catchtouchstart」「根节点不得出现 catchtouchstart」「按钮必须带
-         data-key」「根节点必须保留 bindtouchcancel」这四条静态守卫的真实持有者是
-         `tests/rd-blindfix-1126-guards.test.ts` 的 **P2-6 组**（mock 单测跑在渲染层之下，
-         抓不到这类缺陷，只能靠 grep 兜住）。**不是** `tests/action-drawer.test.ts`（该文件没有
-         E5 组、也从不 grep catchtouchstart —— 旧注释写错了，2026-11-26 纠正）。 -->
+         🔴 以下四条**都已有静态守卫**，真实持有者是 `tests/rd-blindfix-1126-guards.test.ts` 的
+         **P2-6 组**（mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）：
+           ① `.ad-acts` 上只允许 `catchtouchmove`，不得 `catchtouchstart`；
+           ② **所有抽屉系起始标签**（class 含 `ad-drawer` 或恰好 `ad` 的全部 `<view …>`）都不得
+              `catchtouchstart` —— 只查 `.ad-acts` 一处是不够的：挪到 `.ad-drawer` 或最外层 `.ad`
+              上同一个 bug 原地复活（子按钮 tap 全灭）；
+           ③ `.ad-act` 起始标签必须带 `data-key="{{item.key}}"` 与 `data-kind="{{item.kind}}"`
+              （`data-key` 一丢 → `onActionTap` 首行 `if (!key) return` 静默返回，四按钮全哑）；
+           ④ `.ad-drawer` 必须保留 `bindtouchcancel="onTouchEnd"`（缺它手势被系统打断后抽屉歪着停住）。
+         **不是** `tests/action-drawer.test.ts`（该文件没有 E5 组、也从不 grep catchtouchstart ——
+         旧注释写错了，2026-11-26 纠正；同日假绿审计又发现②③④当时是零断言，已同步补齐）。 -->
     <view class="ad-acts" catchtouchmove="noop">
       <!-- 2026-11-26 变体 C：朗读按钮 = ▶/■ 图标 + 文案，点按在组件内直接调 speakText（不 emit、不关抽屉）；
            收藏按钮保持纯文字，点按仍 triggerEvent 回页面。

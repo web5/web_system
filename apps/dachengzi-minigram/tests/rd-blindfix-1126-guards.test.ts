@@ -202,6 +202,25 @@ describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
     expect(drawerTag).not.toMatch(/catchtouchstart/);
     expect(drawerTag).not.toMatch(/catch:touchstart/);
     /**
+     * 🔴🔴 P0（2026-11-26 假绿暴露面审计）：只查 `.ad-acts` + `.ad-drawer` **两处**仍然治不了本病 ——
+     * 把 `catchtouchstart` 挪到**最外层 `.ad` 容器**（或任何新的抽屉系祖先节点）上，同一个 bug 原地
+     * 复活（四按钮 tap 全灭）而套件全绿。所以口径改成「**所有抽屉系起始标签**都不得出现它」：
+     *   · 取全部 `<view …>` 起始标签；
+     *   · class 里去掉 `{{…}}` 插值后按空白拆 token，含 `ad-drawer` 或恰好是 `ad` 的算「抽屉系」；
+     *   · 先断言数量 ≥2（外框 `.ad` + 抽屉 `.ad-drawer`）防空转，再逐个禁 catchtouchstart。
+     */
+    const viewTags = w.match(/<view\b[^>]*>/g) || [];
+    const drawerish = viewTags.filter((tag) => {
+      const cls = (tag.match(/class="([^"]*)"/) || ['', ''])[1];
+      const tokens = cls.replace(/\{\{[^}]*\}\}/g, ' ').split(/\s+/);
+      return tokens.indexOf('ad-drawer') >= 0 || tokens.indexOf('ad') >= 0;
+    });
+    expect(drawerish.length).toBeGreaterThanOrEqual(2);   // 防空转：必须真的抓到外框 + 抽屉
+    for (const tag of drawerish) {
+      expect(tag).not.toMatch(/catchtouchstart/);
+      expect(tag).not.toMatch(/catch:touchstart/);
+    }
+    /**
      * 🔴 2026-11-26 补的零覆盖项：根节点必须保留 `bindtouchcancel="onTouchEnd"`。
      * 缺它 → 手势被系统打断（来电 / 下拉通知栏 / 手势冲突）时 touchend 不触发，
      * `dragging` 永远为 true、`swipeY` 停在半路 → 抽屉歪着停住且 transition 关闭（拖不动也回不去）。
