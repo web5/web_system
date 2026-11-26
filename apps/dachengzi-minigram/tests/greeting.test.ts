@@ -297,3 +297,99 @@ describe('resolveNickname · 回退分支（老基础库无 Intl.Segmenter）与
   });
 });
 
+/**
+ * 🔴 回归防护（P1 崩溃风险）：Segmenter **存在但不可用**。
+ *
+ * 历史缺陷：`getGraphemeSegmenter()` 的 try 只包住构造函数，`segment()` 的调用与迭代
+ * 在 try 之外。构造成功 ≠ 切分可用 —— ICU 裁剪、运行时拒绝 granularity、迭代器中途
+ * 抛错只在 segment()/next() 时暴露，异常会穿透 resolveNickname 打到首页 hero 渲染。
+ *
+ * 本组用例造「构造成功、segment()/迭代抛错」的假 Segmenter，断言：不抛 + 结果与
+ * 正常回退路径逐字一致 + 假 segment 确实被调用（防「没命中实现」的假绿）。
+ */
+describe('resolveNickname · Segmenter 存在但 segment()/迭代抛错 → 静默回退、绝不外抛', () => {
+  const intl = Intl as unknown as { Segmenter?: unknown };
+  const realSegmenter = intl.Segmenter;
+
+  type SegmenterLike = { segment(input: string): Iterable<{ segment: string }> };
+
+  /** 造「typeof === 'function'、构造不抛、只有 segment() 抛」的假 Segmenter。 */
+  const makeThrowingSegmenter = (
+    segment: (input: string) => Iterable<{ segment: string }>,
+  ): new (locales?: string, options?: { granularity?: string }) => SegmenterLike =>
+    function FakeSegmenter() {
+      return { segment };
+    } as unknown as new (
+      locales?: string,
+      options?: { granularity?: string },
+    ) => SegmenterLike;
+
+  const samples: string[] = [
+    '一二三四五六七八九十一二三四五六七八', // 普通中文（18 字，需截断）
+    'a'.repeat(15) + '🇨🇳', // 15 + 旗帜（区域指示符成对）
+    'a'.repeat(15) + '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}\u200d\u{1F466}', // ZWJ 家族
+    'a'.repeat(15) + '\u{1F44D}\u{1F3FD}', // 👍🏽 肤色修饰
+    'a'.repeat(15) + '\u2764\uFE0F', // ❤️ 变体选择符
+    '😀'.repeat(20), // 20 个代理对 emoji
+  ];
+
+  /** 基准：正常回退路径（模拟无 Segmenter 的老基础库）的期望结果。 */
+  const expectedByFallback = (sample: string): string => {
+    intl.Segmenter = undefined;
+    const expected = resolveNickname(sample);
+    intl.Segmenter = realSegmenter;
+    return expected;
+  };
+
+  afterAll(() => {
+    intl.Segmenter = realSegmenter;
+  });
+
+  it.each(samples)('segment() 调用即抛错 → 不抛异常且结果与回退路径逐字一致：%s', (sample: string) => {
+    const expected = expectedByFallback(sample);
+    let segmentCalls = 0;
+    intl.Segmenter = makeThrowingSegmenter(() => {
+      segmentCalls += 1;
+      throw new Error('segment() boom（模拟 ICU 裁剪 / 参数被拒）');
+    });
+    expect(() => resolveNickname(sample)).not.toThrow();
+    expect(resolveNickname(sample)).toBe(expected);
+    // 两次调用都真的进了 segment()：证明不是「Segmenter 压根没被用上」的假绿
+    expect(segmentCalls).toBe(2);
+  });
+
+  it.each(samples)('迭代中途抛错（第 2 次 next() 抛）→ 丢弃半截结果、不抛异常：%s', (sample: string) => {
+    const expected = expectedByFallback(sample);
+    let segmentCalls = 0;
+    intl.Segmenter = makeThrowingSegmenter((input: string) => {
+      segmentCalls += 1;
+      return {
+        [Symbol.iterator]() {
+          let i = 0;
+          return {
+            next(): IteratorResult<{ segment: string }> {
+              i += 1;
+              if (i > 1) throw new Error('iterator boom（模拟迭代中途失败）');
+              return { value: { segment: input.slice(0, 1) }, done: false };
+            },
+          };
+        },
+      };
+    });
+    expect(() => resolveNickname(sample)).not.toThrow();
+    // 不能返回「已经 push 了几个簇」的半截结果，必须整段用回退结果
+    expect(resolveNickname(sample)).toBe(expected);
+    expect(segmentCalls).toBe(2);
+  });
+
+  it('抛错路径下 16 面国旗仍原样保留（回退不是简单透传，截断口径不变）', () => {
+    const flags = '🇨🇳🇺🇸🇯🇵🇰🇷🇬🇧🇫🇷🇩🇪🇮🇹🇪🇸🇨🇦🇦🇺🇧🇷🇷🇺🇮🇳🇹🇭🇻🇳';
+    const expected = expectedByFallback(flags);
+    intl.Segmenter = makeThrowingSegmenter(() => {
+      throw new Error('segment() boom');
+    });
+    expect(resolveNickname(flags)).toBe(expected);
+    expect(resolveNickname(flags)).toBe(flags);
+  });
+});
+
