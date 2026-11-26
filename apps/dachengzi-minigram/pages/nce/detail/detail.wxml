@@ -34,7 +34,7 @@
         <text>通篇阅读视图</text>
         <text class="sub">D1 主定义 · 英文全文不打断</text>
       </view>
-      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；长按句子出朗读此句 / 收藏气泡</view>
+      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，逐句换行；整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；点生词看释义，长按生词朗读/收藏单词，长按句子朗读/收藏整句</view>
 
       <view class="sentences">
         <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
@@ -45,8 +45,10 @@
             <view class="sn">{{si + 1}}</view>
             <view class="stx">
               <view class="en">
+                <!-- 2026-11-26 ②：只有课文生词挂事件（点=词卡，长按=单词气泡）；
+                     非生词是纯文本，点击冒泡到句子节点 → 点按档展开该句译文，无词级高亮 -->
                 <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
-                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{tk.w ? 'hit' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap">{{tk.t}}</text>
+                  <text wx:if="{{tk.w && tk.hasDef}}" class="w has-def" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap" catchlongpress="onWordLongPress">{{tk.t}}</text>
                   <text wx:else>{{tk.t}}</text>
                 </block>
               </view>
@@ -82,7 +84,11 @@
   <view wx:if="{{tipWord}}" class="word-tip on">
     <view class="wt-head">
       <view class="wt-w">{{tipWord.word}}</view>
-      <view class="wt-x" catchtap="closeTip">✕</view>
+      <view class="wt-tools">
+        <!-- 2026-11-26 ④：词卡直接朗读该词；再点停止（播放态由 onSpeakState 回流） -->
+        <view class="wt-play {{tipPlaying ? 'on' : ''}}" catchtap="speakTipWord">{{tipPlaying ? '停止' : '朗读'}}</view>
+        <view class="wt-x" catchtap="closeTip">✕</view>
+      </view>
     </view>
     <view wx:if="{{tipWord.phonetic}}" class="wt-p">{{tipWord.phonetic}}</view>
     <view wx:if="{{tipWord.pos}}" class="wt-pos">{{tipWord.pos}}</view>
@@ -95,6 +101,12 @@
   <view wx:if="{{bubbleIdx >= 0}}" class="bubble on" style="left:{{bubblePos ? bubblePos.left : 0}}rpx;top:{{bubblePos ? bubblePos.top : 0}}rpx" catchtap="closeBubble">
     <view class="bi" data-bubble-act="play" data-i="{{bubbleIdx}}" catchtap="onBubbleSpeak">朗读此句</view>
     <view class="bi" data-bubble-act="fav" data-i="{{bubbleIdx}}" catchtap="collectLine">收藏</view>
+  </view>
+
+  <!-- 2026-11-26 ③ 长按生词气泡：含且仅含「朗读单词」「收藏单词」，与句子气泡互斥 -->
+  <view wx:if="{{wordBubble}}" class="bubble word-bubble on" style="left:{{wordBubble.left}}rpx;top:{{wordBubble.top}}rpx" catchtap="closeWordBubble">
+    <view class="bi" data-word-act="play" catchtap="onWordBubbleSpeak">朗读单词</view>
+    <view class="bi" data-word-act="fav" catchtap="collectWord">收藏单词</view>
   </view>
 
   <!-- 需求① T1 从未登录守卫（内联 modal-login「请先登录」；三态分离，不弹会话过期弹窗） -->

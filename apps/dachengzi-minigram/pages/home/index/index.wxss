@@ -126,6 +126,78 @@ page {
   line-height: 1.6;
 }
 
+/* ---------- 今日一句交互（2026-11-26 ⑤：点词 / 朗读 / 收藏） ---------- */
+/* 只有课文生词带下点线（可点）；表外词是纯文本，点它等同点卡片 → 朗读整句 */
+.dw.has-def {
+  color: var(--brand-txt);
+  border-bottom: 1rpx dotted rgba(37, 99, 235, .55);
+}
+.dw.has-def:active { opacity: .6; }
+.daily-foot {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+.dq-act {
+  font-size: 22rpx;
+  color: var(--t2);
+  padding: 8rpx 20rpx;
+  border: 1rpx solid rgba(0, 0, 0, .08);
+  border-radius: 999rpx;
+  line-height: 1.5;
+}
+.dq-act:active { background: rgba(0, 0, 0, .04); }
+.dq-act.on {
+  color: var(--brand-txt);
+  border-color: rgba(37, 99, 235, .45);
+  background: rgba(37, 99, 235, .06);
+}
+
+/* 今日一句词卡：底部浮层（形态对齐课文详情页 .word-tip，前缀独立防跨页耦合） */
+.q-tip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  padding: 26rpx 30rpx 44rpx;
+  background: var(--card);
+  border-top: 1rpx solid rgba(37, 99, 235, .18);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -12rpx 40rpx rgba(0, 0, 0, .14);
+  box-sizing: border-box;
+}
+.q-tip-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.q-tip-w {
+  font-family: Georgia, serif;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--brand-txt);
+}
+.q-tip-tools { display: flex; align-items: center; gap: 8rpx; }
+.q-tip-btn {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--brand-txt);
+  padding: 4rpx 18rpx;
+  border: 1rpx solid rgba(37, 99, 235, .28);
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+.q-tip-btn.on { background: rgba(37, 99, 235, .10); }
+.q-tip-x { font-size: 30rpx; line-height: 1.2; color: var(--t3); padding: 0 6rpx; }
+.q-tip-p { font-size: 24rpx; color: var(--t3); margin-top: 6rpx; }
+.q-tip-pos { font-size: 22rpx; color: var(--brand-txt); margin-top: 8rpx; }
+.q-tip-def { font-size: 28rpx; color: var(--t1); margin-top: 10rpx; line-height: 1.6; }
+.q-tip-none { font-size: 26rpx; color: var(--t3); margin-top: 10rpx; }
+.q-tip-ex { font-size: 24rpx; color: var(--t2); margin-top: 10rpx; font-style: italic; }
+
 /* ---------- 新对话快捷入口（hero 区，首页唯一的能力入口） ---------- */
 .newchat {
   display: flex;
