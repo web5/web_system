@@ -620,35 +620,14 @@ Page({
     );
   },
 
-  // ───────── 抽屉组件回传的 5 个 handler（方案 §3.3 方案 B：组件只 triggerEvent，页面调 services） ─────────
+  // ───────── 抽屉组件回传的 3 个 handler（组件只 triggerEvent，页面调 services） ─────────
+  // 🔴 2026-11-26 变体 C：朗读（speak-line / speak-word）已下沉到组件内直接调 speakText，
+  //    本页不再有 onDrawerSpeakLine / onDrawerSpeakWord —— 别加回来（重复朗读）。
+  //    收藏仍在本页：`wx.showToast('请先登录')` 是本页既有形态，与详情页内联 modal 有意不同（K10）。
 
   /** 抽屉关闭（遮罩 / 下滑 / ✕ 任一通道）：组件只抛信号，`visible` 由本页置 false。 */
   onDrawerClose() {
     this.closeOverlay();
-  },
-
-  /**
-   * 「朗读此句」：`speakText(text)` 恰好一次。
-   * 🔴 不手写「同句再点 = 停」分支 —— `services/tts.ts` 已内建 same-text 语义；
-   *    动作后立即收起抽屉（V-B11：朗读 / 收藏都要回到正文）。
-   */
-  onDrawerSpeakLine(e: DrawerEvent<SpeakLineDetail>) {
-    const d = (e && e.detail) || {};
-    const text = String(d.text || '');
-    if (!text) return;
-    this.closeOverlay();
-    this._speakingWord = '';
-    void speakText(text);
-  },
-
-  /** 「朗读单词」：`speakText(word)`。普通词与生词走完全相同路径（不查释义、不看 hasDef）。 */
-  onDrawerSpeakWord(e: DrawerEvent<SpeakWordDetail>) {
-    const d = (e && e.detail) || {};
-    const word = String(d.word || '');
-    if (!word) return;
-    this.closeOverlay();
-    this._speakingWord = word;
-    void speakText(word);
   },
 
   /**

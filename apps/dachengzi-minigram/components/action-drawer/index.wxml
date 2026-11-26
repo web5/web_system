@@ -76,17 +76,33 @@
          覆盖「touchstart 冒泡到根节点」的情形（详见 index.ts 的 _startedInActsZone）。
          两层串联后的完整行为：手指按在按钮上 → touchstart 冒泡到根 → 判定在动作区内 → 不置
          `_hasStart` → touchmove 又被本容器 catch 掉 → 抽屉纹丝不动、tap 正常派发。
-         `tests/action-drawer.test.ts` 的 E5 组已把「本容器不得出现 catchtouchstart」钉成静态断言
-         （mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）。 -->
+         🔴 「本容器不得出现 catchtouchstart」「根节点不得出现 catchtouchstart」「按钮必须带
+         data-key」「根节点必须保留 bindtouchcancel」这四条静态守卫的真实持有者是
+         `tests/rd-blindfix-1126-guards.test.ts` 的 **P2-6 组**（mock 单测跑在渲染层之下，
+         抓不到这类缺陷，只能靠 grep 兜住）。**不是** `tests/action-drawer.test.ts`（该文件没有
+         E5 组、也从不 grep catchtouchstart —— 旧注释写错了，2026-11-26 纠正）。 -->
     <view class="ad-acts" catchtouchmove="noop">
+      <!-- 2026-11-26 变体 C：朗读按钮 = ▶/■ 图标 + 文案，点按在组件内直接调 speakText（不 emit、不关抽屉）；
+           收藏按钮保持纯文字，点按仍 triggerEvent 回页面。
+           🔴 `data-key` 一个字母都不许改：它是 onActionTap 的唯一分流依据，改成 data-k 会让四个按钮
+              全部哑掉，而「全量测试」在旧守卫下仍会全绿（正是本轮补的假绿盲区）。 -->
       <view
         wx:for="{{acts}}"
         wx:key="key"
-        class="ad-act {{pressedKey === item.key ? 'ad-act-pressed' : ''}}"
+        class="ad-act {{item.kind === 'speak' ? 'ad-act-speak' : ''}} {{playingKey === item.key ? 'is-playing' : ''}} {{pressedKey === item.key ? 'ad-act-pressed' : ''}}"
         data-key="{{item.key}}"
+        data-kind="{{item.kind}}"
         aria-role="button"
+        aria-label="{{playingKey === item.key ? item.stopLabel : item.label}}"
         catchtap="onActionTap"
-      >{{item.label}}</view>
+      >
+        <block wx:if="{{item.kind === 'speak'}}">
+          <!-- 两个图标互斥显隐由 wxss 的 .is-playing 控制（纯 CSS 画，不引图片 / 不引 SVG） -->
+          <view class="ad-ico ad-ico-play"></view>
+          <view class="ad-ico ad-ico-stop"></view>
+        </block>
+        <text class="ad-act-lb">{{playingKey === item.key ? item.stopLabel : item.label}}</text>
+      </view>
     </view>
   </view>
 </view>

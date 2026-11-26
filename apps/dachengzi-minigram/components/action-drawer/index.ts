@@ -1,24 +1,34 @@
 /**
- * 长按动作抽屉（变体 B · 底部抽屉）— 纯 UI 组件
+ * 长按动作抽屉（变体 C · 抽屉内朗读）— 纯 UI 组件
  *
  * 设计真源（不重新设计）：
  *  - 原型 `30-任务产物/2026-11-26-阅读交互调整-原型稿/原型-变体B-底部抽屉.html`
  *    sha256 前 16 位 `b039064b83b9c6e7`（D1 高度自适应 + 40vh / D2 2×2 + 标题区 /
  *    D4 关闭三通道 / D6 不透明白底 + 遮罩 .34 / D7 env(safe-area-inset-bottom) + 小屏 104rpx）
+ *  - 交互变更（2026-11-26 用户拍板，变体 C）：
+ *    `30-任务产物/2026-11-26-阅读交互调整-原型稿/原型-变体C-抽屉内朗读.html`
+ *    → **朗读在抽屉内直接调 `speakText`，不再 triggerEvent 回页面；收藏仍回页面。**
  *  - 工程契约 `公共能力抽象方案.md` §3（事件契约）/ §4（状态机）/ §5（播放态归属）
  *
- * 🔴 三条硬红线（改这个文件前先读）：
+ * 🔴 四条硬红线（改这个文件前先读）：
  *  1. **组件不自己关**。收到遮罩 / 下滑 / ✕ 手势只 `triggerEvent('close')`，`visible` 由页面置 false。
  *     这样页面是唯一状态持有者（方案 §3.2 契约 1）——组件内部没有任何「关掉自己」的分支。
- *  2. **组件不得 import 任何 services**（方案 §3.3）。组件只做 UI + 手势 + triggerEvent；
- *     朗读 / 收藏 / 未登录守卫 / payload 组装 / toast 文案全部留在页面，两页的差异（详情页弹内联
- *     modal、首页 toast）才不会在组件里被抹平。唯一允许的 import 是 `utils/line-actions`（零副作用纯函数）。
+ *     唯一例外是「关之前先停朗读」（见 `_emitClose`）：那是**副作用**，不是关自己。
+ *  2. **services 只允许 `services/tts`**（A8 收窄，2026-11-26）。朗读下沉到组件后，组件必须能调
+ *     `speakText / stopSpeak / onSpeakState`；其余 services（glossary / auth / nce / account …）
+ *     一律禁止 import —— 收藏、未登录守卫、payload 组装、toast 文案全部留在页面，
+ *     两页的差异（详情页弹内联 modal、首页 toast）才不会在组件里被抹平。
+ *     另一条允许的 import 是 `utils/line-actions`（零副作用纯函数）。
  *  3. **不测任何坐标**。抽屉是 `position:fixed; left/right/bottom:0`，组件内没有
  *     `createSelectorQuery` / `boundingClientRect` / `scrollOffset` / `pageX·750/windowWidth`
  *     （方案 §2.0-B：B 变体把「跨层测量」这个唯一形态级难题直接消灭）。
+ *  4. **关了就不许还在念**。三条关闭通道（遮罩 / ✕ / 下滑）都必须先 `stopSpeak()` 再抛 `close`
+ *     —— 抽屉一关，页面上就没有停止入口了。`pageLifetimes.hide` 与 `detached` 同样要停。
  *
- * 播放态：组件**不持有、不订阅、不感知**（方案 §5.2）。动作触发后组件即收起，
- * 用户看到的播放反馈是页面上的句子高亮与行尾「■ 停止」（U1）。
+ * 播放态（2026-11-26 变体 C 起**由组件自持**，方案 §5.2 的旧口径已作废）：
+ *  - 组件订阅 `onSpeakState`：tts 推文本 → 按文本反查是哪个按钮在播（同一时刻至多一个）；
+ *  - tts 推 `null`（自然播完 / 失败 / 被停）→ 按钮自动回 ▶ 态，不依赖页面镜像；
+ *  - 点按本地立即切态（不等回流），tts 的权威状态到达后校正到同一值。
  *
  * 样式隔离：`index.json` 显式钉 `styleIsolation: "isolated"`。依据官方文档（组件样式 / 样式隔离）：
  * 「默认情况下，自定义组件的样式只受到自定义组件 WXSS 样式的影响」「在其他组件中，styleIsolation
@@ -27,17 +37,37 @@
  * 不依赖默认值（D6 要求抽屉恒为不透明白底，不随阅读档变化）。
  */
 import { EVT, actionsOf, type ActionItem } from '../../utils/line-actions';
+/**
+ * 🔴 唯一允许的 services import（A8 收窄）：朗读下沉到组件是用户 2026-11-26 拍板；
+ *    收藏仍留页面以保留两页 toast / 内联 modal 的差异。静态断言在
+ *    `tests/action-drawer.test.ts` 的 A8 组（其余 services 出现即红）。
+ */
+import { speakText, stopSpeak, onSpeakState, type SpeakState } from '../../services/tts';
 
 /** 下滑关闭阈值（rpx）：≥ 48rpx 松手即关，< 48rpx 回弹（AC-B.13 / V-B9） */
 const SWIPE_CLOSE_RPX = 48;
-/** 动作后 busy 锁时长（ms）：防连点重复请求（方案 §3.2 契约 2） */
+/** 动作后 busy 锁时长（ms）：防连点重复请求（方案 §3.2 契约 2）。**只用于收藏**，朗读不用它 */
 const BUSY_MS = 300;
 /**
- * 动作区高度（rpx）：2 行 × 96rpx（AC-B.20，小屏 2 × 104rpx 更矮的那侧取小值更保守）。
+ * 朗读点按防抖（ms）：**看起来像** busy 锁但语义完全不同 —— 朗读必须「再点一下就停」，
+ * 复用 300ms busy 锁会让用户在 300ms 内点停止点不动（本组件 1.0.18 之前的真实缺陷形态）。
+ * 这里只吞掉「同一次触摸被派发两次」这种同帧重复（人手两次点按间隔 ≥100ms），
+ * 所以窗口取 60ms：远小于真实双击间隔，又远大于一次派发的重入窗口。
+ */
+const SPEAK_TAP_GUARD_MS = 60;
+/**
+ * 动作区高度（rpx）：2 行 × 96rpx + grid `gap:16rpx` = 208rpx（AC-B.20，小屏 2 × 104rpx）。
  * 抽屉贴视口底、动作区是抽屉最底部的一块，所以「触点距视口底 ≤ 动作区高度」等价于
  * 「手指落在按钮上」—— 这一带**不起拖拽**（BB6）。
+ *
+ * 算术（`index.wxss` 的 `.ad-act` / `.ad-acts` / `.ad-drawer` 三处尺寸）：
+ *   按钮带真实高度 = 96 + 16(gap) + 96 = **208rpx**
+ *   按钮带上沿距视口底 = 208 + 24(`.ad-drawer` 的 `padding-bottom` 呼吸量) = **232rpx**
+ * 取 208（而不是 232）是**保守方向**：少拦 24rpx 只会让「贴着按钮上沿那条缝」允许起拖，
+ * 不会把标题区的下滑误拦掉；反过来取 232 会把分隔线下方 24rpx 也算成按钮带。
  */
-const ACTS_ZONE_RPX = 192;
+const ACTS_ZONE_RPX = 208;
+
 /**
  * 首页 tabBar 让位高度（rpx）：**107rpx** = `.tb` 内容盒 100rpx + `.tb` 的 `padding-bottom: 6rpx`
  * + `.tabbar` 的 `border-top: 1rpx`（`custom-tab-bar/index.wxss`；安全区由 CSS 的 `env()` 另叠）。
@@ -105,16 +135,27 @@ Component({
     swipeY: 0,
     /** 拖拽中：关掉 transition 让抽屉跟手（松手后再开回来做回弹 / 收起动画） */
     dragging: false,
-    /** 动作 busy 锁：300ms 内忽略后续点击 */
+    /** 动作 busy 锁：300ms 内忽略后续点击（**只锁收藏**，朗读走 SPEAK_TAP_GUARD_MS） */
     busy: false,
-    /** 当前按下的动作 key（按下高亮 = E4 的「反馈」，不是「暗示」） */
+    /** 当前按下的动作 key（按下高亮 = E4 的「反馈」，不是「暗示」）。只由收藏分支置位 */
     pressedKey: '',
+    /**
+     * 播放中的朗读动作 key（'' = 无）。
+     * wxml 用它决定「▶ 还是 ■ / 文案是 label 还是 stopLabel / 整卡是否品牌浅底」。
+     * 写入口只有两处：点按时的本地立即切态、`onSpeakState` 的权威校正。
+     */
+    playingKey: '',
     /** 手势起点 Y（px）。逻辑层私有，不进渲染 —— 直接赋值，不 setData */
     _startY: 0,
     /** 本次触摸是否已记录起点（touchmove/end 的护栏） */
     _hasStart: false,
     /** busy 锁定时器句柄（逻辑层私有，不 setData） */
     _busyTimer: 0,
+    /** 上一次朗读点按的 key / 时间戳：只用于吞掉同帧重复派发（逻辑层私有） */
+    _speakTapKey: '',
+    _speakTapAt: 0,
+    /** onSpeakState 的退订函数（逻辑层私有；null = 未订阅） */
+    _offSpeakState: null as null | (() => void),
     /** 组件是否仍挂载（detached 后禁止 setData）。默认 true：实例一旦存在就是活的，
      *  只有显式 detached 才置 false —— 这样「从未 attached 的实例」也不会被误判成已卸载。 */
     _alive: true,
@@ -125,7 +166,7 @@ Component({
     scope(scope: string) {
       this.setData({ acts: actionsOf(scope === 'word' ? 'word' : 'line') });
     },
-    /** 关掉时把局部态归零：下次打开不残留上次的下滑位移 / 按下高亮 */
+    /** 关掉时把局部态归零：下次打开不残留上次的下滑位移 / 按下高亮 / 播放态 */
     visible(visible: boolean) {
       if (!visible) this._resetLocalState();
     },
@@ -134,11 +175,22 @@ Component({
   lifetimes: {
     attached() {
       this.data._alive = true;
+      this.data._speakTapKey = '';
+      this.data._speakTapAt = 0;
+      // 订阅 tts 权威状态：自然播完 / 失败 / 被页面停掉 → 按钮自动回 ▶（契约 5）
+      this.data._offSpeakState = onSpeakState((s) => this._syncSpeakState(s));
       // 首帧对齐一次：父组件可能在 attached 前就传了 scope
       this.setData({ acts: actionsOf(this.data.scope === 'word' ? 'word' : 'line') });
     },
     detached() {
       this.data._alive = false;
+      // 先退订再停：退订后 stopSpeak 推的 null 不会再回到本实例（避免卸载后 setData 告警）
+      if (this.data._offSpeakState) {
+        this.data._offSpeakState();
+        this.data._offSpeakState = null;
+      }
+      stopSpeak(); // 组件销毁 = 抽屉不可能再被打开：绝不允许「关了还在念」
+      this.data.playingKey = '';
       if (this.data._busyTimer) {
         clearTimeout(this.data._busyTimer);
         this.data._busyTimer = 0;
@@ -148,12 +200,14 @@ Component({
 
   pageLifetimes: {
     /**
-     * 抽屉打开时切后台 → 内部局部态归零（方案 §5.3）。
+     * 抽屉打开时切后台 → 停朗读 + 内部局部态归零（方案 §5.3）。
      * 官方顺序：组件 `pageLifetimes.hide`（组件树自顶向下）**早于** `Page.onHide`，
      * 所以这里归零不会被页面的 onHide 覆盖；浮层本身的 `overlay = null` 由页面负责
      * （组件不持有业务态，见 §5.3 归零责任矩阵）。
+     * 🔴 必须先 stopSpeak：切后台时抽屉可能还开着，回来时若还在念就没人能停（契约 8）。
      */
     hide() {
+      stopSpeak();
       this._resetLocalState();
     },
   },
@@ -211,11 +265,17 @@ Component({
       this.setData({ dragging: false, swipeY: 0 });
     },
 
-    /** 点动作：busy 锁 + 按下高亮 + 按 key 抛对应事件（组件不知道业务怎么做） */
+    /** 点动作：按 kind 分流（speak = 本地调 tts；collect = busy 锁 + 抛事件） */
     onActionTap(e: TapEventLike) {
       const ds = (e.currentTarget && e.currentTarget.dataset) || {};
       const key = String(ds.key || '');
-      if (!key || this.data.busy) return;
+      if (!key) return;
+      if (this._kindOf(key, ds.kind) === 'speak') {
+        this._onSpeakTap(key);
+        return;
+      }
+      // 收藏：保持既有 busy 锁 + 回页面（组件不知道页面怎么弹 toast / modal）
+      if (this.data.busy) return;
       this.setData({ busy: true, pressedKey: key });
       this._emitAction(key);
       this._armBusyRelease();
@@ -225,21 +285,104 @@ Component({
     // 内部方法
     // ------------------------------------------------------------------
 
-    /** 事件分流：只映射「key → 事件名 + payload」，不碰任何业务 */
+    /** 动作种类：优先信 wxml 的 `data-kind`，缺失/脏值时回落到动作表（不做业务判断） */
+    _kindOf(key: string, kindFromDataset?: unknown): 'speak' | 'collect' {
+      const k = String(kindFromDataset || '');
+      if (k === 'speak' || k === 'collect') return k;
+      const items = (this.data.acts || []) as ActionItem[];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i] && items[i].key === key && items[i].kind === 'speak') return 'speak';
+      }
+      return 'collect';
+    },
+
+    /** 该动作要朗读的原文（抽屉已持有，正是本文原文 —— 无需回页面取） */
+    _textOf(key: string): string {
+      if (key === EVT.SPEAK_WORD) return String(this.data.word || '').trim();
+      if (key === EVT.SPEAK_LINE) return String(this.data.lineText || '').trim();
+      return '';
+    },
+
+    /**
+     * 朗读点按（契约 2/3/4）：
+     *  - 同一个播放中的按钮再点 → `stopSpeak()` + 按钮回 ▶（**不关抽屉**）；
+     *  - 另一个朗读按钮 → 停掉当前、起新的（同一时刻只能有一个按钮是播放态）；
+     *  - 全程**不 emit 任何事件**（朗读已下沉，页面不需要知道）。
+     * 🔴 不复用 `busy` 锁：300ms 内点停止必须立刻生效。防抖只吞同帧重复派发。
+     */
+    _onSpeakTap(key: string) {
+      const now = Date.now();
+      if (this.data._speakTapKey === key && now - this.data._speakTapAt < SPEAK_TAP_GUARD_MS) return;
+      this.data._speakTapKey = key;
+      this.data._speakTapAt = now;
+
+      const text = this._textOf(key);
+      if (!text) {
+        // 没有原文（脏属性 / 时机不对）：不亮、不念，保持静止态
+        this._clearPlaying();
+        return;
+      }
+
+      if (this.data.playingKey === key) {
+        // 契约 3：再点同一个 = 停。先清态再停（不依赖 stopSpeak 的 null 一定被收到）
+        this._clearPlaying();
+        stopSpeak();
+        return;
+      }
+
+      // 契约 4：换一个朗读按钮 → 先停当前（显式停：起不来时也不残留旧播放），再起新的
+      if (this.data.playingKey) stopSpeak();
+      // 本地立即切态（不等回流）；tts 同步推的 loading 会把它校正成同一个值
+      this.setData({ playingKey: key });
+      void speakText(text).then((ok) => {
+        // 起不来（未登录 / 文本超长 / 空文本）：把乐观态收回，不留「永远在播」的死按钮
+        if (ok || !this.data._alive) return;
+        if (this.data.playingKey === key) this._clearPlaying();
+      }).catch(() => {
+        // speakText 理论上不外抛（内部已兜底）；万一抛，也别让按钮卡在播放态
+        if (this.data._alive && this.data.playingKey === key) this._clearPlaying();
+      });
+    },
+
+    /** 清播放态（逻辑层 + 渲染层同一处） */
+    _clearPlaying() {
+      if (!this.data.playingKey) return;
+      this.setData({ playingKey: '' });
+    },
+
+    /**
+     * tts 权威状态 → 按钮态（契约 5）。文本落到哪个动作就亮哪个，落不到（页面在播别的）就全灭。
+     * 🔴 先认「当前正在播的 key」再反查：词档下 `word` 与 `lineText` 可能同文（单词句），
+     *    此时应保持用户刚点的那个按钮，而不是跳到另一个同文按钮。
+     */
+    _syncSpeakState(s: SpeakState | null) {
+      if (!this.data._alive) return;
+      const text = s ? String(s.text || '').trim() : '';
+      let next = '';
+      if (text) {
+        const cur = String(this.data.playingKey || '');
+        if (cur && this._textOf(cur) === text) {
+          next = cur;
+        } else if (this.data.scope === 'word' && String(this.data.word || '').trim() === text) {
+          next = EVT.SPEAK_WORD;
+        } else if (String(this.data.lineText || '').trim() === text) {
+          next = EVT.SPEAK_LINE;
+        }
+      }
+      if (next === this.data.playingKey) return;
+      this.setData({ playingKey: next });
+    },
+
+    /**
+     * 事件分流：只映射「key → 事件名 + payload」，不碰任何业务。
+     * 🔴 朗读动作**不在这里**：它们已在 `_onSpeakTap` 里本地消化（不 emit、不关抽屉）。
+     */
     _emitAction(key: string) {
       const lineIndex = Number(this.data.lineIndex);
       const text = String(this.data.lineText || '');
       const word = String(this.data.word || '');
-      if (key === EVT.SPEAK_LINE) {
-        this.triggerEvent(EVT.SPEAK_LINE, { lineIndex, text });
-        return;
-      }
       if (key === EVT.COLLECT_LINE) {
         this.triggerEvent(EVT.COLLECT_LINE, { lineIndex, text });
-        return;
-      }
-      if (key === EVT.SPEAK_WORD) {
-        this.triggerEvent(EVT.SPEAK_WORD, { word, lineIndex });
         return;
       }
       if (key === EVT.COLLECT_WORD) {
@@ -248,11 +391,18 @@ Component({
       }
     },
 
+    /**
+     * 抛关闭信号。🔴 **先 `stopSpeak()` 再 emit**（契约 6）：
+     * 三条通道（遮罩 / ✕ / 下滑）关掉抽屉后，页面上没有任何停止入口了，
+     * 所以「关了还在念」是硬缺陷 —— 停朗读必须发生在 close 之前（顺序本身也是被断言的）。
+     */
     _emitClose(via: 'mask' | 'swipe' | 'close') {
+      stopSpeak();
+      this._clearPlaying();
       this.triggerEvent(EVT.CLOSE, { via });
     },
 
-    /** busy 锁 300ms：页面可能在 await 收藏接口，期间连点会重复请求 */
+    /** busy 锁 300ms：页面可能在 await 收藏接口，期间连点会重复请求（只给收藏用） */
     _armBusyRelease() {
       if (this.data._busyTimer) clearTimeout(this.data._busyTimer);
       this.data._busyTimer = setTimeout(() => {
@@ -266,11 +416,13 @@ Component({
     _resetLocalState() {
       this.data._hasStart = false;
       this.data._startY = 0;
+      this.data._speakTapKey = '';
+      this.data._speakTapAt = 0;
       if (this.data._busyTimer) {
         clearTimeout(this.data._busyTimer);
         this.data._busyTimer = 0;
       }
-      this.setData({ swipeY: 0, dragging: false, busy: false, pressedKey: '' });
+      this.setData({ swipeY: 0, dragging: false, busy: false, pressedKey: '', playingKey: '' });
     },
 
     /**

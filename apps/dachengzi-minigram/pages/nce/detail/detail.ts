@@ -63,13 +63,20 @@
  *     一个字段 = 物理上不可能两开（F1/F2 结构级保证）；所有 open 入口走 `openOverlay()` 整体替换。
  *  C. 锚点链路整块删除（方案 §2.0-B）：`_anchorFloat` / `boundingClientRect` / `scrollOffset` /
  *     `pageX·750/windowWidth` / `clamp(750-340)` / `tipPos` 全部消失 —— 抽屉贴底通栏不测任何坐标。
- *  D. 五个抽屉 handler（方案 §3.3 方案 B：组件只 triggerEvent，页面调 services）：
- *     `onDrawerSpeakLine / onDrawerSpeakWord / onDrawerCollectLine / onDrawerCollectWord /
- *     onDrawerClose`。未登录守卫仍是本页的内联 modal（首页是 toast，差异不上沉到组件）。
+ *  D. 三个抽屉 handler（组件只 triggerEvent，页面调 services）：
+ *     `onDrawerCollectLine / onDrawerCollectWord / onDrawerClose`。未登录守卫仍是本页的内联 modal
+ *     （首页是 toast，差异不上沉到组件）。
+ *     🔴 2026-11-26 变体 C（用户拍板）：`onDrawerSpeakLine / onDrawerSpeakWord` **已删除** ——
+ *     朗读下沉到组件（组件内直接 speakText、抽屉不关、按钮自切 ▶/■）。别加回来：
+ *     ① 会与组件本地朗读重复朗读一次；② 页面 U1 的「行尾 ■」与抽屉按钮会成为两条互相打架的停止入口。
+ *     `_lineHint`（D-8 重复句定位）因此不再由抽屉朗读写入，只在读词 / 换课 / 卸载时复位为 -1，
+ *     抽屉朗读的「哪一句在播」由 tts 推来的文本反查（`_resolveLineIdx` 的回退分支）。
  *  E. U1 停止按钮：`readingLineIdx === si` 时该句行尾渲染一个极小的 `■`，点击 = `stopSpeak()`。
  *     🔴 这与 V7-C「句子区无常驻 ♪/☆ 控件」**不冲突**：①只在该句正在朗读时渲染（不播放时不存在）；
  *     ②它是「停止」而不是「播放 / 收藏」入口，不具备可发现性引导作用；③它替代的正是被 B 变体
  *     删掉的「长按气泡再点『朗读此句』= 停」这条唯一停止路径（方案 §3.5 U1）。
+ *     ⚠️ 变体 C 之后它只剩「非抽屉来源的整句朗读」一个场景（目前没有这种入口），
+ *     保留是因为删除它属于另一轮范围（见本轮回执的「遗留」）。
  *  F. 播放态权威源不变：仍只由 tts 的 `onSpeakState` 回流反推（P2-1/P2-2/P2-3 刚修的三处
  *     缺陷不得回退）；`onHide` 仍是「stopSpeak → 显式归零 → 退订」，`onShow` 先归零再订阅。
  * ═══════════════════════════════════════════════════════════════════════════
@@ -560,44 +567,16 @@ Page({
    */
   onCnLongPress() { /* 故意留空：只消费事件，不产生浮层 */ },
 
-  // ───────────── 抽屉组件回传的 5 个 handler（方案 §3.3 方案 B：页面调 services） ─────────────
+  // ───────────── 抽屉组件回传的 3 个 handler（组件只 triggerEvent，页面调 services） ─────────────
+  // 🔴 2026-11-26 变体 C（用户拍板）：朗读已下沉到组件内直接调 speakText（抽屉不关、按钮自切 ▶/■），
+  //    本页不再有 onDrawerSpeakLine / onDrawerSpeakWord。别加回来：会与组件本地朗读**重复朗读一次**，
+  //    而且两条停止入口（抽屉按钮 / 本页 U1 的行尾 ■）会互相打架。
+  //    页面侧的播放态回流（_onSpeakState → readingLineIdx / wordPlaying）保持不变：
+  //    组件在抽屉内朗读时，本页仍按 tts 推来的文本点亮对应句子（此时被抽屉盖住，无害且口径一致）。
 
   /** 抽屉关闭（遮罩 / 下滑 / ✕ 任一通道）：组件只抛信号，`visible` 由本页置 false。 */
   onDrawerClose() {
     this.closeOverlay();
-  },
-
-  /**
-   * 「朗读此句」：`speakText(text)` 恰好一次。
-   * 🔴 不手写「同句再点 = 停」分支 —— `services/tts.ts` 已内建 same-text 语义
-   *    （`if (playingText === t) { stopSpeak(); … }`），手写一遍正是 R1 那 12 行冗余的来源。
-   * 播放态仍由 onSpeakState 权威回流（这里只先置 loading，不猜结束时机）。
-   */
-  onDrawerSpeakLine(e: DrawerEvent<SpeakLineDetail>) {
-    const d = (e && e.detail) || {};
-    const text = String(d.text || '');
-    if (!text) return;
-    const i = Number(d.lineIndex);
-    this._playingIdx = isFinite(i) ? i : -1;
-    // 🔴 D-8：在 speakText 之前写 hint（speakText 的同步段会先推 null 再推 loading，
-    //    而 null 不走 _resetPlayingState 之外的清理；hint 不随 null 清零，见字段注释）。
-    this._lineHint = this._playingIdx;
-    this._speakingWord = ''; // 读句子：清掉「单词朗读」标记，避免词卡按钮态串味
-    // V-B11：动作后立即收起抽屉（朗读 / 收藏都要回到正文）
-    this.openOverlay(null, { readingLineIdx: this._playingIdx, readingPhase: 'loading' });
-    void speakText(text);
-  },
-
-  /** 「朗读单词」：`speakText(word)`。普通词与生词走完全相同的路径（不查释义、不看 hasDef）。 */
-  onDrawerSpeakWord(e: DrawerEvent<SpeakWordDetail>) {
-    const d = (e && e.detail) || {};
-    const word = String(d.word || '');
-    if (!word) return;
-    this.closeOverlay();
-    this._speakingWord = word;
-    this._playingIdx = -1;
-    this._lineHint = -1; // 读词：清掉句档定位提示，■ 语义只属于句子朗读（U1）
-    void speakText(word);
   },
 
   /**

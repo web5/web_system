@@ -386,24 +386,22 @@ describe('首页停止入口只有一处：页脚 .dq-act（U1 行尾 ■ 已去
   });
 });
 
-/* ─────────────────────────── 抽屉 5 个 handler ─────────────────────────── */
+/* ─────────────────────────── 抽屉 3 个 handler ─────────────────────────── */
 
-describe('抽屉 5 个 handler（组件只 triggerEvent，页面调 services）', () => {
-  it('speak-line → speakText(句子) 恰好一次 + 抽屉收起', async () => {
+describe('抽屉 3 个 handler（组件只 triggerEvent，页面调 services）', () => {
+  /**
+   * 🔴 2026-11-26 变体 C（用户拍板）：朗读下沉到抽屉组件 ——
+   * 组件内直接 `speakText`、抽屉不关、按钮自切 ▶/■；页面不再有
+   * `onDrawerSpeakLine / onDrawerSpeakWord`。原两条朗读用例的判据对象已消失，
+   * 反转成「不得回潮」断言；行为侧见 `tests/action-drawer.test.ts`「变体 C · 朗读下沉」。
+   */
+  it('朗读不再经过页面：两个 speak handler 都不存在，长按抽屉保持打开、不调 speakText', async () => {
     const ctx = await ctxWithWords();
+    expect((ctx as any).onDrawerSpeakLine).toBeUndefined();
+    expect((ctx as any).onDrawerSpeakWord).toBeUndefined();
     ctx.onQuoteLineLongPress();
-    await ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: QUOTE_EN } });
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenCalledWith(QUOTE_EN);
-    expect(ctx.data.overlay).toBeNull();
-  });
-
-  it('speak-word → speakText(单词) + 抽屉收起（普通词同样可读）', async () => {
-    const ctx = await ctxWithWords();
-    ctx.onQuoteWordLongPress({ currentTarget: { dataset: { w: 'is', hasdef: false } } });
-    await ctx.onDrawerSpeakWord({ detail: { word: 'is', lineIndex: 0 } });
-    expect(speakTextMock).toHaveBeenCalledWith('is');
-    expect(ctx.data.overlay).toBeNull();
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line' });
+    expect(speakTextMock).not.toHaveBeenCalled();
   });
 
   it('collect-line → tag=nce，meta 用 _sourceMeta 的 book/lessonId（P1-1 同源，不绕过）', async () => {
@@ -495,20 +493,25 @@ describe('不复制实现：页面只挂载组件，不自绘抽屉、不重定�
     expect(j.usingComponents['login-gate']).toBe('/components/login-gate/index');
   });
 
-  it('组件 7 个属性 + 5 个事件全部接上（漏一个就是某个动作静默失效）', () => {
+  it('组件 7 个属性 + 3 个事件全部接上（漏一个就是某个动作静默失效）', () => {
     const w = src('pages/home/index/index.wxml');
     ['visible', 'scope', 'line-text', 'line-index', 'word', 'word-has-def', 'phonetic'].forEach((p) => {
       expect(w).toContain(`${p}="{{overlay`);
     });
-    ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close'].forEach((evt) => {
+    // 2026-11-26 变体 C：朗读下沉组件 → speak 两个 bind 已删，只剩收藏两项 + close
+    ['collect-line', 'collect-word', 'close'].forEach((evt) => {
       expect(w).toContain(`bind:${evt}="onDrawer`);
     });
+    expect(w).not.toContain('bind:speak-line');
+    expect(w).not.toContain('bind:speak-word');
   });
 
-  it('公共层对外契约未被本页改动（组件仍只 import utils/line-actions）', () => {
+  it('公共层对外契约（A8 收窄后：组件只许 import utils/line-actions + services/tts）', () => {
     const comp = src('components/action-drawer/index.ts');
     expect(comp).toMatch(/from '\.\.\/\.\.\/utils\/line-actions'/);
-    expect(comp).not.toMatch(/services\//);
+    // 2026-11-26 变体 C：朗读下沉 → 唯一新增的 services 依赖是 tts（用户在原型评审时拍板）
+    const imports = Array.from(comp.matchAll(/from\s+['"]([^'"]*services\/[^'"]*)['"]/g)).map((m) => m[1]);
+    expect(imports).toEqual(['../../services/tts']);
     // 4 项顺序真源：行=对象、列=动词。去掉注释后只看真正会渲染的 label 字面量顺序，
     // 防止「将来有人为了凑首页顺手改了公共层顺序」。
     const actions = src('utils/line-actions.ts')

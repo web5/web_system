@@ -193,13 +193,43 @@ describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
     expect(drawerTag).toMatch(/bindtouchstart="onTouchStart"/);
     expect(drawerTag).not.toMatch(/catchtap/);
     expect(drawerTag).not.toMatch(/bindtap/);
+    /**
+     * 🔴 2026-11-26 补的假绿盲区（测试员实测）：根节点同样是「按钮命脉」上的可疑节点 ——
+     * 给 `.ad-drawer` 加回 `catchtouchstart="noop"`，四个按钮会全部点不动（父 catch 吃掉
+     * touchstart → 子节点 tap 不派发），但旧守卫只盯 `.ad-acts`，全量 58/58 仍全绿。
+     * 所以根节点必须同样禁 catchtouchstart（含 `catch:touchstart` 冒号写法）。
+     */
+    expect(drawerTag).not.toMatch(/catchtouchstart/);
+    expect(drawerTag).not.toMatch(/catch:touchstart/);
+    /**
+     * 🔴 2026-11-26 补的零覆盖项：根节点必须保留 `bindtouchcancel="onTouchEnd"`。
+     * 缺它 → 手势被系统打断（来电 / 下拉通知栏 / 手势冲突）时 touchend 不触发，
+     * `dragging` 永远为 true、`swipeY` 停在半路 → 抽屉歪着停住且 transition 关闭（拖不动也回不去）。
+     * 旧守卫对这条零覆盖，删掉它全量测试仍全绿。
+     */
+    expect(drawerTag).toMatch(/bindtouchcancel="onTouchEnd"/);
+    /**
+     * 🔴 2026-11-26 补的假绿盲区：`.ad-act` 必须带 `data-key="{{item.key}}"`。
+     * 把 `data-key` 改成 `data-k`：`onActionTap` 取不到 key → **四个按钮全哑**（不朗读、不收藏、
+     * 抽屉不关），而旧守卫只断「有 catchtap="onActionTap"」，全量测试仍全绿。变异验证踩过。
+     * 先断言「确实抓到了按钮标签」再验内容，防空转。
+     */
+    const actTag = (w.match(/<view\s+wx:for="\{\{acts\}\}"[\s\S]*?>/) || [''])[0];
+    expect(actTag).toMatch(/^<view\s/);
+    expect(actTag).toMatch(/data-key="\{\{item\.key\}\}"/);
+    expect(actTag).toMatch(/data-kind="\{\{item\.kind\}\}"/);
     // 动作按钮自身的 catchtap 必须在（事件到页面的唯一出口）
     expect((w.match(/<view[\s\S]*?catchtap="onActionTap"/) || [''])[0]).not.toBe('');
   });
 
   it('逻辑层兜底：onTouchStart 在动作区高度带内直接返回（不置 _hasStart、不 setData）', () => {
     const src = stripJs(read('components/action-drawer/index.ts'));
-    expect(src).toMatch(/ACTS_ZONE_RPX\s*=\s*192/); // 2 行 × 96rpx（AC-B.20）
+    /**
+     * 动作区带高 208rpx = 2 行 × 96rpx + grid `gap:16rpx`（+ 抽屉 padding-bottom 24rpx 后
+     * 上沿 232rpx；取 208 是保守方向，见 index.ts 常量的算术注释）。
+     * 旧值 192rpx 漏了 gap 与 padding，按钮带上沿 24~40rpx 会被误判成「可起拖」。
+     */
+    expect(src).toMatch(/ACTS_ZONE_RPX\s*=\s*208/);
     expect(src).toMatch(/_startedInActsZone\(/);
     const start = (src.match(/onTouchStart\(e: TouchEventLike\)\s*\{([\s\S]*?)\n {4}\},/) || ['', ''])[1];
     expect(start).toMatch(/_startedInActsZone\(startY\)/);
@@ -235,27 +265,37 @@ describe('P2-7 长按只响应英文原文区域（AC-B.27）', () => {
 
 // ═════════════════════ P2-8 重复句 ■ 定位 ═════════════════════
 describe('P2-8 重复句时 ■ 落在实际朗读的那一句（U1）', () => {
-  it('定位走 _resolveLineIdx（发起时 lineIndex 优先，文本只用于校验），不再单靠文本反查', () => {
+  /**
+   * 🔴 2026-11-26 变体 C 改写（**不是放松**，是入口变了）：
+   * 原用例断「`onDrawerSpeakLine` 里写 `this._lineHint = this._playingIdx`」。
+   * 朗读下沉到组件后（用户拍板），页面的 `onDrawerSpeakLine` **已被删除** ——
+   * 抽屉朗读时页面拿不到「用户读的是哪一句」，`_lineHint` 不再被写入（只在读词 / 换课 / 卸载复位）。
+   * 因此这里改成守住「改写后仍然成立」的那两条：
+   *  ① 页面**不得**再出现抽屉朗读 handler（删了就别回潮，回潮 = 重复朗读一次）；
+   *  ② 定位链本身不许退化成「只靠文本反查」：`_resolveLineIdx` 的 hint 校验分支必须还在
+   *     （未来任何「页面自己发起的整句朗读」入口仍然要能定位重复句），`_onSpeakState` 必须走它。
+   * 残留风险已写进回执「遗留」：抽屉内朗读重复句时，页面侧 ■ 只能落到文本反查的第一句
+   * （此时抽屉还开着、■ 被抽屉遮住；抽屉关闭即 stopSpeak，所以不影响用户可见行为）。
+   */
+  it('定位链不退化成纯文本反查：_resolveLineIdx 仍先校验 hint，_onSpeakState 仍走它', () => {
     const src = stripJs(read(DETAIL_TS));
+    // ① 抽屉朗读 handler 已删除（回潮即红）
+    expect(src).not.toMatch(/onDrawerSpeakLine/);
+    expect(src).not.toMatch(/onDrawerSpeakWord/);
+    // ② 定位链：字段仍在，hint 校验 + 文本反查两条分支都在
     expect(src).toMatch(/_lineHint:\s*-1/);
-    // 朗读此句时写 hint
-    const speakLine = (src.match(/onDrawerSpeakLine\(e: DrawerEvent<SpeakLineDetail>\)\s*\{([\s\S]*?)\n {2}\},/) || ['', ''])[1];
-    expect(speakLine).toMatch(/this\._lineHint = this\._playingIdx/);
-    // 播放态解析必须走 _resolveLineIdx
     const onState = (src.match(/_onSpeakState\(s: SpeakState \| null\)\s*\{([\s\S]*?)\n {2}\},/) || ['', ''])[1];
     expect(onState).toMatch(/this\._resolveLineIdx\(text\)/);
     expect(onState).not.toMatch(/this\._lineIdxOf\(text\)/);
-    // 校验不通过才回落到文本反查
     const resolve = (src.match(/_resolveLineIdx\(text: string\): number\s*\{([\s\S]*?)\n {2}\},/) || ['', ''])[1];
     expect(resolve).toMatch(/lines\[hint\]/);
     expect(resolve).toMatch(/return this\._lineIdxOf\(t\)/);
   });
 
-  it('读单词 / 换课 / 卸载都要清掉 hint（■ 语义只属于句子朗读）', () => {
+  it('读单词 / 换课 / 卸载仍要把 hint 复位为 -1（■ 语义只属于句子朗读）', () => {
     const src = stripJs(read(DETAIL_TS));
-    const wordSpeaks = src.match(/this\._lineHint = -1;/g) || [];
-    expect(wordSpeaks.length).toBeGreaterThanOrEqual(5); // 读词 ×2 + load + goLesson + onUnload
-    expect(src).toMatch(/onDrawerSpeakWord[\s\S]{0,600}?this\._lineHint = -1/);
+    const resets = src.match(/this\._lineHint = -1;/g) || [];
+    expect(resets.length).toBeGreaterThanOrEqual(4); // 读词 + load + goLesson + onUnload
     expect(src).toMatch(/speakTipWord[\s\S]{0,400}?this\._lineHint = -1/);
   });
 });

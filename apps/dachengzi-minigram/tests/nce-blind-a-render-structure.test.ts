@@ -93,12 +93,22 @@ describe('A2 公共层复用：不许第二份动作表 / 第二份抽屉结构'
     }
   });
 
-  it('组件只 import utils/line-actions，且不 import 任何 services', () => {
+  /**
+   * 🔴 2026-11-26 A8 收窄（与 `tests/action-drawer.test.ts` 的 A8 组同一口径）：
+   * 原断言是「组件只 import utils/line-actions，且不 import 任何 services」。
+   * 朗读下沉到组件是**用户 2026-11-26 拍板**（设计真源 `原型-变体C-抽屉内朗读.html`：
+   * 抽屉持有原文，朗读不再回页面中转）→ 组件必须能调 `services/tts`；其余 services
+   * （glossary / auth / nce / account …）仍一律禁止，收藏与两页授权差异继续留在页面。
+   * 所以断言收窄成「恰好两个 import：line-actions + services/tts」。
+   */
+  it('组件只 import utils/line-actions 与 services/tts（其余 services 一律禁止）', () => {
     const ts = read(DRAWER_TS);
     const imports = ts.match(/^import .*$/gm) || [];
-    expect(imports).toHaveLength(1);
+    expect(imports).toHaveLength(2);
     expect(imports[0]).toMatch(/from '\.\.\/\.\.\/utils\/line-actions'/);
-    expect(ts).not.toMatch(/from '[^']*services\//);
+    expect(imports[1]).toMatch(/from '\.\.\/\.\.\/services\/tts'/);
+    const servicesImports = ts.match(/from '[^']*services\/[^']*'/g) || [];
+    expect(servicesImports).toEqual(["from '../../services/tts'"]);
     expect(ts).not.toMatch(/require\(['"][^'"]*services\//);
   });
 

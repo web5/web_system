@@ -180,16 +180,20 @@ describe('③ 长按任意单词 → 抽屉（朗读此句 / 收藏此句 / 朗�
     expect(actionsOf('word')).toHaveLength(4);    // 与生词档完全一致，不因 hasDef 少项
   });
 
-  it('「朗读单词」：恰好一次 speakText(word)，并收起抽屉（V-B11）', () => {
+  /**
+   * 🔴 2026-11-26 变体 C（用户拍板）：朗读下沉到抽屉组件 ——
+   * 组件内直接 `speakText(word)`，**抽屉不关**（用户要在抽屉里点 ■ 停止）。
+   * 所以页面侧既没有 `onDrawerSpeakWord`，也不会 `closeOverlay`。
+   * 组件侧（speakText 参数 / 播放态 / 不 emit）由 `tests/action-drawer.test.ts` 覆盖。
+   */
+  it('「朗读单词」不再经过页面：页面无该 handler，抽屉保持打开', () => {
     const ctx = makeThis();
     seedLines(ctx);
     pageConfig.onWordLongPress.call(ctx, {
       currentTarget: { dataset: { w: 'engineer', i: 0, hasdef: true } },
     });
-    pageConfig.onDrawerSpeakWord.call(ctx, { detail: { word: 'engineer', lineIndex: 0 } });
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenCalledWith('engineer');
-    expect(ctx.data.overlay).toBeNull();
+    expect((pageConfig as any).onDrawerSpeakWord).toBeUndefined();
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word', word: 'engineer' });
   });
 
   it('「收藏单词」：collectGlossary 走 tag=word，enMain/meta 齐备', async () => {

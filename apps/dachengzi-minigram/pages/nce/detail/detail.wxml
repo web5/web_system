@@ -131,6 +131,10 @@
 
   <!-- 2026-11-26 变体 B：长按动作抽屉（句空白两项 / 任意单词四项）。
        组件只抛事件，页面调 services（朗读 / 收藏 / 未登录守卫 / toast 全在本页，见 detail.ts）。
+       🔴 2026-11-26 变体 C（用户拍板）：**朗读已下沉到组件** —— 组件内直接 `speakText`，抽屉不关、
+       按钮自行切 ▶/■。所以这里只剩 **3 个 bind**（收藏两项 + close）；朗读那两个绑定已删除，
+       别再加回来（加了会与组件的本地朗读重复触发一次朗读）。
+       收藏仍回本页：本页的未登录形态是**内联 modal-login**，与首页 toast 有意不同。
        🔴 原「长按气泡」两个节点（.bubble / .word-bubble，带内联锚点坐标）已整体删除 ——
        抽屉贴底通栏、不测任何坐标。
        🔴 **本页不传 `lift-bottom`**（保持默认 false = bottom: 0）：详情页是 navigateTo 打开的
@@ -144,8 +148,6 @@
     word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
     word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
     phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
-    bind:speak-line="onDrawerSpeakLine"
-    bind:speak-word="onDrawerSpeakWord"
     bind:collect-line="onDrawerCollectLine"
     bind:collect-word="onDrawerCollectWord"
     bind:close="onDrawerClose"

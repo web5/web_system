@@ -99,7 +99,10 @@
     </view>
 
     <!-- 长按动作抽屉（变体 B）：**复用** components/action-drawer，本页不画任何抽屉结构。
-         7 个属性 + 5 个事件与方案 §3.1/§3.2 契约逐字对齐；hidden 由 overlay 单槽位驱动。
+         7 个属性 + **3 个事件**与契约逐字对齐；hidden 由 overlay 单槽位驱动。
+         🔴 2026-11-26 变体 C（用户拍板）：朗读已下沉到组件（组件内直接 speakText、抽屉不关），
+            所以朗读那两个绑定已删除，只剩收藏两项 + close。
+            收藏仍回本页：本页未登录形态是 `wx.showToast('请先登录')`（详情页是内联 modal）。
          🔴 不要在页面里出现第二份 .ad-* 结构 / 第二份 ACTIONS 表：
             动作顺序（朗读此句 → 收藏此句 → 朗读单词 → 收藏单词）只有 utils/line-actions 一份真源。
          🔴 `lift-bottom` 只在本页开：首页是 tabBar 页，自定义 tabBar 是框架层独立根节点，
@@ -115,8 +118,6 @@
       word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
       word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
       phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
-      bind:speak-line="onDrawerSpeakLine"
-      bind:speak-word="onDrawerSpeakWord"
       bind:collect-line="onDrawerCollectLine"
       bind:collect-word="onDrawerCollectWord"
       bind:close="onDrawerClose"

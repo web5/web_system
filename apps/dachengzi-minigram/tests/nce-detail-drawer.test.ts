@@ -171,19 +171,20 @@ describe('抽屉组件接线（properties / events 一个都不能少）', () =>
     expect(json().usingComponents['action-drawer']).toBe('/components/action-drawer/index');
   });
 
-  it('wxml 传齐 7 个 properties 与 5 个 bind 事件', () => {
+  it('wxml 传齐 7 个 properties 与 3 个 bind 事件', () => {
     const w = wxml();
     for (const prop of ['visible', 'scope', 'line-text', 'line-index', 'word', 'word-has-def', 'phonetic']) {
       expect(w).toContain(`${prop}="{{`);
     }
-    for (const evt of ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']) {
+    // 2026-11-26 变体 C（用户拍板）：朗读下沉到组件 → speak-line / speak-word 两个 bind 已删除，
+    // 只剩「收藏两项 + close」。反向断言防止有人把朗读绑定加回来（会与组件本地朗读重复触发）。
+    for (const evt of ['collect-line', 'collect-word', 'close']) {
       expect(w).toContain(`bind:${evt}="`);
     }
-    // 五个 handler 都必须真实存在（漏实现 = 运行时静默失效）
-    for (const fn of [
-      'onDrawerSpeakLine', 'onDrawerSpeakWord', 'onDrawerCollectLine',
-      'onDrawerCollectWord', 'onDrawerClose',
-    ]) {
+    expect(w).not.toContain('bind:speak-line');
+    expect(w).not.toContain('bind:speak-word');
+    // 三个 handler 都必须真实存在（漏实现 = 运行时静默失效）
+    for (const fn of ['onDrawerCollectLine', 'onDrawerCollectWord', 'onDrawerClose']) {
       expect(typeof pageConfig[fn]).toBe('function');
     }
   });

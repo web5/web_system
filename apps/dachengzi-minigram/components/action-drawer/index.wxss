@@ -187,6 +187,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8rpx;
   height: 96rpx;
   border: 1rpx solid rgba(0, 0, 0, .10);
   border-radius: 12rpx;
@@ -197,6 +198,42 @@
 }
 .ad-act:active,
 .ad-act-pressed { background: #EFF6FF; border-color: #DBEAFE; }
+/* 文案不换行：播放态文案（停止此句 / 停止单词）与常态等宽，切态不抖行高 */
+.ad-act-lb { white-space: nowrap; letter-spacing: .1rpx; }
+
+/* ═══ 变体 C：朗读按钮的播放态（抽屉内自持，不再由页面镜像）═══
+   设计真源 `原型-变体C-抽屉内朗读.html` 的 `.dact.playing`（:255-259）：
+     · 整卡品牌浅底 + 品牌边框 + 主色文字；
+     · 图标位 ▶ → ■（两个图标按 .is-playing 互斥显隐，纯 CSS 画，不引图片）；
+     · 文案 朗读此句/朗读单词 → 停止此句/停止单词（wxml 按 playingKey 插值 item.stopLabel）。
+   色值取原型页顶部差异说明条（Banner）同族暖色，与词卡 .wt-play 的蓝系播放态区分开：
+   抽屉是「长按后的临时浮层」，用暖色表示「这里是朗读控制」比再上一层蓝更不抢阅读焦点。 */
+.ad-act.is-playing {
+  background: #FFF7ED;
+  border-color: #FDBA74;
+  color: #C2410C;
+}
+/* ▶ 播放三角：18rpx 高 × 14rpx 宽（与详情页词卡 .wt-ico::before 同一套 CSS 画法） */
+.ad-ico-play {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-left: 2rpx;
+  border-style: solid;
+  border-width: 9rpx 0 9rpx 14rpx;
+  border-color: transparent transparent transparent #C2410C;
+}
+/* ■ 停止方块：14rpx 见方 */
+.ad-ico-stop {
+  flex: none;
+  display: none;
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 2rpx;
+  background: #C2410C;
+}
+.ad-act.is-playing .ad-ico-play { display: none; }
+.ad-act.is-playing .ad-ico-stop { display: block; }
 
 /* 小屏（<360px）：96rpx 折算只有 41px < 44pt（D7 / AC-B.20），格高补到 104rpx；
    40vh 在 320×568 装不下四项（C-B1），max-height 放宽到 48vh */
@@ -205,7 +242,10 @@
   /* 小屏 + 首页让位：同 `.ad-lift` 口径去掉安全区项，保留小屏更紧的 20rpx 呼吸量。
      特异度与上面那条 `.ad-drawer` 相同（0,2,0 > 0,1,0 已胜出），此处按源序再收一次尺寸。 */
   .ad-lift .ad-drawer { padding: 0 28rpx 20rpx; }
-  .ad-act { height: 104rpx; font-size: 24rpx; }
+  .ad-act { height: 104rpx; font-size: 24rpx; gap: 6rpx; }
+  /* 图标同步缩一档（原型 .frame.sm .dact svg 18px → 16px 的等比：14/18 → 12/16） */
+  .ad-ico-play { border-width: 8rpx 0 8rpx 12rpx; margin-left: 2rpx; }
+  .ad-ico-stop { width: 12rpx; height: 12rpx; }
   .ad-word { font-size: 36rpx; }
   .ad-head { padding: 16rpx 0 20rpx; }
   .ad-grab { margin-top: 14rpx; }
