@@ -313,3 +313,32 @@ describe('提交基线层（临时 git 仓库，不碰本仓库）', () => {
     }
   });
 });
+
+/**
+ * 🔴 守卫的**第一信号**：把判定搬进测试体，让 jest 摘要行直接出 `Tests: 1 failed`。
+ *
+ * 为什么需要：红在 `afterAll` 里 `throw` 时，jest 只算「失败的 suite」，摘要行仍是
+ * `Tests: N passed` —— 谁 grep `Tests:` 就会把这套件判成绿，守卫等于被静默绕过
+ * （CI 不受影响：exit code 非零，但人工/agent 复核日志时不成立）。
+ *
+ * 呈现形式（实测，别照直觉写）：默认 reporter 下会多出一条独立的
+ * `● <describe> › <用例名>` 失败块、摘要行变 `Tests: 1 failed`；
+ * 但 **`✕` 字形只在 `--verbose` 下出现** —— 单套件运行时 jest 会自动 verbose，最容易被这个骗。
+ *
+ * 🔴 本用例**必须是文件内最后一个**：run 层（内存快照）的保护窗口 = `beforeAll` → 本用例，
+ * 往后追加用例会让它在文件中途提前跑，窗口变短（追加用例若弄脏文件，快照已消费、run 层抓不到）。
+ * committed 层不受顺序影响 —— `afterAll` 的 `verify()` 每次都重读磁盘与 `git show HEAD`，
+ * 会再报一次同一件事实（第二信号；**不宣称兜 teardown**：run 层已被本用例还原，中间无代码）。
+ *
+ * 🔴 为什么套一层 describe 而不是写成裸 `it`：实测 jest 的**显示顺序与执行顺序相反** ——
+ * 顶层 `it` 即便声明在所有 describe 之后（执行确实最后），reporter 也把它排在列表**最前面**，
+ * 于是叫「[必须最后]」的用例显示在第一行，读日志的人正好读反（`d1-a → d1-b → guard` 执行，
+ * 显示却是 `guard` 在最上）。包进「声明在最后的 describe」后：执行仍最后、显示也落在最后。
+ */
+describe('提交基线守卫（必须最后）', () => {
+  it('🔴 [必须最后] 磁盘 project.config.json 与 HEAD 一致（无回写）', () => {
+    const result = guard.verify();
+    // 失败时把整段 message（含 key 级 diff + 两条出路）原样落进断言差异里
+    expect(result.ok ? '' : result.message).toBe('');
+  });
+});
