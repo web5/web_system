@@ -313,6 +313,40 @@ function resolveCliBinary(env = process.env) {
   return 'cli';
 }
 
+/**
+ * 拼 cli 调用失败时的「真实错误」信息，供 catch 分支原样打印。
+ *
+ * 修的是什么：WECHAT_DEVTOOLS_CLI 未设时 resolveCliBinary 会回退成字面量 'cli'，
+ * spawn('cli') 抛 ENOENT；旧 catch 只打三条通用排查提示，看不到 code / stderr，
+ * 「缺环境变量」被读成「出码失败」，历史上按「开发者工具未登录」白排查过。
+ * 这里把三件事打出来：e.stderr（有内容时）、e.code、WECHAT_DEVTOOLS_CLI 是否已设置。
+ *
+ * 纯函数：不打印、不读 process.env（env 可注入），只返回多行文本；
+ * 退出码与成功路径均不受影响（调用方只多做一次 console.error）。
+ */
+function describeCliError(e, env = process.env) {
+  const lines = [];
+  const stderr = e && e.stderr != null ? String(e.stderr).trim() : '';
+  const message = e && e.message != null ? String(e.message).trim() : '';
+  if (stderr) lines.push(`   真实报错：${stderr}`);
+  else if (message) lines.push(`   真实报错：${message}`);
+
+  const code = e && e.code != null && e.code !== '' ? String(e.code) : '';
+  if (code) lines.push(`   错误码：${code}`);
+
+  const cliSet = !!(env && env.WECHAT_DEVTOOLS_CLI);
+  if (cliSet) {
+    lines.push('   WECHAT_DEVTOOLS_CLI：已设置');
+    if (code === 'ENOENT') {
+      lines.push('   归位：ENOENT = 该路径下找不到可执行文件，检查 WECHAT_DEVTOOLS_CLI 指向的 cli 是否存在');
+    }
+  } else {
+    lines.push('   WECHAT_DEVTOOLS_CLI：未设置 —— 此时回退成字面量 cli，spawn 报 ENOENT；');
+    lines.push('   真正原因是没配 CLI 路径，不是「出码失败」：设置 WECHAT_DEVTOOLS_CLI 指向开发者工具 cli，或把 cli 加进 PATH');
+  }
+  return lines.join('\n');
+}
+
 /** git 短 sha，用于 meta 说明与上传描述；非 git 环境降级 */
 function gitShortSha() {
   try {
@@ -485,6 +519,7 @@ function cmdPreview(opts) {
     console.error('[Publish]   1. 微信开发者工具已登录（cli islogin → {"login":true}）');
     console.error('[Publish]   2. --qr-output 必须是项目内路径（本脚本已写 .ci-output/cli-preview-qr.png，勿改 /tmp）');
     console.error('[Publish]   3. 设置 WECHAT_DEVTOOLS_CLI 指向 cli 二进制，或确保 cli 在 PATH 中（which cli）');
+    console.error(describeCliError(e));
     process.exit(1);
   }
   // cli 不产 meta.json，脚本自拼 meta 供 push 说明文案使用
@@ -528,6 +563,7 @@ function cmdUpload(opts) {
       run(cli, cliUploadArgs(ROOT, version, descInfo.desc), { stdio: 'inherit' });
     } catch (e) {
       console.error(`[Publish] ❌ cli 上传失败。排查：微信开发者工具已登录、版本号已递增（当前 v${version}）。`);
+      console.error(describeCliError(e));
       process.exit(1);
     }
   }
@@ -661,6 +697,7 @@ module.exports = {
   resolveMode,
   resolveTarget,
   resolveCliBinary,
+  describeCliError,
   gitShortSha,
   fmt,
   cliPreviewArgs,

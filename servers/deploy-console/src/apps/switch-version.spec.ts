@@ -41,6 +41,20 @@ describe('AppsService.switchVersion（2026-10-09 收敛，诊断 #1/#5/#3）', (
     expect(artifacts.writePointer).not.toHaveBeenCalled();
   });
 
+  it('#9027：表里残留带前缀脏值，版本列表仍能标出当前/上一版本', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    versionRepo.findOne.mockResolvedValue({
+      currentVersion: 'portal/b6ec9950',
+      previousVersion: 'portal/a1b2c3d4',
+    });
+    artifacts.listVersions.mockResolvedValue(['b6ec9950', 'a1b2c3d4']);
+    const result = await svc.listVersions('portal', 'prod');
+    expect(result.availableVersions).toEqual([
+      { ref: 'b6ec9950', isCurrent: true, isPrevious: false },
+      { ref: 'a1b2c3d4', isCurrent: false, isPrevious: true },
+    ]);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
 
