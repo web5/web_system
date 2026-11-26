@@ -14,11 +14,53 @@
 |---|---|
 | 出码 + 推企业微信（默认 cli 免白名单） | `npm run publish -- preview` |
 | 出预览码（开发版，扫码即用，cli） | `npm run publish -- preview --no-push` |
-| 上传开发版本（cli，脚本到此为止） | `npm run publish -- upload` |
+| 🔴 **验当前改动 / 本机多 worktree 共用 appid** | **第 0 步基线对齐 + cli 三步**（`cli open` → `cli cache --clean compile` → `npm run publish -- preview` 或 `cli preview`），详见下方「cli 三步与封装边界」 |
+| 上传开发版本（cli，脚本到此为止） | `npm run publish -- upload`（上传前必做版本复核、上传后必留 receipt，见 §8.1） |
 | 打印「设为体验版」人工分步指引（零副作用） | `npm run publish -- trial` |
 | 打印「提交审核 → 发布正式版」人工分步指引（零副作用） | `npm run publish -- release` |
 | 出预览码（ci，需白名单） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js` |
 | 上传开发版本（ci，脚本到此为止） | `MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js` |
+
+## 零之一、cli 三步与封装边界（2026-11-20 回流，验当前改动必读）
+
+`npm run publish -- preview` 的 cli 模式**只调第三步 `cli preview`**（`scripts/publish.js` 的 `cliPreviewArgs()` 返回 `['preview', '--project', …]`）。它**不代做** `cli open`（显式切项目目录）与 `cli cache --clean compile`（强清编译缓存）。
+
+🔴 **漏前两步的后果**：开发者工具 `reduxPersist:projectList` 里注册的是**上一次打开的项目目录**；本机多 worktree 共用同一 appid 时，旧 worktree 会覆盖主目录，只传 `--project` 出的码扫出来是**改动前的代码**（2026-11-18 / 11-19 实测两轮返工）。
+
+🔴 **第 0 步 · 基线对齐**（每轮出码 / 上传前跑一次；幂等、内容零变化，**不是 cli 步骤**）
+
+`scripts/publish.js` 的 `gitShortSha()` 取**本地 `HEAD` 的字面值**，写进 `cli-preview-qr.meta.json` 的 `gitSha` 与 `cli upload -d` 的描述。`HEAD` 只要落后于 master（分支自己的提交、或 master 上是 merge commit），即使与远端**逐字节一致**、`git diff origin/master` 为空，账面上的 sha 依然对不上，事后对账会被判成「码是旧版本出的」。2026-11-26 曾发生一次：出码早于 `--ff-only` 对齐 88 秒 —— 码对、凭证错。
+
+```bash
+git -C <出码目录> fetch origin master
+git -C <出码目录> merge --ff-only origin/master        # 报 diverged / 冲突 → 停手问人，不强行合
+git -C <出码目录> rev-parse --short HEAD               # 期望 == 下一行
+git -C <出码目录> rev-parse --short origin/master
+git -C <出码目录> status --porcelain                   # 期望：空
+```
+
+**判据（硬）**：`rev-parse HEAD` **严格等于** `rev-parse origin/master`。❌ 不接受「`git diff` 为空」「内容等价」「`HEAD` 是 merge 的父提交」作为通过理由 —— 那三样只证明码对，不解决账对。
+
+**对账锚点只认 `origin/master` 的实时 ref**（先 `fetch` 再比）。本仓 `enable-auto-merge` 会在 CI 全绿后自动合并 PR（除 `draft` / `no-automerge` 标签 / `feature/manual-review/` 前缀三种逃生口外；2026-11-26 实测全绿后 64 秒自合），所以「发布前 PR 保持未合、等人审批合并」在本仓**不成立**，不得当作基线假设。
+
+三步顺序不可省（`<主目录>` = 含本次改动的工程目录，用相对写法，不写绝对路径）：
+
+```bash
+# 🔴 必须与下面的 `npm run publish` 在**同一条 shell 命令**里 export：env 缺失时
+#    resolveCliBinary() 回落字面量 'cli' → 报 `spawn cli ENOENT`。这**不是**「开发者工具未登录」，
+#    别按登录态排查。判据：exit 1 + spawn 类报错 = 环境变量问题，不是包的问题
+#    （脚本 catch 不打印 e.stderr，看起来像出码失败）。
+export WECHAT_DEVTOOLS_CLI=<开发者工具 cli 绝对路径>
+CLI="$WECHAT_DEVTOOLS_CLI"
+$CLI islogin                                            # 期望 {"login":true}
+$CLI open --project <主目录>                            # ① 显式切目录
+$CLI cache --clean compile --project <主目录>          # ② 强制 TS 重编译、清缓存
+npm run publish -- preview --no-push                    # ③ 出码（等价于 cli preview）
+```
+
+**动手前 4 项核对**（缺一不执行）：① **先跑「第 0 步」**，该目录 `git rev-parse --short HEAD` == `git rev-parse --short origin/master`（**字面相等**）② `git status --porcelain` 为空 ③ 目标文件 sha256 与改动后一致 ④ 开发者工具 `reduxPersist:projectList` 中**已含 `<主目录>`**（不含、或其中最末一项不是本目录 ⇒ 本轮必须 `cli open`，它会把「上次打开的项目」换成本目录）；**判据看「本目录是否已注册」，不看「本机有几个 worktree」—— 数量随时在变，写死即过期**。仅做前 3 项 git 核对仍会踩同 appid 覆盖。
+
+> 🔴 **命令真源唯一**：出码命令全文只在本手册 §零 / §8.1 与 `scripts/publish.js`；接单第一步（判链 / 前置 / 完成判据）见 `docs/development/发布与出码-接单路由卡.md`。用户级 `mp-preview` skill 的「SSH dev + `preview.mjs` 为主通道」是 **11-12 历史口径，非执行入口**；出码走本手册 cli 三步、推送仍走该 skill 的 `wecom-push.mjs`。`miniprogram-ci` / 白名单通道只适用于 §1.3 所述固定出口 IP 执行机。
 
 > 🔴 **能力边界（务必先读，见 §8.3 / §九）**：本手册所有脚本**只到「上传开发版本」为止**。
 > 微信不向自建小程序开放「设为体验版 / 提交审核 / 发布」的服务端接口（开发者工具 CLI 共 19 个
@@ -143,8 +185,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 ### 3.1 出预览码（开发版，ci 模式 / miniprogram-ci）
 
 ```bash
-# ① 执行机上先对齐代码（防止基于旧源码构建）
-cd <repo> && git pull
+# ① 执行机上先对齐代码（防止基于旧源码构建）——统一走 §零之一「第 0 步 · 基线对齐」，不要用 git pull
+cd <repo> && git fetch origin master && git merge --ff-only origin/master
 
 # ② 出码
 cd apps/kedou-ai-minigram
@@ -181,7 +223,12 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 上传产物是公众平台后台「**开发版本**」列表中的一条，**不是体验版**；
 体验版须人工到 公众平台 → 版本管理 → 把该版本设为**体验版**，二维码才长期有效、可分给体验成员反复扫。
 
-> 上传前记得更新 `package.json` 的 `version`——微信要求版本号递增，重复会被拒。
+> 🔴 上传前**复核** `package.json` 的 `version`，不是「记得更新」就够：版本号唯一来源是出码目录的
+> `apps/<app>/package.json`（`publish.js` 用它写 `cli upload -v`、`-d` 描述与 meta 的 `version`，
+> **无任何交叉校验**），同机不同 worktree 可以差好几个版本号，读错目录**不会报任何错**。
+> 复核与留证的三行命令见 §8.1「上传前版本复核」。
+> 另：微信侧同一版本号只会有一条开发版本——同版本重传是**覆盖**（`✔ upload` 照常返回、desc 被改写），
+> 既不会新增条目、也不能用来判定「上一次到底传没传」。判上传只认后台条目（见 §8.1）。
 
 ### 3.3 真机复验（别省）
 
@@ -235,7 +282,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
 | 必须打开微信开发者工具才能上传 | ❌ 不需要。`miniprogram-ci` 直连微信后台，无头即可上传。`scripts/README.md` 里"开启服务端口"那条是陈旧说明 |
 | 本机 `curl ifconfig.me` 的 IP 就是出口 IP | ❌ 不一定，尤其走代理时。以微信报错里的 IP 为准 |
 | 预览码能一直用 | ❌ 有时效，过期重跑 |
-| 改了源码直接出码就行 | ❌ 先 `git pull`，否则构建的是旧源码 |
+| 改了源码直接出码就行 | ❌ 先对齐基线：§零之一「第 0 步」的 `fetch` + `merge --ff-only`（判据是 `HEAD` 与 `origin/master` **字面相等**），否则构建的是旧源码、账也对不上 |
 
 ---
 
@@ -412,6 +459,8 @@ prod 落后时（曾落后 88 个提交）会出现「开发版有语音、体�
 | 2026-11-10 | `publish.js` 新增 `--mode cli|ci`：默认 cli（微信开发者工具 CLI，免 IP 白名单），ci 降级为 `--mode ci`；§1.3 修正白名单口径 |
 | 2026-11-10 | 头部改为「同时适用两个包」；L1 标题覆盖版本管理；§5.3 修正 devtools apiBase 漂移（弃用的本地网关域名 → `https://dev.kedouai.com`，真源 `app.ts` 的 `resolveApiBase()`）；能力边界前置到速查表之后；新增 §3.4/§3.5 人工步骤、§九「版本管理指引（体验版 / 正式版）」；`publish.js` 新增 `trial` / `release` 纯打印零副作用子命令 |
 | 2026-11-12 | trial 体验版 apiBase 由 dev 切到 prod（`resolveApiBase()`：trial/release → `https://kedouai.com`，develop/开发者工具保持 dev）；§3.4/§3.5/§5.3/§六/§9.1-9.3 与 `publish.js`/`preview.js`/README 体验版口径同步更新 |
+| 2026-11-20 | 新增 §零之一「cli 三步与封装边界」（`publish.js` 的 cli 模式只做第三步 `preview`，不代做 `cli open` / 清编译缓存）；速查表补「cli 三步」行；补「命令真源唯一」blockquote |
+| 2026-11-26 | 5 个出码 / 上传坑并入：§零之一 新增「第 0 步 · 基线对齐」（判据 `rev-parse HEAD` **严格等于** `origin/master`，锚点只认远端实时 ref）与 `spawn cli ENOENT` 判据（`export WECHAT_DEVTOOLS_CLI` 须与 `npm run publish` 同一条命令）；「动手前 4 项核对」①④ 判据化、去掉写死 worktree 数量；§3.1 / §四 弃 `git pull` 改 `fetch` + `merge --ff-only`；§3.2 / §8.1 版本复核留证、上传 receipt、禁「重传验版本」；§8.2 补 env 失败形态；§8.3 补「上传零落盘」；§9.2 补「上传成功 ≠ 有码可扫」 |
 
 ---
 
@@ -447,6 +496,37 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci --page pages/chat/index/index
 ```
 
+🔴 **上传前版本复核（必做，并留证）**
+
+版本号唯一来源是出码目录的 `apps/<app>/package.json`：`publish.js` 用它写 `cli upload -v`、`-d` 描述与 meta 的 `version`，**无任何交叉校验**。同机不同 worktree 的版本号可以差好几个，读错目录不会有任何报错。
+
+```bash
+pwd                                                    # 期望：出码目录，不是主 worktree
+grep -n '"version"' apps/<app>/package.json            # 期望 == 本次目标版本
+git rev-parse --short HEAD                             # 期望 == origin/master（见 §零之一 第 0 步）
+```
+
+上面三行输出必须**原样写进发布回执**。上传是长期留存的审计凭证（不像预览码 25 分钟失效），版本号或 sha 错了无法靠「重出一张码」补救，只能再传一版。
+
+🔴 **上传后留 receipt（唯一可复核凭证）**
+
+`scripts/publish.js` 的 `cmdUpload`（upload 分支）与 `scripts/upload.js` **均零 fs 写** —— 上传成功与失败在文件系统上**长得一样**（都是「没有新文件」）。`.ci-output/` 里的 `cli-preview-qr.png` / `cli-preview-qr.meta.json` 是 **preview 专属**产物（只有 `cmdPreview` 写），**不能当 upload 凭据**。故上传结束必须由执行者落一份：
+
+```json
+// apps/<app>/.ci-output/upload-receipt-<version>-<sha>.json（字段缺一不算完成）
+{ "version": "…", "gitSha": "…", "originMasterSha": "…", "appid": "…", "cwd": "…",
+  "startedAt": "…", "finishedAt": "…", "exitCode": 0,
+  "cliStdoutTail": "<最后 20 行>", "verdict": "uploaded | failed" }
+```
+
+判据：**没有 receipt ≠ 没上传；有回执 md ≠ 传成功** —— 两者都必须与后台条目交叉核对。
+**唯一 upload 凭据 = 后台「开发版本」条目的 desc**。
+
+🔴 **禁止的验证姿势**：不要「再跑一次 `upload`，看是否报『版本已存在』」来验证上一次是否传成功 ——
+开发者工具 CLI 无列版本子命令（见本手册「能力边界」），同版本重传是**覆盖**、只会再吐一次 `✔ upload`，
+既区分不了「原本就成功」与「这次才成功」，还会污染审计记录。
+**唯一权威口径**：`https://mp.weixin.qq.com/` → 管理 → 版本管理 → **开发版本** 是否有该版本号条目（人工截图留证）。
+
 ### 8.2 推送链路与前置
 
 ```
@@ -458,6 +538,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 - **授权**：`wecom-cli auth show --status` 须为 `authorized`（一次性，掉授权时按 `wecomcli-shared` 走初始化）。
 - **cli 模式前置**：微信开发者工具已登录（`cli islogin` → `{"login":true}`），
   CLI 路径通过环境变量 `WECHAT_DEVTOOLS_CLI` 或 PATH 中的 `cli` 解析（脚本不硬编码）。
+  两者都没有时 `resolveCliBinary()` 回落**字面量 `'cli'`**，报 `spawn cli ENOENT`；须在跑
+  `npm run publish` 的**同一条 shell 命令**里先 `export`（三步代码块见 §零之一）。
 - **ci 模式前置**：`MINIPROGRAM_CI_PATH` + `private.key` + 出口 IP 白名单（见 §1.3）。
 - **目标会话**：`--to` 按会话名精确匹配（每次发送前现查 `sessions list`，不缓存）；缺省取第一个群（如公司群），
   `--to <会话名>` 指定；无群时回退第一个单聊。
@@ -476,6 +558,10 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
   **不会**提交审核、也**不会**设为体验版；「设为体验版 → 提交审核 → 发布」微信不向自建小程序
   开放服务端接口，须人工在公众平台操作（能力边界见本手册顶部「速查表之后」的 🔴 说明，
   完整分步指引见 §九）。脚本不代做、也不会自称已推进到体验版 / 正式版。
+- 🔴 **上传零落盘**：`cmdUpload` 与 `scripts/upload.js` 都不写任何文件，上传成功 / 失败在文件系统上
+  **无区别**；`.ci-output/` 里的文件都是**预览码**产物（`*.meta.json` 只服务 `cmdPreview`，
+  不能当 upload 凭据）。审计只认 `upload-receipt-*.json` + 后台「开发版本」条目的 desc，
+  不认「重跑一次没报错」，也不认「回执 md 写了成功」（见 §8.1）。
 
 ---
 
@@ -508,6 +594,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci -
 |---|---|
 | 二维码 | 长期可扫的是「公众平台设为体验版后由系统生成的体验版二维码」（官方口径 7 天）；本地 cli preview 出的 25 分钟码是开发版预览码，两者不是同一个东西。 |
 | 上传产物 | `npm run publish -- upload` 的产物是公众平台后台「开发版本」条目，不是体验版；设为体验版须人工点。 |
+| 上传成功 = 有码可扫 | ❌ 两者不同。`cli upload` 产出的「开发版本」是**后台条目、没有二维码**；微信「发现 → 小程序」里能搜到的只有**正式版**。预览码过期后**不要去微信里搜**（搜不到，也别据此判「发布失败」）——重跑 §零之一 三步；要长期码就让后台把该版本设为体验版。 |
 | 体验版连 prod | ⚠️ 体验版直连 prod：设为体验版前就须确认 prod 后端、接口、合法域名、AppSecret 均已就绪，再用真机验证。 |
 | 手填 path | 用公众平台自动生成二维码，勿手填 path：带 path 的旧码会一直生效，指向未注册页面会冷启动白屏（本包默认页为 `pages/home/index/index`）。 |
 | 小程序码 path 手填白屏 | 扫码白屏先查二维码 path，再查 request 合法域名；排查手法见 §5.2（二分：微信首页下拉直接点开小程序）。 |
