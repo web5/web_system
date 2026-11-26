@@ -15,7 +15,6 @@
     </view>
 
     <view class="list">
-      <view class="r" bindtap="goNce"><text>课文学习进度</text><text class="v">{{nceSummary}} ›</text></view>
       <view class="r" bindtap="goGlossary"><text>收藏</text><text class="v">{{glossarySummary}} ›</text></view>
     </view>
 
