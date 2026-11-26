@@ -12,8 +12,10 @@ function evaluateJob(filename: string, branch: string, draft: boolean, sameRepos
   // 求值前归一化成等价的 map 调用；labels 在测试上下文里是空数组，contains 结果为 false。
   const expression = raw.replace(/([A-Za-z_][\w.]*)\.\*\.(\w+)/g, '$1.map(item => item.$2)');
   const repository = 'web5/web_system';
+  // event_name 必须显式给出：auto-merge.yml 自 #666 起按 `github.event_name` 区分
+  // pull_request / workflow_run 两条路径，本组断言描述的是 pull_request 事件。
   return vm.runInNewContext('(' + expression + ')', {
-    github: { repository, ref_name: branch, event: { pull_request: { draft, labels: [], head: { ref: branch, repo: { full_name: sameRepository ? repository : 'fork/web_system' } } } } },
+    github: { repository, event_name: 'pull_request', ref_name: branch, event: { pull_request: { draft, labels: [], head: { ref: branch, repo: { full_name: sameRepository ? repository : 'fork/web_system' } } } } },
     startsWith: (value: string, prefix: string) => value.toLowerCase().startsWith(prefix.toLowerCase()),
     contains: (values: string[], value: string) => values.includes(value),
     fromJSON: JSON.parse,

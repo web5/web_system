@@ -311,6 +311,68 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     expect(saved).toMatchObject({ currentVersion: 'v1', previousVersion: 'v0' });
   });
 
+  // ==================== #9027：版本指针列只写纯 commit ====================
+
+  it('#9027：带模板前缀的 versionTag 落库前归一（current + previous + 云库镜像）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+      previousVersion: 'portal/a1b2c3d4',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'portal/c5d6e7f8',
+    });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved).toMatchObject({ currentVersion: 'c5d6e7f8', previousVersion: 'b6ec9950' });
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ currentVersion: 'c5d6e7f8' }),
+    );
+    // 返回给调用方的 from/previous 保持原值（只收敛落库值，不改编读取语义）
+    expect(r).toMatchObject({ from: 'portal/b6ec9950', previous: 'portal/a1b2c3d4' });
+  });
+
+  it('#9027：同 commit 仅前缀不同 → 写一次纯 commit 自愈，previous 不被自指覆盖', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+      previousVersion: 'a1b2c3d4',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'b6ec9950',
+    });
+    expect(r.unchanged).toBe(false);
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved).toMatchObject({ currentVersion: 'b6ec9950', previousVersion: 'a1b2c3d4' });
+  });
+
+  it('#9027：syncAppEnvPointer（legacy 双写路径）同样归一，不写脏 previous', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+    });
+    await svc.syncAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'portal/b6ec9950',
+    });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved.currentVersion).toBe('b6ec9950');
+    expect(saved.previousVersion).toBeUndefined();
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ currentVersion: 'b6ec9950' }),
+    );
+  });
+
   it('clearAppEnvPointer：本地删行 + 云库删除补偿（首次写入回滚用）', async () => {
     const row = { appKey: 'portal', envId: 'prod', currentVersion: 'v1' };
     appVersionRepo.findOne.mockResolvedValue(row);

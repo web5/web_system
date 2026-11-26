@@ -143,6 +143,28 @@ export function toCommitId(ref?: string | null): string | undefined {
   return parseReleaseRef(v).version;
 }
 
+/**
+ * 归一到**纯 commit**（`deploy_app_env_versions.current_version` 的列契约）。
+ *
+ * 与 {@link toCommitId} 的区别（**别拿来互相替换**）：
+ * - `toCommitId` 是「取末段」的**宽松**解析，只切第一个 `/`，剩段仍原样保留
+ *   （`a/b/c` → `b/c`）；它是产物目录引用的解析口径，`version` 允许含 `/`。
+ * - 本函数是**列的格式契约**：版本指针列只允许纯短哈希。整串按 `/` 切开取
+ *   **最后一段**，因此多段前缀（`portal/prod/b6ec9950`）也能收敛；空值 → undefined。
+ *
+ * 为什么必须有它：`current_version` 历史上被写成 `<templateKey>/<commit>`
+ * （台账 #9027：`portal/b6ec9950`），gateway 靠 `toCommitId` 兜底才没 404。
+ * 靠读取端容错不是设计 —— 任何一处改成字符串精确比对（回滚判断、缓存 key）
+ * 就会误判。故在**写入端**（`ReleaseRegistryService` 落 `deploy_app_env_versions`
+ * 的那一层）统一归一，让列里只剩一种拼写。
+ */
+export function normalizeCommitRef(ref?: string | null): string | undefined {
+  const v = String(ref ?? '').trim();
+  if (!v) return undefined;
+  const segs = v.split('/').map((s) => s.trim()).filter(Boolean);
+  return segs.length ? segs[segs.length - 1] : undefined;
+}
+
 // ── Phase 2：CDN 布局（`<env>/<app>/<commit>`）─────────────────
 // 设计见 specs/static-cdn-phase2/design.md。
 //

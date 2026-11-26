@@ -93,6 +93,40 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       expect(calls[1].params.slice(0, 4)).toEqual(['shell', 'prod', 'v2', 'v1']);
     });
 
+    it('#9027：带模板前缀的版本落云库前归一（current 只存纯 commit，previous 也归一）', async () => {
+      const { cloud, calls, setQuery } = makeCloud({ enabled: true });
+      setQuery(async (sql: string) =>
+        sql.startsWith('SELECT')
+          ? [{ current_version: 'portal/a1b2c3d4', previous_version: 'portal/0912abc3' }]
+          : [],
+      );
+      const svc = new EnvSplitWriterService(cloud);
+
+      const r = await svc.mirrorPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'portal/b6ec9950',
+      });
+
+      expect(r.outcome).toBe('ok');
+      expect(calls[1].params.slice(0, 4)).toEqual(['portal', 'prod', 'b6ec9950', 'a1b2c3d4']);
+    });
+
+    it('#9027：云库已是同 commit 的脏值 → current 写成纯 commit 自愈，previous 保留并归一', async () => {
+      const { cloud, calls, setQuery } = makeCloud({ enabled: true });
+      setQuery(async (sql: string) =>
+        sql.startsWith('SELECT')
+          ? [{ current_version: 'portal/b6ec9950', previous_version: 'portal/a1b2c3d4' }]
+          : [],
+      );
+      const svc = new EnvSplitWriterService(cloud);
+
+      await svc.mirrorPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'b6ec9950' });
+
+      // 不能变成 previous_version = portal/b6ec9950（同版本自指）
+      expect(calls[1].params.slice(0, 4)).toEqual(['portal', 'prod', 'b6ec9950', 'a1b2c3d4']);
+    });
+
     it('严格模式：prod 写云库失败 → 抛出（任务必须红掉，不能静默不一致）', async () => {
       const { cloud } = makeCloud({ enabled: true, strict: true });
       (cloud.query as jest.Mock).mockRejectedValue(new Error('ETIMEDOUT'));
