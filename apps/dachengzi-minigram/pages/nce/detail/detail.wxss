@@ -1,5 +1,6 @@
-/* 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图：点句中文 / 点词 tip / 长按气泡 / 单句朗读）
-   无常驻 ♪/☆ 控件；朗读仅由气泡「朗读此句」触发，tts 服务零改动。
+/* 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图：点句中文 / 点词 tip / 长按抽屉 / 单句朗读）
+   无常驻 ♪/☆ 控件；朗读由「长按 → 底部抽屉『朗读此句』」触发，停止由播放中行尾的极小 ■ 承担
+   （U1，2026-11-26 19:15 拍板）；tts 服务零改动。
    选项 A（18 §5）：D-01/D-02 锚定浮层 · D-03 配色反相 · D-04/D-11 信息结构与操作提示
    · D-06 词点线 · D-07 展开态蓝系 · D-09 句序号；D-05/D-08/D-10 不做。
    2026-11-19 19:11 用户口径变更：① 英文正文统一正常黑（.w.hit 不再蓝）；
@@ -64,13 +65,16 @@
 .wt-none { font-size: 26rpx; color: #6B7280; margin-top: 10rpx; }
 .wt-ex { font-size: 24rpx; color: #4B5563; margin-top: 10rpx; font-style: italic; }
 
-/* D-02 / D-03：长按气泡 = 深色紧凑气泡，absolute 锚定被长按句，视觉层级与 tip 相反 */
-.bubble { position: absolute; left: 0; top: 0; z-index: 61; width: 340rpx; display: flex; background: #1F2937; border-radius: var(--r-control); box-shadow: 0 12rpx 40rpx rgba(0,0,0,.22); overflow: hidden; }
-.bi { flex: 1; text-align: center; padding: 22rpx 0; font-size: 26rpx; color: #FFFFFF; }
-.bi + .bi { border-left: 1rpx solid rgba(255,255,255,.18); }
-.bi:active { background: rgba(255,255,255,.12); }
-/* 2026-11-26 ③ 长按生词气泡：形状/配色复用 .bubble，仅层级高于句子气泡（两者互斥出现） */
-.word-bubble { z-index: 62; }
+/* 2026-11-26 变体 B：长按气泡（.bubble / .bi / .word-bubble）整体删除 —— 长按改走公共
+   `components/action-drawer`（贴底通栏抽屉 + 遮罩），抽屉样式与手势全在组件内，
+   本页不再有任何「锚定坐标」相关样式（原 .bubble 的 position:absolute + 内联 left/top 已消失）。 */
+
+/* 🔴 U1（2026-11-26 19:15 拍板）：句子行尾「■ 停止」。
+   只在 readingLineIdx === si 时由 wxml 渲染（不播放时不存在），故不是常驻控件，
+   与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突（理由见 detail.ts stopLineSpeak 注释）。
+   极小的方块：字面 20rpx，热区靠 padding 撑到 ~40rpx；行内元素，紧跟在句末（沉浸档也是行尾）。 */
+.sent-stop { margin-left: 10rpx; padding: 0 10rpx; font-size: 20rpx; line-height: 1.6; color: #3B82F6; vertical-align: middle; }
+.sent-stop:active { background: #DBEAFE; border-radius: 6rpx; }
 
 .modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 200; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 0 48rpx; }
 .modal .box { width: 100%; max-width: 560rpx; background: #FFFFFF; border-radius: var(--r-control); padding: 40rpx 32rpx 28rpx; }
