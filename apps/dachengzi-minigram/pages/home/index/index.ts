@@ -742,18 +742,6 @@ Page({
   },
 
   /**
-   * 🔴 U1（2026-11-26 19:15 用户拍板）：句子行尾「■ 停止」。
-   * 只在 `quotePlaying === true` 时渲染（不播放时节点根本不存在，不是常驻控件）；
-   * 点击 = `stopSpeak()` + 播放态显式归零（不依赖 tts 一定推出 null）。
-   */
-  stopQuoteSpeak() {
-    stopSpeak();
-    this._speakingWord = '';
-    this._playingText = '';
-    this.setData({ quotePlaying: false, quoteWordPlaying: '' });
-  },
-
-  /**
    * 朗读状态：null 复位；非 null 时**按 tts 推来的权威文本**点亮对应按钮（P2-1）。
    * 🔴 不能用 _speakingWord 反推：speakText 内部会先 stopSpeak() 推一次 null，
    *    页面收到 null 就把标记位清零，紧接着的 loading/playing 用清零后的标记算 → 永远点不亮

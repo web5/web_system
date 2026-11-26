@@ -9,7 +9,8 @@
  *  2. **长按两个入口**：任意英文单词 → `scope='word'`（4 项，含表外词）；英文句子空白 →
  *     `scope='line'`（2 项）。4 项/2 项由组件 `actionsOf` 决定，这里用真实组件实例验证。
  *  3. **E1**：点按普通词（`hasDef=false`）不弹词卡、`overlay` 不变。
- *  4. **U1**（19:15 拍板）：`quotePlaying=true` 才渲染行尾 ■，点击 = stopSpeak + 归零。
+ *  4. **U1 去重**（2026-11-26）：首页**不**实现行尾 ■，停止入口只有页脚 `.dq-act`；
+ *     反向断言锁死 `.sent-stop` / `stopQuoteSpeak` 不回潮（详情页 U1 不受影响）。
  *  5. **K9**（tabBar 常驻页）：`onHide` 必须把 `overlay` 归零，否则返回首页时抽屉「自己回来」。
  *  6. **不复制实现**：页面里不得出现第二份抽屉 UI / 第二份动作表（静态断言）。
  *
@@ -342,40 +343,46 @@ describe('K9：tab 页返回时抽屉不得自己回来', () => {
   });
 });
 
-/* ─────────────────────────── U1：行尾 ■ 停止 ─────────────────────────── */
+/* ──────── 首页停止朗读入口去重（U1 行尾 ■ 与页脚 .dq-act 冗余 → 保留页脚） ──────── */
 
-describe('U1：朗读中行尾 ■ 停止（19:15 拍板）', () => {
-  it('quotePlaying=true 时才渲染 ■，且挂在英文句子容器行尾', () => {
-    const w = stripWxmlComments(src('pages/home/index/index.wxml'));
-    const tag = (/<text wx:if="\{\{quotePlaying\}\}"[^>]*>■<\/text>/).exec(w);
-    expect(tag).not.toBeNull();
-    expect((tag as RegExpExecArray)[0]).toContain('catchtap="stopQuoteSpeak"');
-    // 位置：在 .daily-en 容器内部（行尾），不是页脚按钮
-    const enOpen = w.indexOf('class="daily-en"');
-    const enBlock = w.slice(enOpen, w.indexOf('daily-foot', enOpen));
-    expect(enBlock).toContain('stopQuoteSpeak');
+describe('首页停止入口只有一处：页脚 .dq-act（U1 行尾 ■ 已去重）', () => {
+  /**
+   * 🔴 反向断言，不是「把断言删掉」：将来有人把行尾 ■ 加回首页 → 这条必须变红。
+   * 裁决（用户 2026-11-26 拍板 U1；home 侧判定冗余）：U1 的初衷是补详情页「关掉抽屉后
+   * 没有任何停止入口」这个空洞；首页页脚本来就有「▶ 朗读 / ■ 停止」+「☆ 收藏」，再叠
+   * 一个行尾 ■ 会让用户同屏看到两个 ■。详情页 pages/nce/detail/ 的 U1 保留
+   * （由 tests/nce-detail-drawer.test.ts 守护）。
+   */
+  it('首页 wxml 不得出现 .sent-stop 行尾节点 / stopQuoteSpeak 绑定', () => {
+    const w = src('pages/home/index/index.wxml');
+    expect(w).not.toMatch(/class="sent-stop"/);
+    expect(w).not.toContain('stopQuoteSpeak');
   });
 
-  it('不播放时不渲染：没有无条件的 ■ 节点（行尾按钮只在播放态出现）', () => {
-    const w = stripWxmlComments(src('pages/home/index/index.wxml'));
-    // 所有带 ■ 的节点都必须带 wx:if 守卫
-    const hits = Array.from(w.matchAll(/<text([^>]*)>■<\/text>/g)).map((m) => m[1]);
-    expect(hits.length).toBeGreaterThan(0);
-    hits.forEach((attrs) => expect(attrs).toContain('wx:if="{{quotePlaying}}"'));
+  it('index.ts 不得再定义 stopQuoteSpeak（去重后无调用方，留着即死代码）', () => {
+    expect(src('pages/home/index/index.ts')).not.toContain('stopQuoteSpeak');
   });
 
-  it('点击 ■ → stopSpeak + 播放态归零', async () => {
+  it('页脚保留唯一停止入口：.dq-act + quotePlaying 时文案「■ 停止」/ 否则「▶ 朗读」', () => {
+    const w = stripWxmlComments(src('pages/home/index/index.wxml'));
+    const footOpen = w.indexOf('class="daily-foot"');
+    expect(footOpen).toBeGreaterThan(-1);
+    const foot = w.slice(footOpen);
+    // 同一节点：播放态高亮 .on + 点按走 speakQuote（同句 same-text → tts 停止）
+    expect(foot).toContain('class="dq-act {{quotePlaying ? \'on\' : \'\'}}" catchtap="speakQuote"');
+    expect(foot).toContain("{{quotePlaying ? '■ 停止' : '▶ 朗读'}}");
+  });
+
+  it('页脚「■ 停止」走 speakQuote → speakText(整句)，与整句点按同一 handler', async () => {
     const ctx = await ctxWithWords();
     ctx._onSpeakState({ text: QUOTE_EN, phase: 'playing' });
     expect(ctx.data.quotePlaying).toBe(true);
 
     stopSpeakMock.mockClear();
-    ctx.stopQuoteSpeak();
-
-    expect(stopSpeakMock).toHaveBeenCalledTimes(1);
-    expect(ctx.data.quotePlaying).toBe(false);
-    expect(ctx.data.quoteWordPlaying).toBe('');
-    expect(ctx._playingText).toBe('');
+    ctx.speakQuote();
+    expect(speakTextMock).toHaveBeenCalledWith(QUOTE_EN);
+    // 不再有独立的 stopQuoteSpeak 路径：停止语义由 speakText 的 same-text 负责（tts 侧契约）
+    expect((ctx as any).stopQuoteSpeak).toBeUndefined();
   });
 });
 
