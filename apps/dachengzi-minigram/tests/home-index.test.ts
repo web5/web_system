@@ -14,6 +14,18 @@ jest.mock('../utils/tabbar', () => ({
   setTabBarSelected: jest.fn(),
   TAB_INDEX: { home: 0, discover: 1, mine: 2 },
 }));
+// 首页 index.ts 新增「动态问候」接线后 import 了 services/account 与 utils/greeting。
+// 本文件只测常用功能 / 跳转，不测问候，故把这两条依赖隔离成桩（只补依赖隔离，
+// 不改任何既有用例与断言）；问候本身的接线契约见 tests/home-greeting-wiring.test.ts。
+jest.mock('../services/account', () => ({
+  readLocalNickname: jest.fn(() => ''),
+  fetchProfile: jest.fn(() => Promise.resolve({ id: 1, username: 'u' })),
+  isNicknameUnset: jest.fn((n?: string) => !n || n.startsWith('wx_')),
+}));
+jest.mock('../utils/greeting', () => ({
+  formatGreeting: jest.fn((nick: string, hour: number) => `${nick || '同学'}，H${hour}`),
+  getLocalHour: jest.fn(() => 9),
+}));
 
 import { isLoggedIn } from '../services/auth';
 

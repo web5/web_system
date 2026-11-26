@@ -2,8 +2,9 @@
  * 大橙子英语 · 我的（tab 3）
  *
  * 整改后（specs/dachengzi-minigram/review-remove-ai-2026-11-13.md §2/§3.3）：
- * 头像卡 + 课文学习进度 + 收藏（原生词本）+ 设置 + 协议 + 关于。
+ * 头像卡 + 收藏（原生词本）+ 设置 + 协议 + 关于。
  * 已删除：我的翻译记录、翻译设置两行，及其 translate-keys / feature-flags 依赖。
+ * 2026-11-23（原型 114 / S9）：移除未完成的「学习进度」行——进度暂无落库接口，不编造数字。
  *
  * 数字一律读真数据，读不到就显示空 / 未开始，绝不写死假数字。
  */
@@ -27,8 +28,6 @@ Page({
     email: '',
     /** 收藏条数摘要 */
     glossarySummary: '0 条',
-    /** 课文学习进度：暂无进度落库接口，先显示「未开始」（不编造数字） */
-    nceSummary: '未开始',
   },
 
   _offAuthExpired: null as (() => void) | null,
@@ -129,8 +128,6 @@ Page({
   },
 
   goProfile() { wx.navigateTo({ url: '/pages/mine/profile/profile' }); },
-  /** 课文学习进度：进课文列表（进度暂无落库接口） */
-  goNce() { wx.navigateTo({ url: '/pages/nce/index/index' }); },
   goGlossary() { wx.navigateTo({ url: '/pages/mine/glossary/index' }); },
   goAppSettings() { wx.navigateTo({ url: '/pages/mine/settings/settings' }); },
   goAgreement() { wx.navigateTo({ url: '/pages/mine/agreement/agreement' }); },
