@@ -180,6 +180,8 @@ function parseArgs(argv) {
     else if (a.startsWith('--expect-sha=')) opts.expectSha = a.slice('--expect-sha='.length);
     else if (a === '--require-dir') opts.requireDir = argv[++i];
     else if (a.startsWith('--require-dir=')) opts.requireDir = a.slice('--require-dir='.length);
+    else if (a === '--expect-version') opts.expectVersion = argv[++i];
+    else if (a.startsWith('--expect-version=')) opts.expectVersion = a.slice('--expect-version='.length);
     else if (a === '--allow-dirty') opts.allowDirty = true;
     else opts._.push(a);
   }
@@ -478,6 +480,10 @@ function writeCliMeta(outPath, meta) {
  *
  * mode 会透传进 preflight：cli 模式要求「包根无私钥 + 开发者工具 CLI 可执行」；
  * ci 模式（miniprogram-ci）则相反 —— 私钥是必需文件，改由 packOptions.ignore 兜底。
+ *
+ * 🔴 expectVersion 必须透传：preflight.js 支持 opts.expectVersion（P1 版本一致性），
+ *    但只传 expectSha / requireDir 的话，最常用的出码入口上「期望版本」这一项**静默失效**
+ *    —— 能力在、调用方没接线，等于没有。缺的是调用方，不是能力。
  */
 function preflightGate(opts, sub) {
   if (opts.skipPreflight) {
@@ -486,6 +492,7 @@ function preflightGate(opts, sub) {
   }
   const result = preflight.runPreflight({
     mode: resolveMode(opts.mode),
+    expectVersion: opts.expectVersion,
     expectSha: opts.expectSha,
     requireDir: opts.requireDir,
     allowDirty: opts.allowDirty,
@@ -691,6 +698,7 @@ function main(argv) {
         '',
         '  --skip-preflight  preview / upload 跳过出码前检查（打印「风险自负」，仅限已知异常场景）。',
         '  --expect-sha <sha> 声明期望 HEAD sha，preflight 核对，不符即阻断；可用逗号给多个候选（019d282b,47f74ba8）。',
+        '  --expect-version <ver> 声明期望版本号（如 1.0.18），preflight 与 package.json / utils/version.ts 对账，不符即阻断。',
         '  --require-dir <正则> 把「目录白名单」从警告升级为硬拦，发布轮次建议 ^web_system-1018(-r2)?$。',
         '  --allow-dirty     放行「会进包的未提交改动」（默认阻断，打印警告）。',
         '',
@@ -708,6 +716,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArgs,
+  preflightGate,
   resolveMode,
   resolveTarget,
   resolveCliBinary,
