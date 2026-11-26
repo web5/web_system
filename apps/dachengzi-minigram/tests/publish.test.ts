@@ -80,6 +80,8 @@ interface PublishModule {
   DESC_MAX_LEN: number;
   buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
   writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
+  readAppVersionConst: () => string;
+  assertVersionConsistent: (version: string) => void;
   pushQr: (pngPath: string, toName?: string) => void;
   uploadMedia: (filePath: string, type?: string) => {
     media_id?: string;
@@ -849,5 +851,74 @@ describe('cmdTrial / cmdRelease：纯打印人工分步指引（零副作用）'
     expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_TRIAL(pkg.version));
     publish.cmdRelease();
     expect(logSpy).toHaveBeenCalledWith(publish.GUIDE_RELEASE(pkg.version));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 版本号一致性硬校验（1.0.18 · 关于页 v1.0.0 事故的脚本侧防线）
+//
+// 背景：1.0.17 的包 version=1.0.17，但关于页模板写死 v1.0.0 —— 两处版本当初没有任何
+// 联动。现在 package.json.version 与 utils/version.ts 的 APP_VERSION 必须一致，
+// 不一致时上传必须硬失败，绝不把「界面版本号错位」的包发出去。
+// ---------------------------------------------------------------------------
+describe('assertVersionConsistent（上传前版本号漂移硬校验）', () => {
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+  });
+
+  it('readAppVersionConst 从 utils/version.ts 读出 APP_VERSION，且与 package.json 相等', () => {
+    const declared = publish.readAppVersionConst();
+    expect(declared).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(declared).toBe(pkg.version);
+  });
+
+  it('一致时放行：不 exit、不报错（正常上传不被误拦）', () => {
+    publish.assertVersionConsistent(pkg.version);
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+
+  it('不一致时 exit 1，且把两边的值都打印出来（便于定位改哪边）', () => {
+    const declared = publish.readAppVersionConst();
+    const drifted = '0.0.1';
+    expect(declared).not.toBe(drifted);
+
+    expect(() => publish.assertVersionConsistent(drifted)).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const printed = errSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(printed).toContain(`package.json=${drifted}`);
+    expect(printed).toContain(declared);
+  });
+
+  it('cmdUpload 在漂移时先 exit 1，绝不发起上传（校验必须在上传命令之前）', () => {
+    const realRead = fsCore.readFileSync;
+    const spy = jest
+      .spyOn(fsCore, 'readFileSync')
+      .mockImplementation(((p: unknown, enc?: unknown) => {
+        if (String(p).endsWith(path.join('utils', 'version.ts'))) {
+          return "export const APP_VERSION = '0.0.1';\n";
+        }
+        return (realRead as (a: unknown, b?: unknown) => unknown)(p, enc);
+      }) as never);
+
+    try {
+      expect(() => publish.cmdUpload({})).toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(mockChildProcess.execFileSync).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
