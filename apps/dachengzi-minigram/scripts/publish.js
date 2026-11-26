@@ -25,6 +25,17 @@
  * 🔴 边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须人工在
  *    微信公众平台操作，微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。
  *
+ * 🔴 出码前检查（preflight，见 scripts/preflight.js）：
+ *    preview / upload 两个子命令的**第一步**就跑四项硬检查 ——
+ *      P1 版本真实性（package.json.version == utils/version.ts 的 APP_VERSION，缺 version.ts 即失败）
+ *      P2 私钥不入包（包根出现 *.key / *.pem → 硬失败，P0 安全项）
+ *      P3 工作区身份（打印分支@sha；给了 --expect-sha 就核对，不符即失败）
+ *      P4 目录白名单提示（不在 web_system-<任务号> 命名内 → 只警告）
+ *    失败即 exit 1，**先于任何 CLI 调用**；push / trial / release 三个子命令不受影响。
+ *    --skip-preflight 显式跳过（打印「已跳过出码前检查，风险自负」），只留给已知异常场景。
+ *    起因：web_system-dachengzi 这个分支名叫 devtools/dachengzi-preview 的 worktree 里
+ *    躺着 1.0.14 的代码 + 一个真 private.key —— 一次「顺手出个预览码」就是旧包 + 私钥外发。
+ *
  * 前置：
  *   cli 模式（默认，免 IP 白名单）：
  *     1. 微信开发者工具已登录（cli islogin → {"login":true}）
@@ -42,6 +53,7 @@
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const preflight = require('./preflight');
 
 const ROOT = path.join(__dirname, '..');
 const CI_OUT = path.join(ROOT, '.ci-output');
@@ -163,6 +175,9 @@ function parseArgs(argv) {
     else if (a.startsWith('--desc=')) opts.desc = a.slice('--desc='.length);
     else if (a === '--no-push') opts.noPush = true;
     else if (a === '--notify') opts.notify = true;
+    else if (a === '--skip-preflight') opts.skipPreflight = true;
+    else if (a === '--expect-sha') opts.expectSha = argv[++i];
+    else if (a.startsWith('--expect-sha=')) opts.expectSha = a.slice('--expect-sha='.length);
     else opts._.push(a);
   }
   return opts;
@@ -447,6 +462,27 @@ function writeCliMeta(outPath, meta) {
 
 // ---------- 子命令 ----------
 
+/**
+ * 出码前硬门禁（preview / upload 入口第一件事）。
+ *
+ * 🔴 为什么放在 main() 的子命令分支最前面，而不是 cmdPreview / cmdUpload 内部：
+ *    1. 位置等价于「子命令第一步」，且**先于任何 CLI 调用**（两条路的第一个动作就是它）；
+ *    2. cmdPreview / cmdUpload 被单测直接调用时保持纯函数语义 —— publish.test.ts 是
+ *       「向后兼容基准」（文件里明确写着「不得为了让测试变绿而改它」），
+ *       把 spawn git 的门禁塞进 cmdUpload 会污染它「execFileSync 零调用」的断言。
+ *
+ * 🔴 失败就 exit 1，不给「继续出码」的口子；唯一例外是显式 --skip-preflight（打印风险自负）。
+ */
+function preflightGate(opts) {
+  if (opts.skipPreflight) {
+    console.warn('[Preflight] ⚠️ 已跳过出码前检查，风险自负（--skip-preflight）');
+    return;
+  }
+  const result = preflight.runPreflight({ expectSha: opts.expectSha });
+  preflight.printReport(result);
+  if (!result.ok) process.exit(1);
+}
+
 function cmdPreview(opts) {
   const mode = resolveMode(opts.mode);
   if (mode === 'ci') {
@@ -607,9 +643,13 @@ function main(argv) {
 
   switch (sub) {
     case 'preview':
+      // 出码前硬门禁：站错目录 / 带私钥 / 版本不对，一律跑不起来（--skip-preflight 可显式跳过）
+      preflightGate(opts);
       cmdPreview(opts);
       break;
     case 'upload':
+      // 同上；--skip-preflight 时打印「风险自负」后照旧走原逻辑
+      preflightGate(opts);
       cmdUpload(opts);
       break;
     case 'push':
@@ -636,6 +676,9 @@ function main(argv) {
         '  --desc <文本>  upload 专用。自定义开发版本描述（后台备注），可写 `--desc=文本`。',
         '                不传则用默认格式「cli 上传 v<版本> @ <sha>」；',
         '                传了则「<文本> | v<版本> @ <sha>」，版本与 sha 一律保留便于审计。',
+        '',
+        '  --skip-preflight  preview / upload 跳过出码前四项检查（打印「风险自负」，仅限已知异常场景）。',
+        '  --expect-sha <sha> 声明期望 HEAD 短 sha，preflight 会核对，不符即阻断（也可写 --expect-sha=xxx）。',
         '',
         '  边界：本脚本只到「上传开发版本」为止；设为体验版 / 提交审核 / 发布须在微信公众平台人工操作，',
         '        微信不向自建小程序开放对应接口，脚本不代做、也不会自称已推进。',
