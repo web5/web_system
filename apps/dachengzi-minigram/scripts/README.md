@@ -99,9 +99,15 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 # cli 模式（默认）
 npm run preview   # 等价于 publish preview --no-push 的 cli 路径（见下）
 
-# ci 模式
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
+# ci 模式（同样过 preflightGate，见下方红字）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ```
+
+> 🔴 **别直连 `node scripts/preview.js` / `node scripts/upload.js`**：这两个是**无门禁**的底层实现，
+> 直连等于跳过 `publish.js` 的 `preflightGate`（P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 /
+> P4 目录 / P5 工作区干净 / P6 CLI）。ci 模式经 `publish.js --mode ci` 走的是**同一道门**，
+> 只是 P2 / P6 换判据（ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖、P6 不判开发者工具 CLI）——
+> **换判据不是绕过**。
 
 预览成功后二维码落在 `.ci-output/cli-preview-qr.png`（cli）或 `.ci-output/preview-qr.png`（ci），
 用微信扫码即可预览。
@@ -112,8 +118,8 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/preview.js
 # cli 模式（默认）
 npm run publish -- upload
 
-# ci 模式
-MINIPROGRAM_CI_PATH=<ci-dir>/node_modules node scripts/upload.js
+# ci 模式（同样过 preflightGate）
+MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- upload --mode ci
 ```
 
 上传成功后会输出版本号，并在控制台打印「脚本到此为止」的分步指引。上传产物是公众平台后台
