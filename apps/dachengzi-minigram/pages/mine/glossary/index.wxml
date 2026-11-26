@@ -10,7 +10,13 @@
       <view class="en">{{item.enMain}}</view>
       <view class="src" wx:if="{{item.sourceText}}">{{item.sourceText}}</view>
       <view class="note" wx:if="{{item.note}}">{{item.note}}</view>
-      <view class="meta" wx:if="{{item.metaText}}">{{item.metaText}}</view>
+      <view class="meta" wx:if="{{item.metaText || item.unlistedText}}">
+        <text wx:if="{{item.metaText}}">{{item.metaText}}</text>
+        <!-- E3（2026-11-26 19:15 拍板）：普通词（课文词表未收录）收藏 → 「未收录」灰标。
+             判据在 index.ts `apply()`：只有 meta.hasDef === false 才给 unlistedText，
+             历史数据（无 hasDef 字段）不显示，避免把旧收藏统统标成未收录。 -->
+        <text wx:if="{{item.unlistedText}}" class="unlisted">{{item.unlistedText}}</text>
+      </view>
       <view class="x" data-id="{{item.id}}" bindtap="onRemove" aria-label="删除">
         <view class="x1"></view>
         <view class="x2"></view>

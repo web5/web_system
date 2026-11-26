@@ -14,6 +14,15 @@
  *  - 收藏：整句收藏（tag='nce'）与单词收藏（tag='word'）都落 collectGlossary。
  *  - 生词表来源：今日一句缓存只带 book/lessonId，需回查课文详情（utils/quote-words 缓存 7 天）；
  *    取不到词表时降级为「只保留整句朗读/收藏」，不把表外词当生词乱标下划线。
+ *
+ * 2026-11-26 step2（变体 B，复用 step0 公共层）：
+ *  - **渲染结构改造**：所有英文 token 都渲染成 `<text class="dw">` 节点（不再「生词有节点、
+ *    表外词是纯文本」），否则「长按任意英文单词」没有可挂事件的载体；
+ *  - 浮层收敛成**一个** `overlay`（原 `quoteTip` 并入，`kind:'drawer'|'wordtip'`）→ 物理上不可能两开；
+ *  - 长按单词 → 抽屉四项（生词/表外词同一路径）；长按英文句子空白 → 抽屉两项；
+ *  - 点按表外词无反应（E1）；收藏表外词时 `meta.hasDef=false`（收藏页 E3「未收录」灰标的判据）；
+ *  - U1：朗读中在英文句子行尾显示极小 `■`（仅播放时渲染）；
+ *  - K9：首页是 tabBar 常驻页，`onHide` 必须把 `overlay` 归零，否则返回时抽屉「自己回来」。
  */
 import { isLoggedIn } from '../../../services/auth';
 import { readLocalNickname, fetchProfile, isNicknameUnset } from '../../../services/account';
@@ -27,6 +36,12 @@ import { collectGlossary } from '../../../services/glossary';
 import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
 import { lookupWord, type WordLookup } from '../../../utils/lexicon';
 import { readWordsCache, writeWordsCache } from '../../../utils/quote-words';
+// 公共层（2026-11-26 step0 已建，本页**只复用不复制**）：
+//   - 抽屉 UI / 动作集合 / 手势 → `components/action-drawer/`（由 wxml 挂载，本页不画一格）
+//   - 收藏 toast 文案是唯一纯函数 → `utils/line-actions.collectToastText`
+// 🔴 本页不得再写一份 `actionsOf` / ACTIONS 表：动作顺序（行=对象、列=动词）只有那一份真源，
+//    第二条真源必然漂移（tests/home-action-drawer.test.ts 有静态断言兜住）。
+import { collectToastText } from '../../../utils/line-actions';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
@@ -81,8 +96,47 @@ interface FeatureTapEvent {
 }
 
 interface QuoteTapEvent {
-  currentTarget: { dataset: { w?: string } };
+  currentTarget: { dataset: { w?: string; hasdef?: boolean | string } };
 }
+
+/**
+ * 单槽位浮层（方案 §4.1 / D3 / F1 / F2）：`data.overlay` 是首页**唯一**的浮层字段
+ * （本轮由 `quoteTip` 收敛而来）。一个字段 = 物理上不可能两开：
+ * 「抽屉与词卡同帧并存」不靠两处显隐互相记得关，而靠「同一时刻只有一个值」。
+ *
+ * 首页只有一句「今日一句」，所以 `lineIndex` 恒为 0（抽屉标题区显示「第 1 句」），
+ * 保留字段是为了与公共组件契约（`line-index` / 事件 payload `lineIndex`）逐字对齐，
+ * 不另造一套首页专用属性。
+ */
+interface DrawerLineOverlay {
+  kind: 'drawer';
+  scope: 'line';
+  lineIndex: number;
+  /** 该句英文原文（标题区展示 + 朗读/收藏的目标文本） */
+  lineText: string;
+}
+interface DrawerWordOverlay {
+  kind: 'drawer';
+  scope: 'word';
+  lineIndex: number;
+  /** 该词所在句原文（标题区展示 + 「朗读此句」的目标文本） */
+  lineText: string;
+  /** 小写词形（朗读 / 收藏 / 标题区共用同一份） */
+  word: string;
+  /** 是否课文词汇表直收词：只影响标题区音标 /「暂无释义」，**不影响动作可用性**（恒 4 项） */
+  hasDef: boolean;
+  /** hasDef=true 时的音标（缺失为空串） */
+  phonetic: string;
+}
+/** 生词词卡（点生词弹出）：沿用 WordLookup 字段 + kind 判别位，行为与迁移前一致 */
+interface WordTipOverlay extends WordLookup { kind: 'wordtip'; }
+type Overlay = DrawerLineOverlay | DrawerWordOverlay | WordTipOverlay | null;
+
+/** 抽屉组件 triggerEvent 的事件对象（只用到 detail） */
+interface DrawerEvent<T> { detail?: T; }
+interface SpeakLineDetail { lineIndex?: number; text?: string; }
+interface SpeakWordDetail { word?: string; lineIndex?: number; }
+interface CollectWordDetail extends SpeakWordDetail { hasDef?: boolean; }
 
 Page({
   data: {
@@ -102,8 +156,12 @@ Page({
     quote: INITIAL_QUOTE,
     /** 今日一句英文切词结果（无词表时 hasDef 全 false → 全部纯文本，仅整句可操作） */
     quoteTokens: tokenize(INITIAL_QUOTE.en) as WordToken[],
-    /** 今日一句点词词卡（null = 收起） */
-    quoteTip: null as WordLookup | null,
+    /**
+     * 🔴 唯一浮层槽位（本轮由 `quoteTip` 收敛而来，方案 §4.1）：
+     * `null` = 无浮层；`kind:'drawer'` = 底部动作抽屉；`kind:'wordtip'` = 生词词卡。
+     * 两浮层同帧并存从结构上不可能（同一个字段只能有一个值）。
+     */
+    overlay: null as Overlay,
     /** 整句朗读中（true = 正在读今日一句） */
     quotePlaying: false,
     /** 正在朗读的单词（'' = 无），驱动词卡「朗读/停止」文案 */
@@ -231,6 +289,11 @@ Page({
     this._speakingWord = '';
     // 不依赖 stopSpeak 的 null 一定被收到：播放态一并显式归零（null 事件仍会复位 data）
     this._playingText = '';
+    // 🔴 K9（方案 §4.4 漏洞 2 / T11 / F5）：首页是 tabBar 常驻页 —— `navigateTo` 详情页或切到
+    // 「我的」/「发现」tab 时本页只 onHide、**不销毁**，`overlay` 若留在 data 里，返回首页时
+    // 抽屉会「自己回来」（必现）。所以这里与组件 `pageLifetimes.hide` 双重归零：
+    // 组件那边清的是抽屉内部局部态（下滑位移 / busy / 按下高亮），业务浮层只能由页面清。
+    if (this.data.overlay) this.setData({ overlay: null });
   },
 
   onShow() {
@@ -413,17 +476,44 @@ Page({
     });
   },
 
-  /** 点生词 → 底部词卡；再点同一词收起、点其它词替换内容 */
+  /**
+   * 单槽位写入口（方案 §4.1 / F1 / F2）：所有浮层入口都走这里，**整体替换**。
+   * 因为 `overlay` 是唯一字段，「抽屉与词卡同帧并存」不是靠两处显隐互相记得关，而是结构上不可能。
+   * `patch` 允许把「与切换浮层同一帧必须生效的字段」（如按钮态复位）并进同一次 setData，
+   * 避免中间帧（F3 同理：换档是「一个 setData 覆盖」，不先关后开）。
+   */
+  openOverlay(next: Overlay, patch: Record<string, unknown> = {}) {
+    this.setData({ ...patch, overlay: next });
+  },
+
+  /** 关掉任意浮层（T5/T6/T8）。组件不自己关：它只 triggerEvent('close')，由本页置 null。 */
+  closeOverlay() {
+    this.setData({ overlay: null });
+  },
+
+  /**
+   * 点词热区分发（E1 / 2026-11-26 19:00 拍板「点按普通词无反应」）：
+   * - 🔴 **首行守卫**：非生词（hasDef=false）→ 直接 return。
+   *   渲染结构改造后普通词也是独立节点（有 catchtap），若不加守卫，点它会被 catchtap 吞掉冒泡、
+   *   又不开词卡 → 页面「点了没反应也不知道为什么」。这里显式 return 就是这个语义的实现点：
+   *   **不弹词卡、不弹抽屉、不朗读、不请求**（首页点句朗读整句的既有行为仍由容器 bindtap 承担）。
+   * - 生词 → 底部词卡；再点同一词收起、再点其它词替换内容（与迁移前一致）。
+   */
   onQuoteWordTap(e: QuoteTapEvent) {
-    const w = String((e.currentTarget.dataset.w) || '').toLowerCase();
+    const ds = e.currentTarget.dataset;
+    const w = String(ds.w || '').toLowerCase();
     if (!w) return;
-    const cur = this.data.quoteTip;
-    if (cur && cur.word === w) {
+    // dataset 的布尔值在不同基础库下可能是 true / 'true'（同详情页口径）
+    const hasDef = ds.hasdef === true || ds.hasdef === 'true';
+    if (!hasDef) return; // 🔴 E1：普通词点按无反应
+    const cur = this.data.overlay;
+    if (cur && cur.kind === 'wordtip' && cur.word === w) {
       // 收起卡片 = 关卡片：与 closeQuoteTip 同口径（P2-4，正在读这个词就停掉）
       this.closeQuoteTip();
       return;
     }
-    this.setData({ quoteTip: lookupWord(w, this._quoteWords), quoteWordPlaying: '' });
+    // 一次 setData 完成「关抽屉 + 开词卡 + 复位按钮态」，不留中间帧（T9/T10）
+    this.openOverlay({ ...lookupWord(w, this._quoteWords), kind: 'wordtip' }, { quoteWordPlaying: '' });
   },
 
   /** 关闭词卡：顺手停掉「词卡朗读」（P2-4，与详情页 closeTip 同口径）。
@@ -435,7 +525,7 @@ Page({
       this._speakingWord = '';
       this._playingText = '';
     }
-    this.setData({ quoteTip: null, quoteWordPlaying: '' });
+    this.openOverlay(null, { quoteWordPlaying: '' });
   },
 
   /** 点整句（英文空白/卡片空白）→ 朗读整句；再点同句由 speakText 的 same-text 语义停止 */
@@ -446,10 +536,116 @@ Page({
 
   /** 词卡「朗读」→ 读该词；再点停止 */
   speakQuoteWord() {
-    const tip = this.data.quoteTip;
-    if (!tip || !tip.word) return;
-    this._speakingWord = tip.word;
-    void speakText(tip.word);
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
+    this._speakingWord = ov.word;
+    void speakText(ov.word);
+  },
+
+  /* ─────────────── 长按 → 底部动作抽屉（复用 components/action-drawer） ─────────────── */
+
+  /**
+   * 长按**任意英文单词**（生词或表白词）→ 抽屉 `scope='word'`（四项）。
+   *
+   * - 长按对象从「仅生词」放宽到「任意英文单词」（2026-11-26 18:05 追加）；
+   * - `hasDef` 只随 overlay 带到标题区（音标 /「暂无释义」E2），**不影响动作可用性**：
+   *   普通词同样是 4 项，朗读/收藏走完全相同的路径（动作集合由 actionsOf 决定，本页不判断）；
+   * - 无坐标：B 变体抽屉贴底通栏，本方法不读 touches、不调 SelectorQuery。
+   */
+  onQuoteWordLongPress(e: QuoteTapEvent) {
+    const ds = e.currentTarget.dataset;
+    const w = String(ds.w || '').toLowerCase();
+    if (!w) return; // 脏 token（空 data-w）直接忽略，不产生浮层
+    const hasDef = ds.hasdef === true || ds.hasdef === 'true';
+    const info = hasDef ? lookupWord(w, this._quoteWords) : null;
+    this.openOverlay(
+      {
+        kind: 'drawer',
+        scope: 'word',
+        lineIndex: 0,
+        lineText: String(this.data.quote.en || ''),
+        word: w,
+        hasDef,
+        phonetic: (info && info.phonetic) || '',
+      },
+      { quoteWordPlaying: '' },
+    );
+  },
+
+  /**
+   * 长按**英文句子空白**（今日一句英文容器，不含中文行与按钮）→ 抽屉 `scope='line'`（两项）。
+   * 🔴 本 handler 只挂在 `.daily-en` 上，**不挂整张 `.daily` 卡**：挂在卡片上会让中文行、
+   *    底部「朗读 / 收藏」按钮的长按也弹出句子抽屉（越界触发）。长按与 tap 由平台互斥分发，
+   *    所以长按不会顺带触发卡片的 `speakQuote`。
+   */
+  onQuoteLineLongPress() {
+    this.openOverlay(
+      { kind: 'drawer', scope: 'line', lineIndex: 0, lineText: String(this.data.quote.en || '') },
+      { quoteWordPlaying: '' },
+    );
+  },
+
+  // ───────── 抽屉组件回传的 5 个 handler（方案 §3.3 方案 B：组件只 triggerEvent，页面调 services） ─────────
+
+  /** 抽屉关闭（遮罩 / 下滑 / ✕ 任一通道）：组件只抛信号，`visible` 由本页置 false。 */
+  onDrawerClose() {
+    this.closeOverlay();
+  },
+
+  /**
+   * 「朗读此句」：`speakText(text)` 恰好一次。
+   * 🔴 不手写「同句再点 = 停」分支 —— `services/tts.ts` 已内建 same-text 语义；
+   *    动作后立即收起抽屉（V-B11：朗读 / 收藏都要回到正文）。
+   */
+  onDrawerSpeakLine(e: DrawerEvent<SpeakLineDetail>) {
+    const d = (e && e.detail) || {};
+    const text = String(d.text || '');
+    if (!text) return;
+    this.closeOverlay();
+    this._speakingWord = '';
+    void speakText(text);
+  },
+
+  /** 「朗读单词」：`speakText(word)`。普通词与生词走完全相同路径（不查释义、不看 hasDef）。 */
+  onDrawerSpeakWord(e: DrawerEvent<SpeakWordDetail>) {
+    const d = (e && e.detail) || {};
+    const word = String(d.word || '');
+    if (!word) return;
+    this.closeOverlay();
+    this._speakingWord = word;
+    void speakText(word);
+  },
+
+  /**
+   * 「收藏此句」：`collectGlossary({tag:'nce'})` 契约与卡片「☆ 收藏」完全一致（共用 `_collectLine`）。
+   * 未登录仍是本页既有形态 `wx.showToast('请先登录')`（与详情页内联 modal 的差异**有意保留**，
+   * 方案 K10：不为「统一」抹平两页授权行为）。
+   */
+  async onDrawerCollectLine(e: DrawerEvent<SpeakLineDetail>) {
+    const d = (e && e.detail) || {};
+    const text = String(d.text || '');
+    // V-B11 / BB9：动作后立即收起（未登录也是「抽屉先收起 → toast 请先登录」）
+    this.closeOverlay();
+    const q = this.data.quote;
+    const isSameLine = text === String(q.en || '').trim();
+    await this._collectLine(text || q.en, isSameLine ? q.cn : '');
+  },
+
+  /**
+   * 「收藏单词」：`collectGlossary({tag:'word'})`，普通词同样可用。
+   * 没有音标 / 释义也**不拒收** —— `note` 允许为空串；但必须把 `hasDef:false` 写进 meta，
+   * 收藏页靠它区分「未收录」灰标（E3）与老数据（无该字段 → 不显示灰标）。
+   */
+  async onDrawerCollectWord(e: DrawerEvent<CollectWordDetail>) {
+    const d = (e && e.detail) || {};
+    const word = String(d.word || '').toLowerCase();
+    if (!word) return;
+    // 先取当前抽屉态（关闭后 overlay 已 null），作为事件未带 hasDef 时的兜底
+    const ov = this.data.overlay;
+    const fallbackHasDef = !!(ov && ov.kind === 'drawer' && ov.scope === 'word' && ov.hasDef);
+    this.closeOverlay();
+    const hasDef = typeof d.hasDef === 'boolean' ? d.hasDef : fallbackHasDef;
+    await this._collectWord(word, hasDef);
   },
 
   /**
@@ -463,54 +659,98 @@ Page({
     return { book, lessonId };
   },
 
-  /** 收藏整句：tag='nce'，与课文详情页句子收藏同一契约（收藏页显示 Lesson · 第 N 句） */
-  async collectQuote() {
+  /**
+   * 收藏整句的**唯一实现**（登录守卫 + payload 组装 + toast 文案）：卡片「☆ 收藏」与
+   * 抽屉「收藏此句」共用一份，不写第二份（否则两处的 sourceText / meta / toast 必然漂移）。
+   * tag='nce'：与课文详情页句子收藏同一契约（收藏页显示 Lesson · 第 N 句）。
+   */
+  async _collectLine(text: string, note: string) {
+    const en = String(text || '');
+    if (!en) return;
     if (!isLoggedIn()) {
       wx.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
-    const q = this.data.quote;
     // P1-1：出处取「屏幕上这句话」的记录，不在收藏时重算（否则课号会与句子错源）
     const { book, lessonId } = this._sourceMeta();
     const src = `今日一句${book ? ` · ${book}` : ''}${Number.isInteger(lessonId) ? ` · Lesson ${lessonId}` : ''}`;
     try {
       const res = await collectGlossary({
         tag: 'nce',
-        enMain: q.en,
-        note: q.cn,
+        enMain: en,
+        note,
         sourceText: src,
         meta: { book, lessonId, from: 'daily' },
       });
-      wx.showToast({ title: res.existed ? '已在收藏中' : '已收藏', icon: 'none' });
+      // 文案唯一真源在 utils/line-actions.collectToastText（历史文案零变更）
+      wx.showToast({ title: collectToastText('line', !!res.existed), icon: 'none' });
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
-      console.error('[home/collectQuote]', err);
+      console.error('[home/collectLine]', err);
     }
   },
 
-  /** 收藏单词：tag='word'，与详情页长按「收藏单词」同一契约 */
-  async collectQuoteWord() {
-    const tip = this.data.quoteTip;
-    if (!tip || !tip.word) return;
+  /** 收藏整句（卡片按钮入口） */
+  collectQuote() {
+    const q = this.data.quote;
+    return this._collectLine(q.en, q.cn);
+  },
+
+  /**
+   * 收藏单词的**唯一实现**（登录守卫 + payload 组装 + toast）：词卡「收藏」与抽屉「收藏单词」共用。
+   * `hasDef` 写进 meta 是 E3 的判据来源：`false` → 收藏页显示「未收录」灰标；
+   * 老数据没有该字段（undefined）→ 收藏页不显示灰标（向后兼容）。
+   */
+  async _collectWord(word: string, hasDef: boolean) {
+    const w = String(word || '').toLowerCase();
+    if (!w) return;
     if (!isLoggedIn()) {
       wx.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
+    // 释义/音标来自课文词表（R3 封闭规则表与详情页同一份）；表白词返回 { word, none:true }
+    const info = lookupWord(w, this._quoteWords);
     // P1-1：出处同上，取屏幕上这句话的记录（收藏页 metaText 的 Lesson 号才对得上句子）
     const { book, lessonId } = this._sourceMeta();
-    const note = [tip.pos, tip.def].filter(Boolean).join(' ');
+    const note = [info.pos, info.def].filter(Boolean).join(' ');
     try {
       const res = await collectGlossary({
         tag: 'word',
-        enMain: tip.word,
+        enMain: info.word || w,
         note,
         sourceText: `今日一句${Number.isInteger(lessonId) ? ` · Lesson ${lessonId}` : ''}`,
-        meta: { book, lessonId, word: tip.word, phonetic: tip.phonetic || '', from: 'daily' },
+        meta: {
+          book,
+          lessonId,
+          word: info.word || w,
+          phonetic: info.phonetic || '',
+          hasDef,
+          from: 'daily',
+        },
       });
-      wx.showToast({ title: res.existed ? '已在生词本' : '已收藏', icon: 'none' });
+      wx.showToast({ title: collectToastText('word', !!res.existed), icon: 'none' });
     } catch (err) {
-      console.error('[home/collectQuoteWord]', err);
+      console.error('[home/collectWord]', err);
     }
+  },
+
+  /** 收藏单词（词卡按钮入口）：词卡只在 hasDef=true 时出现，故恒为 true */
+  collectQuoteWord() {
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
+    return this._collectWord(ov.word, true);
+  },
+
+  /**
+   * 🔴 U1（2026-11-26 19:15 用户拍板）：句子行尾「■ 停止」。
+   * 只在 `quotePlaying === true` 时渲染（不播放时节点根本不存在，不是常驻控件）；
+   * 点击 = `stopSpeak()` + 播放态显式归零（不依赖 tts 一定推出 null）。
+   */
+  stopQuoteSpeak() {
+    stopSpeak();
+    this._speakingWord = '';
+    this._playingText = '';
+    this.setData({ quotePlaying: false, quoteWordPlaying: '' });
   },
 
   /**

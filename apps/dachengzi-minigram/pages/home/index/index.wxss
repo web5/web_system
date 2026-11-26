@@ -127,12 +127,26 @@ page {
 }
 
 /* ---------- 今日一句交互（2026-11-26 ⑤：点词 / 朗读 / 收藏） ---------- */
-/* 只有课文生词带下点线（可点）；表外词是纯文本，点它等同点卡片 → 朗读整句 */
+/* 渲染结构改造（2026-11-26 step2）：所有英文 token 都是 .dw 节点（长按载体），
+   但**只有**课文生词（.has-def）带下点线与可点视觉——普通词外观仍是纯文本，
+   避免「看起来能点」的误导（E1：点按普通词无反应，它不是可点控件）。 */
 .dw.has-def {
   color: var(--brand-txt);
   border-bottom: 1rpx dotted rgba(37, 99, 235, .55);
 }
 .dw.has-def:active { opacity: .6; }
+/* U1（2026-11-26 19:15 拍板）：朗读中句子行尾极小 ■ 停止按钮。
+   与详情页 .sent-stop 同口径（detail.wxss:76）：字面 20rpx，热区靠 padding 撑到 ~40rpx，
+   行内元素紧跟在句末；只在播放时渲染 → 不是常驻控件。 */
+.sent-stop {
+  margin-left: 10rpx;
+  padding: 0 10rpx;
+  font-size: 20rpx;
+  line-height: 1.6;
+  color: var(--brand-txt);
+  vertical-align: middle;
+}
+.sent-stop:active { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
 .daily-foot {
   display: flex;
   align-items: center;
