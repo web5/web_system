@@ -68,6 +68,7 @@ interface PublishModule {
     chat_type?: string;
   };
   resolveCliBinary: (env?: Record<string, string | undefined>) => string;
+  describeCliError: (e: unknown, env?: Record<string, string | undefined>) => string;
   gitShortSha: () => string;
   cliPreviewArgs: (appRoot: string, outPath: string) => string[];
   cliUploadArgs: (appRoot: string, version: string, desc: string) => string[];
@@ -93,6 +94,7 @@ interface PublishModule {
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
   cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean; desc?: string }) => void;
+  cmdPreview: (opts: { mode?: string; to?: string; page?: string; noPush?: boolean }) => void;
   cmdTrial: () => void;
   cmdRelease: () => void;
   NOTIFY_UPLOAD: (version: string) => string;
@@ -285,6 +287,156 @@ describe('resolveCliBinary（CLI 路径解析，不硬编码）', () => {
       throw new Error('ENOENT');
     });
     expect(publish.resolveCliBinary()).toBe('cli');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cli 调用失败的「真实错误」输出（缺 WECHAT_DEVTOOLS_CLI 被误报成「出码失败」的修复）
+//
+// 背景：WECHAT_DEVTOOLS_CLI 未设置时 resolveCliBinary 回退成字面量 'cli'，
+// spawn('cli') 抛 ENOENT；旧 catch 只打三条通用排查提示，看不到 code / stderr，
+// 「缺环境变量」被读成「出码失败」，历史上按「开发者工具未登录」白排查过。
+// 这里锁住三件事：① 打印 e.stderr（有内容时）② 打印 e.code
+// ③ 打印 WECHAT_DEVTOOLS_CLI 当前是否已设置。退出码与成功路径一律不变。
+// ---------------------------------------------------------------------------
+
+/** 构造 execFileSync 抛出的 spawn 类错误（ENOENT / EACCES 等） */
+function spawnError(code: string, stderr?: string): Error {
+  const e = new Error(`spawn cli ${code}`) as Error & { code?: string; stderr?: string };
+  e.code = code;
+  if (stderr !== undefined) e.stderr = stderr;
+  return e;
+}
+
+describe('describeCliError（真实错误信息拼装，纯函数）', () => {
+  it('有 stderr → 原样带出；带 code；环境变量已设置时明说「已设置」', () => {
+    const out = publish.describeCliError(
+      spawnError('EACCES', 'Error: 开发者工具未登录，请先登录\n'),
+      { WECHAT_DEVTOOLS_CLI: '/opt/wechat-devtools/cli' },
+    );
+    expect(out).toContain('开发者工具未登录');
+    expect(out).toContain('EACCES');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：已设置');
+  });
+
+  it('未设 WECHAT_DEVTOOLS_CLI + ENOENT → 明确归位到「缺环境变量」，不写成泛泛的失败', () => {
+    const out = publish.describeCliError(spawnError('ENOENT'), {});
+    expect(out).toContain('ENOENT');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：未设置');
+    expect(out).toContain('不是「出码失败」');
+  });
+
+  it('stderr 存在但为空白 → 回退用 e.message，不打印空的「真实报错」', () => {
+    const out = publish.describeCliError(spawnError('ENOENT', '   \n'), {});
+    expect(out).not.toMatch(/真实报错：\s*$/m);
+    expect(out).toContain('spawn cli ENOENT');
+  });
+
+  it('无 code 时不硬编「错误码」（不产出 undefined）', () => {
+    const out = publish.describeCliError(new Error('boom'), {});
+    expect(out).not.toContain('错误码');
+    expect(out).not.toContain('undefined');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：未设置');
+  });
+});
+
+describe('cmdPreview / cmdUpload：cli 失败时打印真实错误（含 ENOENT 归位）', () => {
+  const OLD = process.env.WECHAT_DEVTOOLS_CLI;
+  let exitSpy: jest.SpyInstance;
+  let errSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let mkdirSpy: jest.SpyInstance;
+  let writeSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockChildProcess.execFileSync.mockReset();
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit');
+    }) as never);
+    errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    // 不落盘：cmdPreview 会 mkdir .ci-output，出码成功后还会写 meta.json
+    mkdirSpy = jest.spyOn(fsCore, 'mkdirSync').mockImplementation(() => undefined);
+    writeSpy = jest.spyOn(fsCore, 'writeFileSync').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    if (OLD === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = OLD;
+    exitSpy.mockRestore();
+    errSpy.mockRestore();
+    logSpy.mockRestore();
+    mkdirSpy.mockRestore();
+    writeSpy.mockRestore();
+  });
+
+  const printedErrors = () => errSpy.mock.calls.map((c) => String(c[0])).join('\n');
+
+  it('preview：未设环境变量 + spawn ENOENT → 打印 code 与「未设置」，且原有三条排查提示不回归', () => {
+    delete process.env.WECHAT_DEVTOOLS_CLI;
+    mockChildProcess.execFileSync.mockImplementation(() => {
+      throw spawnError('ENOENT');
+    });
+
+    expect(() => publish.cmdPreview({})).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const out = printedErrors();
+    // 新增：真实错误三件套
+    expect(out).toContain('ENOENT');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：未设置');
+    expect(out).toContain('不是「出码失败」');
+    // 回归：原有三条排查提示一条不少
+    expect(out).toContain('微信开发者工具已登录');
+    expect(out).toContain('--qr-output');
+    expect(out).toContain('which cli');
+  });
+
+  it('preview：环境变量已设置 + cli 报错 → 打印 stderr 原文、code 与「已设置」', () => {
+    process.env.WECHAT_DEVTOOLS_CLI = '/opt/wechat-devtools/cli';
+    mockChildProcess.execFileSync.mockImplementation(() => {
+      throw spawnError('EACCES', 'Error: 开发者工具未登录，请先登录\n');
+    });
+
+    expect(() => publish.cmdPreview({})).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const out = printedErrors();
+    expect(out).toContain('开发者工具未登录');
+    expect(out).toContain('EACCES');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：已设置');
+  });
+
+  it('upload：未设环境变量 + spawn ENOENT → 同样打印 code 与「未设置」（upload 出口不遗漏）', () => {
+    delete process.env.WECHAT_DEVTOOLS_CLI;
+    mockChildProcess.execFileSync.mockImplementation((cmd: string) => {
+      if (cmd === 'git') return 'abc1234\n';
+      throw spawnError('ENOENT');
+    });
+
+    expect(() => publish.cmdUpload({})).toThrow('process.exit');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+
+    const out = printedErrors();
+    expect(out).toContain('ENOENT');
+    expect(out).toContain('WECHAT_DEVTOOLS_CLI：未设置');
+    expect(out).toContain('cli 上传失败');
+  });
+
+  it('成功路径不受影响：cli 正常返回时仍打印「已出码（--no-push）」且不打印真实错误块', () => {
+    delete process.env.WECHAT_DEVTOOLS_CLI;
+    mockChildProcess.execFileSync.mockImplementation((cmd: string) => {
+      if (cmd === 'which') return '/usr/local/bin/cli\n';
+      if (cmd === 'git') return 'abc1234\n';
+      return ''; // cli preview 成功
+    });
+
+    publish.cmdPreview({ noPush: true });
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(errSpy).not.toHaveBeenCalled();
+    const logs = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logs).toContain('已出码（--no-push，跳过推送）');
   });
 });
 
