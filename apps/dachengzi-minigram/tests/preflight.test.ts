@@ -102,6 +102,24 @@ interface PreflightOpts {
 
 interface PreflightModule {
   runPreflight: (opts?: PreflightOpts) => PreflightResult;
+  /** 门禁的唯一执行入口（跑 → 打印 → 不通过 exit 1），台账 9122 */
+  runGateOrExit: (
+    opts?: PreflightOpts & { skipPreflight?: boolean },
+    sub?: 'preview' | 'upload',
+    ctx?: {
+      env?: Record<string, string | undefined>;
+      log?: (...a: unknown[]) => void;
+      warn?: (...a: unknown[]) => void;
+      exit?: (code: number) => void;
+    },
+  ) => PreflightResult;
+  withGateState: (
+    env: Record<string, string | undefined>,
+    state?: string,
+  ) => Record<string, string | undefined>;
+  GATE_ENV: string;
+  GATE_DONE: string;
+  GATE_SKIP: string;
   printReport: (
     result: PreflightResult,
     io?: { log?: (...a: unknown[]) => void; error?: (...a: unknown[]) => void },
@@ -219,7 +237,11 @@ const codes = (r: PreflightResult) => r.failures.map((f) => f.code);
 // P6 会读 WECHAT_DEVTOOLS_CLI 判断「CLI 是否可执行」。测试里指向 node 自身（真实存在且可执行），
 // 这样本机没装微信开发者工具也不会让无关用例随机红；P6 的失败路径单独用 env:{} 显式构造。
 const realCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
-beforeAll(() => {
+// 🔴 用 beforeEach 而不是 beforeAll：注入点越靠近用例，越不可能被某组用例的 afterEach 抹掉之后
+//    传染给后面的兄弟 describe。曾经踩过 —— ⑥b 在 collection 期捕获到 undefined，afterEach 就
+//    把这里的注入 delete 掉，后 6 条 cli 模式用例的 P6 全部回落到「找默认 CLI 路径」：
+//    macOS 上默认路径真实存在 → 本地永远绿；Ubuntu runner 上 DEFAULT_CLI_PATHS 为空 → 必然红。
+beforeEach(() => {
   process.env.WECHAT_DEVTOOLS_CLI = process.execPath;
 });
 afterAll(() => {
@@ -598,61 +620,43 @@ describe('publish.js 接线：--skip-preflight / --expect-sha 可解析且不污
     });
   });
 
-  it('preflightGate 把 allowAnyDir 透传进 runPreflight（preview）', () => {
-    // 本文件不 jest.mock preflight（要测它的真判定逻辑），故这里用 spy 只观察调用参数，
-    // 让 runPreflight 返回 ok:true 以避免 process.exit。
-    const spy = jest.spyOn(preflight, 'runPreflight').mockReturnValue({
+  it('preflightGate 把 allowAnyDir 透传进唯一编排 runGateOrExit（preview）', () => {
+    // 本文件不 jest.mock preflight（要测它的真判定逻辑），故这里用 spy 只观察调用参数。
+    // 🔴 台账 9122 后 publish.js 只调 preflight.runGateOrExit（跑/打印/退出都在那里一份），
+    //    不再自己调 runPreflight —— 所以 spy 的接缝是 runGateOrExit。
+    const spy = jest.spyOn(preflight, 'runGateOrExit').mockReturnValue({
       ok: true,
       failures: [],
       info: {} as PreflightInfo,
     });
-    const printSpy = jest.spyOn(preflight, 'printReport').mockImplementation(() => undefined);
     try {
       publish.preflightGate({ allowAnyDir: true }, 'preview');
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ allowAnyDir: true, forUpload: false }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ allowAnyDir: true }), 'preview');
       // 未声明时不伪造 true（否则「默认放开」= 门禁白写）
       publish.preflightGate({}, 'preview');
       const arg = spy.mock.calls[1][0] as { allowAnyDir?: unknown };
       expect(arg.allowAnyDir).toBeUndefined();
     } finally {
       spy.mockRestore();
-      printSpy.mockRestore();
     }
   });
 });
 
-// ---------- ⑥b 门禁顺序：preflight 失败时「一次 CLI 都不许调」 ----------
+// ---------- ⑥b 门禁顺序：门禁失败时「一次出码动作都不许调」 ----------
+
+/**
+ * ⑥b 每条用例进入时的 WECHAT_DEVTOOLS_CLI 真实值，供 afterEach 精确还原。
+ *
+ * 🔴 必须在 **beforeEach**（hook 期）捕获，不能在这里（collection 期）直接取
+ * `process.env.WECHAT_DEVTOOLS_CLI` 存成 const —— collection 期文件级 beforeEach 还没跑过注入，
+ * 拿到的是 undefined，afterEach 就会把「本该还原成 process.execPath」做成「delete 掉」，泄漏给
+ * 后面所有 describe。捕获点挪到 hook 期，捕获到的才是 beforeAll/beforeEach 注入后的真值。
+ */
+let savedCliEnv: string | undefined;
 
 describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGate）', () => {
   const publishMod = require('../scripts/publish') as { main: (argv: string[]) => void };
   const cp = require('child_process') as { execFileSync: (...a: unknown[]) => unknown };
-
-  const fakeFailResult: PreflightResult = {
-    ok: false,
-    failures: [{ code: 'P2', title: '包根存在密钥文件：private.key', detail: '/x/private.key（1679 B）' }],
-    info: {
-      root: '/x',
-      pkgVersion: '1.0.14',
-      appVersion: '',
-      versionTsExists: false,
-      expectVersion: '1.0.14',
-      branch: 'devtools/dachengzi-preview',
-      headSha: '4292aa45',
-      gitOk: true,
-      expectSha: '',
-      projectName: 'web_system-dachengzi',
-      dirAllowed: false,
-      requiredDir: '',
-      allowAnyDir: false,
-      mode: 'cli',
-      rootKeyHits: [],
-      deepKeyHits: [],
-      packIgnoreCoversKeys: false,
-      dirty: { total: 0, shipping: [], excluded: [] },
-      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false, configured: true, checked: [] },
-      warnings: [],
-    },
-  };
 
   let exitSpy: jest.SpyInstance;
   let execSpy: jest.SpyInstance;
@@ -661,6 +665,9 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   let warnSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    // 🔴 第一行：先记下本条用例开始时的真值（此刻文件级 beforeEach 已注入 process.execPath），
+    //    再让下面的 spy 动手。顺序不能换 —— 挪到 collection 期就是老 bug。
+    savedCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`exit:${code}`);
     }) as never);
@@ -671,50 +678,96 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   });
 
   afterEach(() => {
+    if (savedCliEnv === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = savedCliEnv;
     jest.restoreAllMocks();
   });
 
-  it('preview：preflight 失败 → exit(1)，且 execFileSync 零调用（没摸任何 CLI）', () => {
-    jest.spyOn(preflight, 'runPreflight').mockReturnValue(fakeFailResult);
+  /**
+   * 「出码动作」的调用记录。
+   *
+   * 🔴 台账 9122 后门禁跑在入口**内部**，它自己要用 `git rev-parse` / `git status` /
+   *    `which cli` 三个只读探针 —— 所以这里断言的是「一次出码动作都没发生」，
+   *    而不是「execFileSync 零调用」（后者在旧结构下成立，因为门禁在另一个模块里被 mock 掉了，
+   *    那其实是一条**假强**的断言：它证明的是「mock 生效」，不是「没摸 CLI」）。
+   */
+  const outputCmds = (): string[] => execSpy.mock.calls
+    .map((c: unknown[]) => String(c[0]))
+    .filter((cmd: string) => cmd !== 'git' && cmd !== 'which');
 
-    expect(() => publishMod.main(['preview', '--no-push'])).toThrow('exit:1');
+  it('preview：门禁失败（--expect-version 不可能满足）→ exit(1)，一次出码动作都没发生', () => {
+    expect(() => publishMod.main(['preview', '--no-push', '--expect-version', '9.9.9']))
+      .toThrow('exit:1');
 
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(execSpy).not.toHaveBeenCalled();
-    expect(errSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('private.key');
+    expect(outputCmds()).toEqual([]);
+    // 拦住它的是 P1 判据本身（而不是什么别的错）
+    expect(errSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain(
+      'package.json 版本 ≠ 期望版本',
+    );
   });
 
-  it('upload：同上，preflight 失败 → exit(1)，一次上传动作都没发生', () => {
-    jest.spyOn(preflight, 'runPreflight').mockReturnValue(fakeFailResult);
-
-    expect(() => publishMod.main(['upload', '--notify'])).toThrow('exit:1');
+  it('upload：同上，门禁失败 → exit(1)，一次上传动作都没发生', () => {
+    expect(() => publishMod.main(['upload', '--notify', '--expect-version', '9.9.9']))
+      .toThrow('exit:1');
 
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(execSpy).not.toHaveBeenCalled();
+    expect(outputCmds()).toEqual([]);
   });
 
-  it('preflight 通过时门禁不误伤：preview 继续走到 CLI 层', () => {
-    jest.spyOn(preflight, 'runPreflight').mockReturnValue({ ...fakeFailResult, ok: true, failures: [] });
+  it('门禁通过时门禁不误伤：preview 继续走到 CLI 层', () => {
+    // 🔴 不许真出码：把 WECHAT_DEVTOOLS_CLI 指向一个「存在、可执行、但立刻 exit 1」的假 cli。
+    //    P6 只查文件可执行位（不执行它），所以能过；真正 spawn 时它自己退 1 → cmdPreview 报错退出。
+    const fakeCli = path.join(os.tmpdir(), `fake-devtools-cli-9122-${process.pid}.sh`);
+    fs.writeFileSync(fakeCli, '#!/bin/sh\nexit 1\n');
+    fs.chmodSync(fakeCli, 0o755);
+    process.env.WECHAT_DEVTOOLS_CLI = fakeCli;
 
-    expect(() => publishMod.main(['preview', '--no-push'])).toThrow('exit:1'); // 死在 CLI 层（未 mock）
+    try {
+      // --allow-any-dir：本 worktree 顶层名不在发布白名单内（CI 里可能本来就在，开关无害）
+      expect(() => publishMod.main(['preview', '--no-push', '--allow-any-dir'])).toThrow('exit:1');
 
-    expect(execSpy).toHaveBeenCalled();
+      // 门禁没拦住（拦住了 outputCmds 会是空的）→ 真的走到了 cli 调用才失败
+      expect(outputCmds()).toContain(fakeCli);
+      expect(errSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('cli 出码失败');
+    } finally {
+      fs.rmSync(fakeCli, { force: true });
+      // cmdPreview 在调 cli 前会 mkdir .ci-output；清掉空目录，别给工作区留垃圾
+      fs.rmSync(path.join(__dirname, '..', '.ci-output'), { recursive: true, force: true });
+    }
   });
 
-  it('--skip-preflight：不跑 preflight，打印「已跳过出码前检查，风险自负」后继续', () => {
-    const pfSpy = jest.spyOn(preflight, 'runPreflight');
+  it('--skip-preflight：不跑门禁判定，打印「已跳过出码前检查，风险自负」后继续', () => {
+    const gateSpy = jest.spyOn(preflight, 'runGateOrExit');
     execSpy.mockImplementation(() => {
       throw new Error('CLI_REACHED');
     });
 
     expect(() => publishMod.main(['preview', '--no-push', '--skip-preflight'])).toThrow('exit:1');
 
-    expect(pfSpy).not.toHaveBeenCalled();
+    // 编排入口仍被调（跳过与否由它一处决定），但它没判定 → 报表一行都没有
+    expect(gateSpy).toHaveBeenCalled();
+    expect(logSpy.mock.calls.map((c) => String(c[0])).join('\n')).not.toContain('出码前检查（P1–P6');
     expect(warnSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain(
       '已跳过出码前检查，风险自负',
     );
     // 走到了 CLI 层才失败（说明确实「跳过门禁继续出码」而不是静默什么都不做）
     expect(execSpy).toHaveBeenCalled();
+  });
+
+  /**
+   * 🔴 隔离性绊线：⑥b 跑完，WECHAT_DEVTOOLS_CLI 必须还是文件级 beforeEach 注入的 process.execPath。
+   *
+   * 为什么非要这一条：本组曾经把注入值 delete 掉，导致后面 6 条 cli 模式用例的 P6 回落到
+   * 「找默认 CLI 路径」——**只在 Linux + 没装开发者工具时才红**。macOS 上
+   * /Applications/wechatwebdevtools.app/.../cli 真实存在，回落恒通过，泄漏被彻底掩盖。
+   * 这条断言两个平台都读 process.execPath，修好时都绿、再漏时都红，mac 再也盖不住。
+   *
+   * 🔴 必须写在 afterAll（hook）里，不能写成一条 it()：文件级 beforeEach 会在每条用例前重新
+   *    注入，写成 it() 就等于在绊线前面先把泄漏补好，什么也绊不住。
+   */
+  afterAll(() => {
+    expect(process.env.WECHAT_DEVTOOLS_CLI).toBe(process.execPath);
   });
 });
 
