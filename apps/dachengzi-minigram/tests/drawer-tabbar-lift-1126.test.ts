@@ -8,7 +8,8 @@
  *
  * 根因（不是 z-index 不够）：
  *  - `custom-tab-bar/index.wxss:22-31` → `.tabbar { position: fixed; bottom: 0; z-index: 900 }`
- *    + `padding-bottom: env(safe-area-inset-bottom)`，`.tb { height: 100rpx }` ⇒ 占位 100rpx + 安全区
+ *    + `padding-bottom: env(safe-area-inset-bottom)`；`.tb{height:100rpx;padding-bottom:6rpx}`（content-box）
+ *    + `.tabbar{border-top:1rpx}` ⇒ tabBar 占位 **107rpx** + 安全区（不是 100rpx）
  *  - `components/action-drawer/index.wxss:31-49` → `.ad-drawer { bottom: 0; z-index: 1001 }`
  *  - 🔴 微信**自定义 tabBar 是框架层独立根节点**（app.json `tabBar.custom: true`），层级恒在
  *    页面内任何 `position: fixed` 元素之上 —— 抽屉 z-index 1001 > tabbar 900 也没用。
@@ -16,7 +17,7 @@
  *
  * 本文件钉住 5 件事：
  *  1. 属性选型：Boolean `liftBottom`（默认 false），不是数值 `bottomInset`；
- *  2. wxss：抽屉**与遮罩**共用一条 `bottom: calc(100rpx + env(safe-area-inset-bottom, 0px))`；
+ *  2. wxss：抽屉**与遮罩**共用一条 `bottom: calc(107rpx + env(safe-area-inset-bottom, 0px))`；
  *  3. 抬高后 `padding-bottom` 去掉安全区项（否则底部多一截空白）；
  *  4. 首页开、**详情页不开**（详情页无 tabBar；反向断言防「图省事全页抬」）；
  *  5. 行为：让位后「动作区高度带」判定同步加宽（BB6 第 2 层兜底在首页仍然成立）。
@@ -148,10 +149,10 @@ describe('属性选型：Boolean `liftBottom`（默认 false），不是数值 b
 /* ═════════════════ 2. wxss 抬高规则（抽屉 + 遮罩一起抬） ═════════════════ */
 
 describe('wxss：抽屉与遮罩共用一条抬高规则（遮罩也必须抬）', () => {
-  it('遮罩与抽屉在同一条规则里 bottom: calc(100rpx + env(safe-area-inset-bottom, 0px))', () => {
+  it('遮罩与抽屉在同一条规则里 bottom: calc(107rpx + env(safe-area-inset-bottom, 0px))', () => {
     const rule = liftPairRule(read(COMP_WXSS));
     // 两个选择器必须在同一条规则里：分开写就很容易「只抬抽屉忘了遮罩」
-    expect(rule).toMatch(/bottom:\s*calc\(100rpx \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+    expect(rule).toMatch(/bottom:\s*calc\(107rpx \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
   });
 
   it('未开启（详情页）时仍是 bottom: 0 —— 基线未被改动', () => {
@@ -160,15 +161,25 @@ describe('wxss：抽屉与遮罩共用一条抬高规则（遮罩也必须抬）
     expect(baseRule(css, '.ad-drawer')).toMatch(/bottom:\s*0;/);
   });
 
-  it('抬高量 100rpx 与自定义 tabBar 高度同源（改 tabBar 高度必须同步这条）', () => {
+  it('抬高量 107rpx = tabBar 盒子逐项相加（.tb 高度 + .tb padding + .tabbar border-top）', () => {
     const tabbarCss = stripCss(fs.readFileSync(path.join(APP, 'custom-tab-bar/index.wxss'), 'utf8'));
-    // tabBar：.tb { height: 100rpx } + .tabbar { padding-bottom: env(safe-area-inset-bottom) }
-    expect(tabbarCss).toMatch(/\.tb\s*\{[^}]*height:\s*100rpx/);
-    expect(tabbarCss).toMatch(/\.tabbar\s*\{[^}]*padding-bottom:\s*env\(safe-area-inset-bottom\)/);
-    // 抽屉抬高量必须等于 .tb 高度，否则会盖住 tabBar 顶部或留缝
-    const lift = liftPairRule(read(COMP_WXSS)).match(/calc\((\d+)rpx \+ env/);
+    // tabBar 盒子模型三件套（改任何一项，这里的和就会变 → 抬高量必须跟着改）
     const tbH = tabbarCss.match(/\.tb\s*\{[^}]*height:\s*(\d+)rpx/) as RegExpMatchArray;
-    expect(Number(lift && lift[1])).toBe(Number(tbH[1]));
+    const tbPad = tabbarCss.match(/\.tb\s*\{[^}]*padding-bottom:\s*(\d+)rpx/) as RegExpMatchArray;
+    const tbBorder = tabbarCss.match(/\.tabbar\s*\{[^}]*border-top:\s*(\d+)rpx/) as RegExpMatchArray;
+    expect(tbH).not.toBeNull();
+    expect(tbPad).not.toBeNull();
+    expect(tbBorder).not.toBeNull();
+    // safe-area 由 calc 里的 env() 另叠，不进这个和
+    expect(tabbarCss).toMatch(/\.tabbar\s*\{[^}]*padding-bottom:\s*env\(safe-area-inset-bottom\)/);
+    const tbTotal = Number(tbH[1]) + Number(tbPad[1]) + Number(tbBorder[1]);
+    const lift = liftPairRule(read(COMP_WXSS)).match(/calc\((\d+)rpx \+ env/);
+    expect(lift).not.toBeNull();
+    // ① 与 tabBar 实际占位严格相等：小于它 → 抽屉下沿压进 tabBar（图标上边框被切）；大于它 → 留缝
+    expect(Number((lift as RegExpMatchArray)[1])).toBe(tbTotal);
+    // ② 数值本身也钉死（tabBar 尺寸若被改，这条会红，逼人「有意识地」同步两处，而不是悄悄漂移）
+    expect(tbTotal).toBe(107);
+    expect(Number((lift as RegExpMatchArray)[1])).toBe(107);
   });
 
   it('抬高后 padding-bottom 去掉 env()（安全区已由 tabBar 让出，只留 24rpx 呼吸量）', () => {
@@ -231,7 +242,7 @@ describe('首页开 / 详情页不开（反向断言防「图省事全页抬」�
 describe('行为：让位后动作区高度带同步加宽（BB6 逻辑兜底在首页仍成立）', () => {
   // 口径：windowHeight 667 / windowWidth 375 ⇒ 1rpx = 0.5px
   //   详情页（不抬）：带 = 192rpx = 96px
-  //   首页（抬 100rpx）：带 = 292rpx = 146px
+  //   首页（抬 107rpx）：带 = 299rpx = 149.5px
   const WH = 667;
 
   it('未开启：距底 120px（按钮带外）允许起拖（= 修前行为，未回退）', () => {
@@ -243,8 +254,8 @@ describe('行为：让位后动作区高度带同步加宽（BB6 逻辑兜底在
   it('开启：同一坐标 120px 落进「按钮带上半截」→ 拒绝起拖', () => {
     const inst = makeInst({ liftBottom: true });
     expect(inst._startedInActsZone(WH - 120)).toBe(true);
-    expect(inst._startedInActsZone(WH - 140)).toBe(true); // 292rpx = 146px 的边界内
-    expect(inst._startedInActsZone(WH - 160)).toBe(false); // 已到标题区，允许起拖
+    expect(inst._startedInActsZone(WH - 148)).toBe(true); // 299rpx = 149.5px 的边界内
+    expect(inst._startedInActsZone(WH - 152)).toBe(false); // 越过 299rpx，已到标题区，允许起拖
   });
 
   it('脏坐标一律放行（0 / NaN / 负 → 不拦，保证下滑关永远可用）', () => {
@@ -252,10 +263,12 @@ describe('行为：让位后动作区高度带同步加宽（BB6 逻辑兜底在
     [0, NaN, -1, Infinity].forEach((y) => expect(inst._startedInActsZone(y as number)).toBe(false));
   });
 
-  it('让位常量与 wxss 的 100rpx 同源（防止 TS 里写 100、CSS 里写别的）', () => {
+  it('让位常量与 wxss 同值且为 107rpx（防止 TS 里写 107、CSS 里写别的）', () => {
     const src = read(COMP_TS);
-    expect(src).toMatch(/TABBAR_LIFT_RPX\s*=\s*100/);
+    expect(src).toMatch(/TABBAR_LIFT_RPX\s*=\s*107\b/);
+    // 反向：不许再出现旧的 100rpx 让位写法（只允许出现在 tabBar 的 .tb 高度语境里）
+    expect(src).not.toMatch(/TABBAR_LIFT_RPX\s*=\s*100\b/);
     const lift = liftPairRule(read(COMP_WXSS)).match(/calc\((\d+)rpx \+ env/);
-    expect(Number(lift && lift[1])).toBe(100);
+    expect(Number(lift && lift[1])).toBe(107);
   });
 });

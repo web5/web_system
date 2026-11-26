@@ -59,29 +59,36 @@
    `position: fixed` 之上 —— z-index 提到 9999 也压不过它。要让抽屉底部的动作按钮
    可见可点，唯一出路是把抽屉抬到 tabBar 高度之上。
 
-   🔴 100rpx 的来源（与 tabBar 同源，改 tabBar 高度时要一起改这里）：
-   `custom-tab-bar/index.wxss` → `.tabbar { padding-bottom: env(safe-area-inset-bottom) }`
-   + `.tb { height: 100rpx }` ⇒ tabBar 占位 = 100rpx + 安全区。故这里写
-   `calc(100rpx + env(safe-area-inset-bottom, 0px))`。
+   🔴 107rpx 的来源（与 tabBar 盒子模型逐一对应，改 tabBar 尺寸时必须一起改这里）：
+   `custom-tab-bar/index.wxss` 的 tabBar 实际占位 = **107rpx + 安全区**：
+     · `.tb { height: 100rpx }` —— 内容盒 100rpx（`box-sizing: content-box`）
+     · `.tb { padding-bottom: 6rpx }` —— content-box 下 padding 另计，+6rpx
+     · `.tabbar { border-top: 1rpx solid }` —— 外框另计，+1rpx
+     · `.tabbar { padding-bottom: env(safe-area-inset-bottom) }` —— 安全区，由 calc 里的 env() 叠加
+   ⇒ `calc(107rpx + env(safe-area-inset-bottom, 0px))`。
+   若只按 100rpx 抬（`.tb` 高度），抽屉/遮罩下沿会压进 tabBar 顶部 7rpx（盖住 `.tb` 的
+   6rpx 内边距与 1rpx 上边框，视觉上把 tabBar 的上边界切掉）。
 
    🔴 遮罩**必须一起抬**（不能只抬抽屉）：tabBar 那条带要露出来、可见且可点。
    点 tabBar 切页 → 页面 `onHide` → 抽屉走既有归零逻辑（方案 §5.3），是**正常路径**；
    若遮罩继续盖住 tabBar，用户点不动会以为整页卡死，比原缺陷（按钮被遮）体验更差。
    反之遮罩留在 `bottom:0` 也做不到「只盖到 tabBar 上沿」——遮罩 z-index 1000 同样在
-   tabBar 之下，那 100rpx 依旧是黑的死区。 */
+   tabBar 之下，那 107rpx 依旧是黑的死区。 */
+
+/* tabBar 占位 107rpx = .tb 内容盒 100rpx + padding-bottom 6rpx + 外层 border-top 1rpx；safe-area 由 env() 叠加。改 tabBar 高度时同步改这里。 */
 .ad-lift .ad-mask,
 .ad-lift .ad-drawer {
-  bottom: calc(100rpx + env(safe-area-inset-bottom, 0px));
+  bottom: calc(107rpx + env(safe-area-inset-bottom, 0px));
 }
 
 /* 抬高后底部安全区已由 tabBar 让出：抽屉底边现在位于 home indicator 之上
-   「100rpx + 安全区」，按钮离屏幕物理底边已经足够远，原 `padding-bottom` 里的
+   「107rpx + 安全区」，按钮离屏幕物理底边已经足够远，原 `padding-bottom` 里的
    `env(safe-area-inset-bottom)` 若原样留着，底部会白多出一截（刘海屏 ≈ 68rpx，
    叠加 24rpx 呼吸量后动作区离抽屉下沿过远、看着像没对齐）。
    推算依据（原型 D7：内边距 = 24rpx 呼吸量 + 安全区）：
      - 24rpx 呼吸量保留（设计稿定的按钮与抽屉下沿间距，与 tabBar 无关）；
      - `env(safe-area-inset-bottom)` 项去掉（该职责已由 tabBar 自身的
-       `padding-bottom: env(safe-area-inset-bottom)` 承担，仍被整体抬高 100rpx）。
+       `padding-bottom: env(safe-area-inset-bottom)` 承担，仍被整体抬高 107rpx）。
    ⇒ padding-bottom = 24rpx（小屏 20rpx，见文件末尾 media 块）。 */
 .ad-lift .ad-drawer {
   padding-bottom: 24rpx;
