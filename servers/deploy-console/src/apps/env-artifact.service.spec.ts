@@ -7,7 +7,7 @@ import {
   extractEntryAssetRefs,
   legacyVersionCandidates,
   listCdnCommitDirs,
-  resolveEntryRefPath,
+  resolveEntryRefPaths,
 } from './env-artifact.service';
 
 /**
@@ -386,16 +386,26 @@ describe('EnvArtifactService（入口可解析性校验 · #9087）', () => {
     ]);
   });
 
-  it('resolveEntryRefPath：/static 绝对落静态根；相对落版本目录；/shell 与越界不判定', () => {
+  it('resolveEntryRefPaths：/static 落静态根；/shell 落「版本目录 + 固定目录」；其余不判定', () => {
     const vdir = `${PROD_ROOT}/static/modules/shell/prod/abc1234`;
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/static/modules/shell/shell-dev/abc1234/assets/x.js')).toBe(
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/static/modules/shell/shell-dev/abc1234/assets/x.js')).toEqual([
       `${PROD_ROOT}/static/modules/shell/shell-dev/abc1234/assets/x.js`,
-    );
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, 'assets/x.js')).toBe(`${vdir}/assets/x.js`);
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, './assets/x.js')).toBe(`${vdir}/assets/x.js`);
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/assets/x.js')).toBeNull(); // 非 /static：平台路由
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, '../other/assets/x.js')).toBeNull();
-    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/static/../etc/passwd.js')).toBeNull();
+    ]);
+    // 相对路径：版本目录
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, 'assets/x.js')).toEqual([`${vdir}/assets/x.js`]);
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, './assets/x.js')).toEqual([`${vdir}/assets/x.js`]);
+    // /shell/：网关两条解析路径都要试（版本目录优先，固定目录兜底）
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/shell/assets/index.abc.js')).toEqual([
+      `${vdir}/assets/index.abc.js`,
+      `${PROD_ROOT}/shell/assets/index.abc.js`,
+    ]);
+    // 其余 /… 前缀：不判定（方案 §2 明确不做）
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/assets/x.js')).toEqual([]);
+    // 越界一律不判定
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '../other/assets/x.js')).toEqual([]);
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/static/../etc/passwd.js')).toEqual([]);
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/shell/../etc/passwd.js')).toEqual([]);
+    expect(resolveEntryRefPaths(PROD_ROOT, vdir, '/shell//abs/x.js')).toEqual([]);
   });
 
   it('#9087 本机：引用缺失 → ENTRY_UNRESOLVABLE 并列出缺失的磁盘路径', async () => {
@@ -436,6 +446,74 @@ describe('EnvArtifactService（入口可解析性校验 · #9087）', () => {
       await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).rejects.toThrow(
         /ENTRY_UNRESOLVABLE.*shell-dev/,
       );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * `/shell/assets/*` 是**存量基座产物最常见的 entry 形态**（`2ea0468` / `a6013f8` 实测
+   * `→ /shell/assets/index.<hash>.js`）。网关对它有两条解析路径（`main.ts` + `resolveShellAssetPath`
+   * + ServeStatic 兜底），所以本条只能「两处都在才放行 / 两处都缺才拒绝」。
+   * 旧实现把 `/shell/…` 一律跳过 ⇒ 这些版本的 entry js/css **完全不被判定**，等于本单白做。
+   */
+  it('#9087 本机：/shell/ 引用落在版本目录内 → 放行（不误杀）', async () => {
+    const [root, vdir] = makeVersionDir(
+      '<script type="module" crossorigin src="/shell/assets/index.abc.js"></script>',
+    );
+    fs.writeFileSync(path.join(vdir, 'assets/index.abc.js'), '//ok');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).resolves.toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：/shell/ 引用只在固定 shell/ 目录（ServeStatic 兜底）→ 放行', async () => {
+    const [root] = makeVersionDir('<link rel="stylesheet" href="/shell/assets/index.abc.css">');
+    fs.mkdirSync(path.join(root, 'shell/assets'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'shell/assets/index.abc.css'), '/*ok*/');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).resolves.toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：/shell/ 引用两处都缺 → 抛（堵住「版本目录缺 assets 仍放行」的漏杀）', async () => {
+    const [root] = makeVersionDir(
+      '<script type="module" src="/shell/assets/index.miss.js"></script>' +
+        '<link rel="stylesheet" href="/shell/assets/index.miss.css">',
+    );
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).rejects.toThrow(
+        /ENTRY_UNRESOLVABLE.*index\.miss\.js/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：真实构建产物形态（type=module/crossorigin + /static/cdn + /static/modules）→ 放行', async () => {
+    // 取自 servers/gateway/public/shell/index.html（2026-09-28 真实构建）的引用骨架
+    const [root, vdir] = makeVersionDir(
+      [
+        '<script defer src="/static/cdn/vue.js"></script>',
+        '<script type="module" crossorigin src="/static/modules/shell/prod/abc1234/assets/index.DaEBmOZv.js"></script>',
+        '<link rel="stylesheet" crossorigin href="/static/modules/shell/prod/abc1234/assets/index.CjS37t13.css">',
+        '<link rel="icon" type="image/svg+xml" href="/favicon.svg" />',
+      ].join('\n'),
+    );
+    fs.mkdirSync(path.join(root, 'static/cdn'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'static/cdn/vue.js'), '//ok');
+    fs.writeFileSync(path.join(vdir, 'assets/index.DaEBmOZv.js'), '//ok');
+    fs.writeFileSync(path.join(vdir, 'assets/index.CjS37t13.css'), '/*ok*/');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).resolves.toBeUndefined();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -490,6 +568,52 @@ describe('EnvArtifactService（入口可解析性校验 · #9087）', () => {
     expect(script).toContain(`${PROD_ROOT}/static/modules/shell/prod/v1/assets/ok.js`);
     expect(script).toContain(missing);
     expect(script.match(/\[ -e /g)).toHaveLength(2); // 两个引用合并成一条脚本
+  });
+
+  it('#9087 远端：/shell/ 两条候选合并进同一条批量脚本，且「有一个在」即放行', async () => {
+    const { svc, execAsync } = makeSvc(
+      { STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH },
+      (cmd) => {
+        if (cmd.includes('cat ')) {
+          return { ok: true, stdout: '<script src="/shell/assets/index.abc.js"></script>', stderr: '' };
+        }
+        if (cmd.includes('base64 -d')) {
+          // 版本目录里没有，固定 shell/ 目录里有 → 网关 ServeStatic 能兜住 → 不能拒
+          return {
+            ok: true,
+            stdout: `${PROD_ROOT}/static/modules/shell/prod/v1/assets/index.abc.js\n`,
+            stderr: '',
+          };
+        }
+        return { ok: true, stdout: '', stderr: '' }; // test -f index.html
+      },
+    );
+    await expect(svc.assertArtifactResolvable('prod', 'shell', 'v1')).resolves.toBeUndefined();
+    const batch = execAsync.mock.calls.map((c) => c[0] as string).find((c) => c.includes('base64 -d'))!;
+    const script = Buffer.from(batch.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d/)![1], 'base64').toString('utf-8');
+    expect(script).toContain(`${PROD_ROOT}/static/modules/shell/prod/v1/assets/index.abc.js`);
+    expect(script).toContain(`${PROD_ROOT}/shell/assets/index.abc.js`);
+    expect(execAsync).toHaveBeenCalledTimes(3); // 仍是一条批量往返，不逐文件
+  });
+
+  it('#9087 远端：stdout 掺入 banner/告警行 → 不当作缺失路径（防误杀）', async () => {
+    const { svc } = makeSvc(
+      { STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH },
+      (cmd) => {
+        if (cmd.includes('cat ')) {
+          return { ok: true, stdout: '<script src="assets/a.js"></script>', stderr: '' };
+        }
+        if (cmd.includes('base64 -d')) {
+          return {
+            ok: true,
+            stdout: 'Welcome to Ubuntu 22.04 LTS\nLast login: never\n',
+            stderr: '',
+          };
+        }
+        return { ok: true, stdout: '', stderr: '' };
+      },
+    );
+    await expect(svc.assertArtifactResolvable('prod', 'shell', 'v1')).resolves.toBeUndefined();
   });
 
   it('#9087 远端：批量判定 ssh 失败 → 抛错（不静默通过）', async () => {
