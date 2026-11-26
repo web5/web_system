@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "大橙子英语",
   "usingComponents": {
-    "login-gate": "/components/login-gate/index"
+    "login-gate": "/components/login-gate/index",
+    "action-drawer": "/components/action-drawer/index"
   }
 }

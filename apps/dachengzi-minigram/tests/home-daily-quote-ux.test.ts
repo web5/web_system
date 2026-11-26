@@ -89,7 +89,8 @@ function makeThis() {
   const ctx: any = {
     data: JSON.parse(JSON.stringify({
       ...pageConfig.data,
-      quoteTip: null,
+      // 2026-11-26 step2：浮层单槽位（原 quoteTip 已并入 overlay）
+      overlay: null,
       quotePlaying: false,
       quoteWordPlaying: '',
     })),
@@ -100,12 +101,22 @@ function makeThis() {
     _quoteWords: [],
     _quoteSeq: 0,
     _speakingWord: '',
+    _playingText: '',
   };
   // 页面内部方法（loadQuoteWords 会回调 _applyQuote / _applyQuoteWords，收藏会走 _sourceMeta，
-  // 「再点同一词收起」走 closeQuoteTip —— 与页面实际调用面同步）
-  for (const k of ['_applyQuote', '_applyQuoteWords', '_sourceMeta', 'closeQuoteTip']) ctx[k] = pageConfig[k];
+  // 浮层入口走 openOverlay / closeOverlay，「再点同一词收起」走 closeQuoteTip
+  // —— 与页面实际调用面同步）
+  for (const k of [
+    '_applyQuote', '_applyQuoteWords', '_sourceMeta', 'closeQuoteTip',
+    'openOverlay', 'closeOverlay', '_collectLine', '_collectWord',
+  ]) ctx[k] = pageConfig[k];
   return ctx;
 }
+
+/** 生词点按的模拟事件：wxml 现在对**所有**单词节点都带 data-hasdef（E1 守卫的判据来源） */
+const wordTapEvent = (w: string, hasDef = true) => ({
+  currentTarget: { dataset: { w, hasdef: hasDef } },
+});
 
 const wordOf = (ctx: any, w: string) => ctx.data.quoteTokens.find((t: any) => t.w === w);
 
@@ -152,12 +163,14 @@ describe('点词 / 朗读 / 收藏', () => {
   it('点生词 → 出词卡（释义来自课文词表）；再点同一词收起', async () => {
     const ctx = makeThis();
     await pageConfig.loadQuoteWords.call(ctx);
-    pageConfig.onQuoteWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer' } } });
-    expect(ctx.data.quoteTip).toBeTruthy();
-    expect(ctx.data.quoteTip.word).toBe('engineer');
-    expect(ctx.data.quoteTip.def).toBe('工程师');
-    pageConfig.onQuoteWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer' } } });
-    expect(ctx.data.quoteTip).toBeNull();
+    pageConfig.onQuoteWordTap.call(ctx, wordTapEvent('engineer'));
+    // 单槽位：词卡 = overlay.kind === 'wordtip'（比只断「有值」更严：还锁了判别位）
+    expect(ctx.data.overlay).toBeTruthy();
+    expect(ctx.data.overlay.kind).toBe('wordtip');
+    expect(ctx.data.overlay.word).toBe('engineer');
+    expect(ctx.data.overlay.def).toBe('工程师');
+    pageConfig.onQuoteWordTap.call(ctx, wordTapEvent('engineer'));
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('点整句 → speakText(quote.en) 恰好一次', () => {
@@ -170,7 +183,7 @@ describe('点词 / 朗读 / 收藏', () => {
   it('词卡朗读 → speakText(word)，并标记本次朗读来自单词', async () => {
     const ctx = makeThis();
     await pageConfig.loadQuoteWords.call(ctx);
-    pageConfig.onQuoteWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer' } } });
+    pageConfig.onQuoteWordTap.call(ctx, wordTapEvent('engineer'));
     pageConfig.speakQuoteWord.call(ctx);
     expect(speakTextMock).toHaveBeenCalledWith('engineer');
     expect(ctx._speakingWord).toBe('engineer');
@@ -189,7 +202,7 @@ describe('点词 / 朗读 / 收藏', () => {
   it('收藏单词 → tag=word，enMain=词、note=词性+释义', async () => {
     const ctx = makeThis();
     await pageConfig.loadQuoteWords.call(ctx);
-    pageConfig.onQuoteWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer' } } });
+    pageConfig.onQuoteWordTap.call(ctx, wordTapEvent('engineer'));
     await pageConfig.collectQuoteWord.call(ctx);
     const payload = collectMock.mock.calls[0][0];
     expect(payload.tag).toBe('word');
@@ -214,7 +227,14 @@ describe('点词 / 朗读 / 收藏', () => {
     expect(ctx.data.quotePlaying).toBe(false);
     expect(ctx.data.quoteWordPlaying).toBe('');
 
-    pageConfig.onHide.call({ stopGreetingTicker: jest.fn(), _speakingWord: '' });
+    // onHide 现在还要做 K9 浮层归零（读 this.data.overlay），故桩需带 data / setData
+    pageConfig.onHide.call({
+      stopGreetingTicker: jest.fn(),
+      _speakingWord: '',
+      _playingText: '',
+      data: { overlay: null },
+      setData: jest.fn(),
+    });
     expect(stopSpeak).toHaveBeenCalled();
   });
 });
@@ -232,10 +252,22 @@ describe('静态接线', () => {
     expect(w).toContain('catchtap="collectQuoteWord"');
   });
 
-  it('英文渲染按 token 循环，非生词分支不挂事件（不高亮）', () => {
+  // ⚠️ 本条既有断言已按 2026-11-26 step2「渲染结构改造」（方案 K12 / 用户拍板「长按对象 = 任意
+  //    英文单词」）改写 —— 不是为了让测试变绿而放宽，而是旧断言把**已作废的结构**当成契约：
+  //    旧结构 = 生词有节点(带 hasDef 条件) / 表外词是裸文本且不挂事件；新结构 = 所有 tk.w 都是
+  //    `<text class="dw">` 节点（否则普通词没有长按载体），下点线只给 has-def，点按/长按都挂上、
+  //    由 `onQuoteWordTap` 首行守卫实现 E1「点普通词无反应」。新断言比旧的更严：同时锁
+  //    「节点条件放宽」「has-def 类只能由 hasDef 决定」「长按挂在同一个节点上」三件事。
+  it('英文渲染：所有单词都是 .dw 节点，has-def 只给生词，点按/长按都挂（E1/K12）', () => {
     const w = read('pages/home/index/index.wxml');
-    expect(w).toMatch(/wx:for="\{\{quoteTokens\}\}"/);
-    expect(w).toMatch(/wx:if="\{\{tk\.w && tk\.hasDef\}\}" class="dw has-def"[^>]*catchtap="onQuoteWordTap"/);
+    // ① 所有单词节点（不再以 hasDef 作为渲染条件）
+    expect(w).toMatch(/wx:if="\{\{tk\.w\}\}"/);
+    expect(w).not.toMatch(/tk\.w && tk\.hasDef/); // 旧条件必须彻底消失
+    // ② 下点线/可点视觉只由 hasDef 决定
+    expect(w).toMatch(/class="dw \{\{tk\.hasDef \? 'has-def' : ''\}\}"/);
+    // ③ 同一个节点同时挂 catchtap（E1 守卫入口）与 catchlongpress（长按普通词入口）
+    expect(w).toMatch(/data-hasdef="\{\{tk\.hasDef\}\}"[\s\S]{0,120}catchtap="onQuoteWordTap"[\s\S]{0,120}catchlongpress="onQuoteWordLongPress"/);
+    // ④ 标点等非单词 token 仍走无事件的纯文本分支
     const elseBranch = (/<text wx:else>([\s\S]*?)<\/text>/.exec(w) || ['', ''])[1];
     expect(elseBranch).not.toMatch(/catch|bind/);
   });

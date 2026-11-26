@@ -17,19 +17,40 @@
     <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换
          册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill；
          book 缺失时 bookBadge 为空串 → wx:if 隐藏，不显 undefined
-         2026-11-26 ⑤：点整句朗读（bindtap），生词可点开词卡；词卡内可朗读/收藏单词 -->
+         2026-11-26 ⑤：点整句朗读（bindtap），生词可点开词卡；词卡内可朗读/收藏单词
+         2026-11-26 step2：长按英文单词 / 英文句子空白 → 底部动作抽屉（components/action-drawer） -->
     <view class="daily" bindtap="speakQuote">
       <view class="daily-top">
         <view class="daily-k">今日一句</view>
         <view class="badge-pill" wx:if="{{showBookBadge && bookBadge}}">{{bookBadge}}</view>
       </view>
       <view class="daily-cn">{{quote.cn}}</view>
-      <view class="daily-en">
-        <!-- 只有课文生词挂事件（下点线 + 可点）；表外词是纯文本，点击冒泡到卡片 → 朗读整句 -->
+      <!-- 🔴 长按只挂英文句子容器（catchlongpress），**不许挂整张 .daily 卡**：
+           挂卡片上会让中文行与「朗读 / 收藏」按钮的长按也弹出句子抽屉（越界触发）。
+           点按：卡片 bindtap 读整句；单词节点 catchtap 会吞掉冒泡 → 普通词由 `onQuoteWordTap`
+           首行守卫 return（E1 点按普通词无反应），生词出词卡。 -->
+      <view class="daily-en" catchlongpress="onQuoteLineLongPress">
+        <!-- 渲染结构改造（方案 K12）：**所有**英文 token 都渲染成 <text class="dw"> 节点，
+             不再「生词有节点 / 表外词是裸文本」—— 否则普通词没有载体，长按无从挂起。
+             `has-def` 点线只给课文词表直收词（生词），普通词是纯文本外观但可长按。
+             标点 token（tk.w 为空）仍走 wx:else 纯文本，不参与点按/长按。
+             🔴 wx:for-item="tk" 必须保留：漏写时迭代变量恒为 item，循环体内 tk.* 全部求值
+                undefined → 整段英文渲染为空（P0 缺陷，见 tests/wxml-for-item-scope.test.ts）。 -->
         <block wx:for="{{quoteTokens}}" wx:key="idx" wx:for-item="tk">
-          <text wx:if="{{tk.w && tk.hasDef}}" class="dw has-def" data-w="{{tk.w}}" catchtap="onQuoteWordTap">{{tk.t}}</text>
+          <text
+            wx:if="{{tk.w}}"
+            class="dw {{tk.hasDef ? 'has-def' : ''}}"
+            data-w="{{tk.w}}"
+            data-hasdef="{{tk.hasDef}}"
+            catchtap="onQuoteWordTap"
+            catchlongpress="onQuoteWordLongPress"
+          >{{tk.t}}</text>
           <text wx:else>{{tk.t}}</text>
         </block>
+        <!-- 🔴 U1（2026-11-26 19:15 拍板）：朗读中，在本句行尾显示极小 ■ 停止按钮。
+             只在 quotePlaying=true 时渲染（不播放时节点不存在，不是常驻控件），点击 = stopSpeak + 归零。
+             与详情页 .sent-stop 同一形态（detail.wxml:66）。 -->
+        <text wx:if="{{quotePlaying}}" class="sent-stop" catchtap="stopQuoteSpeak" aria-role="button" aria-label="停止朗读">■</text>
       </view>
       <view class="daily-foot">
         <view class="dq-act {{quotePlaying ? 'on' : ''}}" catchtap="speakQuote">{{quotePlaying ? '■ 停止' : '▶ 朗读'}}</view>
@@ -37,22 +58,42 @@
       </view>
     </view>
 
-    <!-- 今日一句词卡：底部浮层（跟课文详情页同一形态，独立 .q-tip 前缀避免跨页样式耦合） -->
-    <view wx:if="{{quoteTip}}" class="q-tip">
+    <!-- 今日一句词卡：底部浮层（跟课文详情页同一形态，独立 .q-tip 前缀避免跨页样式耦合）
+         单槽位：只在 overlay.kind === 'wordtip' 时渲染，与抽屉互斥（同一个 overlay 字段） -->
+    <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="q-tip">
       <view class="q-tip-head">
-        <view class="q-tip-w">{{quoteTip.word}}</view>
+        <view class="q-tip-w">{{overlay.word}}</view>
         <view class="q-tip-tools">
           <view class="q-tip-btn {{quoteWordPlaying ? 'on' : ''}}" catchtap="speakQuoteWord">{{quoteWordPlaying ? '停止' : '朗读'}}</view>
           <view class="q-tip-btn" catchtap="collectQuoteWord">收藏</view>
           <view class="q-tip-x" catchtap="closeQuoteTip">✕</view>
         </view>
       </view>
-      <view wx:if="{{quoteTip.phonetic}}" class="q-tip-p">{{quoteTip.phonetic}}</view>
-      <view wx:if="{{quoteTip.pos}}" class="q-tip-pos">{{quoteTip.pos}}</view>
-      <view wx:if="{{quoteTip.none}}" class="q-tip-none">暂无释义（课文词汇表未收录该词）</view>
-      <view wx:elif="{{quoteTip.def}}" class="q-tip-def">{{quoteTip.def}}</view>
-      <view wx:if="{{quoteTip.example}}" class="q-tip-ex">{{quoteTip.example}}</view>
+      <view wx:if="{{overlay.phonetic}}" class="q-tip-p">{{overlay.phonetic}}</view>
+      <view wx:if="{{overlay.pos}}" class="q-tip-pos">{{overlay.pos}}</view>
+      <view wx:if="{{overlay.none}}" class="q-tip-none">暂无释义（课文词汇表未收录该词）</view>
+      <view wx:elif="{{overlay.def}}" class="q-tip-def">{{overlay.def}}</view>
+      <view wx:if="{{overlay.example}}" class="q-tip-ex">{{overlay.example}}</view>
     </view>
+
+    <!-- 长按动作抽屉（变体 B）：**复用** components/action-drawer，本页不画任何抽屉结构。
+         7 个属性 + 5 个事件与方案 §3.1/§3.2 契约逐字对齐；hidden 由 overlay 单槽位驱动。
+         🔴 不要在页面里出现第二份 .ad-* 结构 / 第二份 ACTIONS 表：
+            动作顺序（朗读此句 → 收藏此句 → 朗读单词 → 收藏单词）只有 utils/line-actions 一份真源。 -->
+    <action-drawer
+      visible="{{overlay && overlay.kind === 'drawer'}}"
+      scope="{{overlay && overlay.kind === 'drawer' ? overlay.scope : ''}}"
+      line-text="{{overlay && overlay.kind === 'drawer' ? overlay.lineText : ''}}"
+      line-index="{{overlay && overlay.kind === 'drawer' ? overlay.lineIndex : -1}}"
+      word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
+      word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
+      phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+      bind:speak-line="onDrawerSpeakLine"
+      bind:speak-word="onDrawerSpeakWord"
+      bind:collect-line="onDrawerCollectLine"
+      bind:collect-word="onDrawerCollectWord"
+      bind:close="onDrawerClose"
+    />
 
     <!-- 常用功能：注册表 pinned 项（默认 NCE 常驻；收藏可在发现页「添加常用」） -->
     <view class="sec-t">常用功能</view>
