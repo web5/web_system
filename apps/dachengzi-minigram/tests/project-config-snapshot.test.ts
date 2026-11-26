@@ -17,7 +17,7 @@
  *    （插 `setting.isGameTourist` + 重排版）**再**跑本套件，结果 **PASS**：快照拍到的
  *    已经是脏内容，等于自己跟自己比。真实事故形态恰恰如此（回写发生在上一轮 E2E、另一个进程）。
  *    因此加了第二层「提交基线」判据 `diffAgainstCommitted()`：磁盘 vs `git show HEAD:./project.config.json`。
- *    反证（改脏 → 跑 → 红 → 还原 → 绿）见本文件末尾 `describe('反证：提交基线层真的会红')`
+ *    反证（改脏 → 跑 → 红 → 还原 → 绿）见本文件末尾 describe「提交基线层（临时 git 仓库，不碰本仓库）」
  *    与提交信息 / 回执。
  */
 
