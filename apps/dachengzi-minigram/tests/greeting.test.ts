@@ -1,10 +1,26 @@
 import {
   GREETINGS,
   DEFAULT_NICKNAME,
+  NICKNAME_MAX_CHARS,
   getGreeting,
   getLocalHour,
   formatGreeting,
+  resolveNickname,
 } from '../utils/greeting';
+
+/**
+ * 测试侧的字素簇计数（与被测实现的回退算法互相独立：优先用运行时 Intl.Segmenter，
+ * 这样「实现算错簇」不会因为「测试用同一套算法算簇」而双双算错、假绿）。
+ * 本机 node22 / CI node 均带 Segmenter；万一没有则退回码点计数并让断言自然失败。
+ */
+const graphemeCount = (s: string): number => {
+  const Seg = (Intl as unknown as { Segmenter?: new (l?: string, o?: object) => { segment(i: string): Iterable<{ segment: string }> } }).Segmenter;
+  if (typeof Seg === 'function') {
+    const seg = new Seg('zh', { granularity: 'grapheme' });
+    return Array.from(seg.segment(s)).length;
+  }
+  return Array.from(s).length;
+};
 
 describe('getGreeting（① 5 段时段表 · 纯函数）', () => {
   const boundaries: Array<[number, string]> = [
@@ -79,7 +95,7 @@ describe('formatGreeting（① 昵称三态 · 展示「<昵称>，<问候语>�
     }
   });
 
-  it('长昵称截断到 16 码点（PRD 默认 ①-2），不破版 —— 断言精确 16（上下界都锁）', () => {
+  it('长昵称截断到 16 字素簇（PRD 默认 ①-2），不破版 —— 断言精确 16（上下界都锁）', () => {
     const long = '一二三四五六七八九十一二三四五六七八'; // 18 字
     const s = formatGreeting(long, 6);
     expect(s.endsWith('，早上好')).toBe(true);
@@ -89,14 +105,14 @@ describe('formatGreeting（① 昵称三态 · 展示「<昵称>，<问候语>�
     expect(nick).toBe('一二三四五六七八九十一二三四五六');
   });
 
-  it('17 码点 → 恰好 16 码点；20 个 emoji → 16 码点且无 lone surrogate', () => {
+  it('17 码点(=17 簇) → 恰好 16；20 个 emoji → 16 簇且无 lone surrogate', () => {
     const nick17 = 'abcdefghijklmnopq'; // 17 码点
     const s17 = formatGreeting(nick17, 6);
     const cut17 = s17.slice(0, s17.indexOf('，'));
     expect(Array.from(cut17).length).toBe(16);
     expect(cut17).toBe('abcdefghijklmnop');
 
-    // 20 个 emoji（每个都是代理对）→ 16 码点，且不得截出半个代理对
+    // 20 个 emoji（每个都是代理对，1 簇）→ 16 簇 = 16 个 emoji，且不得截出半个代理对
     const emoji20 = '😀'.repeat(20);
     const sEmoji = formatGreeting(emoji20, 6);
     const cutEmoji = sEmoji.slice(0, sEmoji.indexOf('，'));
@@ -107,16 +123,20 @@ describe('formatGreeting（① 昵称三态 · 展示「<昵称>，<问候语>�
     expect(cutEmoji).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
   });
 
-  it('区域指示符（🇨🇳 由 2 个码点组成）截断 —— 记录【现状】，P2-2 口径待产品拍板', () => {
-    // 'a'×15 + '🇨🇳'(U+1F1E8 U+1F1F3) = 17 码点 > 16 → 按码点截断会切出半个旗帜
-    // （只剩 U+1F1E8）。这里只锁【当前实现】的行为，不做正确性判断：
-    // 是否改成「按字素簇（grapheme）截断」属 P2-2，需产品拍板后另行修改本用例。
+  it('区域指示符（🇨🇳 由 2 码点组成）→ 按【字素簇】截断，末位是完整旗帜，绝不切出孤立 U+1F1E8', () => {
+    // 盲测 P2-2：'a'×15 + '🇨🇳'(U+1F1E8 U+1F1F3) = 17 码点 / 16 簇。
+    // 旧实现按码点截断 → '\u{1F1E8}' 孤立代理区指示符（半个旗帜，渲染成字母 C 或豆腐块）。
+    // 新口径（产品已拍板）：单位是字素簇，16 簇 → 一面完整旗帜必须整块保留。
     const nick = 'a'.repeat(15) + '🇨🇳';
     const s = formatGreeting(nick, 6);
     const cut = s.slice(0, s.indexOf('，'));
-    expect(Array.from(cut).length).toBe(16);
-    expect(cut).toBe('a'.repeat(15) + '\u{1F1E8}');
-    expect(cut.endsWith('🇨🇳')).toBe(false); // 现状：旗帜被切掉一半（已知遗留 P2-2）
+    expect(graphemeCount(cut)).toBe(16);
+    expect(cut).toBe('a'.repeat(15) + '🇨🇳');
+    expect(cut.endsWith('🇨🇳')).toBe(true);
+    // 区域指示符必须成对（奇数个 = 一定有半个旗帜）
+    const ri = cut.match(/[\u{1F1E6}-\u{1F1FF}]/gu) ?? [];
+    expect(ri.length).toBe(2);
+    expect(ri.length % 2).toBe(0);
   });
 });
 
@@ -150,3 +170,130 @@ describe('getLocalHour（① 跟随设备本地时区 · new Date().getHours()�
     expect(h).toBeLessThanOrEqual(23);
   });
 });
+
+describe('resolveNickname · 按【字素簇】截断（P2-2 新口径：绝不切半 emoji）', () => {
+  it('NICKNAME_MAX_CHARS 语义是「字素簇」，值仍为 16（口径改了、上限没改）', () => {
+    expect(NICKNAME_MAX_CHARS).toBe(16);
+  });
+
+  it('恰好 16 簇不截断、17 簇截到 16（ASCII 与中文各一遍，上下界都锁）', () => {
+    expect(resolveNickname('a'.repeat(16))).toBe('a'.repeat(16));
+    expect(resolveNickname('a'.repeat(17))).toBe('a'.repeat(16));
+    const cn16 = '一二三四五六七八九十一二三四五六';
+    expect(Array.from(cn16).length).toBe(16);
+    expect(resolveNickname(cn16)).toBe(cn16); // 16 字不截断
+    expect(resolveNickname(cn16 + '七')).toBe(cn16); // 17 字截到 16 字
+  });
+
+  it('16 面国旗（32 码点 / 16 簇）全部保留，一面都不切半', () => {
+    const flags = '🇨🇳🇺🇸🇯🇵🇰🇷🇬🇧🇫🇷🇩🇪🇮🇹🇪🇸🇨🇦🇦🇺🇧🇷🇷🇺🇮🇳🇹🇭🇻🇳';
+    expect(Array.from(flags).length).toBe(32); // 32 码点
+    expect(graphemeCount(flags)).toBe(16); // 16 簇
+    // 16 簇 = 上限，不截断：一面不少、无孤立区域指示符
+    expect(resolveNickname(flags)).toBe(flags);
+    const ri = resolveNickname(flags).match(/[\u{1F1E6}-\u{1F1FF}]/gu) ?? [];
+    expect(ri.length).toBe(32);
+  });
+
+  it('ZWJ 家庭（👨‍👩‍👧‍👦 = 4 emoji + 3×U+200D = 7 码点）计 1 簇；\'a\'×15 + 家庭 → 完整保留', () => {
+    const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}\u200d\u{1F466}';
+    expect(Array.from(family).length).toBe(7); // 7 码点
+    expect(graphemeCount(family)).toBe(1); // 1 簇
+    const nick = 'a'.repeat(15) + family;
+    const cut = resolveNickname(nick);
+    expect(graphemeCount(cut)).toBe(16);
+    expect(cut).toBe(nick);
+    expect(cut.endsWith(family)).toBe(true);
+    expect(cut.endsWith('\u200d')).toBe(false); // 不得切在连接符后（= 半个家庭）
+  });
+
+  it('肤色修饰 👍🏽（U+1F44D + U+1F3FD）计 1 簇，不被拆成两簇', () => {
+    const thumbs = '\u{1F44D}\u{1F3FD}';
+    expect(Array.from(thumbs).length).toBe(2); // 2 码点
+    expect(graphemeCount(thumbs)).toBe(1); // 1 簇
+    const nick = 'a'.repeat(15) + thumbs;
+    const cut = resolveNickname(nick);
+    expect(cut).toBe(nick);
+    expect(cut.endsWith(thumbs)).toBe(true);
+  });
+
+  it('变体选择符 ❤️（U+2764 + U+FE0F）计 1 簇，不被拆成「黑白心 + 孤立 FE0F」', () => {
+    const heart = '\u2764\uFE0F';
+    expect(Array.from(heart).length).toBe(2); // 2 码点
+    expect(graphemeCount(heart)).toBe(1); // 1 簇
+    const nick = 'a'.repeat(15) + heart;
+    const cut = resolveNickname(nick);
+    expect(cut).toBe(nick);
+    expect(cut.endsWith('\uFE0F')).toBe(true);
+  });
+
+  it('组合附加符 e + U+0301 计 1 簇，不把重音符号切下来', () => {
+    const eAcute = 'e\u0301';
+    expect(graphemeCount(eAcute)).toBe(1);
+    const nick = 'x'.repeat(15) + eAcute;
+    const cut = resolveNickname(nick);
+    expect(cut).toBe(nick);
+    expect(cut.endsWith('e\u0301')).toBe(true);
+  });
+
+  it('奇数个区域指示符：15a + 🇨🇳🇺 = 17 簇 → 截到 16 簇，只留完整旗帜不留半个', () => {
+    // 15 + 2 簇 = 17 > 16 → 末位簇是落单的 RI（它本身自成一簇，截断点落在簇边界上）
+    const nick = 'a'.repeat(15) + '🇨🇳🇺';
+    expect(resolveNickname(nick)).toBe('a'.repeat(15) + '🇨🇳');
+  });
+});
+
+describe('resolveNickname · 回退分支（老基础库无 Intl.Segmenter）与主分支结果一致', () => {
+  const intl = Intl as unknown as { Segmenter?: unknown };
+  const realSegmenter = intl.Segmenter;
+
+  const samples: string[] = [
+    'a'.repeat(15) + '🇨🇳',
+    '🇨🇳🇺🇸🇯🇵🇰🇷🇬🇧🇫🇷🇩🇪🇮🇹🇪🇸🇨🇦🇦🇺🇧🇷🇷🇺🇮🇳🇹🇭🇻🇳',
+    'a'.repeat(15) + '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}\u200d\u{1F466}',
+    'a'.repeat(15) + '\u{1F44D}\u{1F3FD}',
+    'a'.repeat(15) + '\u2764\uFE0F',
+    'x'.repeat(15) + 'e\u0301',
+    '一二三四五六七八九十一二三四五六七八',
+    '😀'.repeat(20),
+  ];
+
+  beforeEach(() => {
+    // 强制走内置回退切分（模拟小程序基础库 / 老设备没有 Segmenter）
+    intl.Segmenter = undefined;
+  });
+
+  afterAll(() => {
+    intl.Segmenter = realSegmenter;
+  });
+
+  it.each(samples)('回退路径结果 == Segmenter 路径结果：%s', (sample: string) => {
+    intl.Segmenter = undefined;
+    const fallback = resolveNickname(sample);
+    intl.Segmenter = realSegmenter;
+    const primary = resolveNickname(sample);
+    expect(fallback).toBe(primary);
+    // 回退路径同样不得切出孤立代理项 / 半个旗帜
+    expect(fallback).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(fallback).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    const ri = fallback.match(/[\u{1F1E6}-\u{1F1FF}]/gu) ?? [];
+    expect(ri.length % 2).toBe(0);
+  });
+
+  it('回退路径下 16 面国旗原样保留（该断言在码点实现下必红）', () => {
+    intl.Segmenter = undefined;
+    const flags = '🇨🇳🇺🇸🇯🇵🇰🇷🇬🇧🇫🇷🇩🇪🇮🇹🇪🇸🇨🇦🇦🇺🇧🇷🇷🇺🇮🇳🇹🇭🇻🇳';
+    expect(resolveNickname(flags)).toBe(flags);
+  });
+
+  it('回退路径下 ZWJ 家庭整块保留（删掉 ZWJ 处理该断言必红）', () => {
+    intl.Segmenter = undefined;
+    const family = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}\u200d\u{1F466}';
+    const nick = 'a'.repeat(15) + family;
+    expect(resolveNickname(nick)).toBe(nick);
+    const over = 'a'.repeat(16) + family; // 17 簇 → 截掉家庭，但不得留半个
+    expect(resolveNickname(over)).toBe('a'.repeat(16));
+    expect(resolveNickname(over).endsWith('\u200d')).toBe(false);
+  });
+});
+
