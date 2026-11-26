@@ -135,18 +135,8 @@ page {
   border-bottom: 1rpx dotted rgba(37, 99, 235, .55);
 }
 .dw.has-def:active { opacity: .6; }
-/* U1（2026-11-26 19:15 拍板）：朗读中句子行尾极小 ■ 停止按钮。
-   与详情页 .sent-stop 同口径（detail.wxss:76）：字面 20rpx，热区靠 padding 撑到 ~40rpx，
-   行内元素紧跟在句末；只在播放时渲染 → 不是常驻控件。 */
-.sent-stop {
-  margin-left: 10rpx;
-  padding: 0 10rpx;
-  font-size: 20rpx;
-  line-height: 1.6;
-  color: var(--brand-txt);
-  vertical-align: middle;
-}
-.sent-stop:active { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
+/* 首页**不实现** U1 行尾 .sent-stop（2026-11-26 去重）：停止入口只保留页脚 .dq-act，
+   两个 ■ 同屏会让用户困惑。详情页 detail.wxss 的 .sent-stop 是那边唯一停止入口，保留。 */
 .daily-foot {
   display: flex;
   align-items: center;
