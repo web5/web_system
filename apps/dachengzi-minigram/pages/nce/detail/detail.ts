@@ -81,7 +81,7 @@ import { collectGlossary } from '../../../services/glossary';
 import { isLoggedIn, loginFromGate } from '../../../services/auth';
 import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
 import { lookupWord, type WordLookup } from '../../../utils/lexicon';
-import { collectToastText } from '../../../utils/line-actions';
+import { collectToastText, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
@@ -153,6 +153,21 @@ Page({
   _playingIdx: -1,
   /** 当前正在朗读的单词（'' = 本次朗读不是单词）—— 同上，仅作兜底意图标记 */
   _speakingWord: '' as string,
+  /**
+   * 🟢 2026-11-26 盲测 D-8（U1 重复句）修：**「朗读此句」发起时的句下标**。
+   *
+   * 为什么需要它：`_onSpeakState` 拿到的只有 tts 回流的**文本**，`_lineIdxOf(text)` 反查必然
+   * 返回**首个**匹配句。课文里出现两句完全同文时（如第 3 句 = 第 1 句），朗读第 3 句 → ■ 跑到第 1 句
+   * 行尾：用户在第 1 句点 ■，停掉的是第 3 句的朗读，停止按钮位置是错的。
+   *
+   * 口径：**以发起时的 lineIndex 为准**，文本只用于校验（`lines[hint].en === text` 才认）。
+   * 校验不通过（用户改课文 / 事件带的是别的文本）→ 退回 `_lineIdxOf` 反查，行为与改动前一致。
+   * 生命周期：只在「朗读此句」入口写值；单词朗读 / 换课 / 卸载写 -1。
+   * 🔴 **不放进 `_resetPlayingState()`**：speakText 内部会先 `stopSpeak()` 推一次 null（意图标记清零），
+   *    紧随其后的 loading/playing 才带文本 —— 若随 null 一起清掉，提示等于没写。
+   */
+  _lineHint: -1,
+
   /** 真实播放文本（'' = 空闲）：只由 tts 的 onSpeakState 回流，页面不自己猜（P2-1/P2-2/P2-3） */
   _playingText: '' as string,
   /** auth 事件订阅退订（V18 成对，页面级；组件内不订阅） */
@@ -190,6 +205,19 @@ Page({
     overlay: null as Overlay,
     /** 2026-11-26 ④：词卡「朗读」按钮播放态（true = 正在朗读该词） */
     tipPlaying: false,
+    /**
+     * E4 后半（盲测 D-4）：当前**按下的词**的复合 key（`si*1000 + token.idx`，-1 = 没有）。
+     * 驱动词节点 `w-pressed` 浅蓝底 —— 长按 350ms 期间用户要看到「按住了」。
+     * 为什么不用 CSS：`<text>` 不支持 hover-class（官方仅 view/button/navigator），
+     * 裸 `.w:active` 被「点非生词无词级高亮」的既有守卫禁止，故走长按态 class。
+     */
+    pressedWordKey: -1,
+    /**
+     * 词卡朗读按钮的 `aria-label`（AC-3.4：随形态在「朗读单词 / 停止朗读」间切换）。
+     * 文案真源在 `utils/line-actions`（两页共用一份，页面里不写动作文案字面量）。
+     */
+    ariaPlayWord: ARIA_WORD_PLAY,
+    ariaStopWord: ARIA_WORD_STOP,
     /** 2026-11-26 ③ 正在朗读的单词（'' = 无）：驱动词卡/单词气泡按钮文案 */
     wordPlaying: '',
     /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
@@ -222,6 +250,8 @@ Page({
     // T11 / F5：页面隐藏时浮层必须归零。抽屉是 position:fixed，若留在 data 里，
     // 回到本页时「浮层自己回来」（tab 页不销毁时必现，方案 §4.4 漏洞 2）。
     if (this.data.overlay) this.setData({ overlay: null });
+    // K9 同源：按下高亮也是页面局部态，切走必须清（否则回来时某个词还亮着蓝底）
+    if (this.data.pressedWordKey >= 0) this.setData({ pressedWordKey: -1 });
   },
 
   onUnload() {
@@ -231,6 +261,7 @@ Page({
     this._playingText = '';
     this._playingIdx = -1;
     this._speakingWord = '';
+    this._lineHint = -1; // 页面销毁：句档定位提示一并清
     // V18：页面级退订（与 onLoad 成对，同一 handler 引用 off；组件内不订阅）
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
@@ -311,6 +342,7 @@ Page({
         wordPlaying: '', tipPlaying: false,
       });
       this._speakingWord = '';
+      this._lineHint = -1; // 换课 / 重载：句档定位提示必须失效（句子下标已换了一套）
     } catch {
       // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗
       if (this.data.authExpired) return;
@@ -439,6 +471,7 @@ Page({
     if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
     this._speakingWord = ov.word;
     this._playingIdx = -1;
+    this._lineHint = -1; // 读词：清掉句档定位提示（U1 的 ■ 只属于句子朗读）
     void speakText(ov.word);
   },
 
@@ -496,6 +529,37 @@ Page({
     );
   },
 
+  /**
+   * E4 后半（盲测 D-4）：按下某词 → 该词浅蓝高亮（`w-pressed`），touchend / touchcancel 撤销。
+   * 与首页同源（`pages/home/index/index.ts` 的 onWordPressStart）：`<text>` 不支持 hover-class，
+   * 裸 `:active` 被既有守卫禁止，故用长按态 class。不新增请求、不改任何业务链路。
+   */
+  onWordPressStart(e: NceTapEvent) {
+    const key = Number((e.currentTarget.dataset || {}).k);
+    if (!isFinite(key) || key < 0) return;
+    if (this.data.pressedWordKey === key) return; // 同词重复 touchstart 不重复 setData
+    this.setData({ pressedWordKey: key });
+  },
+
+  /** 松手 / 手势被打断 → 撤掉按下高亮 */
+  onWordPressEnd() {
+    if (this.data.pressedWordKey >= 0) this.setData({ pressedWordKey: -1 });
+  },
+
+  /**
+   * 🟢 2026-11-26 盲测 D-7（AC-B.27）修：长按**中文译文块** → 什么都不做。
+   *
+   * 起因：`.sent`（整句容器，含中文译文 `.sent-cn`）挂着 `bindlongpress="onLongPress"`，
+   * 长按中文行会冒泡上去弹出「该句两项抽屉」——与 AC-B.27「长按中文行 / 长按底部朗读·收藏按钮
+   * 不弹抽屉」直接冲突，也与首页口径不一致（首页长按只挂 `.daily-en`）。
+   *
+   * 做法：`.sent-cn` 上 `catchlongpress` 吞掉事件（catch 会阻断冒泡），本方法**故意留空**。
+   * 为什么不在 `.sent` 上摘掉 longpress：`tests/nce-detail-v7c.test.ts` 的 C5 判据要求
+   * 「同一句节点同时挂 bindtap 与 bindlongpress」（平台互斥分发，长按不展开译文），
+   * 那条判据仍然成立；手势隔离改由中文块自己吞事件完成。
+   */
+  onCnLongPress() { /* 故意留空：只消费事件，不产生浮层 */ },
+
   // ───────────── 抽屉组件回传的 5 个 handler（方案 §3.3 方案 B：页面调 services） ─────────────
 
   /** 抽屉关闭（遮罩 / 下滑 / ✕ 任一通道）：组件只抛信号，`visible` 由本页置 false。 */
@@ -515,6 +579,9 @@ Page({
     if (!text) return;
     const i = Number(d.lineIndex);
     this._playingIdx = isFinite(i) ? i : -1;
+    // 🔴 D-8：在 speakText 之前写 hint（speakText 的同步段会先推 null 再推 loading，
+    //    而 null 不走 _resetPlayingState 之外的清理；hint 不随 null 清零，见字段注释）。
+    this._lineHint = this._playingIdx;
     this._speakingWord = ''; // 读句子：清掉「单词朗读」标记，避免词卡按钮态串味
     // V-B11：动作后立即收起抽屉（朗读 / 收藏都要回到正文）
     this.openOverlay(null, { readingLineIdx: this._playingIdx, readingPhase: 'loading' });
@@ -529,6 +596,7 @@ Page({
     this.closeOverlay();
     this._speakingWord = word;
     this._playingIdx = -1;
+    this._lineHint = -1; // 读词：清掉句档定位提示，■ 语义只属于句子朗读（U1）
     void speakText(word);
   },
 
@@ -570,6 +638,17 @@ Page({
   /**
    * 「收藏单词」：`collectGlossary({tag:'word'})`，普通词同样可用（AC-B.31）：
    * 没有音标 / 释义也**不拒收** —— `note` 允许为空串、`meta.phonetic` 允许为空串。
+   *
+   * 🟢 2026-11-26 盲测 D-2（E3/E5 两页口径断链）修：`meta` 必须带 `hasDef`。
+   *   原实现 meta 里只有 `book / lessonId / lineIndex / word / phonetic`，**没有 `hasDef`**；
+   *   而收藏页 `pages/mine/glossary/index.ts:151` 的灰标判据是严格 `m.hasDef === false`
+   *   → `undefined !== false` → 详情页收藏的普通词**永不显示「未收录」**，
+   *   同一动作在首页收藏却正常（首页 meta 带 hasDef）—— 两页行为不一致（E5 要求同口径）。
+   *   组件早在 `collect-word` 事件里回传了 hasDef（components/action-drawer/index.ts:193），
+   *   属「回传被丢弃」。
+   *   取值口径：事件带布尔就照用；事件没带（老调用方 / 词卡入口）则回落到本次查词结果
+   *   `!info.none`（查到了 = 已收录），**不写 undefined、也不默认 false**，
+   *   避免把已收录词误标「未收录」。
    */
   async onDrawerCollectWord(e: DrawerEvent<CollectWordDetail>) {
     const d = (e && e.detail) || {};
@@ -582,6 +661,7 @@ Page({
       return;
     }
     const info = this._lookupWord(word);
+    const hasDef = typeof d.hasDef === 'boolean' ? d.hasDef : !info.none;
     const { id, book, detail } = this.data;
     const note = [info.pos, info.def].filter(Boolean).join(' ');
     try {
@@ -596,6 +676,8 @@ Page({
           lineIndex,
           word: info.word || word,
           phonetic: info.phonetic || '',
+          // E3 判据字段：false → 收藏页「未收录」灰标；与首页 pages/home/index/index.ts 同形
+          hasDef,
         },
       });
       wx.showToast({ title: collectToastText('word', !!res.existed), icon: 'none' });
@@ -650,6 +732,7 @@ Page({
     stopSpeak();
     this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle', overlay: null, wordPlaying: '', tipPlaying: false });
     this._speakingWord = '';
+    this._lineHint = -1; // 换课：句档定位提示跨课无意义
     void this.load();
     wx.pageScrollTo({ scrollTop: 0, duration: 200 });
   },
@@ -667,7 +750,30 @@ Page({
     return -1;
   },
 
-  /** 播放态归零（切后台 / 回前台 / 播完共用一处，避免各处漏字段） */
+  /**
+   * 🟢 D-8 修：文本 → 句下标的**唯一入口**（U1 行尾 ■ 的定位）。
+   *
+   * 先用「发起朗读时的 lineIndex」校验（`lines[hint].en === text` 才认），校验不过才退回
+   * 文本反查。这样课文含两句完全同文时，■ 落在**用户实际长按/朗读的那一句**上，
+   * 而不是反查到的最前面那一句。
+   */
+  _resolveLineIdx(text: string): number {
+    const t = String(text || '').trim();
+    const hint = Number(this._lineHint);
+    const lines = this.data.lines || [];
+    if (t && isFinite(hint) && hint >= 0 && hint < lines.length
+      && lines[hint] && String(lines[hint].en || '').trim() === t) {
+      return hint;
+    }
+    return this._lineIdxOf(t);
+  },
+
+  /**
+   * 播放态归零（切后台 / 回前台 / 播完共用一处，避免各处漏字段）。
+   * 🔴 故意**不清** `_lineHint`：tts 的 `speakText` 同步段会先 `stopSpeak()` 推一次 null
+   *    （走到这里），紧随其后的 loading 才带文本 —— 若在这里清掉 hint，D-8 的重复句定位就失效了。
+   *    hint 的失效点只有三类：换课 / 重载、读单词、页面销毁（均已显式写 -1）。
+   */
   _resetPlayingState() {
     this._playingText = '';
     this._playingIdx = -1;
@@ -692,7 +798,7 @@ Page({
     let lineIdx: number;
     let word: string;
     if (text) {
-      lineIdx = this._lineIdxOf(text);
+      lineIdx = this._resolveLineIdx(text); // D-8：优先用发起时的 lineIndex（重复句不歧义）
       word = lineIdx >= 0 ? '' : text;
     } else {
       // 事件未携带文本（兼容老调用方）：退回意图标记，行为与改动前一致

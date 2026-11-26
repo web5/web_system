@@ -32,6 +32,16 @@ import { EVT, actionsOf, type ActionItem } from '../../utils/line-actions';
 const SWIPE_CLOSE_RPX = 48;
 /** 动作后 busy 锁时长（ms）：防连点重复请求（方案 §3.2 契约 2） */
 const BUSY_MS = 300;
+/**
+ * 动作区高度（rpx）：2 行 × 96rpx（AC-B.20，小屏 2 × 104rpx 更矮的那侧取小值更保守）。
+ * 抽屉贴视口底、动作区是抽屉最底部的一块，所以「触点距视口底 ≤ 动作区高度」等价于
+ * 「手指落在按钮上」—— 这一带**不起拖拽**（BB6）。
+ */
+const ACTS_ZONE_RPX = 192;
+/** 取不到 windowHeight 时的兜底逻辑高（iPhone 8 / 常见最小屏，仅用于「距底距离」换算） */
+const FALLBACK_WINDOW_H = 667;
+/** 取不到 windowWidth 时的兜底（与 _pxToRpx 同一口径） */
+const FALLBACK_WINDOW_W = 375;
 
 interface TouchPoint { clientY?: number; pageY?: number; }
 interface TouchEventLike { touches?: TouchPoint[]; }
@@ -125,10 +135,18 @@ Component({
     /** 点右上 ✕ → 只抛信号 */
     onCloseTap() { this._emitClose('close'); },
 
+    /**
+     * 下滑手势起点。🔴 BB6（盲测 D-6）：**触点落在动作按钮区时不起拖拽** ——
+     * 「想点按却把抽屉拖走」比「拖不动抽屉」糟得多（前者误关，后者只是少一条手势通道，
+     * 下滑之外还有遮罩 / ✕ 两个关闭通道，D4 三通道不受影响）。
+     * 第 1 层是 wxml 结构（.ad-acts catchtouchstart），这里是第 2 层逻辑兜底。
+     */
     onTouchStart(e: TouchEventLike) {
       const t = (e.touches && e.touches[0]) || null;
       if (!t) return;
-      this.data._startY = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0;
+      const startY = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0;
+      if (this._startedInActsZone(startY)) return;
+      this.data._startY = startY;
       this.data._hasStart = true;
       this.setData({ dragging: true, swipeY: 0 });
     },
@@ -220,19 +238,41 @@ Component({
     },
 
     /**
+     * 触点是否落在「动作按钮带」里（BB6）。判据：距视口底部 ≤ 动作区高度（px）。
+     * 抽屉 `position:fixed; bottom:0` + 动作区在最底部 ⇒ 这一带就是按钮所在带（含安全区时会略窄，
+     * 保守方向是「少拦一点」，不会把标题区的下滑误拦掉）。
+     * 坐标脏值（0 / NaN / 负）一律**放行**：宁可允许拖拽（阈值/回弹仍然生效），也不让下关闭失灵。
+     */
+    _startedInActsZone(clientY: number): boolean {
+      const y = Number(clientY);
+      if (!isFinite(y) || y <= 0) return false;
+      const wh = this._windowSize('windowHeight', FALLBACK_WINDOW_H);
+      return wh - y <= this._rpxToPx(ACTS_ZONE_RPX);
+    },
+
+    /** 读 getSystemInfoSync 的某个尺寸；取值异常时返回兜底值（绝不让 NaN 进入判定） */
+    _windowSize(key: 'windowWidth' | 'windowHeight', fallback: number): number {
+      let v = 0;
+      try {
+        v = Number((wx.getSystemInfoSync() as unknown as Record<string, unknown>)[key]) || 0;
+      } catch {
+        v = 0;
+      }
+      return v > 0 && isFinite(v) ? v : fallback;
+    },
+
+    /** rpx → px（与 _pxToRpx 反向，同一套 windowWidth 兜底口径） */
+    _rpxToPx(rpx: number): number {
+      return (Number(rpx) || 0) * this._windowSize('windowWidth', FALLBACK_WINDOW_W) / 750;
+    },
+
+    /**
      * px → rpx。下滑阈值口径是 48rpx（AC-B.13），而原生 touch 给的是 px，必须换算。
      * 兜底：windowWidth 异常（0 / NaN / 取值抛错）时按 375 算，**不得算出 NaN/Infinity**
      * （否则阈值判定永远为假 → 下滑关不掉）。
      */
     _pxToRpx(px: number): number {
-      let ww = 0;
-      try {
-        ww = Number(wx.getSystemInfoSync().windowWidth) || 0;
-      } catch {
-        ww = 0;
-      }
-      if (!ww || !isFinite(ww)) ww = 375;
-      return (Number(px) || 0) * 750 / ww;
+      return (Number(px) || 0) * 750 / this._windowSize('windowWidth', FALLBACK_WINDOW_W);
     },
   },
 });

@@ -38,9 +38,18 @@
 .f0 .en { font-size: 28rpx; }
 .f2 .en { font-size: 38rpx; }
 .w { color: #1A1A1F; }
-/* 2026-11-26 ②：词级高亮只给课文生词 —— .has-def 点线是「可查词」标识，
-   按下变蓝也只对它生效；非生词是纯文本，点它不再有任何词级视觉反馈。
+/* 2026-11-26 ②：词级**静态**高亮只给课文生词 —— .has-def 点线是「可查词」标识，
+   非生词是纯文本、无点线/下划线/色差（E4 前半，AC-B.32）。
    （.w.hit 恒正文黑的旧补丁已无调用方，删除，避免死类名继续误导。） */
+/* E4 后半（盲测 D-4）：**普通词也要有按下反馈**。静态暗示仍然只给生词，
+   这里只是「按下去那一瞬间」的浅蓝底，松手 / 出抽屉即消失 —— 反馈，不是暗示。
+   🔴 实现只用 `hover-class`（detail.wxml 的 .w 节点，hover-start-time=0 不延迟、
+      hover-stay-time 覆盖 350ms 长按窗口），**故意不写裸 `.w:active`**：
+      需求② 的既有判据要求「点非生词无任何词级高亮」，`tests/nce-detail-v7c.test.ts`
+      与 `tests/utils-lexicon-tokenize.test.ts` 各有一条静态断言禁止无作用域的 `.w:active`
+      （它们是防止「点普通词也变蓝」的守卫，本轮不推翻）。按下反馈改由 hover-class 承担，
+      语义更准：它是**按下态**（touchend 自动撤销），不是常驻/伪类高亮。 */
+.w-pressed { background: #DBEAFE; border-radius: 6rpx; }
 .w.has-def { border-bottom: 1rpx dotted #3B82F6; }
 .w.has-def:active { color: #3B82F6; }
 .sent-cn { display: none; }
@@ -53,10 +62,20 @@
 .word-tip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 80; width: auto; padding: 26rpx 30rpx 44rpx; border: 1rpx solid #DBEAFE; border-radius: 24rpx 24rpx 0 0; background: #FFFFFF; color: #1A1A1F; box-shadow: 0 -12rpx 40rpx rgba(0,0,0,.14); box-sizing: border-box; animation: wt-rise .18s ease-out; }
 @keyframes wt-rise { from { transform: translateY(14rpx); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
 .wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
-/* 2026-11-26 ④ 词卡朗读按钮：右侧轻量胶囊，播放态反白；✕ 保持在最右 */
 .wt-tools { display: flex; align-items: center; gap: 8rpx; }
-.wt-play { font-size: 24rpx; line-height: 1.6; color: #1D4ED8; padding: 4rpx 18rpx; border: 1rpx solid #BFDBFE; border-radius: var(--r-pill); white-space: nowrap; }
-.wt-play.on { background: #EFF6FF; border-color: #3B82F6; }
+/* 2026-11-26 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮 = 圆形播放图标。
+   原型真源 `.btn-icon`（原型-变体B-底部抽屉.html:294-302）：30px 圆 / 16px 图标 / 描边品牌蓝 /
+   播放态浅蓝底 + 品牌描边；ICON.play = 三角 path、ICON.stop = 圆角方块 rect（:613-614）。
+   小程序不能内联 <svg>，故用 CSS 画同形（不引图片、不加依赖）：
+     热区 88rpx（.wt-play，AC-3.3 下限）⊃ 视觉圆 60rpx（.wt-ico）⊃ 图标 ≈32rpx（.wt-ico::before） */
+.wt-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; border: none; background: transparent; line-height: 1; }
+.wt-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+/* ▶ 播放三角：18rpx 高 × 14rpx 宽（≈32rpx 图标框内），填品牌蓝 */
+.wt-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+.wt-play.on .wt-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
+/* ■ 停止方块：14rpx 见方（原型 rect 10.4/24 的等比），填品牌蓝 */
+.wt-play.on .wt-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
+.wt-play-hv .wt-ico { background: #EFF6FF; }
 .wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
 .wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }
 .wt-p { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; }

@@ -263,8 +263,8 @@ describe('静态接线', () => {
     // ① 所有单词节点（不再以 hasDef 作为渲染条件）
     expect(w).toMatch(/wx:if="\{\{tk\.w\}\}"/);
     expect(w).not.toMatch(/tk\.w && tk\.hasDef/); // 旧条件必须彻底消失
-    // ② 下点线/可点视觉只由 hasDef 决定
-    expect(w).toMatch(/class="dw \{\{tk\.hasDef \? 'has-def' : ''\}\}"/);
+    // ② 下点线/可点视觉只由 hasDef 决定（2026-11-26 盲测 D-4 后允许追加按下态修饰类）
+    expect(w).toMatch(/class="dw \{\{tk\.hasDef \? 'has-def' : ''\}\}(?:[^"]*)?"/);
     // ③ 同一个节点同时挂 catchtap（E1 守卫入口）与 catchlongpress（长按普通词入口）
     expect(w).toMatch(/data-hasdef="\{\{tk\.hasDef\}\}"[\s\S]{0,120}catchtap="onQuoteWordTap"[\s\S]{0,120}catchlongpress="onQuoteWordLongPress"/);
     // ④ 标点等非单词 token 仍走无事件的纯文本分支

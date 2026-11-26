@@ -54,7 +54,12 @@
                        · 普通词**不加任何静态视觉标记**（无点线 / 无下划线 / 无色差，E4）——
                          可长按这件事只通过手势结果（抽屉升起）表达。 -->
                 <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
-                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" catchtap="onWordTap" catchlongpress="onWordLongPress">{{tk.t}}</text>
+                  <!-- E4 后半（盲测 D-4）·长按瞬间按下高亮 = 反馈，不是暗示：
+                       `<text>` 不支持 hover-class（微信仅 view / button / navigator 支持），
+                       裸 `.w:active` 又被「点非生词不得有词级高亮」的既有守卫禁止，
+                       故用长按态 class：touchstart 记 key（si*1000+tk.idx，同一行内唯一）、
+                       touchend/cancel 清空 → wxml 插值出 w-pressed 浅蓝底，松手/出抽屉即消失。 -->
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{pressedWordKey === si * 1000 + tk.idx ? 'w-pressed' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" data-k="{{si * 1000 + tk.idx}}" catchtap="onWordTap" catchlongpress="onWordLongPress" bindtouchstart="onWordPressStart" bindtouchend="onWordPressEnd" bindtouchcancel="onWordPressEnd" hover-class="w-pressed" hover-start-time="0" hover-stay-time="600">{{tk.t}}</text>
                   <text wx:else>{{tk.t}}</text>
                 </block>
                 <!-- 🔴 U1（2026-11-26 19:15 用户拍板）：句子朗读中，在该句**行尾**显示一个极小的 ■ 停止按钮。
@@ -67,8 +72,11 @@
               </view>
             </view>
           </view>
-          <!-- V25 双语档全部中文常显（不依赖 expandedIdx）；tap 档仍由 expandedIdx 逐句展开；沉浸档不渲染 -->
-          <view wx:if="{{readMode === 'bilingual' || expandedIdx === si}}" class="sent-cn show">{{line.cn}}</view>
+          <!-- V25 双语档全部中文常显（不依赖 expandedIdx）；tap 档仍由 expandedIdx 逐句展开；沉浸档不渲染
+               🔴 AC-B.27（盲测 D-7 修）：`catchlongpress` 吞掉长按 —— 长按中文行**不弹抽屉**。
+                 长按只对英文原文区（.en 内的单词 / 句子空白）生效，与首页「长按只挂 .daily-en」同口径。
+                 catch 会阻断冒泡，故 .sent 上的 bindlongpress 收不到这次事件；点按（tap）不受影响。 -->
+          <view wx:if="{{readMode === 'bilingual' || expandedIdx === si}}" class="sent-cn show" catchlongpress="onCnLongPress">{{line.cn}}</view>
         </view>
       </view>
     </view>
@@ -99,8 +107,18 @@
     <view class="wt-head">
       <view class="wt-w">{{overlay.word}}</view>
       <view class="wt-tools">
-        <!-- 2026-11-26 ④：词卡直接朗读该词；再点停止（播放态由 onSpeakState 回流） -->
-        <view class="wt-play {{tipPlaying ? 'on' : ''}}" catchtap="speakTipWord">{{tipPlaying ? '停止' : '朗读'}}</view>
+        <!-- 🔴 AC-3.1 / AC-3.3 / AC-3.4（2026-11-26 盲测 D-1 修）：词卡朗读按钮是**圆形播放图标**，
+             不是文字「朗读 / 停止」。
+               · 形态：原型 `.btn-icon`（原型-变体B-底部抽屉.html:294-302 + ICON.play/stop:613-614）
+                 —— 未播 = ▶ 三角、播放中 = ■ 方块，图标由 CSS 画（不引图片、不新增依赖）；
+               · 尺寸（AC-3.3）：热区 88rpx（.wt-play 外框，直接可点）⊃ 视觉圆 60rpx（.wt-ico）
+                 ⊃ 图标 32rpx（.wt-ico::before）；
+               · 无障碍（AC-3.4）：aria-role=button + aria-label 随形态在「朗读单词 / 停止朗读」间切换
+                 （文案真源 utils/line-actions 的 ARIA_WORD_PLAY / ARIA_WORD_STOP，不在此写字面量）。 -->
+        <view class="wt-play {{tipPlaying ? 'on' : ''}}" catchtap="speakTipWord" hover-class="wt-play-hv"
+              aria-role="button" aria-label="{{tipPlaying ? ariaStopWord : ariaPlayWord}}">
+          <view class="wt-ico"></view>
+        </view>
         <view class="wt-x" catchtap="closeTip">✕</view>
       </view>
     </view>

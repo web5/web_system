@@ -102,7 +102,9 @@ function makeThis() {
   };
   // 页面内部方法桩：与页面实际调用面保持同步。
   // 2026-11-26 变体 B：`_anchorFloat` 已删除；单槽位重构后新增 openOverlay / closeOverlay。
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip', '_subscribeReading', '_lineIdxOf', '_resetPlayingState']) {
+  // 2026-11-26 盲测 D-8：新增 `_resolveLineIdx`（文本→句下标的唯一入口，U1 ■ 定位用），
+  // 桩必须同步，否则 `_onSpeakState` 在桩上下文里取不到它。
+  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip', '_subscribeReading', '_lineIdxOf', '_resolveLineIdx', '_resetPlayingState']) {
     ctx[k] = pageConfig[k];
   }
   return ctx;
@@ -143,7 +145,8 @@ describe('② 非生词不高亮 / 点普通词不弹词卡（E1）', () => {
     const path = require('path');
     const w = fs.readFileSync(path.resolve(__dirname, '../pages/nce/detail/detail.wxml'), 'utf8');
     // 2026-11-26 R-READ-04（AC-B.28）：渲染条件不再含 hasDef，否则普通词没有节点
-    expect(w).toMatch(/<text wx:if="\{\{tk\.w\}\}" class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}"[^>]*catchtap="onWordTap"[^>]*catchlongpress="onWordLongPress"/);
+    // （2026-11-26 盲测 D-4 后 class 末尾多了按下态修饰类，故 has-def 插值后允许追加其它修饰类）
+    expect(w).toMatch(/<text wx:if="\{\{tk\.w\}\}" class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}(?:[^"]*)?"[^>]*catchtap="onWordTap"[^>]*catchlongpress="onWordLongPress"/);
     expect(w).not.toMatch(/tk\.w && tk\.hasDef/);
     // 非单词 token（标点 / 空格）仍是纯文本，没有任何事件绑定
     const elseBranch = (/<text wx:else>([\s\S]*?)<\/text>/.exec(w) || ['', ''])[1];
@@ -284,12 +287,17 @@ describe('④ 词卡朗读按钮', () => {
     expect(ctx.data.tipPlaying).toBe(false);
   });
 
-  it('静态：词卡头部有朗读按钮，文案随播放态切换', () => {
+  it('静态：词卡朗读按钮 = 圆形播放图标（▶/■），aria-label 随播放态切换', () => {
     const fs = require('fs');
     const path = require('path');
     const w = fs.readFileSync(path.resolve(__dirname, '../pages/nce/detail/detail.wxml'), 'utf8');
     expect(w).toMatch(/catchtap="speakTipWord"/);
-    expect(w).toMatch(/\{\{tipPlaying \? '停止' : '朗读'\}\}/);
+    // 🔴 2026-11-26 盲测 D-1（R-READ-03 / AC-3.1 / AC-3.4）口径更新：词卡朗读按钮由
+    //   文字「朗读 / 停止」改为圆形播放图标 —— 本用例原来断言 `{{tipPlaying ? '停止' : '朗读'}}`，
+    //   那是改动前的形态，已与已拍板判据冲突，故改为断言 icon 结构与 aria-label（不放宽强度）。
+    expect(w).not.toMatch(/\{\{tipPlaying \? '停止' : '朗读'\}\}/);
+    expect(w).toMatch(/class="wt-play[\s\S]{0,200}?aria-label="\{\{tipPlaying \? ariaStopWord : ariaPlayWord\}\}"/);
+    expect(w).toMatch(/class="wt-play[^"]*"[\s\S]{0,400}?<view class="wt-ico">/);
   });
 });
 

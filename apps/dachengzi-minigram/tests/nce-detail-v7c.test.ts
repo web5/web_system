@@ -488,7 +488,7 @@ describe('选项 A · D-06 词点线 / hasDef 标记（R-READ-04 后：点线只
     const css = src('pages/nce/detail/detail.wxss');
     // 2026-11-26 R-READ-04（AC-B.28 / V-B17）：渲染条件不再含 hasDef，
     // 否则非生词没有节点 → 「长按任意英文单词」物理上做不到。
-    expect(w).toMatch(/<text wx:if="\{\{tk\.w\}\}" class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}"/);
+    expect(w).toMatch(/<text wx:if="\{\{tk\.w\}\}" class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}(?:[^"]*)?"/);
     expect(w).not.toMatch(/tk\.w && tk\.hasDef/);
     expect(css).toMatch(/\.w\.has-def\s*\{[^}]*border-bottom:\s*1rpx dotted #3B82F6/);
     // 🔴 非生词不高亮：全局 .w:active 与废弃的 .w.hit 都必须不存在

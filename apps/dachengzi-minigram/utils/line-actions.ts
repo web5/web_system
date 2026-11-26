@@ -31,6 +31,18 @@ export const EVT = {
   CLOSE: 'close',
 } as const;
 
+/**
+ * 词卡「朗读」圆形图标按钮的无障碍文案（AC-3.4：`aria-label` 随形态在两者间切换）。
+ *
+ * 🔴 为什么放在公共层而不是两页各自 data 里写死字面量：
+ *   ① 两页各写一份字面量必然漂移（首页说「朗读单词」、详情页说「朗读」这类）；
+ *   ② wxml 无法 import 常量，页面只能把常量注入 data 再由 wxml 插值；
+ *   ③ 页面 ts 里出现 `'朗读单词'` 这种动作文案字面量本身就是被静态断言禁止的
+ *      （`tests/nce-blind-a-render-structure.test.ts` A2 第二例）。
+ */
+export const ARIA_WORD_PLAY = '朗读单词';
+export const ARIA_WORD_STOP = '停止朗读';
+
 /** 抽屉动作的作用域：句子空白 = 两项；任意英文单词 = 四项 */
 export type ActionScope = 'line' | 'word';
 
