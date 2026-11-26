@@ -53,8 +53,13 @@ interface PreflightInfo {
   expectSha: string;
   projectName: string;
   dirAllowed: boolean;
+  requiredDir: string;
+  mode: string;
   rootKeyHits: Hit[];
   deepKeyHits: Hit[];
+  packIgnoreCoversKeys: boolean;
+  dirty: { total: number; shipping: string[]; excluded: string[] };
+  cli: { ok: boolean; path: string; source: string; skipped: boolean };
   warnings: string[];
 }
 
@@ -66,9 +71,14 @@ interface PreflightResult {
 
 interface PreflightOpts {
   root?: string;
+  mode?: 'cli' | 'ci';
   expectVersion?: string;
   expectSha?: string;
+  requireDir?: string;
+  allowDirty?: boolean;
+  forUpload?: boolean;
   execFileSync?: (...args: unknown[]) => unknown;
+  env?: Record<string, string | undefined>;
 }
 
 interface PreflightModule {
@@ -85,6 +95,12 @@ interface PreflightModule {
   };
   isSameSha: (a: string, b: string) => boolean;
   isKeyFile: (name: string) => boolean;
+  ignoreCoversKeys: (ignores: unknown[], fileName?: string) => boolean;
+  dirtyEntryShipsPackage: (entry: string, ignores: unknown[], pkgPrefix?: string) => boolean;
+  checkDevtoolsCli: (
+    execFileSync: (...a: unknown[]) => unknown,
+    env: Record<string, string | undefined>,
+  ) => { ok: boolean; path: string; source: string };
   ALLOWED_DIR_NAME: RegExp;
 }
 
@@ -100,9 +116,17 @@ function mkFixture(opts: {
   rawVersionTs?: string;
   keys?: string[];
   extraFiles?: string[];
+  packIgnores?: unknown[];
+  projectConfig?: boolean;
+  /** true 时按真实仓库布局造：<tmp>/web_system-1018-r2/apps/dachengzi-minigram */
+  repoLayout?: boolean;
 }): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-'));
-  tmpDirs.push(dir);
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-'));
+  tmpDirs.push(base);
+  const dir = opts.repoLayout
+    ? path.join(base, 'web_system-1018-r2', 'apps', 'dachengzi-minigram')
+    : base;
+  if (opts.repoLayout) fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     path.join(dir, 'package.json'),
@@ -114,6 +138,13 @@ function mkFixture(opts: {
     fs.writeFileSync(
       path.join(dir, 'utils', 'version.ts'),
       opts.rawVersionTs ?? `export const APP_VERSION = '${opts.appVersion ?? opts.version ?? '1.0.18'}';\n`,
+    );
+  }
+
+  if (opts.packIgnores || opts.projectConfig) {
+    fs.writeFileSync(
+      path.join(dir, 'project.config.json'),
+      JSON.stringify({ appid: 'wxfixture', packOptions: { ignore: opts.packIgnores ?? [] } }, null, 2),
     );
   }
 
@@ -131,10 +162,14 @@ function mkFixture(opts: {
   return dir;
 }
 
-/** 假 git：返回固定的分支/sha/toplevel，用来测 P3（真 git 在临时目录里读不到）。 */
-function fakeGit(branch: string, sha: string, toplevel: string) {
+/**
+ * 假 git：返回固定的分支/sha/toplevel/status，用来测 P3/P4/P5（真 git 在临时目录里读不到）。
+ * 顺序有讲究：`status --short` 里也含 `--short`，必须先判 status。
+ */
+function fakeGit(branch: string, sha: string, toplevel: string, status = '') {
   return (_cmd: unknown, args: unknown): string => {
     const a = (args as string[]).join(' ');
+    if (a.includes('status')) return status ? `${status}\n` : '';
     if (a.includes('--abbrev-ref')) return `${branch}\n`;
     if (a.includes('--show-toplevel')) return `${toplevel}\n`;
     if (a.includes('--short')) return `${sha}\n`;
@@ -143,6 +178,17 @@ function fakeGit(branch: string, sha: string, toplevel: string) {
 }
 
 const codes = (r: PreflightResult) => r.failures.map((f) => f.code);
+
+// P6 会读 WECHAT_DEVTOOLS_CLI 判断「CLI 是否可执行」。测试里指向 node 自身（真实存在且可执行），
+// 这样本机没装微信开发者工具也不会让无关用例随机红；P6 的失败路径单独用 env:{} 显式构造。
+const realCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
+beforeAll(() => {
+  process.env.WECHAT_DEVTOOLS_CLI = process.execPath;
+});
+afterAll(() => {
+  if (realCliEnv === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+  else process.env.WECHAT_DEVTOOLS_CLI = realCliEnv;
+});
 
 afterAll(() => {
   for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
@@ -396,11 +442,11 @@ describe('printReport：失败项打 stderr，通过打 stdout', () => {
     expect(errText).toContain('[P2]');
     expect(errText).toContain('private.key');
     expect(errText).toContain('--skip-preflight');
-    expect(out.join('\n')).toContain('出码前检查（4 项）');
+    expect(out.join('\n')).toContain('出码前检查（P1–P6');
     expect(out.join('\n')).toContain('package.json=1.0.14');
   });
 
-  it('通过时打「四项检查通过」，且不打失败头', () => {
+  it('通过时打「六项检查通过」，且不打失败头', () => {
     const root = mkFixture({ version: '1.0.18' });
     const r = preflight.runPreflight({ root });
     const out: string[] = [];
@@ -408,7 +454,7 @@ describe('printReport：失败项打 stderr，通过打 stdout', () => {
 
     preflight.printReport(r, { log: (s: unknown) => out.push(String(s)), error: (s: unknown) => err.push(String(s)) });
 
-    expect(out.join('\n')).toContain('四项检查通过');
+    expect(out.join('\n')).toContain('六项检查通过');
     expect(err).toEqual([]);
   });
 
@@ -474,8 +520,13 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
       expectSha: '',
       projectName: 'web_system-dachengzi',
       dirAllowed: false,
+      requiredDir: '',
+      mode: 'cli',
       rootKeyHits: [],
       deepKeyHits: [],
+      packIgnoreCoversKeys: false,
+      dirty: { total: 0, shipping: [], excluded: [] },
+      cli: { ok: true, path: '/x/cli', source: 'env', skipped: false },
       warnings: [],
     },
   };
@@ -611,5 +662,276 @@ describe('真实炸弹实测：1.0.14 + 真 private.key 的 web_system-dachengzi
     expect(all).toContain('private.key');
     if (firstLine) expect(all).not.toContain(firstLine);
     expect(all).not.toContain('PRIVATE KEY-----\n');
+  });
+});
+
+// ---------- ⑧ P2 按出码模式分层（ci 模式私钥是必需文件） ----------
+
+describe('P2 出码模式分层：cli 禁私钥，ci 靠 packOptions.ignore 兜底', () => {
+  it('cli 模式（默认）+ 包根 private.key → 失败（cli 根本不需要私钥）', () => {
+    const root = mkFixture({ version: '1.0.18', keys: ['private.key'] });
+    const r = preflight.runPreflight({ root });
+
+    expect(codes(r)).toContain('P2');
+    expect(r.failures.find((f) => f.code === 'P2')!.hint).toContain('cli 模式出码不需要私钥');
+  });
+
+  it('ci 模式 + 包根 private.key + ignore 覆盖 → 不阻断，但打 HIGH 警告（含「必需文件」和根治办法）', () => {
+    const root = mkFixture({
+      version: '1.0.18',
+      keys: ['private.key'],
+      packIgnores: [{ type: 'file', value: 'private.key' }],
+    });
+    const r = preflight.runPreflight({ root, mode: 'ci' });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.packIgnoreCoversKeys).toBe(true);
+    const w = r.info.warnings.join('\n');
+    expect(w).toContain('ci 模式的必需文件');
+    expect(w).toContain('MINIPROGRAM_PRIVATE_KEY_PATH');
+  });
+
+  it('ci 模式 + 包根 private.key + ignore **没**覆盖 → 失败（这才是真会随包外发）', () => {
+    const root = mkFixture({
+      version: '1.0.18',
+      keys: ['private.key'],
+      // 只忽略 project.private.config.json，故意不含任何 key 规则
+      packIgnores: [{ type: 'file', value: 'project.private.config.json' }],
+    });
+    const r = preflight.runPreflight({ root, mode: 'ci' });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P2');
+    expect(f!.title).toContain('未被 packOptions.ignore 覆盖');
+    expect(f!.hint).toContain('{"type":"file","value":"private.key"}');
+  });
+
+  it('ci 模式 + 一条 suffix .key 规则也能兜住（不强制写成 file 规则）', () => {
+    const root = mkFixture({
+      version: '1.0.18',
+      keys: ['private.key'],
+      packIgnores: [{ type: 'suffix', value: '.key' }],
+    });
+    const r = preflight.runPreflight({ root, mode: 'ci' });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.packIgnoreCoversKeys).toBe(true);
+  });
+
+  it('ci 模式 + 没有 project.config.json（读不到 ignore）→ 失败（不能「读不到就当有」）', () => {
+    const root = mkFixture({ version: '1.0.18', keys: ['private.key'] });
+    const r = preflight.runPreflight({ root, mode: 'ci' });
+
+    expect(r.ok).toBe(false);
+    expect(r.info.packIgnoreCoversKeys).toBe(false);
+  });
+});
+
+// ---------- ⑨ 私钥识别口径（别把合法配置文件判成密钥） ----------
+
+describe('私钥识别口径：只认 *.key / *.pem，不误伤 project.private.config.json', () => {
+  it('project.private.config.json 不算密钥（用 /key|private/i 会假阳性）', () => {
+    expect(preflight.isKeyFile('project.private.config.json')).toBe(false);
+    const root = mkFixture({ version: '1.0.18', extraFiles: ['project.private.config.json'] });
+    const r = preflight.runPreflight({ root });
+    expect(r.info.rootKeyHits).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('ignoreCoversKeys：file/suffix/glob 三种合法写法都算覆盖，folder 不算', () => {
+    expect(preflight.ignoreCoversKeys([{ type: 'file', value: 'private.key' }])).toBe(true);
+    expect(preflight.ignoreCoversKeys([{ type: 'suffix', value: '.pem' }])).toBe(true);
+    expect(preflight.ignoreCoversKeys([{ type: 'glob', value: '**/*.key' }])).toBe(true);
+    expect(preflight.ignoreCoversKeys([{ type: 'folder', value: 'scripts' }])).toBe(false);
+    expect(preflight.ignoreCoversKeys([])).toBe(false);
+  });
+});
+
+// ---------- ⑩ P5 工作区干净 ----------
+
+describe('P5 工作区干净：只拦「会进包的」未提交改动', () => {
+  const dirtyPage = ' M apps/dachengzi-minigram/pages/home/index/index.ts';
+
+  const topOf = (root: string) => path.dirname(path.dirname(root)); // <tmp>/web_system-1018-r2
+
+  it('会进包的改动（页面代码）→ 失败，并列出条目', () => {
+    const root = mkFixture({ version: '1.0.18', projectConfig: true, repoLayout: true });
+    const r = preflight.runPreflight({
+      root,
+      execFileSync: fakeGit('main', 'abc1234', topOf(root), dirtyPage),
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P5');
+    expect(f!.detail).toContain('pages/home/index/index.ts');
+    expect(r.info.dirty.shipping).toEqual([dirtyPage]);
+  });
+
+  it('只在 scripts/ 的改动（不进包）→ 只警告，不阻断', () => {
+    const root = mkFixture({ version: '1.0.18', projectConfig: true, repoLayout: true });
+    const r = preflight.runPreflight({
+      root,
+      execFileSync: fakeGit(
+        'main',
+        'abc1234',
+        topOf(root),
+        ' M apps/dachengzi-minigram/scripts/publish.js',
+      ),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.dirty.total).toBe(1);
+    expect(r.info.dirty.shipping).toEqual([]);
+    expect(r.info.warnings.join('\n')).toContain('都不在打包范围内');
+  });
+
+  it('--allow-dirty 显式放行 → 通过，但必须打警告', () => {
+    const root = mkFixture({ version: '1.0.18', projectConfig: true, repoLayout: true });
+    const r = preflight.runPreflight({
+      root,
+      allowDirty: true,
+      execFileSync: fakeGit('main', 'abc1234', topOf(root), dirtyPage),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.warnings.join('\n')).toContain('--allow-dirty 放行');
+  });
+
+  it('dirtyEntryShipsPackage：命中 packOptions.ignore 的 folder 规则 → 不进包', () => {
+    const ignores = [{ type: 'folder', value: 'assets/dev' }];
+    expect(preflight.dirtyEntryShipsPackage(' M assets/dev/foo.ts', ignores)).toBe(false);
+    expect(preflight.dirtyEntryShipsPackage(' M assets/prod/foo.ts', ignores)).toBe(true);
+    // 带包前缀时先换算：app 包内的 pages/* 会进包，包外（其他包）不影响本包
+    const prefix = 'apps/dachengzi-minigram/';
+    expect(preflight.dirtyEntryShipsPackage(' M apps/dachengzi-minigram/pages/a.ts', ignores, prefix)).toBe(true);
+    expect(preflight.dirtyEntryShipsPackage(' M apps/kedou-ai-minigram/pages/a.ts', ignores, prefix)).toBe(false);
+  });
+});
+
+// ---------- ⑪ P6 开发者工具 CLI 可执行 ----------
+
+describe('P6 微信开发者工具 CLI 可执行（发布全程唯一的硬缺口）', () => {
+  it('WECHAT_DEVTOOLS_CLI 未设且 which cli 也找不到 → 失败（不是等到 spawnSync ENOENT）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      env: {},
+      execFileSync: (cmd: unknown, args: unknown) => {
+        const a = (args as string[]).join(' ');
+        if (String(cmd) === 'which') throw new Error('which: no cli in PATH');
+        if (a.includes('status')) return '';
+        if (a.includes('--abbrev-ref')) return 'main\n';
+        if (a.includes('--show-toplevel')) return '/Users/x/workspace/web_system-1018-r2\n';
+        if (a.includes('--short')) return '47f74ba8\n';
+        throw new Error(`unexpected: ${String(cmd)} ${a}`);
+      },
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P6');
+    expect(f!.detail).toContain('WECHAT_DEVTOOLS_CLI=(未设置)');
+    expect(f!.hint).toContain('wechatwebdevtools.app');
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 指向不存在的路径 → 失败', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, env: { WECHAT_DEVTOOLS_CLI: '/nonexistent/cli' } });
+
+    expect(r.ok).toBe(false);
+    expect(r.failures.find((x) => x.code === 'P6')!.detail).toContain('/nonexistent/cli');
+  });
+
+  it('WECHAT_DEVTOOLS_CLI 可执行 → 通过并报出实际路径', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, env: { WECHAT_DEVTOOLS_CLI: process.execPath } });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.cli.ok).toBe(true);
+    expect(r.info.cli.path).toBe(process.execPath);
+    expect(r.info.warnings.join('\n')).toContain('开发者工具 CLI 可执行');
+  });
+
+  it('ci 模式不需要开发者工具 CLI → P6 跳过（不会因没装工具而误杀 ci）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, mode: 'ci', env: {} });
+
+    expect(r.info.cli.skipped).toBe(true);
+    expect(r.failures.some((f) => f.code === 'P6')).toBe(false);
+  });
+});
+
+// ---------- ⑫ P3 多候选 sha / P4 硬拦目录 / upload 人工确认提示 ----------
+
+describe('P3 多候选 sha', () => {
+  it('--expect-sha 传逗号分隔的多个候选，命中任一即通过', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      expectSha: '019d282b, 47f74ba8',
+      execFileSync: fakeGit('release/dachengzi-1018-r2', '47f74ba8', '/Users/x/workspace/web_system-1018-r2'),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.warnings.join('\n')).toContain('核对通过');
+  });
+
+  it('三个候选都不匹配 → 失败，detail 列出全部候选', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      expectSha: '019d282b,47f74ba8',
+      execFileSync: fakeGit('devtools/dachengzi-preview', '4292aa45', '/Users/x/workspace/web_system-dachengzi'),
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.failures.find((f) => f.code === 'P3')!.detail).toContain('019d282b|47f74ba8');
+  });
+});
+
+describe('P4 --require-dir 可把目录白名单升级为硬拦', () => {
+  it('不匹配 --require-dir → 失败（发布轮次只许在指定 worktree 出码）', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      requireDir: '^web_system-1018(-r2)?$',
+      execFileSync: fakeGit('feat/some-branch', 'abc1234', '/Users/x/workspace/web_system-hero9042'),
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P4');
+    expect(f!.title).toContain('web_system-hero9042');
+    expect(f!.detail).toContain('^web_system-1018(-r2)?$');
+  });
+
+  it('匹配 --require-dir → 通过', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({
+      root,
+      requireDir: '^web_system-1018(-r2)?$',
+      execFileSync: fakeGit('release/dachengzi-1018-r2', '47f74ba8', '/Users/x/workspace/web_system-1018-r2'),
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.info.requiredDir).toBe('^web_system-1018(-r2)?$');
+  });
+});
+
+describe('upload 的「后台是否已有同版本」只做提醒，不假装检查过', () => {
+  it('forUpload → 打「微信无只读接口，请人工确认」的提醒', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root, forUpload: true });
+
+    const w = r.info.warnings.join('\n');
+    expect(w).toContain('微信无只读接口');
+    expect(w).toContain('开发版本列表');
+    // 提醒不影响通过（它不是断言，因为脚本根本查不到）
+    expect(r.ok).toBe(true);
+  });
+
+  it('preview（非 upload）不打这条提醒', () => {
+    const root = mkFixture({ version: '1.0.18' });
+    const r = preflight.runPreflight({ root });
+
+    expect(r.info.warnings.join('\n')).not.toContain('微信无只读接口');
   });
 });
