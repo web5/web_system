@@ -572,6 +572,17 @@ export class AppsService implements OnModuleInit {
       }
     }
 
+    // site-version shell：index.html 存在 ≠ 能服务（台账 #9087）。
+    // 线上出现过 index.html 在、它引用的 assets/*.js 不在 ⇒ 切成功、页面白屏。
+    // 这里把「切过去白屏」改成「切不动」（400 + 指针不动），只加校验，不改既有 400 语义。
+    if (siteVersionShell) {
+      try {
+        await this.artifacts.assertArtifactResolvable(envId, appKey, version);
+      } catch (e) {
+        throw new BadRequestException((e as Error).message);
+      }
+    }
+
     // 1) 指针表（含 prod 云库镜像，strict 失败即抛 → 不会留下「以为切了其实没切」）
     // lock（诊断 #6）：UI 连点两次会交叉覆盖，previousVersion 被写成错值 → 回滚目标丢失
     const { from, previous, unchanged } = await this.registry.setAppEnvPointer({
