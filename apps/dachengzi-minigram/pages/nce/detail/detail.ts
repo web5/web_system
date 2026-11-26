@@ -25,7 +25,10 @@
  *
  * 2026-11-19 19:11 口径变更：生词 tip 作废「就近锚定」，改移动端底部统一浮层。
  * onWordTap 不再为 tip 调用 _anchorFloat；tipPos 字段保留但不得驱动 word-tip。
- * 🔴 _anchorFloat 函数本体与 bubblePos 长按气泡锚定逻辑完全保留、行为不变。
+ * ~~🔴 _anchorFloat 函数本体与 bubblePos 长按气泡锚定逻辑完全保留、行为不变。~~
+ *   ⚠️ 上面这条已被 2026-11-26 变体 B 覆盖作废（留痕不静默删除）：选 B 后长按气泡整体退役，
+ *   `_anchorFloat` / `bubblePos` / `tipPos` / `bubbleIdx` / `wordBubble` / `tipWord` **全部删除**，
+ *   改单槽位 `overlay` + 公共抽屉组件。详见下方 2026-11-26 段落。
  *
  * 2026-11-20 治本授权（用户原话「不做临时修补，要从合理的实现方案去改」）：
  *    原「utils/request.ts 一律不改」红线就此解除 —— 依据 49 §5 方案 B，在
@@ -42,6 +45,34 @@
  *  - ④ 底部生词词卡新增「朗读」按钮（读该词，再点停止）。
  *  - 生词点按开词卡的档位由「仅 tap 档」放宽为全档（沉浸/双语也可查词），
  *    非生词在任何档位都不出词卡。
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * 2026-11-26 19:00 用户拍板「变体 B · 底部抽屉」+ D1–D8 / E1–E5 全按推荐；
+ * 19:15 追加拍板 U1「句子朗读中，在正在朗读的那一句行尾显示极小的 ■ 停止按钮」。
+ * 设计真源：`原型-变体B-底部抽屉.html`（sha256 前 16 位 b039064b83b9c6e7）；
+ * 工程契约：`公共能力抽象方案.md`（sha256 前 16 位 e7649e525498575b）。
+ *
+ * 本页本轮改动（**长按气泡整体退役，改走公共抽屉组件**）：
+ *  A. 渲染结构（AC-B.28 / V-B17，本轮唯一有风险的增量）：
+ *     所有 `tk.w` 的单词都渲染成 `<text class="w">`（原来非生词走 wx:else 纯文本、没有节点
+ *     → 普通词物理上无法长按）；`.has-def` 点线只给 hasDef；`catchlongpress` 与 `catchtap`
+ *     挂**全部**单词，`onWordTap` 首行用 hasDef 守卫回落成「点句子」（E1：点普通词不弹词卡）。
+ *  B. 单槽位 overlay（方案 §4.1）：`bubbleIdx / bubblePos / wordBubble / tipWord / tipPos`
+ *     五个字段收敛成**一个** `overlay`：
+ *       `null | {kind:'drawer',…} | {kind:'wordtip',…}`
+ *     一个字段 = 物理上不可能两开（F1/F2 结构级保证）；所有 open 入口走 `openOverlay()` 整体替换。
+ *  C. 锚点链路整块删除（方案 §2.0-B）：`_anchorFloat` / `boundingClientRect` / `scrollOffset` /
+ *     `pageX·750/windowWidth` / `clamp(750-340)` / `tipPos` 全部消失 —— 抽屉贴底通栏不测任何坐标。
+ *  D. 五个抽屉 handler（方案 §3.3 方案 B：组件只 triggerEvent，页面调 services）：
+ *     `onDrawerSpeakLine / onDrawerSpeakWord / onDrawerCollectLine / onDrawerCollectWord /
+ *     onDrawerClose`。未登录守卫仍是本页的内联 modal（首页是 toast，差异不上沉到组件）。
+ *  E. U1 停止按钮：`readingLineIdx === si` 时该句行尾渲染一个极小的 `■`，点击 = `stopSpeak()`。
+ *     🔴 这与 V7-C「句子区无常驻 ♪/☆ 控件」**不冲突**：①只在该句正在朗读时渲染（不播放时不存在）；
+ *     ②它是「停止」而不是「播放 / 收藏」入口，不具备可发现性引导作用；③它替代的正是被 B 变体
+ *     删掉的「长按气泡再点『朗读此句』= 停」这条唯一停止路径（方案 §3.5 U1）。
+ *  F. 播放态权威源不变：仍只由 tts 的 `onSpeakState` 回流反推（P2-1/P2-2/P2-3 刚修的三处
+ *     缺陷不得回退）；`onHide` 仍是「stopSpeak → 显式归零 → 退订」，`onShow` 先归零再订阅。
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 import { getNceLesson, type NceLessonDetail } from '../../../services/nce';
 import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
@@ -50,15 +81,7 @@ import { collectGlossary } from '../../../services/glossary';
 import { isLoggedIn, loginFromGate } from '../../../services/auth';
 import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
 import { lookupWord, type WordLookup } from '../../../utils/lexicon';
-
-/** D-01/D-02：浮层锚定坐标（rpx，页面坐标；null = 收起 / 未定位） */
-interface FloatPos {
-  left: number;
-  top: number;
-}
-/** SelectorQuery.exec 结果元素形状（只声明所需字段，避免 any） */
-interface FloatRect { left?: number; bottom?: number; }
-interface FloatScroll { scrollTop?: number; }
+import { collectToastText } from '../../../utils/line-actions';
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
@@ -71,21 +94,43 @@ interface NceLineView {
 /** 词卡视图 = utils/lexicon 的查词结果（详情页与首页共用同一形状） */
 type WordTipView = WordLookup;
 
-/** 长按生词气泡（2026-11-26 ③）：含且仅含「朗读单词」「收藏单词」 */
-interface WordBubble {
-  /** 小写词形（查词 / 朗读 / 收藏用） */
-  word: string;
-  /** 所属句下标（收藏 meta.lineIndex） */
-  lineIdx: number;
-  /** 气泡左上角（rpx，页面坐标） */
-  left: number;
-  top: number;
+/**
+ * 单槽位浮层（方案 §4.1 / D3）：`data.overlay` 是**唯一**的浮层字段。
+ * 一个字段 = 物理上不可能两开 —— 抽屉与词卡互斥不靠「两处显隐逻辑互相记得关」，
+ * 而靠「同一时刻只有一个值」（F1/F2 结构级保证）。
+ */
+interface DrawerLineOverlay {
+  kind: 'drawer';
+  scope: 'line';
+  lineIndex: number;
+  /** 该句英文原文（标题区展示 + 朗读/收藏的目标文本） */
+  lineText: string;
 }
+interface DrawerWordOverlay {
+  kind: 'drawer';
+  scope: 'word';
+  lineIndex: number;
+  /** 该词所在句原文（标题区展示 + 「朗读此句」的目标文本） */
+  lineText: string;
+  /** 小写词形（朗读 / 收藏 / 标题区共用同一份） */
+  word: string;
+  /** 是否课文词汇表直收词：只影响标题区音标 /「暂无释义」，不影响任何动作可用性 */
+  hasDef: boolean;
+  /** hasDef=true 时的音标（查表得到；缺失为空串） */
+  phonetic: string;
+}
+/** 底部生词词卡（点生词弹出）：沿用 WordLookup 字段 + kind 判别位，行为与迁移前完全一致 */
+interface WordTipOverlay extends WordLookup { kind: 'wordtip'; }
+type Overlay = DrawerLineOverlay | DrawerWordOverlay | WordTipOverlay | null;
+
+/** 抽屉组件 triggerEvent 的事件对象（detail 里已解构，只用到 detail） */
+interface DrawerEvent<T> { detail?: T; }
+interface SpeakLineDetail { lineIndex?: number; text?: string; }
+interface SpeakWordDetail { word?: string; lineIndex?: number; }
+interface CollectWordDetail extends SpeakWordDetail { hasDef?: boolean; }
 
 interface NceTapEvent {
   currentTarget: { dataset: Record<string, string | number | boolean | undefined> };
-  /** 长按事件带原生触点（pageX/pageY 为页面坐标，px）：用于长按生词气泡定位 */
-  touches?: Array<{ pageX?: number; pageY?: number; clientX?: number; clientY?: number }>;
 }
 
 /** V21+ 阅读三档：沉浸（连排通读）/ 双语（中文常显）/ 点按=精读（逐句展开 + 生词 tip）。默认沉浸。 */
@@ -137,20 +182,16 @@ Page({
     readingPhase: 'idle',
     /** V2 点句展开中文下标（-1 = 无；至多 1 句） */
     expandedIdx: -1,
-    /** V4 长按气泡所在句下标（-1 = 无） */
-    bubbleIdx: -1,
-    /** V3 点词 tip（null = 收起） */
-    tipWord: null as WordTipView | null,
+    /**
+     * 🔴 唯一浮层槽位（本轮由 bubbleIdx / bubblePos / wordBubble / tipWord / tipPos 收敛而来）。
+     * `null` = 无浮层；`kind:'drawer'` = 底部动作抽屉；`kind:'wordtip'` = 生词词卡。
+     * 两浮层同帧并存从结构上不可能（同一个字段只能有一个值）。
+     */
+    overlay: null as Overlay,
     /** 2026-11-26 ④：词卡「朗读」按钮播放态（true = 正在朗读该词） */
     tipPlaying: false,
-    /** 2026-11-26 ③ 长按生词气泡（null = 收起） */
-    wordBubble: null as WordBubble | null,
     /** 2026-11-26 ③ 正在朗读的单词（'' = 无）：驱动词卡/单词气泡按钮文案 */
     wordPlaying: '',
-    /** 19:11：tipPos 字段保留（切档/换课/收起时仍清），但不再驱动底部浮层 word-tip */
-    tipPos: null as FloatPos | null,
-    /** D-02 长按气泡锚定坐标（rpx；null = 收起） */
-    bubblePos: null as FloatPos | null,
     /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
     guestLoginShow: false,
     /** V11 页面级会话过期标志（由 auth:expired 订阅置位） */
@@ -178,6 +219,9 @@ Page({
     stopSpeak();
     this._resetPlayingState();
     this._unsubscribeReading();
+    // T11 / F5：页面隐藏时浮层必须归零。抽屉是 position:fixed，若留在 data 里，
+    // 回到本页时「浮层自己回来」（tab 页不销毁时必现，方案 §4.4 漏洞 2）。
+    if (this.data.overlay) this.setData({ overlay: null });
   },
 
   onUnload() {
@@ -262,9 +306,9 @@ Page({
       wx.setNavigationBarTitle({ title: `Lesson ${d.id} · ${d.title}` });
       this.setData({
         detail: d, lines, readingLineIdx: -1, readingPhase: 'idle',
-        expandedIdx: -1, bubbleIdx: -1, tipWord: null, tipPos: null,
-        bubblePos: null, fullCn, cnExpanded: false, loading: false,
-        wordBubble: null, wordPlaying: '', tipPlaying: false,
+        expandedIdx: -1, overlay: null,
+        fullCn, cnExpanded: false, loading: false,
+        wordPlaying: '', tipPlaying: false,
       });
       this._speakingWord = '';
     } catch {
@@ -287,9 +331,8 @@ Page({
     wx.setStorageSync('nce-mode', mode);
     this.setData({
       readMode: mode,
-      expandedIdx: -1, bubbleIdx: -1,
-      tipWord: null, tipPos: null, bubblePos: null,
-      wordBubble: null, tipPlaying: false,
+      expandedIdx: -1, overlay: null,
+      tipPlaying: false,
     });
   },
 
@@ -307,7 +350,7 @@ Page({
   _applyLineTap(i: number) {
     const line = this.data.lines[i];
     if (!line) return;
-    const clear = { bubbleIdx: -1, tipWord: null, tipPos: null, bubblePos: null, wordBubble: null, tipPlaying: false };
+    const clear = { overlay: null as Overlay, tipPlaying: false };
     if (this.data.readMode === 'tap') {
       this.setData({ ...clear, expandedIdx: this.data.expandedIdx === i ? -1 : i });
     } else {
@@ -321,55 +364,52 @@ Page({
   },
 
   /**
-   * D-02 长按气泡锚定浮层（19:11 后仅 bubblePos 使用；生词 tip 已改底部统一浮层，不再走这里）：
-   * 取被长按句的视口 rect + 页面滚动偏移，换算成页面坐标 rpx 后写入 bubblePos 供 WXML style 绑定。
-   * 原型 03:1134-1165 positionFloat(anchor) 取 left=(rect.left+8) / top=(rect.bottom+6)；
-   * 小程序 boundingClientRect 为视口坐标，故 top 需叠加 scrollTop 才是页面坐标。
-   * 🔴 tipPos 分支保留（字段仍在），但 onWordTap 不再调用本方法；长按气泡行为不变。
+   * 单槽位写入口（方案 §4.1 / F1 / F2）：所有浮层入口都走这里，**整体替换**。
+   * 因为 `overlay` 是唯一字段，「抽屉与词卡同帧并存」不是靠两处显隐互相记得关，而是结构上不可能。
+   * `patch` 允许把「与切换浮层同一帧必须生效的字段」（如 tipPlaying 复位）并进同一次 setData，
+   * 避免出现中间帧（F3 同理：换档是「一个 setData 覆盖」，不先关后开）。
    */
-  _anchorFloat(selector: string, key: 'tipPos' | 'bubblePos') {
-    const k = 750 / (wx.getSystemInfoSync().windowWidth || 375); // px → rpx（750 设计稿）
-    wx.createSelectorQuery().select(selector).boundingClientRect().selectViewport().scrollOffset().exec((res: unknown) => {
-      const list: unknown[] = Array.isArray(res) ? res : [];
-      const r = (list[0] || {}) as FloatRect;
-      const s = (list[1] || {}) as FloatScroll;
-      const pos: FloatPos = {
-        left: Math.round((Number(r.left || 0) + 8) * k),
-        top: Math.round((Number(r.bottom || 0) + Number(s.scrollTop || 0) + 6) * k),
-      };
-      if (key === 'tipPos') this.setData({ tipPos: pos });
-      else this.setData({ bubblePos: pos });
-    });
+  openOverlay(next: Overlay, patch: Record<string, unknown> = {}) {
+    this.setData({ ...patch, overlay: next });
+  },
+
+  /** 关掉任意浮层（T5/T6/T8）。组件不自己关：它只 triggerEvent('close')，由本页置 null。 */
+  closeOverlay() {
+    this.setData({ overlay: null });
   },
 
   /**
-   * 点词热区分发（2026-11-26 ② 口径变更）：
-   * - 非生词（hasDef=false，含标点/空白）→ 不产生任何词级反馈，语义等同点句子空白（_applyLineTap）；
-   *   WXML 侧非生词节点已不挂事件，这里是兜底，防止别处直接调用时行为漂移。
+   * 点词热区分发（E1 / AC-B.29 / AC-B.24）：
+   * - 🔴 **首行守卫**：非生词（hasDef=false）→ 语义等同「点句子空白」，走 `_applyLineTap`
+   *   （tap 档仍展开该句译文、其它档只清浮层），**不弹词卡、不弹抽屉、不朗读、不请求**。
+   *   普通词现在也是独立节点（渲染结构改造后），所以这条守卫是「点普通词无反应」的唯一执行点。
    * - 生词 → 任意阅读档都出底部词卡（不再限 tap 档）：沉浸/双语阅读中也可随时查词；
-   *   再点同一词收起、再点其它词替换内容。词卡不展开该句中文、不锚定、不写 tipPos。
+   *   再点同一词收起、再点其它词替换内容。词卡不展开该句中文、不锚定、不测坐标。
    */
   onWordTap(e: NceTapEvent) {
     const ds = e.currentTarget.dataset;
     const i = Number(ds.i ?? 0);
     const hasDef = ds.hasdef === true || ds.hasdef === 'true';
+    // 🔴 E1 守卫：点普通词 = 点句子（不弹词卡）
+    if (!hasDef) {
+      this._applyLineTap(i);
+      return;
+    }
     const raw = String(ds.w || '');
-    if (!hasDef || !raw) {
+    if (!raw) {
       this._applyLineTap(i);
       return;
     }
     const w = raw.toLowerCase();
-    const cur = this.data.tipWord;
-    if (cur && cur.word === w) {
+    const cur = this.data.overlay;
+    if (cur && cur.kind === 'wordtip' && cur.word === w) {
       // 收起卡片 = 关卡片：与 closeTip 同口径（P2-3，正在读这个词就停掉）
       this.closeTip();
       return;
     }
-    // 19:11 ③：底部浮层由 tipWord 驱动；不取 anchor、不调 _anchorFloat、不写 tipPos。
-    this.setData({
-      tipWord: this._lookupWord(w), tipPos: null, tipPlaying: false,
-      bubbleIdx: -1, bubblePos: null, wordBubble: null,
-    });
+    const tip = this._lookupWord(w);
+    // 一次 setData 完成「关抽屉 + 开词卡 + 复位按钮态」，不留中间帧（T9/T10）
+    this.openOverlay({ ...tip, kind: 'wordtip' }, { tipPlaying: false });
   },
 
   /**
@@ -387,7 +427,7 @@ Page({
       this._speakingWord = '';
       this._playingText = '';
     }
-    this.setData({ tipWord: null, tipPos: null, tipPlaying: false });
+    this.setData({ overlay: null, tipPlaying: false });
   },
 
   /**
@@ -395,78 +435,42 @@ Page({
    * 播放态经 onSpeakState 回流（wordPlaying / tipPlaying），页面不自己猜结束时机。
    */
   speakTipWord() {
-    const tip = this.data.tipWord;
-    if (!tip || !tip.word) return;
-    this._speakingWord = tip.word;
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
+    this._speakingWord = ov.word;
     this._playingIdx = -1;
-    void speakText(tip.word);
+    void speakText(ov.word);
   },
 
   /**
-   * 2026-11-26 ③ 长按生词 → 自绘气泡「朗读单词 / 收藏单词」。
-   * 定位用长按原生的 pageX/pageY（页面坐标 px）直接换算 rpx，不做 SelectorQuery，
-   * 避免与句子气泡的 _anchorFloat 抢同一份坐标状态；长按句子仍是原两项气泡。
+   * 长按**任意英文单词**（生词或普通词）→ 打开抽屉 `scope='word'`（四项）。
+   *
+   * - 长按对象已从「仅生词」放宽到「任意英文单词」（2026-11-26 18:05 用户追加 / AC-B.28）；
+   * - `hasDef` 只随 overlay 带到标题区（有音标 /「暂无释义」），**不影响任何动作可用性**
+   *   （口径 §5.9-8：动作层不得出现 `if (hasDef)`）；
+   * - 🔴 无坐标：B 变体抽屉贴底通栏，本方法**不读 touches、不调 SelectorQuery**。
    */
   onWordLongPress(e: NceTapEvent) {
     const ds = e.currentTarget.dataset;
     const i = Number(ds.i ?? 0);
     const w = String(ds.w || '').toLowerCase();
-    if (!w) return;
-    const t = (e.touches && e.touches[0]) || null;
-    const px2rpx = 750 / (wx.getSystemInfoSync().windowWidth || 375);
-    const px = Number((t && (t.pageX !== undefined ? t.pageX : t.clientX)) || 0);
-    const py = Number((t && (t.pageY !== undefined ? t.pageY : t.clientY)) || 0);
-    // 气泡宽 340rpx：右边界夹紧，避免长按行尾词时气泡出屏
-    const left = Math.max(0, Math.min(Math.round(px * px2rpx), 750 - 340));
-    const top = Math.round(py * px2rpx + 8);
-    this.setData({
-      wordBubble: { word: w, lineIdx: i, left, top },
-      bubbleIdx: -1, bubblePos: null,
-      tipWord: null, tipPos: null, tipPlaying: false,
-    });
-  },
-
-  closeWordBubble() { this.setData({ wordBubble: null }); },
-
-  /** 单词气泡「朗读单词」：读该词并收起气泡 */
-  onWordBubbleSpeak() {
-    const wb = this.data.wordBubble;
-    if (!wb) return;
-    this.setData({ wordBubble: null });
-    this._speakingWord = wb.word;
-    this._playingIdx = -1;
-    void speakText(wb.word);
-  },
-
-  /**
-   * 单词气泡「收藏单词」：沿用 collectGlossary 契约，tag='word'。
-   * note 存「词性 + 释义」便于收藏页直接读；meta 带 word/phonetic/lineIndex 供溯源。
-   * 未登录同句子收藏：弹 modal-login「请先登录」。
-   */
-  async collectWord() {
-    const wb = this.data.wordBubble;
-    if (!wb) return;
-    this.setData({ wordBubble: null });
-    if (!isLoggedIn()) {
-      this.setData({ guestLoginShow: true });
-      return;
-    }
-    const info = this._lookupWord(wb.word);
-    const { id, book, detail } = this.data;
-    const note = [info.pos, info.def].filter(Boolean).join(' ');
-    try {
-      const res = await collectGlossary({
-        tag: 'word',
-        enMain: info.word || wb.word,
-        note,
-        sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
-        meta: { book, lessonId: id, lineIndex: wb.lineIdx, word: info.word || wb.word, phonetic: info.phonetic || '' },
-      });
-      wx.showToast({ title: res.existed ? '已在生词本' : '已收藏', icon: 'none' });
-    } catch (err) {
-      // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
-      console.error('[nce/collectWord]', err);
-    }
+    if (!w) return; // 脏 token（空 data-w）直接忽略，不产生浮层
+    const line = this.data.lines[i];
+    if (!line) return;
+    const hasDef = ds.hasdef === true || ds.hasdef === 'true';
+    const info = hasDef ? this._lookupWord(w) : null;
+    this.openOverlay(
+      {
+        kind: 'drawer',
+        scope: 'word',
+        lineIndex: i,
+        lineText: line.en,
+        word: w,
+        hasDef,
+        phonetic: (info && info.phonetic) || '',
+      },
+      { tipPlaying: false },
+    );
   },
 
   /**
@@ -478,58 +482,82 @@ Page({
     return lookupWord(w, (detail && detail.words) || []);
   },
 
-  /** V4 平台原生 bindlongpress 长按气泡（与 bindtap 同句节点，平台互斥分发）+ D-02 锚点 */
+  /**
+   * V4 平台原生 bindlongpress 长按句子空白 → 抽屉 `scope='line'`（两项）。
+   * 长按与 tap 由平台互斥分发：长按**不展开**该句中文（expandedIdx 置 -1）。
+   */
   onLongPress(e: NceTapEvent) {
     const i = Number(e.currentTarget.dataset.i);
     const line = this.data.lines[i];
     if (!line) return;
-    this.setData({
-      bubbleIdx: i, expandedIdx: -1, tipWord: null, tipPos: null,
-      wordBubble: null, tipPlaying: false,
-    });
-    this._anchorFloat(`#line-${i}`, 'bubblePos');
+    this.openOverlay(
+      { kind: 'drawer', scope: 'line', lineIndex: i, lineText: line.en },
+      { expandedIdx: -1, tipPlaying: false },
+    );
   },
 
-  closeBubble() { this.setData({ bubbleIdx: -1, bubblePos: null }); },
+  // ───────────── 抽屉组件回传的 5 个 handler（方案 §3.3 方案 B：页面调 services） ─────────────
 
-  /** V5 气泡「朗读此句」：恰好一次 speakText(line.en)、仅该句高亮；再点同句停止 */
-  onBubbleSpeak(e: NceTapEvent) {
-    const i = Number(e.currentTarget.dataset.i);
-    const line = this.data.lines[i];
-    if (!line) return;
-    if (this.data.readingLineIdx === i) {
-      // same-text 再点 → 停止（tts.ts 零改动，页面侧显式 stopSpeak）
-      stopSpeak();
-      this._playingIdx = -1;
-      this.setData({ readingLineIdx: -1, readingPhase: 'idle', bubbleIdx: -1, bubblePos: null });
-      return;
-    }
-    this._playingIdx = i;
+  /** 抽屉关闭（遮罩 / 下滑 / ✕ 任一通道）：组件只抛信号，`visible` 由本页置 false。 */
+  onDrawerClose() {
+    this.closeOverlay();
+  },
+
+  /**
+   * 「朗读此句」：`speakText(text)` 恰好一次。
+   * 🔴 不手写「同句再点 = 停」分支 —— `services/tts.ts` 已内建 same-text 语义
+   *    （`if (playingText === t) { stopSpeak(); … }`），手写一遍正是 R1 那 12 行冗余的来源。
+   * 播放态仍由 onSpeakState 权威回流（这里只先置 loading，不猜结束时机）。
+   */
+  onDrawerSpeakLine(e: DrawerEvent<SpeakLineDetail>) {
+    const d = (e && e.detail) || {};
+    const text = String(d.text || '');
+    if (!text) return;
+    const i = Number(d.lineIndex);
+    this._playingIdx = isFinite(i) ? i : -1;
     this._speakingWord = ''; // 读句子：清掉「单词朗读」标记，避免词卡按钮态串味
-    this.setData({ readingLineIdx: i, readingPhase: 'loading', bubbleIdx: -1, bubblePos: null });
-    void speakText(line.en);
+    // V-B11：动作后立即收起抽屉（朗读 / 收藏都要回到正文）
+    this.openOverlay(null, { readingLineIdx: this._playingIdx, readingPhase: 'loading' });
+    void speakText(text);
   },
 
-  /** V6 收藏：collectGlossary({tag:'nce', …}) 契约不变；T1 弹「请先登录」 */
-  async collectLine(e: NceTapEvent) {
-    const i = Number(e.currentTarget.dataset.i);
-    const line = this.data.lines[i];
-    if (!line) return;
-    this.setData({ bubbleIdx: -1, bubblePos: null });
+  /** 「朗读单词」：`speakText(word)`。普通词与生词走完全相同的路径（不查释义、不看 hasDef）。 */
+  onDrawerSpeakWord(e: DrawerEvent<SpeakWordDetail>) {
+    const d = (e && e.detail) || {};
+    const word = String(d.word || '');
+    if (!word) return;
+    this.closeOverlay();
+    this._speakingWord = word;
+    this._playingIdx = -1;
+    void speakText(word);
+  },
+
+  /**
+   * 「收藏此句」：`collectGlossary({tag:'nce'})` 契约不变；T1 未登录仍弹本页内联 modal-login
+   * 「请先登录」（首页同位置是 wx.showToast —— 这个差异**有意保留**，不下沉到公共层）。
+   */
+  async onDrawerCollectLine(e: DrawerEvent<SpeakLineDetail>) {
+    const d = (e && e.detail) || {};
+    const lineIndex = Number(d.lineIndex);
+    const text = String(d.text || '');
+    // V-B11：动作后立即收起（BB9：未登录也是「抽屉先收起 → toast 请先登录」）
+    this.closeOverlay();
     if (!isLoggedIn()) {
       this.setData({ guestLoginShow: true });
       return;
     }
+    const lines = this.data.lines || [];
+    const line = isFinite(lineIndex) ? lines[lineIndex] : null;
     const { id, book, detail } = this.data;
     try {
       const res = await collectGlossary({
         tag: 'nce',
-        enMain: line.en,
-        note: line.cn || '',
+        enMain: text || (line ? line.en : ''),
+        note: (line && line.cn) || '',
         sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
-        meta: { book, lessonId: id, lineIndex: i },
+        meta: { book, lessonId: id, lineIndex },
       });
-      wx.showToast({ title: res.existed ? '已在收藏中' : '已收藏', icon: 'none' });
+      wx.showToast({ title: collectToastText('line', !!res.existed), icon: 'none' });
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责（49 §5 方案 B / 11-20 治本授权）：
       // 常规失败在请求层保证「有且仅有一条中文 string toast」；页面层只保留排障留痕
@@ -537,6 +565,60 @@ Page({
       // 避免与请求层重复弹或把数组 message 直接塞进 wx.showToast 的 title。
       console.error('[nce/collect]', err);
     }
+  },
+
+  /**
+   * 「收藏单词」：`collectGlossary({tag:'word'})`，普通词同样可用（AC-B.31）：
+   * 没有音标 / 释义也**不拒收** —— `note` 允许为空串、`meta.phonetic` 允许为空串。
+   */
+  async onDrawerCollectWord(e: DrawerEvent<CollectWordDetail>) {
+    const d = (e && e.detail) || {};
+    const word = String(d.word || '').toLowerCase();
+    const lineIndex = Number(d.lineIndex);
+    if (!word) return;
+    this.closeOverlay();
+    if (!isLoggedIn()) {
+      this.setData({ guestLoginShow: true });
+      return;
+    }
+    const info = this._lookupWord(word);
+    const { id, book, detail } = this.data;
+    const note = [info.pos, info.def].filter(Boolean).join(' ');
+    try {
+      const res = await collectGlossary({
+        tag: 'word',
+        enMain: info.word || word,
+        note,
+        sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
+        meta: {
+          book,
+          lessonId: id,
+          lineIndex,
+          word: info.word || word,
+          phonetic: info.phonetic || '',
+        },
+      });
+      wx.showToast({ title: collectToastText('word', !!res.existed), icon: 'none' });
+    } catch (err) {
+      // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
+      console.error('[nce/collectWord]', err);
+    }
+  },
+
+  /**
+   * 🔴 U1（2026-11-26 19:15 用户拍板）：句子行尾「■ 停止」。
+   * 为什么这条不与 V7-C「句子区无常驻 ♪/☆ 控件」冲突（后来人请先读这段再改）：
+   *  ① **只在播放中渲染**：`wx:if="{{readingLineIdx === si}}"`，不播放时节点根本不存在，
+   *     不是常驻控件；
+   *  ② 它是**停止**而不是「播放 / 收藏」入口 —— 不承担「引导用户去朗读或收藏」的可发现性职责，
+   *     而 V7-C 禁止常驻控件的目的是「不要把阅读页做成播放器界面」；
+   *  ③ 它替代的正是 B 变体删掉的那条唯一停止路径（长按气泡「朗读此句」再点一次 = 停，方案 §3.5 U1），
+   *     没有它，用户点完「朗读此句」后抽屉已收起 → 页面上再无任何可停止的控件。
+   * 实现：`stopSpeak()` + 显式归零（不依赖 tts 一定推出 null）。
+   */
+  stopLineSpeak() {
+    stopSpeak();
+    this._resetPlayingState();
   },
 
   /** T1「去登录」：复用 loginFromGate() 语义；成功由 auth:logged 广播收起并重拉 */
@@ -566,7 +648,7 @@ Page({
       return;
     }
     stopSpeak();
-    this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle', wordBubble: null, wordPlaying: '', tipPlaying: false });
+    this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle', overlay: null, wordPlaying: '', tipPlaying: false });
     this._speakingWord = '';
     void this.load();
     wx.pageScrollTo({ scrollTop: 0, duration: 200 });
@@ -617,8 +699,9 @@ Page({
       lineIdx = this._playingIdx;
       word = this._speakingWord;
     }
-    const tip = this.data.tipWord;
-    const tipOn = !!word && !!tip && String(tip.word || '').toLowerCase() === word.toLowerCase();
+    // 词卡按钮态：只有 overlay 当前是词卡、且正在播的就是这个词时才亮（单槽位后判据更直白）
+    const ov = this.data.overlay;
+    const tipOn = !!word && !!ov && ov.kind === 'wordtip' && String(ov.word || '').toLowerCase() === word.toLowerCase();
     this.setData({
       readingPhase: s.phase === 'loading' ? 'loading' : 'playing',
       readingLineIdx: lineIdx,

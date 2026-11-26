@@ -106,6 +106,7 @@ import { speakText, stopSpeak } from '../services/tts';
 import { collectGlossary } from '../services/glossary';
 import { isLoggedIn } from '../services/auth';
 import { getNceLesson } from '../services/nce';
+import { actionsOf } from '../utils/line-actions';
 
 const speakTextMock = speakText as unknown as jest.Mock;
 const stopSpeakMock = stopSpeak as unknown as jest.Mock;
@@ -176,10 +177,12 @@ function makeThis(over: Record<string, unknown> = {}): any {
     load: jest.fn(),
   };
   // Page 配置里的内部方法需显式挂到 ctx 桩上（onWordTap 依赖 _lookupWord；
-  // D-01/D-02 落码后 onWordTap/onLongPress 还依赖 _anchorFloat），否则 this.xxx 不是函数。
   // V21+：toggleLine/onWordTap 共用 _applyLineTap 按档分派，也需挂到桩上；
   // 容错 typeof 判断，保证 TDD 红阶段（实现未落码时方法还不存在）不因 undefined.bind 崩桩。
-  for (const k of ['_lookupWord', '_anchorFloat', '_applyLineTap', 'toggleLine']) {
+  // 2026-11-26 变体 B：`_anchorFloat` 已随锚点链路整块删除，从桩表移除（不再有该键）。
+  // 单槽位重构后 onWordTap / onLongPress 改调 openOverlay / closeOverlay / closeTip，
+  // 这些是页面内部方法，同样要挂到桩上（否则 `this.openOverlay is not a function`）。
+  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip']) {
     if (typeof (pageConfig as any)[k] === 'function') {
       ctx[k] = (pageConfig as any)[k].bind(ctx);
     }
@@ -252,7 +255,7 @@ describe('C4/V3-A · 封闭规则表 R3（不得实现期扩充）', () => {
   });
 });
 
-describe('C5/V4 · 平台原生 bindlongpress 长按气泡', () => {
+describe('C5/V4 · 平台原生 bindlongpress 长按 → 底部动作抽屉（变体 B）', () => {
   it('detail.wxml 用 bindlongpress（与 bindtap 同句节点），禁 tap+timer 模拟', () => {
     const wxml = src('pages/nce/detail/detail.wxml');
     expect(wxml).toMatch(/bindlongpress=/);                       // 现状无 → 红灯
@@ -261,44 +264,79 @@ describe('C5/V4 · 平台原生 bindlongpress 长按气泡', () => {
     expect(wxml).toMatch(/bindtap="toggleLine"[\s\S]{0,200}bindlongpress=|bindlongpress=[\s\S]{0,200}bindtap="toggleLine"/);
   });
 
-  it('气泡含且仅含「朗读此句」「收藏」两动作', () => {
+  /**
+   * 2026-11-26 变体 B 改写：动作集合不再是 wxml 里手写的两个 `.bi` 节点，而是
+   * `utils/line-actions.actionsOf()` 的产物 + 组件渲染。判据随之改成：
+   *   ① 句档恰好 2 项、且就是四项的前两项（AC-B.6 / V-B6「两项与四项第一行格位一致」）；
+   *   ② detail.wxml 挂着抽屉组件的 5 个 bind（一个都不能少，否则某个动作会静默失效）。
+   * 🔴 没放松：仍要求「句档只有 2 项、不多不少、顺序固定」。
+   */
+  it('句档恰好「朗读此句 / 收藏此句」两项（= 四项前两项），且抽屉 5 个事件全部接线', () => {
+    const acts = actionsOf('line').map((a) => a.label);
+    expect(acts).toEqual(['朗读此句', '收藏此句']);
+    expect(actionsOf('line')).toHaveLength(2);
+    expect(actionsOf('word').slice(0, 2).map((a) => a.label)).toEqual(acts); // 换档不挪位
     const wxml = src('pages/nce/detail/detail.wxml');
-    expect(wxml).toMatch(/朗读此句/);
-    expect(wxml).toMatch(/收藏/);
-    const acts = (wxml.match(/data-bubble-act="(play|fav)"/g) || []);
-    expect(new Set(acts).size).toBe(2);
+    expect(wxml).toMatch(/<action-drawer/);
+    for (const evt of ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']) {
+      expect(wxml).toContain(`bind:${evt}="`);
+    }
   });
 
-  it('长按第 5 句弹气泡、不展开中文（长按与 tap 平台互斥）', () => {
+  it('长按第 5 句 → 抽屉 scope=line、lineIndex=4，不展开中文（长按与 tap 平台互斥）', () => {
     const ctx = makeThis();
     ctx.data.lines = mockLines();
     expect(typeof pageConfig.onLongPress).toBe('function'); // 现状无 → 红灯
     pageConfig.onLongPress.call(ctx, { currentTarget: { dataset: { i: 4 } } });
-    expect(ctx.data.bubbleIdx).toBe(4);
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 4 });
+    expect(ctx.data.overlay.lineText).toBe('He has already visited many places.');
     expect(ctx.data.expandedIdx).toBe(-1); // 长按不展开中文
   });
 });
 
-describe('C6/V5 · 气泡「朗读此句」= 恰好一次 speakText(line.en)、再点同句停止', () => {
-  it('单句朗读仅该句高亮、其他句不高亮、再次点停止且不推进到第 3 句', () => {
+describe('C6/V5 · 抽屉「朗读此句」= 恰好一次 speakText(line.en)、页面不手写停止分支', () => {
+  /**
+   * 2026-11-26 变体 B 改写（原用例断言「再点同句 → stopSpeak 被调用」）：
+   * 停止语义**没有消失，而是下沉**：`services/tts.ts` 内建
+   * `if (playingText === t) { stopSpeak(); … }`（本文件 S4 静态护栏仍在断这句源码）。
+   * 因此页面侧的正确契约不是「点两次时自己调 stopSpeak」，而是：
+   *   ① 两次点击都只是 `speakText(同一文本)`（第二次由 tts 内部转成停止）；
+   *   ② 页面**不得**用本地标记反推播放态（P2-1）——高亮归零一律由 onSpeakState 回流。
+   * 本文件用 dumb jest.fn 桩，无法观测 tts 内部语义 → 「再点同句 = 停 + 高亮复位」
+   * **由 tests/nce-detail-playstate.test.ts 的忠实 tts 桩覆盖**（那里 speakText 同文本即 stop）。
+   * 这里补一条静态断言，防止有人把停止分支重新写回页面。
+   */
+  it('单句朗读仅该句高亮、无整篇调度；再点同句仍只调 speakText（不手写 stopSpeak 分支）', () => {
     const ctx = makeThis();
     ctx.data.lines = mockLines();
-    expect(typeof pageConfig.onBubbleSpeak).toBe('function'); // 现状无 → 红灯
+    expect(typeof pageConfig.onDrawerSpeakLine).toBe('function'); // 迁移前无 → 红灯
     speakTextMock.mockClear();
     stopSpeakMock.mockClear();
 
-    pageConfig.onBubbleSpeak.call(ctx, { currentTarget: { dataset: { i: 1 } } });
+    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: 'He is an engineer.' } });
     expect(speakTextMock).toHaveBeenCalledTimes(1);
     expect(speakTextMock).toHaveBeenCalledWith('He is an engineer.');
     expect(ctx.data.readingLineIdx).toBe(1);
+    // V-B11：动作后抽屉立即收起
+    expect(ctx.data.overlay).toBeNull();
     // 无整篇调度：不会连播第 2..末句
     expect(speakTextMock.mock.calls.map((c) => c[0])).toEqual(['He is an engineer.']);
 
-    // 再次点同一句 → 停止、清高亮（same-text → stopSpeak 语义，tts.ts 零改动）
-    pageConfig.onBubbleSpeak.call(ctx, { currentTarget: { dataset: { i: 1 } } });
-    expect(stopSpeakMock).toHaveBeenCalled();
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(ctx.data.readingLineIdx).toBe(-1);
+    // 再次点同一句 → 仍是「读这一句」（停止由 tts 内建 same-text 语义决定），页面不插手
+    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: 'He is an engineer.' } });
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(speakTextMock.mock.calls.map((c) => c[0])).toEqual(['He is an engineer.', 'He is an engineer.']);
+    expect(stopSpeakMock).not.toHaveBeenCalled();   // 🔴 页面不得手写停止分支
+  });
+
+  it('静态：onDrawerSpeakLine 里不得出现「同句再点 = 停」的手写分支', () => {
+    const ts = src('pages/nce/detail/detail.ts');
+    const m = /onDrawerSpeakLine\(e: DrawerEvent<SpeakLineDetail>\)\s*\{([\s\S]*?)\n  \},/.exec(ts);
+    expect(m).not.toBeNull();
+    const body = (m as RegExpExecArray)[1];
+    expect(body).toMatch(/speakText\(text\)/);
+    expect(body).not.toMatch(/stopSpeak/);                    // 不做手写停止
+    expect(body).not.toMatch(/readingLineIdx\s*===\s*/);       // 不用本地高亮反推是否在播
   });
 });
 
@@ -306,10 +344,11 @@ describe('C6/V5 · 气泡「朗读此句」= 恰好一次 speakText(line.en)、�
 // 🔴 本轮范围：D-01/D-02/D-03/D-04/D-06/D-07/D-09/D-11；D-05(.head 保留)/D-08/D-10/D-1/D-2 不做。
 
 /**
- * 19:11 口径变更后的锚定判据（正反例共用，防假绿）：
- * - 生词 tip 不再是 absolute 就近锚定浮层，改为移动端底部固定浮层 position:fixed / bottom:0；
- * - 长按气泡仍是 absolute 就近锚定（_anchorFloat / bubblePos 行为不变）。
- * 两者分开判，避免用旧口径把新实现误判为通过。
+ * 2026-11-26 变体 B 改写（原 D-01/D-02「长按气泡就近锚定」判据）：
+ * - 生词 tip 仍是 `position:fixed / bottom:0` 的底部浮层（19:11 口径不变）；
+ * - 长按气泡（`.bubble`）**已整体退役**，锚点链路（`_anchorFloat` / `boundingClientRect` /
+ *   `scrollOffset` / `750/windowWidth` / `clamp(750-340)`）**从架构中删除**。
+ *   → 对应用例**反转为「不得出现」**的静态断言（不是放宽，是判据对象已不存在）。
  */
 function isTipBottomSheet(css: string): boolean {
   const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
@@ -321,22 +360,19 @@ function isTipBottomSheet(css: string): boolean {
     /right:\s*0/.test(tip)
   );
 }
-function isBubbleAnchored(css: string): boolean {
-  const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
-  return /position:\s*absolute/.test(bubble) && !/position:\s*fixed/.test(bubble);
-}
 
-describe('19:11 · 生词 tip 底部浮层 / 长按 bubble 就近锚定（口径变更，D-01 部分作废）', () => {
+describe('19:11+ / B 变体 · 生词 tip 底部浮层保留、长按锚点链路删除', () => {
   const wxss = () => src('pages/nce/detail/detail.wxss');
   const wxml = () => src('pages/nce/detail/detail.wxml');
   const ts = () => src('pages/nce/detail/detail.ts');
 
-  it('正例：.word-tip 为底部固定浮层、.bubble 仍 absolute 就近锚定', () => {
+  it('正例：.word-tip 仍为底部固定浮层；锚点气泡 .bubble 已删除', () => {
     expect(isTipBottomSheet(wxss())).toBe(true);
-    expect(isBubbleAnchored(wxss())).toBe(true);
+    expect(wxss()).not.toMatch(/\.bubble\s*\{/);
+    expect(wxss()).not.toMatch(/\.word-bubble\s*\{/);
   });
 
-  it('反例（防假绿）：tip 回退成 absolute 就近锚定、或 bubble 回退成 fixed，判据必须失败', () => {
+  it('反例（防假绿）：tip 回退成 absolute 就近锚定 → 判据必须失败', () => {
     const css = wxss();
     const tipReverted = css.replace(
       /(\.word-tip\s*\{[^}]*?)position:\s*fixed/,
@@ -344,90 +380,92 @@ describe('19:11 · 生词 tip 底部浮层 / 长按 bubble 就近锚定（口径
     );
     expect(tipReverted).not.toBe(css);                  // 确认反例确实改到了浮层规则
     expect(isTipBottomSheet(tipReverted)).toBe(false);
-    const bubbleReverted = css.replace(
-      /(\.bubble\s*\{[^}]*?)position:\s*absolute/,
-      '$1position: fixed',
-    );
-    expect(bubbleReverted).not.toBe(css);
-    expect(isBubbleAnchored(bubbleReverted)).toBe(false);
   });
 
-  it('word-tip 无 tipPos 的 left/top 内联样式；bubble 仍以 rpx 绑定锚点坐标', () => {
+  it('detail.wxml 无任何 left:{{…}}rpx / top:{{…}}rpx 坐标绑定（抽屉不测坐标，V-B2）', () => {
     const w = wxml();
-    expect(w).toMatch(/wx:if="\{\{tipWord\}\}" class="word-tip/);    // 底部浮层按 tipWord 渲染
-    expect(w).not.toMatch(/class="word-tip[^"]*"\s+style="left:/);   // 🔴 不再绑 tipPos
-    expect(w).toMatch(/class="bubble[^"]*"\s+style="left:\{\{[^}]+\}\}rpx;top:\{\{[^}]+\}\}rpx"/);
+    expect(w).toMatch(/wx:if="\{\{overlay && overlay\.kind === 'wordtip'\}\}" class="word-tip/);
+    expect(w).not.toMatch(/class="word-tip[^"]*"\s+style="left:/);
+    expect(w).not.toMatch(/left:\{\{[^}]+\}\}rpx/);
+    expect(w).not.toMatch(/top:\{\{[^}]+\}\}rpx/);
   });
 
-  it('detail.ts 用 createSelectorQuery + boundingClientRect + scrollOffset 换算页面坐标（含滚动偏移）', () => {
-    const t = ts();
-    expect(t).toMatch(/wx\.createSelectorQuery\(\)/);
-    expect(t).toMatch(/\.boundingClientRect\(\)/);
-    expect(t).toMatch(/\.selectViewport\(\)\.scrollOffset\(\)/);
-    expect(t).toMatch(/scrollTop/);
+  it('detail.ts 不得再用锚点换算链路（selector 查询 / 视口滚动偏移 / px→rpx）', () => {
+    // 只看代码，不看注释：本文件的变更留痕注释里会**提到**被删除的标识符（不静默删除原则），
+    // 那些提及不是实现。断言对象是「代码里还有没有这条链路」。
+    const t = ts()
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(t).not.toMatch(/createSelectorQuery/);
+    expect(t).not.toMatch(/boundingClientRect/);
+    expect(t).not.toMatch(/scrollOffset/);
+    expect(t).not.toMatch(/_anchorFloat/);
+    expect(t).not.toMatch(/750 \/ /);          // 不存在 px→rpx 换算
+    expect(t).not.toMatch(/750 - 340/);        // clamp 常量已删
+    expect(t).not.toMatch(/touches/);          // 长按不再读原生触点
   });
 
-  it('点词：底部浮层显示（tipWord 出）、tipPos 不再驱动 word-tip、closeTip 清空（tap 档 + 生词语义）', () => {
+  it('点词：底部浮层显示（overlay.kind=wordtip）、不展开该句中文、不测任何坐标', () => {
     const ctx = makeThis();
     ctx.data.readMode = 'tap'; // V26：生词 tip 仅 tap 档生效
     ctx.data.lines = mockLines();
     ctx.data.detail = { id: 4, title: 'L4', words: [{ word: 'engineer', def: '工程师' }] };
-    expect(typeof pageConfig._anchorFloat).toBe('function');   // 🔴 函数本体保留（长按气泡仍用）
     wxMock.createSelectorQuery.mockClear();
     pageConfig.onWordTap.call(ctx, {
       currentTarget: { dataset: { w: 'engineer', anchor: 'w-0-2', i: 0, hasdef: true } },
     });
-    expect(ctx.data.tipWord).toBeTruthy();                     // 底部浮层渲染条件成立
-    expect(ctx.data.tipWord.word).toBe('engineer');            // tipWord 内容正确
-    expect(ctx.data.tipWord.def).toBe('工程师');
-    expect(ctx.data.tipWord.none).toBe(false);
-    expect(ctx.data.tipPos).toBeNull();                       // 🔴 tipPos 不再被写入/驱动
-    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();  // 🔴 不为 tip 调 _anchorFloat
+    expect(ctx.data.overlay.kind).toBe('wordtip');            // 底部浮层渲染条件成立
+    expect(ctx.data.overlay.word).toBe('engineer');            // 内容正确
+    expect(ctx.data.overlay.def).toBe('工程师');
+    expect(ctx.data.overlay.none).toBe(false);
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();  // 🔴 不测任何坐标
     expect(ctx.data.expandedIdx).toBe(-1);                    // 点按生词不展开该句中文
     pageConfig.closeTip.call(ctx);
-    expect(ctx.data.tipWord).toBeNull();
-    expect(ctx.data.tipPos).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
   });
 
-  it('长按：保存锚点坐标到 bubblePos，closeBubble 清空；expandedIdx 语义不变（V4）', () => {
+  it('长按：写单槽位 overlay（无 bubblePos 字段）；onDrawerClose 清空；expandedIdx 语义不变（V4）', () => {
     const ctx = makeThis();
     ctx.data.lines = mockLines();
     pageConfig.onLongPress.call(ctx, {
       currentTarget: { dataset: { i: 4 } },
     });
-    expect(ctx.data.bubbleIdx).toBe(4);
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 4 });
     expect(ctx.data.expandedIdx).toBe(-1);
-    expect(ctx.data.bubblePos).toEqual({ left: 136, top: 672 });
-    pageConfig.closeBubble.call(ctx);
-    expect(ctx.data.bubbleIdx).toBe(-1);
-    expect(ctx.data.bubblePos).toBeNull();
+    // 旧锚点字段已从 data 中消失（不是值为 null，而是根本不存在）
+    expect('bubblePos' in ctx.data).toBe(false);
+    expect('bubbleIdx' in ctx.data).toBe(false);
+    expect('tipPos' in ctx.data).toBe(false);
+    pageConfig.onDrawerClose.call(ctx);
+    expect(ctx.data.overlay).toBeNull();
   });
 });
 
-describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', () => {
+/**
+ * 2026-11-26 变体 B 改写（原 D-03「tip 白底蓝边 / bubble 深色反相」）：
+ * `.bubble` / `.bi` / `.word-bubble` 三个规则块随长按气泡整体删除 → 对它们的断言**整条删除**
+ * （不是放宽：被断对象已不存在）。保留的判据是「词卡仍为白底蓝边底部浮层、词头仍品牌深蓝」。
+ * 抽屉的配色（不透明白底 + 遮罩 .34，D6）由 `components/action-drawer/index.wxss` 承担，
+ * 其静态判据落在 tests/action-drawer.test.ts。
+ */
+describe('选项 A · D-03 配色（词卡白底蓝边底部浮层；气泡已退役）', () => {
   const wxss = () => src('pages/nce/detail/detail.wxss');
 
-  it('tip 白底蓝边底部浮层（width:auto）、bubble 深色 #1F2937 紧凑气泡，视觉层级相反', () => {
+  it('tip 白底蓝边底部浮层（width:auto）；气泡规则块已删，本页不再有深色浮层', () => {
     const css = wxss();
     const tip = (/\.word-tip\s*\{[^}]*\}/.exec(css) || [''])[0];
-    const bubble = (/\.bubble\s*\{[^}]*\}/.exec(css) || [''])[0];
     expect(tip).toMatch(/background:\s*#FFFFFF/);
     expect(tip).toMatch(/border:\s*1rpx solid #DBEAFE/);
     expect(tip).toMatch(/width:\s*auto/);              // 19:11：底部浮层横向铺满，不再收窄卡片
     expect(tip).toMatch(/border-radius:\s*[^;]*rpx/);  // 上方圆角
-    expect(Number((/z-index:\s*(\d+)/.exec(tip) || ['', '0'])[1])).toBeGreaterThan(
-      Number((/z-index:\s*(\d+)/.exec(bubble) || ['', '0'])[1]),
-    );                                                 // z-index 高于气泡
-    expect(bubble).toMatch(/background:\s*#1F2937/);
-    expect(bubble).toMatch(/width:\s*\d+rpx/);         // 收窄为气泡
-    expect(tip).not.toMatch(/background:\s*#1F2937/);
-    expect(bubble).not.toMatch(/background:\s*#FFFFFF/);
+    expect(css).not.toMatch(/\.bubble\s*\{/);          // 🔴 长按气泡规则块已删
+    expect(css).not.toMatch(/\.word-bubble\s*\{/);
   });
 
-  it('bubble 动作为浅色文字（深色底），tip 词头为品牌深蓝（白底）', () => {
+  it('tip 词头为品牌深蓝（白底）；.bi 浅色文字规则已随气泡删除', () => {
     const css = wxss();
-    expect(css).toMatch(/\.bi\s*\{[^}]*color:\s*#FFFFFF/);
     expect(css).toMatch(/\.wt-w\s*\{[^}]*color:\s*#1D4ED8/);
+    expect(css).not.toMatch(/\.bi\s*\{/);
   });
 
   it('19:11 ② 展开态/中文块保留浅蓝背景但去掉左侧色条；.sent 仍留 transparent 占位防跳版', () => {
@@ -444,12 +482,14 @@ describe('选项 A · D-03 配色反相（tip 白底蓝边 / bubble 深色）', 
   });
 });
 
-describe('选项 A · D-06 词点线 / hasDef 标记', () => {
-  it('WXML 只有生词挂事件（has-def 点线），非生词是纯文本；WXSS 词级高亮只作用于 .has-def', () => {
+describe('选项 A · D-06 词点线 / hasDef 标记（R-READ-04 后：点线只控样式，不控渲染）', () => {
+  it('WXML 所有英文词都是节点（条件只判 tk.w），has-def 点线由插值控制；WXSS 词级高亮只作用于 .has-def', () => {
     const w = src('pages/nce/detail/detail.wxml');
     const css = src('pages/nce/detail/detail.wxss');
-    // 2026-11-26 ②：事件与点线只挂在 hasDef 生词分支
-    expect(w).toMatch(/wx:if="\{\{tk\.w && tk\.hasDef\}\}" class="w has-def"/);
+    // 2026-11-26 R-READ-04（AC-B.28 / V-B17）：渲染条件不再含 hasDef，
+    // 否则非生词没有节点 → 「长按任意英文单词」物理上做不到。
+    expect(w).toMatch(/<text wx:if="\{\{tk\.w\}\}" class="w \{\{tk\.hasDef \? 'has-def' : ''\}\}"/);
+    expect(w).not.toMatch(/tk\.w && tk\.hasDef/);
     expect(css).toMatch(/\.w\.has-def\s*\{[^}]*border-bottom:\s*1rpx dotted #3B82F6/);
     // 🔴 非生词不高亮：全局 .w:active 与废弃的 .w.hit 都必须不存在
     expect(css).not.toMatch(/\.w:active\s*\{/);
@@ -484,8 +524,11 @@ describe('选项 A · D-04/D-09/D-11 信息结构、句序号、可发现性', (
     expect(w).toMatch(/D1 主定义 · 英文全文不打断/);
     expect(w).toMatch(/class="hint"/);
     expect(w).toMatch(/长按句子/);
-    expect(w).toMatch(/朗读此句/);
-    expect(w).toMatch(/收藏/);
+    // 2026-11-26 变体 B：提示文案随「长按对象 = 任意英文单词」更新（E4 的补偿手段之一），
+    // 动作文案（朗读此句 / 收藏此句）已搬进组件，故此处只断文案口径不断节点。
+    expect(w).toMatch(/长按任意单词/);
+    expect(w).toMatch(/朗读\/收藏单词/);
+    expect(w).toMatch(/朗读\/收藏整句/);
   });
 
   it('每句补 .sn 句序号，句子文本包 .stx；.sn 为小号浅灰', () => {
@@ -514,7 +557,11 @@ describe('V6/清单 8 · 收藏沿用 collectGlossary({tag:"nce"}) 契约 + T1 �
     ctx.data.book = 'NCE2';
     ctx.data.detail = { id: 4, title: 'L4', words: [] };
     collectMock.mockClear();
-    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    // 2026-11-26 变体 B：入口从 `collectLine(e.dataset.i)` 改为抽屉事件
+    // `onDrawerCollectLine({detail:{lineIndex,text}})`；payload 契约一字未改。
+    await pageConfig.onDrawerCollectLine.call(ctx, {
+      detail: { lineIndex: 0, text: 'I have just received a letter.' },
+    });
     expect(collectMock).toHaveBeenCalledWith({
       tag: 'nce',
       enMain: 'I have just received a letter.',
@@ -531,7 +578,9 @@ describe('V6/清单 8 · 收藏沿用 collectGlossary({tag:"nce"}) 契约 + T1 �
     collectMock.mockClear();
     wxMock.switchTab.mockClear();
 
-    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    await pageConfig.onDrawerCollectLine.call(ctx, {
+      detail: { lineIndex: 0, text: 'I have just received a letter.' },
+    });
     expect(ctx.data.guestLoginShow).toBe(true);        // 现状 toast+switchTab → 红灯
     expect(ctx.data.showAuthModal).not.toBe(true);     // 不弹 T2 的「登录已过期」
     expect(wxMock.switchTab).not.toHaveBeenCalled();
@@ -558,7 +607,7 @@ describe('V21 · 默认档 immersion + setReadMode 三档切换写 nce-mode', ()
     const ctx = makeThis();
     ctx.data.lines = mockLines();
     ctx.data.expandedIdx = 2;
-    ctx.data.tipWord = { word: 'x', none: true };
+    ctx.data.overlay = { kind: 'wordtip', word: 'x', none: true };
     expect(typeof pageConfig.setReadMode).toBe('function');
     for (const m of ['bilingual', 'tap', 'immersion', 'bogus']) {
       wxMock.setStorageSync.mockClear();
@@ -567,9 +616,8 @@ describe('V21 · 默认档 immersion + setReadMode 三档切换写 nce-mode', ()
       expect(ctx.data.readMode).toBe(m === 'bogus' ? 'immersion' : m);
     }
     expect(ctx.data.expandedIdx).toBe(-1);
-    expect(ctx.data.tipWord).toBeNull();
-    expect(ctx.data.tipPos).toBeNull();
-    expect(ctx.data.bubbleIdx).toBe(-1);
+    // 2026-11-26 变体 B：五个旧浮层字段 → 单槽位 overlay null
+    expect(ctx.data.overlay).toBeNull();
   });
 
   it('onLoad 读回持久化的 nce-mode，且非法/缺失值回落默认档 immersion', () => {
@@ -636,7 +684,7 @@ describe('V23 · tap 档点句任意位置展开/收起该句中文（catchtap �
 
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'have', i: 2, hasdef: false } } });
     expect(ctx.data.expandedIdx).toBe(2);
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();  // 非生词不锚定 tip
 
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'been', i: 2, hasdef: false } } });
@@ -666,11 +714,12 @@ describe('V24 · 沉浸档点句不展开逐句中文 + 文末参考译文折叠
 
     pageConfig.toggleLine.call(ctx, { currentTarget: { dataset: { i: 2 } } });
     expect(ctx.data.expandedIdx).toBe(-1);
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
 
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
     expect(ctx.data.expandedIdx).toBe(-1);           // 🔴 沉浸点生词不展开该句中文
-    expect(ctx.data.tipWord).toBeTruthy();           // 🔴 但仍出底部词卡（不再限 tap 档）
+    expect(ctx.data.overlay).toBeTruthy();           // 🔴 但仍出底部词卡（不再限 tap 档）
+    expect(ctx.data.overlay.kind).toBe('wordtip');
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
   });
 
@@ -734,37 +783,42 @@ describe('V25 · 双语档全部中文常显、点句不 toggle expandedIdx', ()
     ctx.data.detail = { id: 4, title: 'L4', words: [] };
     pageConfig.toggleLine.call(ctx, { currentTarget: { dataset: { i: 1 } } });
     expect(ctx.data.expandedIdx).toBe(-1);
-    expect(ctx.data.tipWord).toBeNull();
+    expect(ctx.data.overlay).toBeNull();
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'just', i: 0, hasdef: true, anchor: 'w-0-3' } } });
     expect(ctx.data.expandedIdx).toBe(-1);           // 不 toggle
-    expect(ctx.data.tipWord).toBeTruthy();           // 2026-11-26：双语档也可点生词查释义
+    expect(ctx.data.overlay).toBeTruthy();           // 2026-11-26：双语档也可点生词查释义
+    expect(ctx.data.overlay.kind).toBe('wordtip');
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
   });
 });
 
-/** V26′ 19:11 口径变更：生词 tip 仅 tap 档生效，改为底部统一浮层（不再 _anchorFloat 就近锚定） */
-describe('V26′ · 生词 tip 仅 tap 档生效，改为底部统一浮层（不再就近锚定）', () => {
-  it('tap 档 + hasDef → 底部浮层显示、tipWord 内容正确、不展开该句中文、不为 tip 锚定', () => {
+/**
+ * V26′（19:11 口径 + 2026-11-26 变体 B）
+ * 改写说明：原用例用 `jest.spyOn(ctx, '_anchorFloat')` 断「不为 tip 锚定」。
+ * 变体 B 已把 `_anchorFloat` 整块删除 → spyOn 不存在的属性会**直接抛错**（不是断言失败），
+ * 故改为「静态断言该方法不存在」+「selectorQuery 零调用」，判据强度不降：
+ *   - 原来断「方法在但没被调」；
+ *   - 现在断「方法根本不存在」（更强的保证），且仍断 selectorQuery 未被调用。
+ */
+describe('V26′ · 生词 tip 底部浮层（不再就近锚定，锚点方法已删除）', () => {
+  it('tap 档 + hasDef → 底部浮层显示、内容正确、不展开该句中文、不测坐标', () => {
     const ctx = makeThis();
     ctx.data.readMode = 'tap';
     ctx.data.lines = mockLines();
     ctx.data.detail = { id: 4, title: 'L4', words: [] };
-    const spy = jest.spyOn(ctx, '_anchorFloat');
+    expect(pageConfig._anchorFloat).toBeUndefined();   // 🔴 方法本体已删
     wxMock.createSelectorQuery.mockClear();
     pageConfig.onWordTap.call(ctx, {
       currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
     });
     const w = src('pages/nce/detail/detail.wxml');
-    expect(w).toMatch(/wx:if="\{\{tipWord\}\}" class="word-tip/);   // 底部浮层渲染
-    expect(ctx.data.tipWord).toBeTruthy();
-    expect(ctx.data.tipWord.word).toBe('just');                      // 内容正确（表外词 → none）
-    expect(ctx.data.tipWord.none).toBe(true);
+    expect(w).toMatch(/wx:if="\{\{overlay && overlay\.kind === 'wordtip'\}\}" class="word-tip/); // 底部浮层渲染
+    expect(ctx.data.overlay).toBeTruthy();
+    expect(ctx.data.overlay.word).toBe('just');                      // 内容正确（表外词 → none）
+    expect(ctx.data.overlay.none).toBe(true);
     expect(ctx.data.expandedIdx).toBe(-1);                           // 点按生词不展开该句中文
-    expect(spy).not.toHaveBeenCalled();                              // 🔴 不再为 tip 调 _anchorFloat
     expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
-    expect(ctx.data.tipPos).toBeNull();                              // tipPos 可保留但不得驱动 word-tip
     expect(w).not.toMatch(/class="word-tip[^"]*"\s+style="left:/);
-    spy.mockRestore();
   });
 
   it('再点其它生词 → 替换底部浮层内容（仍不锚定、不展开中文）', () => {
@@ -772,33 +826,28 @@ describe('V26′ · 生词 tip 仅 tap 档生效，改为底部统一浮层（�
     ctx.data.readMode = 'tap';
     ctx.data.lines = mockLines();
     ctx.data.detail = { id: 4, title: 'L4', words: [{ word: 'engineer', def: '工程师' }, { word: 'firm', def: '公司' }] };
-    const spy = jest.spyOn(ctx, '_anchorFloat');
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'engineer', i: 0, hasdef: true } } });
-    expect(ctx.data.tipWord.word).toBe('engineer');
+    expect(ctx.data.overlay.word).toBe('engineer');
     pageConfig.onWordTap.call(ctx, { currentTarget: { dataset: { w: 'firm', i: 3, hasdef: true } } });
-    expect(ctx.data.tipWord.word).toBe('firm');
-    expect(ctx.data.tipWord.def).toBe('公司');
+    expect(ctx.data.overlay.word).toBe('firm');
+    expect(ctx.data.overlay.def).toBe('公司');
     expect(ctx.data.expandedIdx).toBe(-1);
-    expect(spy).not.toHaveBeenCalled();
-    spy.mockRestore();
+    expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
   });
 
-  it('非 tap 档（immersion / bilingual）点同一生词 → 也出底部词卡；_anchorFloat 不调用、不写 tipPos', () => {
+  it('非 tap 档（immersion / bilingual）点同一生词 → 也出底部词卡；不测任何坐标', () => {
     for (const m of ['immersion', 'bilingual']) {
       const ctx = makeThis();
       ctx.data.readMode = m;
       ctx.data.lines = mockLines();
       ctx.data.detail = { id: 4, title: 'L4', words: [] };
-      const spy = jest.spyOn(ctx, '_anchorFloat');
       wxMock.createSelectorQuery.mockClear();
       pageConfig.onWordTap.call(ctx, {
         currentTarget: { dataset: { w: 'just', anchor: 'w-0-3', i: 0, hasdef: true } },
       });
-      expect(ctx.data.tipWord).toBeTruthy();          // 2026-11-26：全档可查词
-      expect(ctx.data.tipPos).toBeNull();             // 仍不做就近锚定
-      expect(spy).not.toHaveBeenCalled();
+      expect(ctx.data.overlay).toBeTruthy();          // 2026-11-26：全档可查词
+      expect(ctx.data.overlay.kind).toBe('wordtip');  // 不做就近锚定
       expect(wxMock.createSelectorQuery).not.toHaveBeenCalled();
-      spy.mockRestore();
     }
   });
 });
@@ -916,23 +965,25 @@ describe('19:11 · 三处 UI 优化静态判据（读源码文本 + 必然失败
   it('③ 正例：.word-tip 为 position:fixed + bottom:0 的底部浮层，不再就近锚定', () => {
     expect(bottomSheet(wxss(), wxml(), ts())).toBe(true);
   });
-  it('③ 反例：回退成 absolute 就近锚定（并重新绑定 tipPos + 调 _anchorFloat）→ 判据失败', () => {
+  it('③ 反例：回退成 absolute 就近锚定（并重新绑定坐标 + 调 _anchorFloat）→ 判据失败', () => {
     const revertedCss = wxss()
       .replace(/(\.word-tip\s*\{[^}]*?)position:\s*fixed/, '$1position: absolute')
       .replace(/(\.word-tip\s*\{[^}]*?)bottom:\s*0/, '$1bottom: auto');
     const revertedWxml = wxml().replace(
       'class="word-tip on"',
-      'class="word-tip on" style="left:{{tipPos ? tipPos.left : 0}}rpx;top:{{tipPos ? tipPos.top : 0}}rpx"',
+      'class="word-tip on" style="left:{{overlay.left}}rpx;top:{{overlay.top}}rpx"',
     );
+    // 2026-11-26 变体 B：`_anchorFloat` 已删除，注入点改到 onWordTap 的查词入口
+    // （原注入锚点 `const cur = this.data.tipWord;` 已随单槽位重构消失）
     const revertedTs = ts().replace(
-      /(const cur = this\.data\.tipWord;)/,
-      "this._anchorFloat(String(ds.anchor || ''), 'tipPos');\n    $1",
+      /(const tip = this\._lookupWord\(w\);)/,
+      "this._anchorFloat('x', 'tipPos');\n    $1",
     );
     expect(revertedCss).not.toBe(wxss());
     expect(revertedWxml).not.toBe(wxml());
     expect(revertedTs).not.toBe(ts());
     expect(bottomSheet(revertedCss, wxml(), ts())).toBe(false);      // CSS 回退即失败
-    expect(bottomSheet(wxss(), revertedWxml, ts())).toBe(false);      // WXML 重新绑 tipPos 即失败
+    expect(bottomSheet(wxss(), revertedWxml, ts())).toBe(false);      // WXML 重新绑坐标即失败
     expect(bottomSheet(wxss(), wxml(), revertedTs)).toBe(false);      // TS 重新就近锚定即失败
   });
 });
@@ -956,7 +1007,10 @@ describe('收藏 catch · console.error 落日志 + 页面层不重复弹（业�
     collectMock.mockRejectedValueOnce({ statusCode: 400, message: 'property tag should not exist' });
     wxMock.showToast.mockClear();
 
-    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    // 入口随变体 B 从 collectLine 改为抽屉事件（catch 分支逻辑一字未改）
+    await pageConfig.onDrawerCollectLine.call(ctx, {
+      detail: { lineIndex: 0, text: 'I have just received a letter.' },
+    });
     expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.objectContaining({ statusCode: 400 }));
     expect(wxMock.showToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: '收藏失败，请重试' }));
     expect(wxMock.showToast).not.toHaveBeenCalled();   // 服务层被 mock 时页面层不弹；真实提示由 utils/request.ts 统一负责
@@ -973,7 +1027,9 @@ describe('收藏 catch · console.error 落日志 + 页面层不重复弹（业�
     collectMock.mockRejectedValueOnce(new Error('NOT_LOGGED_IN'));
     wxMock.showToast.mockClear();
 
-    await pageConfig.collectLine.call(ctx, { currentTarget: { dataset: { i: 0 } } });
+    await pageConfig.onDrawerCollectLine.call(ctx, {
+      detail: { lineIndex: 0, text: 'I have just received a letter.' },
+    });
     expect(errSpy).toHaveBeenCalledWith('[nce/collect]', expect.any(Error));
     // NOT_LOGGED_IN 属登录态信号，页面层与请求层都不弹，由 login-gate 承接；页面层只保留 console.error 留痕
     expect(wxMock.showToast).not.toHaveBeenCalled();
