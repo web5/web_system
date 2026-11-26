@@ -240,6 +240,15 @@ describe('静态接线', () => {
     expect(elseBranch).not.toMatch(/catch|bind/);
   });
 
+  // 2026-11-26 P0 · 首页「今日一句」英文整段不显示：wx:for 未声明 wx:for-item，
+  // 微信默认迭代变量恒为 item，循环体却取 tk.* → tk 不在作用域 → 24 个 token 全渲染空串。
+  // 教训：「用了 tk.*」和「把 tk 引入作用域」是一对约束，上面那条只断言了字符串存在，拦不住。
+  // 通用扫描见 tests/wxml-for-item-scope.test.ts，这里留一条贴身的定点断言。
+  it('英文 token 循环必须声明 wx:for-item="tk"（否则 tk 不在作用域，整段渲染为空）', () => {
+    const w = read('pages/home/index/index.wxml');
+    expect(w).toMatch(/<block[^>]*wx:for="\{\{quoteTokens\}\}"[^>]*wx:for-item="tk"/);
+  });
+
   it('onShow 接线：登录态下拉取今日一句词表', () => {
     const ts = read('pages/home/index/index.ts');
     expect(ts).toMatch(/void this\.loadQuoteWords\(\)/);
