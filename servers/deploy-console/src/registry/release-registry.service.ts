@@ -401,6 +401,33 @@ export class ReleaseRegistryService {
    * 统一口径：**指针表的 previous_version 优先**（它就是「上一次生效的版本」，
    * 写指针时同步维护，语义最准）；指针表没有记录时才回落历史表（后端 legacy 只写
    * `deploy_deployments`，新表里可能压根没行）。
+   *
+   * **契约边界（台账 #9027 第二轮，方案 A″，2026-11-26）**：本函数只回答「回滚到哪个
+   * 版本**引用**」，**不做跨契约归一**，三个分支都原样返回来源里的值（`explicit` 传入值、
+   * `previous_version` 原值、历史行 `versionTag` 原值）。
+   *
+   * - `deploy_app_env_versions.*_version` 的**纯 commit 契约**由三个写入方法各自
+   *   `requireCommitRef` 保证（`setAppEnvPointerInner` / `syncAppEnvPointerInner` /
+   *   `mirrorPointer`）—— 归一只发生在写列处。
+   * - 归一**比对**仍在本函数内保留（只用于「判断是不是同一个版本」）：历史脏值
+   *   `portal/b6ec9950` 与 `b6ec9950` 必须视为同版本，否则会把当前版本自己选成回滚目标
+   *   → 下游 `from === currentVersion` → 静默 no-op（P1 回归）。
+   * - **`previous == current` 是合法状态，不是脏数据**（第五轮补充）：同一 commit 连续发布
+   *   两次时，`previous_version` 会忠实记录成与 `current_version` 相同的值（如 prod shell 的
+   *   `a82270f9` 于 14:23 / 14:33 各发一次，见台账 #9027 数据侧取证）。本函数视其为
+   *   「没有可用的 previous」，继续回落历史表找真正更早的**不同**版本 —— 而不是抛错，
+   *   因为抛错会把「本可自救」变成「不可自救」（历史表里通常还有更早的版本）。
+   * - `explicit` 分支是唯一**没有回落路径**的入口，故它做两道前置校验（校验但**不归一**，
+   *   返回的仍是原始引用）：归一失败（`..` / 空段）→ 400，堵住下游 `path.join` 穿越；
+   *   归一后等于 current → 400（否则「回滚到当前版本」会被下游 `unchanged: true` 静默吃掉）。
+   * - 两类消费者需求**相反**，故不能统一成一种形态：
+   *   - app / env-dir：`doSwitchVersion` 的三个 IO 点（`hasVersion` / `writePointer` /
+   *     指针列）本就对原始引用容错 —— `env-artifact.service.ts` 的 `hasVersion` 与
+   *     `writePointer` 都经 `resolveVersion()`，其 `legacyVersionCandidates` 是
+   *     **原始值优先、归一值兜底**。所以传原始引用最稳（`portal/b6ec9950` 也命中）。
+   *   - 后端：`applyBackendVersion` 直接
+   *     `path.join(ws,'servers',dir,versionTag)`，`runtime-checkpoint/<id>` 是磁盘上
+   *     **真实的一级目录**，剥掉前缀会指向不存在的目录。
    */
   async resolveRollbackTarget(input: {
     env: string;
@@ -417,13 +444,33 @@ export class ReleaseRegistryService {
     const fromCommit = normalizeCommitRef(from);
 
     // 三种来源都要覆盖：explicit / previous_version / 历史表 versionTag。
-    // 返回的 to 必须是纯 commit —— 下游 setAppEnvPointer / writePointer 直接拿它落库与拼路径。
-    if (explicit) return { from, to: requireCommitRef(explicit, '回滚目标'), source: 'explicit' };
+    // 三者都原样返回来源引用（契约边界见函数头 JSDoc）：列归一只在写列处做，
+    // 产物解析侧的 `resolveVersion` 已「原始值优先、归一值兜底」。
+    if (explicit) {
+      // 格式校验但**不归一**（台账 #9027 第五轮 · D11）：归一失败（`..` / 空段 / 超短）→ 400，
+      // 堵住下游 `applyBackendVersion` 的 path.join(ws,'servers',dir,versionTag) 路径穿越；
+      // 但**返回的仍是原始引用** —— `runtime-checkpoint/<id>` 与 `portal/<commit>` 都要原样透传。
+      // 🔴 校验与归一是**两件事**：A″ 之前把「撤掉剥前缀」和「撤掉校验」当成一件事一起做，
+      //    才是这处回退的根因 —— 不需要在「剥前缀」和「不校验」之间二选一。
+      requireCommitRef(explicit, '回滚目标'); // 只判定，不取返回值
+      // 注：「explicit 等于当前版本 → 400」是**另一个洞**（用户主动点当前版本），
+      // 属 P2，本轮不实现（team-lead 2026-11-26 定案）；要与格式校验的 400 分开文案。
+      return { from, to: explicit, source: 'explicit' };
+    }
 
     if (row?.previousVersion) {
-      const prev = normalizeCommitRef(row.previousVersion);
-      // previous 若不是列契约允许的形态（历史垃圾值）→ 视同没有，回落历史表
-      if (prev) return { from, to: prev, source: 'pointer' };
+      // normalizeCommitRef 只作**有效性判定**：无效（历史垃圾值如 `..`）视同没有 → 回落历史表；
+      // 有效则返回**原始**值（可能是合法的 `portal/c0ffee02` 形态）。
+      const prevRef = normalizeCommitRef(row.previousVersion);
+      // 🔴 `previous == current` 是**合法状态**，不是脏数据（台账 #9027 第五轮）：
+      // 同一 commit 连续发布两次时（如 shell@prod 的 a82270f9 于 14:23 与 14:33 各发一次），
+      // 第 2 次发布时 current 已是 a82270f9，previous 便忠实记录成同一个值。
+      // 但它不能当回滚目标 —— 那是「回滚到自己」：app 链 doSwitchVersion 会
+      // `unchanged: true` 静默成功（apps.service.ts:585），又是一次静默 no-op。
+      // 故视同「没有可用的 previous」，继续回落历史表找真正更早的**不同**版本。
+      if (prevRef && prevRef !== fromCommit) {
+        return { from, to: row.previousVersion, source: 'pointer' };
+      }
     }
 
     // 回落历史表（后端 legacy）
@@ -434,19 +481,19 @@ export class ReleaseRegistryService {
       where: { env: input.env, component: input.moduleKey },
       order: { releasedAt: 'DESC' } as never,
     });
-    const prev = rows
-      .map((r) => normalizeCommitRef(r.versionTag))
-      .find(
-        (ref): ref is string =>
-          !!ref && ref !== fromCommit && ref !== normalizeCommitRef(dep?.currentVersion),
-      );
-    if (!prev) {
+    // 比对用**归一值**（P1 修复不动）：命中的行返回它**原始**的 versionTag，
+    // 因为下游要拿原始引用来拼产物路径 / 后端目录（见函数头 JSDoc 的契约边界）。
+    const prevRow = rows.find((r) => {
+      const ref = normalizeCommitRef(r.versionTag);
+      return !!ref && ref !== fromCommit && ref !== normalizeCommitRef(dep?.currentVersion);
+    });
+    if (!prevRow?.versionTag) {
       throw new BadRequestException(
         `没有可回滚的历史版本：${input.moduleKey}@${input.env} 的指针表无 previous_version，` +
           `deploy_versions 里也没有其他版本`,
       );
     }
-    return { from: from ?? dep?.currentVersion ?? null, to: prev, source: 'history' };
+    return { from: from ?? dep?.currentVersion ?? null, to: prevRow.versionTag, source: 'history' };
   }
 
   /** 按版本标签查版本记录（复用产物时回填 gitCommit 用；跨 env 任意一条即可） */
