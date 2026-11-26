@@ -18,11 +18,15 @@
   <!-- 遮罩：点它 = 关（via='mask'）；catchtouchmove 用于拦页面滚动穿透（K4，未验证方案，见回执） -->
   <view class="ad-mask" catchtap="onMaskTap" catchtouchmove="noop"></view>
 
-  <!-- 抽屉本体：固定视口底，不测任何坐标；下滑手势用原生 touch 事件（不引库） -->
+  <!-- 抽屉本体：固定视口底，不测任何坐标；下滑手势用原生 touch 事件（不引库）
+       🔴 根节点**不绑任何 tap**（原 `catchtap="noop"` 已删）：父节点上的 catchtap 同样有
+       「吃掉子节点 tap」的争议（官方社区 000a248b7b0ff0183bb74180153c00 讨论串里两种说法都有），
+       而它本来也没有实际作用 —— 本节点的祖先链是 `.ad` → 页面根 `<view class="page">`，
+       两页的页面根都没有绑 tap，点抽屉空白处的冒泡不会命中任何 handler。
+       去掉它等于把「四个按钮能不能点」这条命脉上的可疑节点清零。 -->
   <view
     class="ad-drawer {{dragging ? 'ad-dragging' : ''}}"
     style="transform: translateY({{swipeY}}px)"
-    catchtap="noop"
     bindtouchstart="onTouchStart"
     bindtouchmove="onTouchMove"
     bindtouchend="onTouchEnd"
@@ -55,13 +59,26 @@
 
     <view class="ad-sep"></view>
 
-    <!-- 🔴 BB6（盲测 D-6 修）：动作按钮区**不参与下滑拖拽**。
-         第 1 层（结构）：本容器 catchtouchstart/catchtouchmove 吞掉触摸事件，抽屉根节点收不到
-         → 手指落在按钮上下拉，不会把抽屉拖走（想点按却关掉抽屉的误操作）。
-         按钮自身的 catchtap 不受影响（tap 与 touchmove 是两条事件流）。
-         第 2 层（逻辑）：`onTouchStart` 里还有一道「触点落在动作区高度带内就拒绝起拖」的兜底，
-         覆盖「事件绕过本容器直接进根节点」的情形（详见 index.ts 的 _startedInActsZone）。 -->
-    <view class="ad-acts" catchtouchstart="noop" catchtouchmove="noop">
+    <!-- 🔴🔴 BB6（盲测 D-6 修）：动作按钮区**不参与下滑拖拽**。
+         🔴 第 1 层（结构）：本容器只留 `catchtouchmove`，**绝不能写 `catchtouchstart`**。
+
+         为什么（2026-11-26 真机缺陷根因，血的教训）：微信父节点一旦 catch 掉 touchstart，
+         子节点的 tap 会失效 —— 官方社区帖 `000a248b7b0ff0183bb74180153c00`
+         （「catchtouchstart 会导致子元素 bindtap 失效」，多人复现）与多篇实务总结同一结论。
+         本组件曾写成 `catchtouchstart="noop" catchtouchmove="noop"` 来「吞掉触摸事件」，
+         结果是四个动作按钮**全部点不动**（抽屉不关、不朗读、不收藏，真机与开发者工具都复现），
+         而遮罩 / ✕ 因为不在这个容器里，反而是好的 —— 症状极具迷惑性。
+         社区共识的安全组合：父元素 `bind:touchstart` + `catch:touchmove` + `bind:touchend`。
+         这里更简单：`catchtouchmove` 已足够（touchmove 到不了根节点 = 拖不动），
+         touchstart 根本不需要拦 —— 起拖拦截由第 2 层逻辑判定，见下。
+
+         第 2 层（逻辑）：`onTouchStart` 里有一道「触点落在动作区高度带内就拒绝起拖」的判定，
+         覆盖「touchstart 冒泡到根节点」的情形（详见 index.ts 的 _startedInActsZone）。
+         两层串联后的完整行为：手指按在按钮上 → touchstart 冒泡到根 → 判定在动作区内 → 不置
+         `_hasStart` → touchmove 又被本容器 catch 掉 → 抽屉纹丝不动、tap 正常派发。
+         `tests/action-drawer.test.ts` 的 E5 组已把「本容器不得出现 catchtouchstart」钉成静态断言
+         （mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）。 -->
+    <view class="ad-acts" catchtouchmove="noop">
       <view
         wx:for="{{acts}}"
         wx:key="key"

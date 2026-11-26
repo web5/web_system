@@ -174,11 +174,27 @@ describe('P2-5 连字符词整词一个 token（BB16）', () => {
 
 // ═════════════════════ P2-6 动作按钮区不参与下滑拖拽 ═════════════════════
 describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
-  it('结构层：.ad-acts 自己 catch 掉 touchstart/touchmove（抽屉根节点收不到）', () => {
+  // 🔴 2026-11-26 真机缺陷修：本条断言的方向被**反转**过。
+  //    原断言要求 `.ad-acts` 必须 `catchtouchstart="noop"` —— 那是「结构层吞掉触摸」的实现，
+  //    但微信父节点 catch 掉 touchstart 会让子节点 tap 失效（官方社区 000a248b7b0ff0183bb74180153c00），
+  //    导致四个动作按钮全部点不动（抽屉不关 / 不朗读 / 不收藏）。
+  //    现在断言的是**相反的契约**：这个容器上只允许 catchtouchmove，出现 catchtouchstart 即红。
+  it('结构层：.ad-acts 只 catch 掉 touchmove；🔴 绝不许出现 catchtouchstart（会吃掉子按钮 tap）', () => {
     const w = read('components/action-drawer/index.wxml');
     const actsTag = (w.match(/<view class="ad-acts"[^>]*>/) || [''])[0];
-    expect(actsTag).toMatch(/catchtouchstart="noop"/);
     expect(actsTag).toMatch(/catchtouchmove="noop"/);
+    expect(actsTag).not.toMatch(/catchtouchstart/);
+    expect(actsTag).not.toMatch(/catch:touchstart/);
+    // 同一条命脉上：抽屉根节点不得绑任何 tap（父 catchtap 有吃掉子 tap 的争议，且它本无作用）
+    const drawerTag = (w.match(/<view\s+class="ad-drawer[\s\S]*?>/) || [''])[0];
+    // 🔴 先证明「真的抓到了那个标签」再断言内容 —— 否则正则失配时 drawerTag 是空串，
+    //    not.toMatch 会**空转通过**（本轮变异验证时真踩过这个坑）。
+    expect(drawerTag).toMatch(/^<view\s/);
+    expect(drawerTag).toMatch(/bindtouchstart="onTouchStart"/);
+    expect(drawerTag).not.toMatch(/catchtap/);
+    expect(drawerTag).not.toMatch(/bindtap/);
+    // 动作按钮自身的 catchtap 必须在（事件到页面的唯一出口）
+    expect((w.match(/<view[\s\S]*?catchtap="onActionTap"/) || [''])[0]).not.toBe('');
   });
 
   it('逻辑层兜底：onTouchStart 在动作区高度带内直接返回（不置 _hasStart、不 setData）', () => {
