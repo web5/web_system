@@ -2,9 +2,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  ENTRY_UNRESOLVABLE,
   EnvArtifactService,
+  extractEntryAssetRefs,
   legacyVersionCandidates,
   listCdnCommitDirs,
+  resolveEntryRefPath,
 } from './env-artifact.service';
 
 /**
@@ -326,5 +329,193 @@ describe('EnvArtifactService（CDN 布局去指针化）', () => {
     expect(await svc.hasVersion('prod', 'portal', '6e7b2690')).toBe(true);
     const cmd = execAsync.mock.calls[0][0] as string;
     expect(cmd).toContain('/data/legacy-static/static/modules/portal/prod/6e7b2690/index.js');
+  });
+});
+
+/**
+ * 台账 #9087 · 入口可解析性校验（`index.html` 存在 ≠ 能服务）。
+ *
+ * 白屏成因：`6e7b2690` / `4ea6d64` 的 index.html 引用
+ * `/static/modules/shell/shell-dev/…`，prod 落点没有该目录 ⇒ 页面 200、JS 404。
+ * 本组用例锁死三件事：**缺失必抛 / 可解析不误杀 / 远端不可达不静默通过**。
+ */
+describe('EnvArtifactService（入口可解析性校验 · #9087）', () => {
+  const PROD_ROOT = '/data/web_system_static/public';
+  const PROD_SSH = 'root@106.52.176.246';
+
+  type ExecResult = { ok: boolean; stdout: string; stderr: string };
+
+  function makeSvc(
+    env: Record<string, string>,
+    execImpl?: (cmd: string) => ExecResult,
+  ) {
+    const config = { get: (k: string) => env[k] };
+    const execAsync = jest.fn<Promise<ExecResult>, [string, string, Record<string, string>, number]>(
+      async (cmd: string) => (execImpl ? execImpl(cmd) : { ok: true, stdout: '', stderr: '' }),
+    );
+    const svc = new EnvArtifactService(config as never, { execAsync } as never);
+    return { svc, execAsync };
+  }
+
+  /** 在临时静态根下造一个 shell 版本目录，返回 [root, versionDir] */
+  function makeVersionDir(html: string): [string, string] {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'entry-'));
+    const vdir = path.join(root, 'static/modules/shell/prod/abc1234');
+    fs.mkdirSync(path.join(vdir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(vdir, 'index.html'), html);
+    return [root, vdir];
+  }
+
+  it('extractEntryAssetRefs：只留 js/css，去 query/hash，跳过外链与图片', () => {
+    const html = [
+      '<link rel="stylesheet" href="./assets/index.111.css?v=2">',
+      '<link rel="icon" href="/favicon.ico">',
+      '<script src="assets/index.abc.js?v=1"></script>',
+      '<script src="https://cdn.example.com/lib.js"></script>',
+      '<script src="//cdn.example.com/x.js"></script>',
+      '<script src="data:text/javascript,void 0"></script>',
+      '<img src="assets/logo.png">',
+      '<link rel="modulepreload" href="assets/vendor.js#hash">',
+      "<script src='assets/quote.js'></script>",
+    ].join('\n');
+    expect(extractEntryAssetRefs(html)).toEqual([
+      './assets/index.111.css',
+      'assets/index.abc.js',
+      'assets/vendor.js',
+      'assets/quote.js',
+    ]);
+  });
+
+  it('resolveEntryRefPath：/static 绝对落静态根；相对落版本目录；/shell 与越界不判定', () => {
+    const vdir = `${PROD_ROOT}/static/modules/shell/prod/abc1234`;
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/static/modules/shell/shell-dev/abc1234/assets/x.js')).toBe(
+      `${PROD_ROOT}/static/modules/shell/shell-dev/abc1234/assets/x.js`,
+    );
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, 'assets/x.js')).toBe(`${vdir}/assets/x.js`);
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, './assets/x.js')).toBe(`${vdir}/assets/x.js`);
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/assets/x.js')).toBeNull(); // 非 /static：平台路由
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, '../other/assets/x.js')).toBeNull();
+    expect(resolveEntryRefPath(PROD_ROOT, vdir, '/static/../etc/passwd.js')).toBeNull();
+  });
+
+  it('#9087 本机：引用缺失 → ENTRY_UNRESOLVABLE 并列出缺失的磁盘路径', async () => {
+    const [root, vdir] = makeVersionDir(
+      '<script src="assets/index.ok.js"></script><script src="assets/index.miss.js"></script>',
+    );
+    fs.writeFileSync(path.join(vdir, 'assets/index.ok.js'), '//ok');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).rejects.toThrow(
+        /ENTRY_UNRESOLVABLE.*index\.miss\.js/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：全部可解析 → 静默通过（不误杀）', async () => {
+    const [root, vdir] = makeVersionDir(
+      '<link rel="stylesheet" href="assets/index.ok.css"><script src="assets/index.ok.js"></script>',
+    );
+    fs.writeFileSync(path.join(vdir, 'assets/index.ok.js'), '//ok');
+    fs.writeFileSync(path.join(vdir, 'assets/index.ok.css'), '/*ok*/');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).resolves.toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：跨环境绝对引用（shell-dev）缺失 → 抛（线上白屏成因）', async () => {
+    const [root] = makeVersionDir(
+      '<script src="/static/modules/shell/shell-dev/abc1234/assets/index.js"></script>',
+    );
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).rejects.toThrow(
+        /ENTRY_UNRESOLVABLE.*shell-dev/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：无 js/css 引用（纯内联页）→ 放行', async () => {
+    const [root] = makeVersionDir('<h1>hello</h1><script>void 0</script>');
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'abc1234')).resolves.toBeUndefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 本机：版本目录不存在 → ENTRY_UNRESOLVABLE（不误报为可解析）', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'entry-'));
+    try {
+      const { svc } = makeSvc({ STATIC_PUBLIC_ROOT_PROD: root });
+      await expect(svc.assertArtifactResolvable('prod', 'shell', 'ghost')).rejects.toThrow(
+        /ENTRY_UNRESOLVABLE/,
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('#9087 远端：cat 读入口 + 一条 ssh 批量判定（缺失项按 stdout 行返回）', async () => {
+    const missing = `${PROD_ROOT}/static/modules/shell/prod/v1/assets/miss.js`;
+    const { svc, execAsync } = makeSvc(
+      { STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH },
+      (cmd) => {
+        if (cmd.includes('cat ')) {
+          return {
+            ok: true,
+            stdout: '<script src="assets/ok.js"></script><script src="assets/miss.js"></script>',
+            stderr: '',
+          };
+        }
+        if (cmd.includes('base64 -d')) return { ok: true, stdout: `${missing}\n`, stderr: '' };
+        return { ok: true, stdout: '', stderr: '' }; // test -f index.html
+      },
+    );
+
+    await expect(svc.assertArtifactResolvable('prod', 'shell', 'v1')).rejects.toThrow(
+      /ENTRY_UNRESOLVABLE/,
+    );
+    // 三次 ssh：test -f(index.html) → cat → 批量 test；不存在逐文件多次往返
+    expect(execAsync).toHaveBeenCalledTimes(3);
+    const batch = execAsync.mock.calls.map((c) => c[0] as string).find((c) => c.includes('base64 -d'))!;
+    const script = Buffer.from(batch.match(/echo ([A-Za-z0-9+/=]+) \| base64 -d/)![1], 'base64').toString('utf-8');
+    expect(script).toContain(`${PROD_ROOT}/static/modules/shell/prod/v1/assets/ok.js`);
+    expect(script).toContain(missing);
+    expect(script.match(/\[ -e /g)).toHaveLength(2); // 两个引用合并成一条脚本
+  });
+
+  it('#9087 远端：批量判定 ssh 失败 → 抛错（不静默通过）', async () => {
+    const { svc } = makeSvc(
+      { STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH },
+      (cmd) => {
+        if (cmd.includes('cat ')) return { ok: true, stdout: '<script src="assets/a.js"></script>', stderr: '' };
+        if (cmd.includes('base64 -d')) return { ok: false, stdout: '', stderr: 'timed out' };
+        return { ok: true, stdout: '', stderr: '' };
+      },
+    );
+    await expect(svc.assertArtifactResolvable('prod', 'shell', 'v1')).rejects.toThrow(/入口资源校验失败/);
+  });
+
+  it('#9087 远端：cat 读不到 → 抛错（不返回「可解析」）', async () => {
+    const { svc } = makeSvc(
+      { STATIC_PUBLIC_ROOT_PROD: PROD_ROOT, STATIC_SSH_TARGET_PROD: PROD_SSH },
+      (cmd) =>
+        cmd.includes('cat ')
+          ? { ok: false, stdout: '', stderr: 'No such file' }
+          : { ok: true, stdout: '', stderr: '' },
+    );
+    await expect(svc.assertArtifactResolvable('prod', 'shell', 'v1')).rejects.toThrow(/入口文件读取失败/);
+  });
+
+  it('ENTRY_UNRESOLVABLE 是对外契约：错误码字符串不得改动', () => {
+    expect(ENTRY_UNRESOLVABLE).toBe('ENTRY_UNRESOLVABLE');
   });
 });

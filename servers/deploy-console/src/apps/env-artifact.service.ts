@@ -31,6 +31,15 @@ import {
 /** 远端命令整体超时（毫秒）：列目录 / 校验 / 写指针都在 HTTP 请求路径上 */
 const REMOTE_TIMEOUT_MS = 15_000;
 
+/**
+ * 「入口不可解析」错误码前缀（台账 #9087）。
+ *
+ * 与「版本产物不存在」是两件事：后者是 `index.html` 本身缺失（旧行为已 fail-closed），
+ * 前者是 `index.html` 在、但它引用的 js / css 在落点上不存在 —— 切过去就是**白屏**。
+ * 验收脚本按这个字符串断言，别改成别的说法。
+ */
+export const ENTRY_UNRESOLVABLE = 'ENTRY_UNRESOLVABLE';
+
 export interface PointerWriteResult {
   js: string;
   css: string | null;
@@ -97,6 +106,100 @@ export class EnvArtifactService {
     // Phase 2：微前端（index.js）走入口机 `<env>/<app>/<commit>` 布局（去指针化，无磁盘指针）。
     // shell 基座（index.html）不进 CDN，仍走 legacy 布局。
     return (await this.resolveVersion(env, appKey, version, entry)) !== null;
+  }
+
+  /**
+   * 入口引用可解析性校验（台账 #9087）。
+   *
+   * **为什么需要**：`hasVersion` 只判 `<version>/index.html` 存在。线上出现过
+   * index.html 在、它引用的 `assets/*.js` 不在（`6e7b2690` / `4ea6d64` 指向
+   * `/static/modules/shell/shell-dev/…`，prod 没有该目录）⇒ 切换成功、页面白屏。
+   * 文件存在 ≠ 可服务，这一层把 fail-open 改成 fail-closed：**切不动，指针不动**。
+   *
+   * 只判 `.js` / `.css`（决定页面能否起来的那两个）；图片 404 不致白屏，不拦。
+   * 非 `/static/` 的绝对路径（如 `/shell/…` 由 gateway 拼装）不属版本产物，跳过。
+   * html 读不到 / ssh 不可达 → 抛错（不允许静默通过）；引用全可解析 → 静默返回。
+   *
+   * @throws Error 消息以 {@link ENTRY_UNRESOLVABLE} 开头（调用方转 400）
+   */
+  async assertArtifactResolvable(env: string, appKey: string, version: string): Promise<void> {
+    const t = this.target(env);
+    const dirName = await this.resolveVersion(env, appKey, version, 'index.html');
+    if (!dirName) {
+      throw new Error(
+        `${ENTRY_UNRESOLVABLE}: 入口文件不存在：${appKey}/${env}/${version}/index.html（${describeStaticTarget(t)}）`,
+      );
+    }
+    const versionDir = `${t.root}/${path.posix.join(envArtifactsRel(appKey, env), dirName)}`;
+    const html = await this.readTextAt(t, `${versionDir}/index.html`);
+
+    const refs = extractEntryAssetRefs(html);
+    const probed: string[] = [];
+    for (const ref of refs) {
+      const abs = resolveEntryRefPath(t.root, versionDir, ref);
+      if (abs && !probed.includes(abs)) probed.push(abs);
+    }
+    // 无可判定引用（纯内联脚本页面 / 全部为外链）：不阻断，避免误杀
+    if (probed.length === 0) return;
+
+    const missing = t.sshTarget
+      ? await this.missingPathsOn(t.sshTarget, probed)
+      : probed.filter((p) => !fs.existsSync(p));
+    if (missing.length === 0) return;
+
+    throw new Error(
+      `${ENTRY_UNRESOLVABLE}: 入口引用的资源在落点上不存在，切过去会白屏：` +
+        `${appKey}/${env}/${version}（${describeStaticTarget(t)}）缺 ${missing.join(', ')}`,
+    );
+  }
+
+  /** 读落点上某个绝对路径的文本（本机 fs / 远端 cat）；读不到抛错，不降级 */
+  private async readTextAt(t: StaticTarget, abs: string): Promise<string> {
+    if (!t.sshTarget) {
+      try {
+        return fs.readFileSync(abs, 'utf8');
+      } catch (e) {
+        throw new Error(`入口文件读取失败（${describeStaticTarget(t)} ${abs}）：${(e as Error).message}`);
+      }
+    }
+    const r = await this.command.execAsync(
+      `${sshPrefix(t.sshTarget)} "cat '${abs}'"`,
+      process.cwd(),
+      {},
+      REMOTE_TIMEOUT_MS,
+    );
+    if (!r.ok) {
+      throw new Error(
+        `入口文件读取失败（${describeStaticTarget(t)} ${abs}）：${r.stderr || r.stdout}`,
+      );
+    }
+    return r.stdout;
+  }
+
+  /**
+   * 远端批量存在性判定（**一条 ssh**，不逐文件往返）。
+   * @returns 不存在的绝对路径（按传参顺序）
+   */
+  private async missingPathsOn(sshTarget: string, paths: string[]): Promise<string[]> {
+    // 路径含单引号会破坏 shell 单引号包裹：这类路径本不该出现，直接视为不可判定跳过
+    const safe = paths.filter((p) => !p.includes("'"));
+    if (safe.length === 0) return [];
+    const script = [...safe.map((p) => `[ -e '${p}' ] || echo '${p}'`), ''].join('\n');
+    const r = await this.command.execAsync(
+      `${sshPrefix(sshTarget)} "echo ${b64(script)} | base64 -d | bash"`,
+      process.cwd(),
+      {},
+      REMOTE_TIMEOUT_MS,
+    );
+    if (!r.ok) {
+      throw new Error(
+        `入口资源校验失败（无法访问 ${sshTarget}）：${r.stderr || r.stdout}`,
+      );
+    }
+    return r.stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
   }
 
   /**
@@ -307,6 +410,55 @@ export class EnvArtifactService {
 /** base64（远端脚本传递用，避免多层引号转义） */
 function b64(s: string): string {
   return Buffer.from(s, 'utf-8').toString('base64');
+}
+
+/**
+ * 从 `index.html` 抽出「决定页面能否起来」的资源引用（台账 #9087）。
+ *
+ * 规则（每条都为了不误杀）：
+ * - 只看 `src=` / `href=`；只留 `.js` / `.css` 结尾（图片、字体 404 不致白屏）
+ * - 去掉 query / hash 再判后缀（`index.js?v=2` 常见于构建产物）
+ * - 跳过带协议的（`http(s):` / `data:` / `mailto:`）、协议相对（`//`）、锚点（`#`）
+ * - 去重保序（同一份 index.html 里 preload 与 script 常指向同一文件）
+ */
+export function extractEntryAssetRefs(html: string): string[] {
+  const out: string[] = [];
+  const re = /\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const raw = (m[1] ?? m[2] ?? '').trim();
+    if (!raw) continue;
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(raw)) continue;
+    const clean = raw.split(/[?#]/)[0].trim();
+    if (!/\.(?:js|css)$/i.test(clean)) continue;
+    if (!out.includes(clean)) out.push(clean);
+  }
+  return out;
+}
+
+/**
+ * 入口引用 → 落点上的磁盘绝对路径（台账 #9087）。返回 null 表示**不判定**。
+ *
+ * - `/static/…`：本站静态根下的绝对路径 → `<root>/static/…`
+ *   （跨环境引用 `…/shell/shell-dev/…` 正是白屏成因，必须落到同一台落点机上判）
+ * - 其他 `/…`：`/shell/…` 之类由 gateway 自行拼装，不属版本产物 → 跳过（不误杀）
+ * - 相对路径：相对版本目录；`normalize` 后越出版本目录（`../`）→ 跳过
+ */
+export function resolveEntryRefPath(
+  root: string,
+  versionDir: string,
+  ref: string,
+): string | null {
+  const clean = (ref ?? '').split(/[?#]/)[0].trim();
+  if (!clean) return null;
+  const base = root.replace(/\/+$/, '');
+  if (clean.startsWith('/static/')) {
+    const abs = path.posix.normalize(`${base}${clean}`);
+    return abs.startsWith(`${base}/static/`) ? abs : null;
+  }
+  if (clean.startsWith('/')) return null;
+  const abs = path.posix.normalize(path.posix.join(versionDir, clean));
+  return abs.startsWith(`${versionDir.replace(/\/+$/, '')}/`) ? abs : null;
 }
 
 /**
