@@ -104,10 +104,10 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run publish -- preview --mode ci
 ```
 
 > 🔴 **门禁已下沉到 `scripts/preview.js` / `scripts/upload.js` 本体**（台账 9122）：
-> 这两个文件**历史上**是「无门禁的底层实现」（H1 之前 `npm run preview` / `npm run upload`
-> 也直连它们）；现在两者本体在出码前已跑同一道门禁 —— **直连与 npm 入口过的是同一道门**。
-> 门禁判据是 P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 / P4 目录 / P5 工作区干净 / P6 CLI，
-> 判据只有 `scripts/preflight.js` 一份、编排只有 `preflight.runGateOrExit` 一份。
+> **直连 `node scripts/preview.js` / `node scripts/upload.js` 与走 npm 入口过的是同一道门**
+> —— 门禁就是这两个文件的第一条动作。判据是 P1 版本真实性 / P2 私钥不入包 / P3 工作区身份 /
+> P4 目录 / P5 工作区干净 / P6 CLI，判据只有 `scripts/preflight.js` 一份、编排只有
+> `preflight.runGateOrExit` 一份。
 > ci 模式经 `publish.js --mode ci` 走的是同一道门，只是 P2 / P6 换判据
 > （ci 模式 P2 要求私钥存在且被 `packOptions.ignore` 覆盖、P6 不判开发者工具 CLI）——
 > **换判据不是绕过**。
