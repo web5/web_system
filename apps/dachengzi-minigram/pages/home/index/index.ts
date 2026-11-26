@@ -18,7 +18,7 @@
 import { isLoggedIn } from '../../../services/auth';
 import { readLocalNickname, fetchProfile, isNicknameUnset } from '../../../services/account';
 import { formatGreeting, getLocalHour } from '../../../utils/greeting';
-import { getDailyQuote, getDailyQuoteMeta, BOOK_LABEL } from '../../../utils/daily';
+import { getDailyQuoteSource, getDailyQuoteMeta, BOOK_LABEL, type DailyQuoteSource } from '../../../utils/daily';
 import { setTabBarSelected, TAB_INDEX } from '../../../utils/tabbar';
 import { FEATURES, getPinned, FEATURES_UPDATED_EVENT, type FeatureDef } from '../../../utils/features';
 import { speakText, onSpeakState, stopSpeak, type SpeakState } from '../../../services/tts';
@@ -30,11 +30,16 @@ import { readWordsCache, writeWordsCache } from '../../../utils/quote-words';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
-function bookBadgeText(): string {
-  const { book, lessonId } = getDailyQuoteMeta();
+function badgeTextOf(book?: string, lessonId?: number): string {
   const label = book ? BOOK_LABEL[book] : undefined;
   if (!label) return '';
   return Number.isInteger(lessonId) ? `${label} · L${lessonId}` : label;
+}
+
+/** data 初值用的角标文案：与初值句子同一 tick 解析，随首次刷新由 _applyQuote 覆盖。 */
+function bookBadgeText(): string {
+  const { book, lessonId } = getDailyQuoteMeta();
+  return badgeTextOf(book, lessonId);
 }
 
 /** 未登录时的登录引导落点：「我的」页有登录入口 */
@@ -49,8 +54,14 @@ const DISCOVER_PATH = '/pages/discover/index/index';
  */
 const GREETING_LOADING = '…';
 
-/** 今日一句初值：data 初值与切词共用同一份，避免同日两次取模拿到不同行。 */
-const INITIAL_QUOTE = getDailyQuote();
+/**
+ * 今日一句初值：句子 + 出处**一次性**解析（P1-1）。
+ * 🔴 句子与 book/lessonId 必须出自同一次解析，否则「拿别的课的词表给这句话打点线」——
+ *    这正是盲测 P1-1 的错源缺陷（旧实现：句子在模块加载时定死、课号在 onShow 时重算）。
+ * data.quote 只暴露 { cn, en }，出处另存 _quoteMeta 供点词/收藏溯源。
+ */
+const INITIAL_SOURCE: DailyQuoteSource = getDailyQuoteSource();
+const INITIAL_QUOTE = { cn: INITIAL_SOURCE.cn, en: INITIAL_SOURCE.en };
 
 /**
  * 跨时段重算的心跳周期（ms）。tabBar 页常驻不销毁，
@@ -120,8 +131,15 @@ Page({
   _offSpeakState: null as (() => void) | null,
   /** 今日一句所在课文的词表（点词查释义 / hasDef 判定） */
   _quoteWords: [] as NceWord[],
-  /** 本次朗读是否为单词（'' = 整句或无）；驱动词卡按钮态 */
+  /** 屏幕上这句话的出处（与 data.quote 同源）；点词查词失败不猜、收藏溯源不记错课号 */
+  _quoteMeta: { book: INITIAL_SOURCE.book, lessonId: INITIAL_SOURCE.lessonId } as {
+    book?: string;
+    lessonId?: number;
+  },
+  /** 意图标记：本次朗读是否为单词（'' = 整句或无）；仅在事件未携带文本时兜底 */
   _speakingWord: '' as string,
+  /** 真实播放文本（'' = 空闲）：只由 tts 的 onSpeakState 回流，页面不自己猜（P2-1） */
+  _playingText: '' as string,
   /** 词表拉取序号：切走再回来 / 隔天换句时丢弃过期响应 */
   _quoteSeq: 0 as number,
 
@@ -182,6 +200,7 @@ Page({
       this._offSpeakState = null;
     }
     this._speakingWord = '';
+    this._playingText = '';
     const __app = getApp<IAppOption>();
     const __bus = __app && __app.eventBus;
     if (__bus) {
@@ -210,6 +229,8 @@ Page({
     // 切走即停朗读：首页是 tab 页常驻，后台继续出声会打扰
     stopSpeak();
     this._speakingWord = '';
+    // 不依赖 stopSpeak 的 null 一定被收到：播放态一并显式归零（null 事件仍会复位 data）
+    this._playingText = '';
   },
 
   onShow() {
@@ -331,37 +352,65 @@ Page({
    * 取今日一句所在课文的词表：有缓存直接用，无缓存回查课文详情（结果写入 utils/quote-words 缓存）。
    * 取不到（缺 book/lessonId、请求失败）→ 空词表：今日一句退化为「纯文本 + 整句朗读/收藏」，
    * 绝不把表外词错标成生词（否则违背「非生词不高亮」）。
+   *
+   * 🔴 P1-1：句子与词表必须同源 —— 这里只解析**一次**来源（getDailyQuoteSource），
+   *    句子与词表在同一个 setData 里一起落地，不会出现「屏幕是 A 句、点线来自 B 课」。
+   *    首启「兜底句 → 池子就绪」也自洽：池子还没到位时只有兜底句 + 兜底句自己那课的词表；
+   *    池子到位后句子换新、词表同刷（旧实现是句子永不刷新、课号每次 onShow 重算）。
    */
   async loadQuoteWords() {
-    const en = this.data.quote.en;
-    const { book, lessonId } = getDailyQuoteMeta();
     const seq = (this._quoteSeq += 1);
+    const src = getDailyQuoteSource();
+    const { book, lessonId } = src;
     if (!book || !Number.isInteger(lessonId)) {
-      this._applyQuoteWords(en, []);
+      // 无出处（旧缓存行缺字段）：屏幕这句话按纯文本降级，不换句、不猜课号
+      this._applyQuoteWords(this.data.quote.en, []);
       return;
     }
     const id = Number(lessonId);
     const cached = readWordsCache(book, id);
     if (cached) {
-      this._applyQuoteWords(en, cached);
+      this._applyQuote(src, cached);
       return;
     }
+    let detail: unknown;
     try {
-      const detail = await getNceLesson(id, book);
-      if (!this._alive || seq !== this._quoteSeq) return;
-      const words = (detail && detail.words) || [];
-      writeWordsCache(book, id, words);
-      this._applyQuoteWords(en, words);
+      detail = await getNceLesson(id, book);
     } catch {
       if (!this._alive || seq !== this._quoteSeq) return;
-      this._applyQuoteWords(en, []);
+      // 回查失败：保持屏幕现状（不换句、不错源），本次按纯文本降级，下次进页再回源
+      this._applyQuoteWords(this.data.quote.en, []);
+      return;
     }
+    // ⚠️ try 只包请求：落地逻辑不在 catch 里，避免页面自身缺陷被「静默降级」掩盖
+    if (!this._alive || seq !== this._quoteSeq) return;
+    const raw = detail ? (detail as { words?: unknown }).words : undefined;
+    // P2-5：「响应缺 words 字段」是降级信号，不是「本课没有生词」——不落缓存，
+    // 否则空数组会被当成有效值缓存 7 天，后端修好了也回不来。
+    const hasWordsField = Array.isArray(raw);
+    const words = hasWordsField ? (raw as NceWord[]) : [];
+    if (hasWordsField) writeWordsCache(book, id, words);
+    this._applyQuote(src, words);
   },
 
-  /** 写词表并重切今日一句（hasDef 只认词表直收词） */
+  /** 写词表并重切当前这句话（hasDef 只认词表直收词）；不换句，供降级路径复用 */
   _applyQuoteWords(en: string, words: NceWord[]) {
     this._quoteWords = words;
     this.setData({ quoteTokens: tokenize(en, buildKnown(words)) });
+  },
+
+  /**
+   * 句子与词表**同一次**落地（P1-1 的核心约束）：句子、切词、出处、角标一起写。
+   * 调用方保证 words 属于 src 这句话的课文。
+   */
+  _applyQuote(src: DailyQuoteSource, words: NceWord[]) {
+    this._quoteWords = words;
+    this._quoteMeta = { book: src.book, lessonId: src.lessonId };
+    this.setData({
+      quote: { cn: src.cn, en: src.en },
+      quoteTokens: tokenize(src.en, buildKnown(words)),
+      bookBadge: badgeTextOf(src.book, src.lessonId),
+    });
   },
 
   /** 点生词 → 底部词卡；再点同一词收起、点其它词替换内容 */
@@ -370,13 +419,24 @@ Page({
     if (!w) return;
     const cur = this.data.quoteTip;
     if (cur && cur.word === w) {
-      this.setData({ quoteTip: null, quoteWordPlaying: '' });
+      // 收起卡片 = 关卡片：与 closeQuoteTip 同口径（P2-4，正在读这个词就停掉）
+      this.closeQuoteTip();
       return;
     }
     this.setData({ quoteTip: lookupWord(w, this._quoteWords), quoteWordPlaying: '' });
   },
 
-  closeQuoteTip() { this.setData({ quoteTip: null, quoteWordPlaying: '' }); },
+  /** 关闭词卡：顺手停掉「词卡朗读」（P2-4，与详情页 closeTip 同口径）。
+   *  判据看「当前真实在播的文本」而不是会被换词清掉的标记位：是整句 → 不停（用户可能想继续听）。 */
+  closeQuoteTip() {
+    const playing = this._playingText;
+    if (playing && playing !== String(this.data.quote.en || '').trim()) {
+      stopSpeak();
+      this._speakingWord = '';
+      this._playingText = '';
+    }
+    this.setData({ quoteTip: null, quoteWordPlaying: '' });
+  },
 
   /** 点整句（英文空白/卡片空白）→ 朗读整句；再点同句由 speakText 的 same-text 语义停止 */
   speakQuote() {
@@ -392,6 +452,17 @@ Page({
     void speakText(tip.word);
   },
 
+  /**
+   * 屏幕上这句话的出处（收藏溯源 / 角标）：优先用 _applyQuote 记下的那份，
+   * 保证与 data.quote 同源（P1-1）；尚未记录时回源一次，绝不凭当天课号硬猜。
+   */
+  _sourceMeta(): { book?: string; lessonId?: number } {
+    const m = this._quoteMeta;
+    if (m) return m;
+    const { book, lessonId } = getDailyQuoteMeta();
+    return { book, lessonId };
+  },
+
   /** 收藏整句：tag='nce'，与课文详情页句子收藏同一契约（收藏页显示 Lesson · 第 N 句） */
   async collectQuote() {
     if (!isLoggedIn()) {
@@ -399,7 +470,8 @@ Page({
       return;
     }
     const q = this.data.quote;
-    const { book, lessonId } = getDailyQuoteMeta();
+    // P1-1：出处取「屏幕上这句话」的记录，不在收藏时重算（否则课号会与句子错源）
+    const { book, lessonId } = this._sourceMeta();
     const src = `今日一句${book ? ` · ${book}` : ''}${Number.isInteger(lessonId) ? ` · Lesson ${lessonId}` : ''}`;
     try {
       const res = await collectGlossary({
@@ -424,7 +496,8 @@ Page({
       wx.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
-    const { book, lessonId } = getDailyQuoteMeta();
+    // P1-1：出处同上，取屏幕上这句话的记录（收藏页 metaText 的 Lesson 号才对得上句子）
+    const { book, lessonId } = this._sourceMeta();
     const note = [tip.pos, tip.def].filter(Boolean).join(' ');
     try {
       const res = await collectGlossary({
@@ -440,17 +513,29 @@ Page({
     }
   },
 
-  /** 朗读状态：null 复位；非 null 时按「本次读的是整句还是单词」点亮对应按钮 */
+  /**
+   * 朗读状态：null 复位；非 null 时**按 tts 推来的权威文本**点亮对应按钮（P2-1）。
+   * 🔴 不能用 _speakingWord 反推：speakText 内部会先 stopSpeak() 推一次 null，
+   *    页面收到 null 就把标记位清零，紧接着的 loading/playing 用清零后的标记算 → 永远点不亮
+   *    （「整句在播 → 点词卡朗读」时更会把整句按钮错亮成停止态）。
+   *    以 s.text 判定：等于整句 → 整句亮；否则就是单词朗读 → 词卡按钮亮。
+   */
   _onSpeakState(s: SpeakState | null) {
     if (!s) {
+      this._playingText = '';
       this._speakingWord = '';
       this.setData({ quotePlaying: false, quoteWordPlaying: '' });
       return;
     }
-    this.setData({
-      quotePlaying: !this._speakingWord,
-      quoteWordPlaying: this._speakingWord,
-    });
+    const text = String(s.text || '').trim();
+    this._playingText = text;
+    if (!text) {
+      // 事件未携带文本（兼容老调用方）：退回意图标记，行为与改动前一致
+      this.setData({ quotePlaying: !this._speakingWord, quoteWordPlaying: this._speakingWord });
+      return;
+    }
+    const isQuote = text === String(this.data.quote.en || '').trim();
+    this.setData({ quotePlaying: isQuote, quoteWordPlaying: isQuote ? '' : text });
   },
 
   refreshPinned() {

@@ -44,6 +44,9 @@ jest.mock('../utils/greeting', () => ({
 jest.mock('../utils/daily', () => ({
   getDailyQuote: jest.fn(() => ({ cn: 'CN', en: 'EN' })),
   getDailyQuoteMeta: jest.fn(() => ({})),
+  // 2026-11-26 P1-1：首页改用「句子 + 出处一次性解析」的同源入口 getDailyQuoteSource，
+  // 桩必须一并给出（否则页面模块加载即 TypeError）。这里只补依赖，不改任何断言。
+  getDailyQuoteSource: jest.fn(() => ({ cn: 'CN', en: 'EN' })),
   BOOK_LABEL: {},
   FALLBACK_QUOTES: [{ cn: 'CN', en: 'EN' }],
   pickNceLine: jest.fn(),
