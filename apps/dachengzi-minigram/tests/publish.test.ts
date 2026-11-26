@@ -57,6 +57,7 @@ interface PublishModule {
     to?: string;
     page?: string;
     mode?: string;
+    desc?: string;
     noPush?: boolean;
     notify?: boolean;
   };
@@ -70,6 +71,13 @@ interface PublishModule {
   gitShortSha: () => string;
   cliPreviewArgs: (appRoot: string, outPath: string) => string[];
   cliUploadArgs: (appRoot: string, version: string, desc: string) => string[];
+  sanitizeDesc: (raw?: string | null) => string;
+  buildUploadDesc: (
+    version: string,
+    gitSha: string,
+    customDesc?: string | null,
+  ) => { desc: string; text: string; base: string; truncated: boolean };
+  DESC_MAX_LEN: number;
   buildCliMeta: (pagePath?: string, opts?: CliMetaOpts) => CliMeta;
   writeCliMeta: (outPath: string, meta: Record<string, unknown>) => string;
   pushQr: (pngPath: string, toName?: string) => void;
@@ -82,7 +90,7 @@ interface PublishModule {
   };
   sendMarkdown: (chatId: string, content: string) => unknown;
   sendImage: (chatId: string, mediaId: string) => unknown;
-  cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean }) => void;
+  cmdUpload: (opts: { mode?: string; to?: string; notify?: boolean; desc?: string }) => void;
   cmdTrial: () => void;
   cmdRelease: () => void;
   NOTIFY_UPLOAD: (version: string) => string;
@@ -128,6 +136,26 @@ describe('parseArgs', () => {
 
   it('未知 flag 不进 flag 字段，按位置参数保留', () => {
     expect(publish.parseArgs(['--unknown', 'x'])).toEqual({ _: ['--unknown', 'x'] });
+  });
+
+  it('--desc <文本> 与 --desc=<文本> 两种写法都进 desc 字段', () => {
+    expect(publish.parseArgs(['upload', '--desc', '首页动态问候'])).toEqual({
+      _: ['upload'],
+      desc: '首页动态问候',
+    });
+    expect(publish.parseArgs(['upload', '--desc=首页动态问候'])).toEqual({
+      _: ['upload'],
+      desc: '首页动态问候',
+    });
+  });
+
+  it('--desc 与其它 flag 共存，互不覆盖', () => {
+    expect(publish.parseArgs(['--desc=首页动态问候', '--notify', '--to', '公司群'])).toEqual({
+      _: [],
+      desc: '首页动态问候',
+      to: '公司群',
+      notify: true,
+    });
   });
 });
 
@@ -283,6 +311,75 @@ describe('cli 命令参数拼装', () => {
       '-d',
       'cli 上传 v1.2.3',
     ]);
+  });
+});
+
+describe('buildUploadDesc（--desc 拼接；不传时向后兼容）', () => {
+  // 🔒 向后兼容基准：改造前 cmdUpload 里的字面量。**不得为了让测试变绿而改它**。
+  const BASE = 'cli 上传 v1.2.3 @ abc1234';
+
+  it('不传 --desc → 与改造前逐字符一致，且拼进 cliUploadArgs 的 -d 就是它', () => {
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').desc).toBe(BASE);
+    // 四种「没传」等价形态都回到同一字面量
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', undefined).desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', null).desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', '').desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234', '   ').desc).toBe(BASE);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').truncated).toBe(false);
+    expect(publish.buildUploadDesc('1.2.3', 'abc1234').text).toBe('');
+
+    const args = publish.cliUploadArgs(
+      '/repo/app',
+      '1.2.3',
+      publish.buildUploadDesc('1.2.3', 'abc1234').desc,
+    );
+    expect(args[args.indexOf('-d') + 1]).toBe(BASE);
+  });
+
+  it('传 --desc「首页动态问候」→ -d 含该文本 + 版本号 + sha', () => {
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '首页动态问候');
+    expect(r.desc).toBe('首页动态问候 | v1.2.3 @ abc1234');
+    expect(r.desc).toContain('首页动态问候');
+    expect(r.desc).toContain('v1.2.3');
+    expect(r.desc).toContain('abc1234');
+    expect(r.truncated).toBe(false);
+
+    const args = publish.cliUploadArgs('/repo/app', '1.2.3', r.desc);
+    const d = args[args.indexOf('-d') + 1];
+    expect(d).toContain('首页动态问候');
+    expect(d).toContain('v1.2.3');
+    expect(d).toContain('abc1234');
+  });
+
+  it('换行 / 制表符 / 连续空白压成单空格（微信描述是单行字段）', () => {
+    expect(publish.sanitizeDesc('首页\n动态\t问候')).toBe('首页 动态 问候');
+    expect(publish.sanitizeDesc('  首页   动态  ')).toBe('首页 动态');
+    expect(publish.sanitizeDesc(null)).toBe('');
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', 'a\r\nb');
+    expect(r.desc).toBe('a b | v1.2.3 @ abc1234');
+    expect(r.desc).not.toContain('\n');
+  });
+
+  it('超长 → 截断到 DESC_MAX_LEN（含 … 标记），版本与 sha 不被截掉', () => {
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '功'.repeat(200));
+    expect(publish.DESC_MAX_LEN).toBe(60);
+    expect(r.truncated).toBe(true);
+    expect(r.desc.length).toBe(publish.DESC_MAX_LEN);
+    // 有自定义文案时后缀是 tail（v + sha），不含缺省前缀「cli 上传」
+    expect(r.desc.endsWith('v1.2.3 @ abc1234')).toBe(true);
+    expect(r.desc.endsWith(BASE)).toBe(false);
+    expect(r.desc).toContain('…');
+  });
+
+  it('截断按码点切，不切坏 emoji 代理对', () => {
+    // 用 200 个 emoji 确保必然超长（tail 比缺省 base 短，40 个已装得下、不会触发截断）
+    const r = publish.buildUploadDesc('1.2.3', 'abc1234', '🎉'.repeat(200));
+    expect(r.truncated).toBe(true);
+    expect(Array.from(r.desc).length).toBe(publish.DESC_MAX_LEN);
+    // 没有落单的高位代理（切半 emoji）
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(r.desc)).toBe(false);
+    // 去掉尾部 … 后剩下的全是完整 emoji
+    expect(Array.from(r.text.slice(0, -1)).every((c) => c === '🎉')).toBe(true);
   });
 });
 
