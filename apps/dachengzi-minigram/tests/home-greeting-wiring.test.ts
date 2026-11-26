@@ -23,7 +23,12 @@ declare const __dirname: string;
 const fs = require('fs') as { readFileSync(p: string, enc: string): string };
 const path = require('path') as { join(...parts: string[]): string };
 
-jest.mock('../services/auth', () => ({ isLoggedIn: jest.fn() }));
+// 登录态初值持有者：data 初值在 require 页面模块时只求值一次，两态用例必须分别
+// resetModules + 重新 require。而 mock 工厂在重新 require 时会重建 jest.fn，
+// 旧引用上的 mockReturnValue 对新实例无效 —— 故工厂统一读这个持有者（名字须以 mock 开头，
+// 否则 babel-plugin-jest-hoist 禁止工厂引用外部变量）。
+const mockAuthState = { loggedIn: true };
+jest.mock('../services/auth', () => ({ isLoggedIn: jest.fn(() => mockAuthState.loggedIn) }));
 jest.mock('../services/account', () => ({
   readLocalNickname: jest.fn(),
   fetchProfile: jest.fn(),
@@ -131,7 +136,7 @@ function makePage(): any {
 function flush(): Promise<void> { return new Promise((r) => setTimeout(r, 0)); }
 
 describe('① 首页 hero 动态问候接线（昵称三态 / 本地时区 / 零业务请求）', () => {
-  it('data.greetingText 初值是中性 loading 占位（不编造昵称、不在页面拼逗号）', () => {
+  it('data.greetingText 初值不含昵称、不含中文逗号（不编造昵称、不在页面拼逗号）', () => {
     expect(typeof pageConfig.data.greetingText).toBe('string');
     expect(pageConfig.data.greetingText).not.toContain('，');
     expect(pageConfig.data.greetingText).not.toMatch(/小橙|同学/);
@@ -241,6 +246,44 @@ describe('① 首页 hero 动态问候接线（昵称三态 / 本地时区 / 零
     ctx.onUnload();
     expect(bus.off).toHaveBeenCalledWith('profile:updated', expect.any(Function));
     expect((handlers['profile:updated'] || []).length).toBe(0);
+  });
+});
+
+describe('①-b 首帧即 data 初值：登录/未登录两态互斥锁（台账 9045「任何一帧不出现「…」或缺昵称文案」）', () => {
+  /**
+   * 重新加载首页模块，返回「这一次 require 时求值出来的 data 初值」。
+   * 为什么必须重新加载：data 初值在 require 页面模块时**只求值一次**，
+   * 同一次加载无法同时观测两态；两态必须各自 resetModules + 重新 require，
+   * 不许糊成一条对静态字面量的断言。
+   * 用临时 Page 捕获，避免覆盖本文件其余用例共用的 pageConfig。
+   */
+  function initDataFor(loginState: boolean): any {
+    let captured: any = null;
+    const prevPage = (globalThis as any).Page;
+    mockAuthState.loggedIn = loginState;
+    isLoggedInMock.mockReturnValue(loginState); // 兼容 resetModules 未重建 mock 的情形
+    (globalThis as any).Page = jest.fn((cfg: any) => { captured = cfg; });
+    jest.resetModules();
+    try {
+      require('../pages/home/index/index');
+    } finally {
+      (globalThis as any).Page = prevPage;
+      mockAuthState.loggedIn = true;
+    }
+    expect(captured).not.toBeNull();
+    return captured.data;
+  }
+
+  it('未登录：data 初值即 loggedIn=false 且 greetingText="" —— 首帧既不闪 hero 也不闪「…」', () => {
+    const data = initDataFor(false);
+    expect(data.loggedIn).toBe(false);
+    expect(data.greetingText).toBe('');
+  });
+
+  it('已登录：data 初值 loggedIn=true 且 greetingText 保留「…」中性占位（拉取中不编造昵称）', () => {
+    const data = initDataFor(true);
+    expect(data.loggedIn).toBe(true);
+    expect(data.greetingText).toBe('…');
   });
 });
 

@@ -144,6 +144,7 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 1. **① close()→launch() 之间 devtools 自动化会清空 wx storage**（仅 api_base 因 onLaunch 重写残留）→ 跨进程持久化用例判 `BLOCKED`，不当产品 bug（E3 先例）。⚠️ 2026-11-11 探针实测：现版 devtools 可能已不再清空（close→launch 后 appearance_radius 仍在），待复核——复核确认前 BLOCKED 口径不变。
 2. **② 仅 macOS 本地可跑**；需开发者工具「设置 → 安全设置 → 服务端口」开启；CI 不适用。
 3. **③ automator 0.12.1 与 devtools 36.x automation 协议的 checkVersion 不兼容**，包内已 patch（`src/automator.js`）——**升级 miniprogram-automator 前先看本节与源码头注**。
+4. **④ automator 查不到自定义组件内部节点，也不支持 `login-gate` 这类组件标签选择器**（实测 `.gate`/`.gate-btn`/`login-gate` 三选择器全 false，而同类页内节点 `.page`/`.hero`/`.hi`/`.daily`/`.fcard` 全 true）。故「组件是否渲染」改用页面根 `.page` 的 `locked` class 间接证明（G 先例）。🔴 断言「某节点不存在」前，必须先在该节点存在的状态下反证选择器可命中，否则是假绿。
 
 ---
 

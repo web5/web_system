@@ -8,3 +8,6 @@
 | B | —（未迁移） | — | **暂缓**：目标页已随 AI 能力整改废弃，重写走用例卡流程单独立项 |
 | E | cases/E-radius-persist.js | V42 | 圆角设置持久化（E3 跨进程持久化判 BLOCKED，见基建 README 已知限制①） |
 | F | cases/F-clear-cache.js | V45 | 清缓存白名单 |
+| G | cases/G-login-gate.js | 台账 9045/9053 | 未登录态首页：只有 login-gate、hero 不渲染、greetingText 空串 |
+
+已知限制（automator 选择器边界等）统一记在基建 README `## ⑤ 已知限制`，本仓库不再另立一份。
