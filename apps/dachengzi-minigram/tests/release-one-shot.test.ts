@@ -11,12 +11,14 @@
  *   ③ WECHAT_DEVTOOLS_CLI 回落：环境变量为空时回落到官方安装路径（并做 -x 检查）；
  *      指向不存在文件时直接拒跑，而不是等 spawn 报 ENOENT 再让人猜。
  *   ④ S6 那一行必须能被 JSON.parse：连同 sha256 一起给出**实测**摘要，
- *      sha256 与 `shasum -a 256` 逐字符一致（不是从文件名/时间猜出来的）。
+ *      sha256 与外部 sha256 工具（shasum / sha256sum）逐字符一致（不是从文件名/时间猜出来的）。
  *
  * 隔离手段：
  *   · 不跑真实出码/上传。临时目录里放 scripts/preflight.js 与 scripts/publish.js 两个桩，
  *     publish 桩只写假的 png + meta.json，命令行参数原样落到 .ci-output/args.json 供断言。
  *   · 临时目录 git init 一次，让 gitSha 走真实的 `git rev-parse --short=8` 分支。
+ *   · 临时目录里再造一个可执行的「微信开发者工具 CLI」桩：脚本前置的 `-x` 检查必须过，
+ *     但**不能靠执行机装没装工具**（PR #698 CI 全红就是这么来的，见 makeFixture 注释）。
  *   · 只读被测脚本原文（复制到临时目录），不改仓库里的任何文件。
  */
 
@@ -75,6 +77,12 @@ interface Fixture {
   worktreeRoot: string;
   appRoot: string;
   script: string;
+  /**
+   * 夹具里自带的「微信开发者工具 CLI」桩（可执行）。
+   * 脚本前置只对它做 `-x` 检查，S1/S4 用的是 preflight/publish 桩，所以它永远不会被真正执行。
+   * 见 makeFixture 里的注释：不给它，测试就变成了「本机装没装微信开发者工具」。
+   */
+  stubCli: string;
   cleanup: () => void;
 }
 
@@ -98,6 +106,20 @@ function makeFixture(prefix: string, topName?: string): Fixture {
   fs.writeFileSync(path.join(scriptsDir, 'preflight.js'), STUB_PREFLIGHT);
   fs.writeFileSync(path.join(scriptsDir, 'publish.js'), STUB_PUBLISH);
 
+  // 🔴 宿主无关的 CLI（2026-11-26 PR #698 CI 全红的根因就出在这里）：
+  // release-one-shot.sh 的前置步骤要求 WECHAT_DEVTOOLS_CLI（未设时回落到**硬编码的 macOS
+  // 官方安装路径** /Applications/wechatwebdevtools.app/Contents/MacOS/cli）存在且可执行。
+  // 若测试只 delete 环境变量，就等于把「执行机装没装微信开发者工具」写进了断言：
+  //   · 开发者本机（macOS，装了工具）→ 前置通过，19 条全绿；
+  //   · CI runner（Ubuntu，没装工具）→ 前置 die，脚本在 S0 之后立刻退出，
+  //     S1/S2/S4/S5/S6 一步都走不到，除参数校验外的用例全红。
+  // 所以在夹具里现造一个必然可执行的桩，让「CLI 就绪」成为夹具自带的事实，而不是环境事实。
+  // 注意：这不是「放宽断言」—— CLI 缺失/不可执行那两个分支由「CLI 前置」describe 里的
+  // 三条用例专门钉住（其中「未设 WECHAT_DEVTOOLS_CLI 且回落路径不存在」是确定性用例）。
+  const stubCli = path.join(root, 'fake-wechat-devtools-cli');
+  fs.writeFileSync(stubCli, '#!/usr/bin/env bash\nexit 0\n');
+  fs.chmodSync(stubCli, 0o755);
+
   // 让 gitSha 走真实分支，同时让 S2 的 `git rev-parse --show-toplevel` 命中 worktreeRoot：
   // 空提交即可，git 只关心有没有 HEAD。
   execFileSync('git', ['init', '-q'], { cwd: worktreeRoot });
@@ -109,6 +131,7 @@ function makeFixture(prefix: string, topName?: string): Fixture {
     worktreeRoot,
     appRoot,
     script,
+    stubCli,
     cleanup: () => { fs.rmSync(root, { recursive: true, force: true }); },
   };
 }
@@ -147,6 +170,10 @@ function runScript(
   delete env.WECHAT_DEVTOOLS_CLI;
   delete env.WECHAT_DEVTOOLS_CLI_DEFAULT;
   delete env.STUB_VERSION;
+  // 默认给夹具自带的 CLI 桩，让用例与「执行机装没装微信开发者工具」解耦。
+  // 显式在 extraEnv 里传 WECHAT_DEVTOOLS_CLI / WECHAT_DEVTOOLS_CLI_DEFAULT（含传 undefined 删掉）
+  // 的用例仍然按自己的意图走 —— 下面那个循环后执行，优先级更高。
+  env.WECHAT_DEVTOOLS_CLI = fx.stubCli;
   for (const [k, v] of Object.entries(extraEnv)) {
     if (v === undefined) delete env[k];
     else env[k] = v;
@@ -174,6 +201,27 @@ function runScript(
 function lastNonEmptyLine(text: string): string {
   const lines = text.split('\n').map((s) => s.trim()).filter(Boolean);
   return lines.length ? lines[lines.length - 1] : '';
+}
+
+/**
+ * 拿**外部工具**对文件真算一遍 sha256（不复用被测脚本的实现，避免自证）。
+ * macOS 自带 shasum；精简 Linux 镜像可能只有 coreutils 的 sha256sum。
+ * 顺序与 release-one-shot.sh 的 sha256_of() 一致，但这里是独立跑一遍再逐字符比对。
+ */
+function externalSha256(file: string): string {
+  const candidates: Array<[string, string[]]> = [
+    ['shasum', ['-a', '256', file]],
+    ['sha256sum', [file]],
+  ];
+  for (const [cmd, args] of candidates) {
+    try {
+      return execFileSync(cmd, args, { encoding: 'utf8' }).trim().split(/\s+/)[0];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue; // 该工具不存在 → 换下一个
+      throw err;
+    }
+  }
+  throw new Error('既找不到 shasum 也找不到 sha256sum，无法独立验证二维码摘要');
 }
 
 const fixtures: Fixture[] = [];
@@ -397,6 +445,44 @@ describe('release-one-shot.sh · CLI 前置（必须在 S1 之前）', () => {
     expect(r.combined).toContain('不可执行');
     expect(fs.existsSync(path.join(fx.appRoot, '.ci-output', 'args.json'))).toBe(false);
   });
+
+  /**
+   * 🔴 这条是 PR #698 CI 全红（2026-11-26）的**回归钉**。
+   *
+   * 上面那条「回落链末端的官方路径恒被点名」只能两个分支二选一 —— 在装了微信开发者工具的
+   * macOS 上永远走成功分支，「回落的 CLI 不可执行」这一支**从来没人测过**；而 CI 的 Ubuntu
+   * 恰好只走这一支，于是一次性红了 12 条用例。
+   *
+   * 这里把「回落路径不存在」做成确定性输入（WECHAT_DEVTOOLS_CLI_DEFAULT 指到不存在的文件），
+   * 与执行机无关地钉住三件事：
+   *   ① 会 die，且 die 在**前置**（S1 一次都没跑）—— 不是等 spawn ENOENT 才炸；
+   *   ② 报错点名具体路径，人不用猜「缺的是哪个 env」；
+   *   ③ S6 仍出一行可解析的结论（EVIDENCE_LOCKED:false / preflight:not-run）。
+   */
+  it('未设 WECHAT_DEVTOOLS_CLI 且回落路径不存在 → 死在「前置」，不进 S1', () => {
+    const fx = track(makeFixture('web_system-1018-oneshot-'));
+    const missing = path.join(fx.root, 'no-devtools', 'cli');
+    const r = runScript(fx, stdArgs(fx), {
+      WECHAT_DEVTOOLS_CLI: '',
+      WECHAT_DEVTOOLS_CLI_DEFAULT: missing,
+    });
+
+    expect(r.status).not.toBe(0);
+    // ① 报错点名路径 + 给出出路（显式指定 WECHAT_DEVTOOLS_CLI）
+    expect(r.combined).toContain('[CLI] WECHAT_DEVTOOLS_CLI 未设置，回落官方安装路径：');
+    expect(r.combined).toContain(missing);
+    expect(r.combined).toContain('不可执行');
+    expect(r.combined).toContain('WECHAT_DEVTOOLS_CLI=');
+    // ② 死在 S1 之前：preflight 桩一次都没被执行（不是「跑完 S1 才报出码失败」）
+    expect(r.stdout).not.toContain('[S1] 出码前预检');
+    expect(r.stdout).not.toContain('[Preflight] stub');
+    expect(fs.existsSync(path.join(fx.appRoot, '.ci-output', 'args.json'))).toBe(false);
+    // ③ S6 仍是一行可解析的未锁住结论
+    const json = JSON.parse(lastNonEmptyLine(r.stderr));
+    expect(json.EVIDENCE_LOCKED).toBe(false);
+    expect(json.preflight).toBe('not-run');
+    expect(String(json.reason)).toContain('CLI 前置');
+  });
 });
 
 describe('release-one-shot.sh · S5/S6 留证', () => {
@@ -428,15 +514,14 @@ describe('release-one-shot.sh · S5/S6 留证', () => {
     expect(String(json.qr.expireAt)).toContain('2026-11-26');
   });
 
-  it('qr.sha256 与 shasum -a 256 逐字符一致（真算，不是猜的）', () => {
+  it('qr.sha256 与外部 sha256 工具逐字符一致（真算，不是猜的）', () => {
     const fx = track(makeFixture('web_system-1018-oneshot-'));
     const r = runScript(fx, stdArgs(fx));
     expect(r.status).toBe(0);
 
     const json = JSON.parse(lastNonEmptyLine(r.stdout));
-    const shasumOut = execFileSync('shasum', ['-a', '256', json.qr.path], { encoding: 'utf8' });
-    const expected = shasumOut.trim().split(/\s+/)[0];
-    expect(json.qr.sha256).toBe(expected);
+    // 独立算一遍再比：不能是「从文件名/时间猜出来的」，也不能是脚本自己回声自己
+    expect(json.qr.sha256).toBe(externalSha256(json.qr.path));
   });
 
   it('三行 [QR] 格式固定，remaining 是现算的整数分钟', () => {
