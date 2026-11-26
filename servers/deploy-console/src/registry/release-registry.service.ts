@@ -406,9 +406,9 @@ export class ReleaseRegistryService {
    * 版本**引用**」，**不做跨契约归一**，三个分支都原样返回来源里的值（`explicit` 传入值、
    * `previous_version` 原值、历史行 `versionTag` 原值）。
    *
-   * - `deploy_app_env_versions.*_version` 的**纯 commit 契约**由三个写入方法各自
-   *   `requireCommitRef` 保证（`setAppEnvPointerInner` / `syncAppEnvPointerInner` /
-   *   `mirrorPointer`）—— 归一只发生在写列处。
+   * - `deploy_app_env_versions.*_version` 的**纯 commit 契约**由三个写入处各自校验保证
+   *   （`setAppEnvPointerInner` / `syncAppEnvPointerInner` 用 `requireCommitRef`；
+   *   `mirrorPointer` 在 `env-split-writer.service.ts` 内联判等后 throw）—— 归一只发生在写列处。
    * - 归一**比对**仍在本函数内保留（只用于「判断是不是同一个版本」）：历史脏值
    *   `portal/b6ec9950` 与 `b6ec9950` 必须视为同版本，否则会把当前版本自己选成回滚目标
    *   → 下游 `from === currentVersion` → 静默 no-op（P1 回归）。
@@ -417,8 +417,8 @@ export class ReleaseRegistryService {
    *   `a82270f9` 于 14:23 / 14:33 各发一次，见台账 #9027 数据侧取证）。本函数视其为
    *   「没有可用的 previous」，继续回落历史表找真正更早的**不同**版本 —— 而不是抛错，
    *   因为抛错会把「本可自救」变成「不可自救」（历史表里通常还有更早的版本）。
-   * - `explicit` 分支是唯一**没有回落路径**的入口，故它做两道前置校验（校验但**不归一**，
-   *   返回的仍是原始引用）：归一失败（`..` / 空段）→ 400，堵住下游 `path.join` 穿越；
+   * - `explicit` 分支是唯一**没有回落路径**的入口，故它做两道前置校验（归一值**只用于判等**，
+   *   **返回值仍是原始引用**）：归一失败（`..` / 空段）→ 400，堵住下游 `path.join` 穿越；
    *   归一后等于 current → 400（否则「回滚到当前版本」会被下游 `unchanged: true` 静默吃掉）。
    * - 两类消费者需求**相反**，故不能统一成一种形态：
    *   - app / env-dir：`doSwitchVersion` 的三个 IO 点（`hasVersion` / `writePointer` /
@@ -447,14 +447,22 @@ export class ReleaseRegistryService {
     // 三者都原样返回来源引用（契约边界见函数头 JSDoc）：列归一只在写列处做，
     // 产物解析侧的 `resolveVersion` 已「原始值优先、归一值兜底」。
     if (explicit) {
-      // 格式校验但**不归一**（台账 #9027 第五轮 · D11）：归一失败（`..` / 空段 / 超短）→ 400，
+      // 格式校验（台账 #9027 第五轮 · D11）：归一失败（`..` / 空段 / 超短）→ 400，
       // 堵住下游 `applyBackendVersion` 的 path.join(ws,'servers',dir,versionTag) 路径穿越；
       // 但**返回的仍是原始引用** —— `runtime-checkpoint/<id>` 与 `portal/<commit>` 都要原样透传。
       // 🔴 校验与归一是**两件事**：A″ 之前把「撤掉剥前缀」和「撤掉校验」当成一件事一起做，
       //    才是这处回退的根因 —— 不需要在「剥前缀」和「不校验」之间二选一。
-      requireCommitRef(explicit, '回滚目标'); // 只判定，不取返回值
-      // 注：「explicit 等于当前版本 → 400」是**另一个洞**（用户主动点当前版本），
-      // 属 P2，本轮不实现（team-lead 2026-11-26 定案）；要与格式校验的 400 分开文案。
+      // 🔴 `explicitRef` 是**归一值，仅用于判等**；返回值仍是**原始引用** `explicit`
+      //    （`portal/b6ec9950` 与 `b6ec9950` 判等相等，但下游要的是原样引用）。
+      const explicitRef = requireCommitRef(explicit, '回滚目标');
+      // 「回滚到当前版本」= 退化操作。`explicit` 分支**没有回落路径**（不像 previous 分支
+      // 还能继续找更早版本），留着必被下游吃掉：app 链 `unchanged: true` 静默成功
+      // （apps.service.ts:585，线上一个字没改却报成功）；后端链虽有 deploy.service.ts:1193-1194
+      // 的守卫，但那是**精确**比较，跨拼写（`b6ec9950` vs `portal/b6ec9950`）会漏网。
+      // 故此处用归一值判等后直接 400；文案要与上面格式校验的 400 区分开，便于排查。
+      if (explicitRef === fromCommit) {
+        throw new BadRequestException(`回滚失败: ${explicit} 就是当前版本（${from}），无需回滚`);
+      }
       return { from, to: explicit, source: 'explicit' };
     }
 

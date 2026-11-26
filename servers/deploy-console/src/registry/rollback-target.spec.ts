@@ -158,13 +158,17 @@ describe('ReleaseRegistryService.resolveRollbackTarget（诊断 #17）', () => {
     ).resolves.toMatchObject({ to: 'c0ffee02', source: 'history' });
   });
 
-  // ── 第五轮：`previous == current` 自指守卫（存量缺陷，本轮补修）────────────────
+  // ── 第五轮（D11 格式校验回退 / D12 自指守卫）：存量缺陷，本轮补修 ────────────────
   //
   // 🔴 变异预期（写清，避免下次误判）：
-  //   删掉指针分支的 `prevRef !== fromCommit` →
-  //     · 下面第 1、2 条**变红**（`source` 变 pointer、`to` 变当前版本）
-  //     · 上面的 `#9027 P1` 用例**仍然绿**（它走 `previous=null`，靠的是既有 `:463`
-  //       归一比对，与自指守卫无关）→ 所以 P1 那条证明不了自指守卫存在，必须另有专条。
+  //   删 `const explicitRef = requireCommitRef(explicit, '回滚目标')` → 下面 D11 那两条（`../../etc/passwd`
+  //                                                             与 `.. / portal/../etc / a//b` 三输入）**变红**
+  //   删 `explicitRef === fromCommit` 等值守卫整块            → 下面 D12a（同拼写）与 D12b（跨拼写）**双双变红**
+  //   删指针分支 `prevRef !== fromCommit`                     → 下面「previous 自指」那条**变红**
+  //   三条全删                                                 → `:102` runtime-checkpoint 透传那条**仍绿**
+  //                                                              （它走格式校验；且 appVersionRepo 为 null → fromCommit=undefined）
+  //   且既有 `#9027 P1` 用例在删「previous 自指」守卫后**仍绿**（它走 `previous=null`，靠 `:494` 归一比对）
+  //   → 所以 P1 那条证明不了自指守卫存在，必须另有专条。
   //
   // 定性：`previous == current` 是**合法状态**（同一 commit 连续发布两次），不是脏数据。
 
@@ -185,74 +189,89 @@ describe('ReleaseRegistryService.resolveRollbackTarget（诊断 #17）', () => {
     expect(r).toEqual({ from: 'portal/b6ec9950', to: 'portal/948d24fd', source: 'history' });
   });
 
-  it('#9027 自指：shell@prod 真实形态 previous==current(a82270f9) → 回落到 b94924b3', async () => {
-    // 数据侧取证（releaser-9027-preflight）：a82270f9 于 2026-10-10 发布过两次
-    // （14:23:37 与 14:33:02），previous 忠实记为 a82270f9；真上一个**不同**版本是 b94924b3。
-    appVersionRepo.findOne.mockResolvedValue({
-      currentVersion: 'a82270f9',
-      previousVersion: 'a82270f9',
-    });
-    versionRepo.find.mockResolvedValue([
-      { versionTag: 'a82270f9' },
-      { versionTag: 'a82270f9' },
-      { versionTag: 'b94924b3' },
-    ]);
-
-    const r = await svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'shell' });
-
-    expect(r.to).toBe('b94924b3'); // 正向断言（不用 !==，否则 throw 场景下无意义）
-    expect(r.source).toBe('history'); // 走回落，不是指针分支
+  /**
+   * D11：`explicit` 非法引用必须 400，绝不能把 `..` 透给下游拼路径。
+   *
+   * 攻击面：`POST /deploy/rollback-version`（`deploy.controller.ts:111-132`）的 `@Body()`
+   * 是内联类型，`to` 无 `@Matches` → 直达 `deploy.service.ts:605`
+   * `path.join(ws,'servers',dir,versionTag)`，`../../etc/passwd` 会被 `path.join` 归一出去。
+   *
+   * 这是 round-1 已有行为的**恢复**：A″ 把 `requireCommitRef(explicit,'回滚目标')` 整句撤掉时
+   * 连校验一起丢了。修复方式是「只校验、返回值仍用原始引用」，故 `:102` 的
+   * runtime-checkpoint 透传用例不受影响。
+   *
+   * 断言带 `/非法/`（不只判异常类型）：等值守卫也抛同类 `BadRequestException`，
+   * 只判类型会在「两个同类型异常都可达」时退化成假绿。
+   */
+  it('#9027 D11：explicit 传 ../../etc/passwd → 400，不把路径穿越值透给下游', async () => {
+    appVersionRepo.findOne.mockResolvedValue({ currentVersion: 'c0ffee03', previousVersion: null });
+    await expect(
+      svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'portal', to: '../../etc/passwd' }),
+    ).rejects.toThrow(/非法/);
   });
 
-  it('#9027 自指：previous==current 且历史表无更早版本 → 明确报错（绝不静默成功）', async () => {
-    appVersionRepo.findOne.mockResolvedValue({
-      currentVersion: 'a82270f9',
-      previousVersion: 'a82270f9',
-    });
-    versionRepo.find.mockResolvedValue([{ versionTag: 'a82270f9' }]);
-
-    await expect(
-      svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'shell' }),
-    ).rejects.toThrow(BadRequestException);
-  });
-
-  it('#9027：explicit 指定当前版本 → 400（无回落路径，不许静默成功）', async () => {
-    // previous 给一个可用值，证明 400 来自 explicit 判等，而不是「根本没得退」
-    appVersionRepo.findOne.mockResolvedValue({
-      currentVersion: 'a82270f9',
-      previousVersion: 'b94924b3',
-    });
-    await expect(
-      svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'shell', to: 'a82270f9' }),
-    ).rejects.toThrow(BadRequestException);
-
-    // 同一 commit 的不同拼写也必须认出「就是当前版本」
+  /**
+   * D12b：「回滚到当前版本」必须 400，不能落到下游被判成 no-op。
+   *
+   * 真实形态是**跨拼写**：指针表 `current_version` 已被归一成纯 commit `b6ec9950`，
+   * UI 传来的 `to` 可能是历史行里的原始引用 `portal/b6ec9950`（或反过来）。
+   * 只做 `explicit === from` 的字符串比较会漏，必须用**归一值**判等。
+   *
+   * 漏掉这层，两条链都不好：
+   * - app / env-dir：`doSwitchVersion` 见 `from === version` → `unchanged: true`
+   *   直接 return（`apps.service.ts:585`），线上一个字没改却报成功；
+   * - 后端：`deploy.service.ts:1193-1194` 有守卫，但只挡**精确**相等的形态。
+   *
+   * 删掉 `explicitRef === fromCommit` → 本用例 resolve → `rejects` 变红。
+   */
+  it('#9027 D12b：explicit 归一后等于 current → 400（跨拼写自指，不被 unchanged 静默吃掉）', async () => {
     appVersionRepo.findOne.mockResolvedValue({
       currentVersion: 'portal/b6ec9950',
+      // previous 给一个**可用**值：证明 400 来自 `explicitRef === fromCommit` 判等，
+      // 而不是「根本没有更早版本可退」。少了这个前提，本用例在等值守卫被删时
+      // 仍可能因「无路可退」而 400，退化成假绿。
       previousVersion: 'portal/948d24fd',
     });
     await expect(
       svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'portal', to: 'b6ec9950' }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(/就是当前版本/);
   });
 
   /**
-   * ⚠️ 本条对应**超出 team-lead 指定范围**的第 3 处改动（explicit 非法引用校验）。
-   * 它是 round-1 已有行为的恢复 —— A″ 把 `requireCommitRef(explicit, '回滚目标')`
-   * 整句撤掉时一并丢失了校验，导致 `POST /deploy/rollback-version` 的 `to`
-   * 可直达 `applyBackendVersion` 的 `path.join(ws,'servers',dir,versionTag)`。
+   * D12a：同拼写（非跨拼写）的「回滚到当前版本」也必须 400。
    *
-   * 若不采纳这处改动：把 explicit 分支的
-   *   `const explicitRef = requireCommitRef(explicit, '回滚目标');`
-   * 改为 `const explicitRef = normalizeCommitRef(explicit);`
-   * 并把判等改成 `if (explicitRef && explicitRef === fromCommit)`，然后删掉本条用例即可。
+   * 与 `D12b` 是**两条独立的判别性用例**，不能互相替代：
+   * - 本条的字符串本来就相等，`explicit === from` 这种朴素比较也能挡住 → 它只证明守卫**存在**；
+   * - `D12b` 的 `to='b6ec9950'` vs `current='portal/b6ec9950'` 字符串不等、归一后相等
+   *   → 只有**用归一值判等**才能挡住 → 那条才证明「判等口径是归一后的」。
+   *
+   * 删掉 `explicitRef === fromCommit` 整块 → 本条与 `D12b` **双双变红**。
    */
-  it('#9027：explicit 传非法引用（.. / 空段）→ 400，不把脏值透给下游拼路径', async () => {
+  it('#9027 D12a：explicit 与 current 同拼写相等 → 400（有可用 previous 也不许回滚到自己）', async () => {
+    appVersionRepo.findOne.mockResolvedValue({
+      currentVersion: 'a82270f9',
+      previousVersion: 'b94924b3', // 可用 previous：排除「无路可退」这个混淆因素
+    });
+    await expect(
+      svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'shell', to: 'a82270f9' }),
+    ).rejects.toThrow(/就是当前版本/);
+  });
+
+  /**
+   * D11 补充：三条非法输入覆盖**两条不同分支**，单留 `../../etc/passwd` 盖不全。
+   * - `..`             → 点段守卫（`segs.some(s => s === '..')`）
+   * - `portal/../etc`  → 点段守卫（前缀形态，确认不是靠「取末段」侥幸）
+   * - `a//b`           → 空段守卫（`parts.some(s => !s.trim())`）—— 与上面是**不同**分支
+   *
+   * 三者都经 `requireCommitRef` → 文案含「非法」，故断言 `/非法/` 而非仅断言异常类型
+   * （等值守卫抛的也是 `BadRequestException`，只判类型会退化成假绿）。
+   */
+  it('#9027 D11：explicit 传非法引用（.. / portal/../etc / a//b）→ 400，点段与空段守卫都要挡住', async () => {
     appVersionRepo.findOne.mockResolvedValue({ currentVersion: 'c0ffee03', previousVersion: null });
     for (const bad of ['..', 'portal/../etc', 'a//b']) {
       await expect(
         svc.resolveRollbackTarget({ env: 'prod', moduleKey: 'portal', to: bad }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(/非法/);
     }
   });
 });
