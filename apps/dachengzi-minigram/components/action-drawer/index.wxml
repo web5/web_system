@@ -86,9 +86,13 @@
          🔴 以下四条**都已有静态守卫**，真实持有者是 `tests/rd-blindfix-1126-guards.test.ts` 的
          **P2-6 组**（mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）：
            ① `.ad-acts` 上只允许 `catchtouchmove`，不得 `catchtouchstart`；
-           ② **所有抽屉系起始标签**（class 含 `ad-drawer` 或恰好 `ad` 的全部 `<view …>`）都不得
+           ② **所有抽屉系 `<view>` 起始标签**（class 任一 token 命中 `/^ad(-|$)/` 的都算：`ad` /
+              `ad-mask` / `ad-drawer` / `ad-acts` / `ad-close` / 将来的 `ad-inner` …）都不得
               `catchtouchstart` —— 只查 `.ad-acts` 一处是不够的：挪到 `.ad-drawer` 或最外层 `.ad`
-              上同一个 bug 原地复活（子按钮 tap 全灭）；
+              上同一个 bug 原地复活（子按钮 tap 全灭）。口径 2026-11-27 从「精确等于 ad/ad-drawer」
+              收紧成前缀匹配，并对 `ad` / `ad-drawer` / `ad-acts` 三个节点各做一次点名断言；
+              ⚠️ 覆盖面只到 `<view …>` 起始标签（不含 `<text>` / `<block>` / `<scroll-view>`
+              上挂的 catchtouchstart —— 那类节点目前一个也没有，将来加了要同步扩守卫）；
            ③ `.ad-act` 起始标签必须带 `data-key="{{item.key}}"` 与 `data-kind="{{item.kind}}"`
               （`data-key` 一丢 → `onActionTap` 首行 `if (!key) return` 静默返回，四按钮全哑）；
            ④ `.ad-drawer` 必须保留 `bindtouchcancel="onTouchEnd"`（缺它手势被系统打断后抽屉歪着停住）。

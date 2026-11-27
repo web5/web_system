@@ -176,6 +176,27 @@ describe('硬红线 · 组件不得下沉业务 / 不得测坐标 / 必须订阅
     expect(t).toMatch(/stopSpeak\(/);
   });
 
+  /**
+   * 🔴 2026-11-27 清理的守卫（`_offSpeakState` 移出 `data` 时补的）：`data` 是**渲染层数据源**，
+   * 函数/闭包不该进去 —— 进了也只是在 setData 序列化那一层被抹成 null，纯噪音。
+   * 这条断言同时钉住两件事：① `data` 里没有函数；② 「退订闭包 / 来源标志」既不在 data、
+   * 也不在 methods（挂实例字段才是对的位置，见 `DrawerInstance` 注释）。
+   * 注意 `makeDrawer` 用 `JSON.parse(JSON.stringify(cfg.data))` 造实例 —— 函数字段本来就被抹掉，
+   * 所以「改成实例字段」这件事**不会让任何行为用例自动变红**，必须靠这条静态断言兜住。
+   */
+  it('data 里不得出现函数字段；_offSpeakState / _speakByDrawer 只在实例上（不在 data、不在 methods）', () => {
+    const cfg = drawerCfg as ComponentCfg;
+    const dataObj = (cfg.data || {}) as Record<string, unknown>;
+    const fnKeys = Object.keys(dataObj).filter((k) => typeof dataObj[k] === 'function');
+    expect(fnKeys).toEqual([]);
+    for (const k of ['_offSpeakState', '_speakByDrawer']) {
+      expect(Object.prototype.hasOwnProperty.call(dataObj, k)).toBe(false);
+      expect(Object.keys((cfg.methods || {}) as Record<string, unknown>)).not.toContain(k);
+    }
+    // 且确实有「退订闭包」这个实例字段的赋值点（说明不是把订阅整块删掉了）
+    expect(ts()).toMatch(/instOf\(this\)\._offSpeakState\s*=\s*onSpeakState\(/);
+  });
+
   it('styleIsolation 显式钉为 isolated（D6：页面档位 class 不穿透，抽屉恒不透明白底）', () => {
     const j = JSON.parse(json());
     expect(j.component).toBe(true);
@@ -573,19 +594,30 @@ describe('契约 6：关闭三通道都必须「先停朗读，再抛 close」�
 //   · 音频继续念，而抽屉已经消失（页面上再没有停止入口）；
 //   · 更坏的是重新打开抽屉时按钮带着 ■ 残留，点「朗读」实际执行的是「停止」，
 //     用户感知为「点了没声音」。
-// 本组用例就是这条缺陷的证伪器：把 observer 里的 `stopSpeak()` 注释掉，本组必红。
+//
+// 🔴🔴 判据必须是**来源**（`_speakByDrawer`），不能是「有没有在播」（`playingKey` 非空）：
+//   `_syncSpeakState` 按文本比对点亮按钮，**页面自己发起的整句朗读**在抽屉打开时同样让
+//   `playingKey='speak-line'`；按 `playingKey` 停会把页面发起的整句朗读一起停掉，而两页既有
+//   判据写死的是相反的（详情页 `closeTip` / 首页 `closeQuoteTip`：「整句在播 → 不停，用户可能
+//   想继续听」；契约测试 `tests/nce-detail-blind-d-behavior.test.ts:250-259`「页面侧不得越权停
+//   非抽屉来源的播放」）。所以下面**两条相反方向都要**：抽屉发起的必须停、页面发起的一个都不许停。
+//
+// 证伪能力（两种变异各自打红一条）：
+//   ① 注释掉 observer 里的 `stopSpeak()` → 第一条用例红；
+//   ② 把 observer 判据从 `_speakByDrawer` 换回 `this.data.playingKey` → 第二条用例红。
 describe('🔴 页面侧关抽屉（visible=false）必须停朗读（P1「关了还在念」）', () => {
-  /** 开一个正在朗读单词的抽屉（走真实点按路径点亮 playingKey，不用手塞 data） */
+  /** 开一个正在朗读单词的抽屉（走真实点按路径点亮 playingKey + 来源标志，不用手塞 data） */
   function speaking(): Record<string, any> {
     const c = makeDrawer({ visible: true, scope: 'word', lineText: 'He is an engineer.', lineIndex: 2, word: 'engineer' });
     c.scope('word');
     c.attached();   // 真机上 observer 触发时组件必然处于挂载态（订阅已建立）
     c.onActionTap({ currentTarget: { dataset: { key: 'speak-word', kind: 'speak' } } });
     expect(c.data.playingKey).toBe('speak-word');
+    expect(c._speakByDrawer).toBe(true);   // 来源标志：这段朗读是抽屉发起的
     return c;
   }
 
-  it('🔴 页面侧关抽屉（visible false）时必须停朗读，不许「关了还在念」', () => {
+  it('🔴 抽屉发起的朗读：页面侧关抽屉（visible false）时必须停，不许「关了还在念」', () => {
     const c = speaking();
 
     // 记录「stopSpeak 发生的那一刻 playingKey 是什么」—— 同时验证**顺序**（先停、后清态）
@@ -605,14 +637,39 @@ describe('🔴 页面侧关抽屉（visible=false）必须停朗读（P1「关�
     expect(seen).toEqual(['stop@speak-word']);
     // ③ 播放态归零：重开抽屉不会带着 ■ 残留（否则「点朗读」变成「停止」→ 用户以为没声音）
     expect(c.data.playingKey).toBe('');
+    // ④ 来源标志也归零：下次再关抽屉不能凭旧标志误停
+    expect(c._speakByDrawer).toBe(false);
   });
 
-  it('playingKey 为空时**不**调 stopSpeak（不误停页面别处的朗读）', () => {
+  /**
+   * 🔴 本条是 2026-11-27 判据纠正的核心（防回退）：**页面自己发起的整句朗读，一个都不许停**。
+   * 现场：用户在抽屉外面（或首页「今日一句」）发起整句朗读 → tts 推来的文本正好等于抽屉持有的
+   * `lineText` → 组件按文本反查把 `playingKey` 点亮成 `speak-line`（既有行为，按钮显示 ■）。
+   * 此时长按开抽屉、点「收藏」→ 页面 `closeOverlay()` → `visible=false`。
+   * 按「playingKey 非空就停」的错误判据会**停掉用户正在听的整句** —— 与两页 closeTip /
+   * closeQuoteTip 的既有契约相反。正确行为：`_speakByDrawer=false` → 一次都不停。
+   */
+  it('🔴 页面发起的整句朗读（同文点亮 playingKey）：关抽屉时**一次都不许停**', () => {
+    const c = makeDrawer({ visible: true, scope: 'line', lineText: 'He is an engineer.', lineIndex: 2 });
+    c.scope('line');
+    c.attached();
+
+    // 页面自己发起朗读：组件没点过任何按钮，只是 tts 权威状态把同文按钮点亮了
+    mockTts.emit({ text: 'He is an engineer.', phase: 'playing' });
+    expect(c.data.playingKey).toBe('speak-line');   // 文本反查点亮（视觉上确实显示 ■）
+    expect(c._speakByDrawer).toBe(false);           // 但来源不是抽屉
+
+    mockTts.calls = [];
+    c.visible(false);
+    expect(mockTts.calls.filter((x) => x === 'stop')).toHaveLength(0);  // 不许越权停
+  });
+
+  it('tts 在播别的文本、本实例没有播放态：关抽屉也不调 stopSpeak（不误停）', () => {
     const c = makeDrawer({ visible: true, scope: 'line', lineText: 'S.' });
     c.attached();
-    // tts 确实在播，但播的不是本抽屉发起的（playingKey 仍为空 = 本实例没在播）
     mockTts.emit({ text: 'some other sentence.', phase: 'playing' });
     expect(c.data.playingKey).toBe('');
+    expect(c._speakByDrawer).toBe(false);
 
     mockTts.calls = [];
     c.visible(false);

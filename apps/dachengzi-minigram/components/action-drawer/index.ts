@@ -29,6 +29,10 @@
  *     observer。所以那个 observer 在 `visible` 变 false 时**必须自己先停朗读**，否则
  *     「抽屉已消失、声音还在念」，且重开时按钮带着 ■ 残留（点「朗读」实际执行的是停止，
  *     用户感知为「点了没声音」）。
+ *     🔴 但**判据只能是来源标志 `_speakByDrawer`**（本实例发起的播放），不能是「有没有在播」：
+ *     `playingKey` 由文本比对点亮，页面自己发起的整句朗读在抽屉打开时同样点亮它 —— 按
+ *     `playingKey` 停会越权停掉页面发起的整句，与两页 `closeTip` / `closeQuoteTip`
+ *     「整句在播 → 不停」的既有契约相反（详见 `DrawerInstance._speakByDrawer`）。
  *
  * 播放态（2026-11-26 变体 C 起**由组件自持**，方案 §5.2 的旧口径已作废）：
  *  - 组件订阅 `onSpeakState`：tts 推文本 → 按文本反查是哪个按钮在播（同一时刻至多一个）；
@@ -106,6 +110,28 @@ interface TapEventLike { currentTarget?: { dataset?: Record<string, unknown> }; 
 interface DrawerInstance {
   /** `onSpeakState` 的退订闭包（`null` = 未订阅） */
   _offSpeakState: (() => void) | null;
+  /**
+   * 「当前这段朗读是**抽屉自己发起的**」来源标志（逻辑层私有，不进 `data`）。
+   *
+   * 🔴 为什么不能用 `playingKey` 当判据（2026-11-27 盲测纠正，我第一版就写错了）：
+   *    `_syncSpeakState` 是**按文本比对**点亮的 —— tts 推来的文本等于抽屉持有的 `lineText` /
+   *    `word` 就把 `playingKey` 点亮。它**分辨不出来源**。所以「页面自己发起的整句朗读」
+   *    （用户在抽屉外点朗读、或首页「今日一句」）在抽屉打开时同样让 `playingKey='speak-line'`。
+   *    此时用户长按开抽屉 → 点「收藏」→ 页面 `closeOverlay()` → 若按 `playingKey` 非空就停，
+   *    会把**页面发起的整句朗读**停掉，而两页既有判据写死的是相反的：
+   *      · 详情页 `closeTip`（`pages/nce/detail/detail.ts:454-469`）「真正在播整句时不停
+   *        （用户可能想继续听整句）」；
+   *      · 首页 `closeQuoteTip`（`pages/home/index/index.ts:553-562`）同口径「是整句 → 不停」；
+   *      · 契约测试 `tests/nce-detail-blind-d-behavior.test.ts:250-259`「页面侧不得越权停
+   *        非抽屉来源的播放」。
+   *    所以判据必须是**来源**，不是**有没有在播**：`_speakByDrawer` 为 true 才停。
+   *
+   * 写入口（谁置 true / false 都被测试钉着）：
+   *   · `_onSpeakTap` 真正发起朗读（`speakText` 之前）→ true；
+   *   · `_clearPlaying` / `_resetLocalState` / `detached` → false；
+   *   · `_syncSpeakState` 走**文本反查**两个分支（文本命中 ≠ 抽屉发起）、以及 tts 推 `null` → false。
+   */
+  _speakByDrawer: boolean;
 }
 /** 取实例的私有字段视图：不复制对象，只做类型收窄（`self` 收成 `unknown` 才允许这样转） */
 const instOf = (self: unknown): DrawerInstance => self as DrawerInstance;
@@ -200,8 +226,10 @@ Component({
      *   · 抽屉已消失、音频继续念（页面上再无停止入口）；
      *   · 重开抽屉时按钮带着 ■ 残留 → 点「朗读」走的是「停止」分支，用户以为「点了没声音」。
      *
-     * 🔴 判据是 `this.data.playingKey` 非空**才**调 `stopSpeak()`：页面可能同时在播别的东西
-     * （详情页 tip 朗读 / 首页「今日一句」），本实例没在播就不许误停。
+     * 🔴 判据是**来源标志** `_speakByDrawer`（本实例自己发起的播放），**不是** `playingKey`
+     * 非空：`playingKey` 由文本比对点亮，页面自己发起的整句朗读在抽屉打开时也会点亮它 ——
+     * 按 `playingKey` 停会把页面发起的整句朗读一起停掉，与两页既有判据（「整句在播 → 不停，
+     * 用户可能想继续听」：`closeTip` / `closeQuoteTip`）正好相反。详见 `DrawerInstance` 注释。
      * 顺序也是被断言的：**先 stopSpeak 再清 playingKey**（stopSpeak 推回的 null 可能同步到达，
      * 先清态会让「谁在播」这条信息在 stop 之前就丢了）。
      *
@@ -210,8 +238,8 @@ Component({
      */
     visible(visible: boolean) {
       if (visible) return;
-      if (this.data.playingKey) stopSpeak();
-      this._resetLocalState();
+      if (instOf(this)._speakByDrawer) stopSpeak();
+      this._resetLocalState();   // 内含 setData({ playingKey: '' }) + 来源标志复位
     },
   },
 
@@ -223,6 +251,8 @@ Component({
       // 订阅 tts 权威状态：自然播完 / 失败 / 被页面停掉 → 按钮自动回 ▶（契约 5）
       // 🔴 退订闭包挂实例字段（不进 data），见文件顶部 DrawerInstance 的注释
       instOf(this)._offSpeakState = onSpeakState((s) => this._syncSpeakState(s));
+      // 来源标志初值：刚挂载时本实例没发起过任何朗读（不能留 undefined 让判据依赖隐式转换）
+      instOf(this)._speakByDrawer = false;
       // 首帧对齐一次：父组件可能在 attached 前就传了 scope
       this.setData({ acts: actionsOf(this.data.scope === 'word' ? 'word' : 'line') });
     },
@@ -235,6 +265,7 @@ Component({
         inst._offSpeakState = null;
       }
       stopSpeak(); // 组件销毁 = 抽屉不可能再被打开：绝不允许「关了还在念」
+      inst._speakByDrawer = false;
       this.data.playingKey = '';
       if (this.data._busyTimer) {
         clearTimeout(this.data._busyTimer);
@@ -379,6 +410,10 @@ Component({
       if (this.data.playingKey) stopSpeak();
       // 本地立即切态（不等回流）；tts 同步推的 loading 会把它校正成同一个值
       this.setData({ playingKey: key });
+      // 🔴 来源标志：从这一行起这段朗读是**本实例发起**的（页面侧关抽屉时才有权停它）。
+      //    必须在 speakText 之前置位 —— tts 可能同步回流，回流走的是「沿用当前 key」分支，
+      //    那里不改标志，靠的就是这里先置 true。
+      instOf(this)._speakByDrawer = true;
       void speakText(text).then((ok) => {
         // 起不来（未登录 / 文本超长 / 空文本）：把乐观态收回，不留「永远在播」的死按钮
         if (ok || !this.data._alive) return;
@@ -389,8 +424,9 @@ Component({
       });
     },
 
-    /** 清播放态（逻辑层 + 渲染层同一处） */
+    /** 清播放态（逻辑层 + 渲染层同一处）。🔴 同时把「来源」清掉：没有播放态，就没有「抽屉发起的播放」 */
     _clearPlaying() {
+      instOf(this)._speakByDrawer = false;   // 先清来源（无播放态即无来源，早退也不能漏）
       if (!this.data.playingKey) return;
       this.setData({ playingKey: '' });
     },
@@ -399,21 +435,31 @@ Component({
      * tts 权威状态 → 按钮态（契约 5）。文本落到哪个动作就亮哪个，落不到（页面在播别的）就全灭。
      * 🔴 先认「当前正在播的 key」再反查：词档下 `word` 与 `lineText` 可能同文（单词句），
      *    此时应保持用户刚点的那个按钮，而不是跳到另一个同文按钮。
+     *
+     * 🔴 来源标志（2026-11-27 盲测纠正）：**只有第一个分支（沿用当前 key）保留来源不变** ——
+     *    那说明这次回流是在续报本实例刚发起的那段播放。后两个分支是**文本反查**点亮的，
+     *    文本命中 ≠ 抽屉发起（页面自己发起的整句朗读同文时也会命中），必须显式把
+     *    `_speakByDrawer` 置回 false；tts 推 `null`（自然播完 / 被停 / 失败）同样置 false ——
+     *    那时已经没有任何播放，来源标志留着只会在下次关抽屉时误停别人的朗读。
      */
     _syncSpeakState(s: SpeakState | null) {
       if (!this.data._alive) return;
       const text = s ? String(s.text || '').trim() : '';
       let next = '';
+      /** 本次点亮是否为「沿用本实例当前播放中的 key」（唯一能保住来源标志的分支） */
+      let keepSource = false;
       if (text) {
         const cur = String(this.data.playingKey || '');
         if (cur && this._textOf(cur) === text) {
           next = cur;
+          keepSource = true;
         } else if (this.data.scope === 'word' && String(this.data.word || '').trim() === text) {
           next = EVT.SPEAK_WORD;
         } else if (String(this.data.lineText || '').trim() === text) {
           next = EVT.SPEAK_LINE;
         }
       }
+      if (!keepSource) instOf(this)._speakByDrawer = false;
       if (next === this.data.playingKey) return;
       this.setData({ playingKey: next });
     },
@@ -440,6 +486,11 @@ Component({
      * 抛关闭信号。🔴 **先 `stopSpeak()` 再 emit**（契约 6）：
      * 三条通道（遮罩 / ✕ / 下滑）关掉抽屉后，页面上没有任何停止入口了，
      * 所以「关了还在念」是硬缺陷 —— 停朗读必须发生在 close 之前（顺序本身也是被断言的）。
+     *
+     * 🔴 这三条通道是**用户对抽屉本身下指令**（点遮罩 / 点 ✕ / 下滑），语义是「连朗读一起关」，
+     *    所以这里无条件停、不看 `_speakByDrawer`（与页面侧 `closeOverlay()` 的 observer 判据不同：
+     *    那边可能是页面在播整句、顺手关了个抽屉，不能越权停别人的朗读）。
+     *    `_clearPlaying()` 会顺带把来源标志置 false。
      */
     _emitClose(via: 'mask' | 'swipe' | 'close') {
       stopSpeak();
@@ -463,6 +514,8 @@ Component({
       this.data._startY = 0;
       this.data._speakTapKey = '';
       this.data._speakTapAt = 0;
+      // 来源标志也在这里归零：调用方（visible observer / pageLifetimes.hide）都是「本次播放结束」
+      instOf(this)._speakByDrawer = false;
       if (this.data._busyTimer) {
         clearTimeout(this.data._busyTimer);
         this.data._busyTimer = 0;
