@@ -49,7 +49,9 @@
 #   S2  目录硬检：worktree 顶层名不匹配 --require-dir 的正则 且未传 --force-dir → 直接拒跑
 #   S3  确认 CLI 已就绪（前置步骤已补齐，此处只回报结论）
 #   S4  node scripts/publish.js <mode> --require-dir <正则> [--desc ...] [--expect-sha ...] [--no-push]
-#   S5  实测二维码 sha256 / 有效期（现算剩余分钟），三行固定格式 [QR] ...
+#   S5  实测二维码 sha256 / 有效期（现算剩余分钟），**并与出码前基线比对判假绿**
+#       （台账 9221：cli preview 编译失败仍以 0 退出且不覆盖旧 png，故 sha 与出码前相同 = 判红）；
+#       三行固定格式 [QR] path / sha256 / expireAt，另加三行「出码前 → 现在」新鲜度对比
 #   S6  一行机读结论 JSON（EVIDENCE_LOCKED / reason / qr / requiredDir / forcedDir …）
 #
 # 边界：本脚本只到「出预览码 / 上传开发版本」为止。设为体验版、提交审核、发布正式版
@@ -90,6 +92,16 @@ RESOLVED_CLI=""
 QR_PATH=""
 QR_SHA=""
 QR_EXPIRE=""
+
+# 假绿判据（台账 9221）。语义：`cli preview` 在**编译/上传失败时仍以 0 退出**
+# （实测：`✖ compile_start` + `code: 10, …unexpected character` → EXIT=0），且失败时不覆盖
+# `.ci-output/cli-preview-qr.png`。于是「对固定路径算 sha 并打印」这种做法会把**上一轮的旧码**
+# 当成这一轮的凭证（v1.0.20 与 v1.0.21 两轮各复现一次，png 逐字节相同、只有 meta 被改写）。
+# 因此必须在**出码前**留一份基线，出码后逐项比对；只记录不比对 = 没留证。
+QR_PRE_SHA=""
+QR_PRE_MTIME=""
+QR_PRE_SIZE=""
+RUN_START_EPOCH=""
 
 usage() {
   sed -n '2,120p' "${BASH_SOURCE[0]}" | sed -n '/^# 用法：/,/^# 边界：/p' | sed 's/^# \{0,1\}//'
@@ -154,6 +166,35 @@ sha256_of() {
     sha256sum "$f" | awk '{print $1}'
   else
     die "S5 找不到 shasum 或 sha256sum，无法实测二维码摘要"
+  fi
+}
+
+# 文件 mtime 的 epoch 秒。文件不存在 / 读不到 → 给 0（判据在调用处，本函数不 die：
+# 「出码前没有文件」是合法状态，首出就是这样）。用 node 取，避免 GNU/BSD `stat` 参数差异。
+mtime_epoch_of() {
+  node -e '
+    const fs = require("fs");
+    try { process.stdout.write(String(Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000))); }
+    catch (e) { process.stdout.write("0"); }
+  ' "$1"
+}
+
+# 文件字节数。不存在 → 0。
+size_of() {
+  node -e '
+    const fs = require("fs");
+    try { process.stdout.write(String(fs.statSync(process.argv[1]).size)); }
+    catch (e) { process.stdout.write("0"); }
+  ' "$1"
+}
+
+# 当前存在的二维码文件路径（找不到给空串）。S4 取基线 / S5 取产物共用同一处判定，
+# 免得两处各写一份「固定路径」而漂移。
+existing_qr_path() {
+  if [ -f ".ci-output/cli-preview-qr.png" ]; then
+    echo "$PWD/.ci-output/cli-preview-qr.png"
+  elif [ -f ".ci-output/preview-qr.png" ]; then
+    echo "$PWD/.ci-output/preview-qr.png"
   fi
 }
 
@@ -351,6 +392,24 @@ if [ -n "$EXPECT_SHA" ]; then pub_args+=(--expect-sha "$EXPECT_SHA"); fi
 pub_args+=("${dir_gate_args[@]}")
 if [ "$NO_PUSH" -eq 1 ]; then pub_args+=(--no-push); fi
 
+# ---------------------------------------------------------------- 假绿基线（台账 9221）
+
+# 必须在 S4 **之前**取：出码后再取基线，就等于拿产物自己跟自己比。
+if [ "$MODE" = "preview" ]; then
+  RUN_START_EPOCH="$(date +%s)"
+  QR_PRE_PATH="$(existing_qr_path)"
+  if [ -n "$QR_PRE_PATH" ]; then
+    QR_PRE_SHA="$(sha256_of "$QR_PRE_PATH")"
+    QR_PRE_MTIME="$(mtime_epoch_of "$QR_PRE_PATH")"
+    QR_PRE_SIZE="$(size_of "$QR_PRE_PATH")"
+    echo "[S4] 假绿基线（出码前）：${QR_PRE_PATH}"
+    echo "[S4]    sha256=${QR_PRE_SHA} mtime_epoch=${QR_PRE_MTIME} size=${QR_PRE_SIZE}"
+  else
+    echo "[S4] 假绿基线：出码前 .ci-output/ 下没有二维码文件（首出，无需比对 sha）"
+  fi
+  echo "[S4] 出码开始 epoch=${RUN_START_EPOCH}（产物 mtime 必须 ≥ 此值）"
+fi
+
 echo "[S4] 执行：node scripts/publish.js ${pub_args[*]}"
 if ! node scripts/publish.js "${pub_args[@]}"; then
   die "S4 publish.js ${MODE} 失败（退出码非 0，详见上方 [Publish] 输出）"
@@ -362,11 +421,9 @@ echo "[S4] publish.js ${MODE} 成功"
 if [ "$MODE" = "preview" ]; then
   # cli 模式固定写 cli-preview-qr.png；--mode ci 那一路写 preview-qr.png。
   # 本脚本不透传 --mode，正常只会命中前者；后者作为兜底，避免「码出了却报失败」。
-  if [ -f ".ci-output/cli-preview-qr.png" ]; then
-    QR_PATH="$PWD/.ci-output/cli-preview-qr.png"
-  elif [ -f ".ci-output/preview-qr.png" ]; then
-    QR_PATH="$PWD/.ci-output/preview-qr.png"
-  else
+  # 路径判定与 S4 取基线共用 existing_qr_path()（一处定义，两处使用）。
+  QR_PATH="$(existing_qr_path)"
+  if [ -z "$QR_PATH" ]; then
     die "S5 出码成功但找不到二维码文件（已找 .ci-output/cli-preview-qr.png 与 .ci-output/preview-qr.png）"
   fi
   QR_META="${QR_PATH%.png}.meta.json"
@@ -375,6 +432,27 @@ if [ "$MODE" = "preview" ]; then
   fi
 
   QR_SHA="$(sha256_of "$QR_PATH")"
+
+  # 🔴 假绿判据（台账 9221）—— 本段是「只记录 sha」与「判 sha 是否变过」的分界线。
+  # `cli preview` 编译失败时**仍以 0 退出**（实测 v1.0.20 / v1.0.21 两轮：
+  # `✖ compile_start` + `code: 10 …unexpected character` → EXIT=0），且不覆盖旧 png。
+  # 所以「sha 与出码前相同」是脚本内唯一能识别的假绿信号；放过它就会把上一轮的码当本轮凭证。
+  QR_POST_MTIME="$(mtime_epoch_of "$QR_PATH")"
+  QR_POST_SIZE="$(size_of "$QR_PATH")"
+
+  if [ -n "${QR_PRE_SHA:-}" ] && [ "$QR_SHA" = "$QR_PRE_SHA" ]; then
+    die "S5 二维码未更新（假绿）：sha256 与出码前逐字节相同（${QR_SHA}）。meta 即使写成新 version/gitSha/expireAt 也**不能**当凭证 —— 真实原因是 cli preview 失败但以 0 退出（已知形态：✖ compile_start + code 10）。请先读上方 [Publish] 输出里的 ✖/code 定位，修好后重出（台账 9221）"
+  fi
+  if [ -n "${RUN_START_EPOCH:-}" ] && [ "${QR_POST_MTIME:-0}" -lt "$RUN_START_EPOCH" ]; then
+    die "S5 二维码 mtime 早于本次出码开始时刻（假绿）：mtime_epoch=${QR_POST_MTIME} < 出码开始=${RUN_START_EPOCH}（mtime 原文见上方 [QR] expireAt 同目录文件）。产物不是本次生成的，拒绝出具结论（台账 9221）"
+  fi
+  if [ -n "${QR_PRE_SHA:-}" ] && [ "$QR_POST_SIZE" = "${QR_PRE_SIZE:-}" ]; then
+    echo "[QR] ⚠️ 提示：文件大小与出码前相同（${QR_POST_SIZE} B）。sha 已变，故放行；若你怀疑是同图重出，看 sha 与 mtime 两项即可"
+  fi
+  echo "[QR] 新鲜度对比（出码前 → 现在）："
+  echo "[QR]   sha256  ${QR_PRE_SHA:-（出码前无文件）} → ${QR_SHA}"
+  echo "[QR]   mtime   ${QR_PRE_MTIME:-—} → ${QR_POST_MTIME}（出码开始 epoch=${RUN_START_EPOCH:-未记录}）"
+  echo "[QR]   size    ${QR_PRE_SIZE:-—} → ${QR_POST_SIZE}"
 
   # expireAtText / expireAtMs 由 publish.js 写入；remaining 在这里**现算**，
   # 不写死、不抄文档 —— 30 分钟内被覆盖 3 次的教训就是「文档里的分钟数一定过期」。

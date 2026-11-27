@@ -95,6 +95,14 @@ const DETAIL_WXML = 'pages/nce/detail/detail.wxml';
 const DETAIL_TS = 'pages/nce/detail/detail.ts';
 const stripWxml = (s: string): string => s.replace(/<!--[\s\S]*?-->/g, '');
 const stripJs = (s: string): string => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+/**
+ * 🔴 `collectedKeys` 是**集合**语义，不是序列语义：
+ *    它的消费方只有组件里的 `includes(key)`（决定某一项渲染成 ✓ 还是 ☆），
+ *    「先收句子还是先收单词」不构成契约，也会随用户操作顺序而变。
+ *    用 `toEqual(['collect-line','collect-word'])` 断，是在把「push 顺序」当契约钉死 ——
+ *    真机换个顺序就一条绿一条红（原型复测第二轮指出）。故统一按排序后比较。
+ */
+const sortedKeys = (keys: readonly string[]): string[] => [...keys].sort();
 
 /** 页面上下文：方法走 Page 原型（与真机一致），data 独立 */
 function makeCtx(patch: Record<string, unknown> = {}): any {
@@ -232,6 +240,41 @@ describe('D1 行为：未登录 / 成功 / 已存在 / 失败 / 连点', () => {
     errSpy.mockRestore();
   });
 
+  /**
+   * 🔴 失败路径的**可恢复性**（原型复测第二轮要求）：
+   *    「失败回 ☆」只证明 UI 复位，不证明用户还能再点 —— 若 busy 没释放，按钮永远灰着，
+   *    表现和「卡死」一样。判据必须落在**状态字段**上（`tipCollect` / 文案），
+   *    **不许**断 `rejects.toBeTruthy()` 之类的异常形态：`try/finally return idle` 与
+   *    `try/catch return idle` 两种修法都合法，断异常会把实现锁死。
+   *    也不许断「失败了有 toast」：`_collectWord` 故意只 `console.error`，
+   *    用户可见提示归 `utils/request.ts`（49 §5 方案 B），页面层只能断**反向**。
+   */
+  it('🔴 失败后可重试：busy 释放 → 回「收藏」→ 再点一次真的发第 2 次请求', async () => {
+    mockGlossary.reject = true;
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const ctx = makeCtx();
+    openCard(ctx);
+
+    const p = ctx.collectTipWord();
+    expect(ctx.data.tipCollect).toBe('busy');          // 提交中
+    expect(ctx.data.tipCollectLabel).toBe('收藏中');
+    await p;
+
+    expect(ctx.data.tipCollect).toBe('idle');          // busy 已释放（不是卡死）
+    expect(ctx.data.tipCollectLabel).toBe('收藏');      // 按钮回到「可再点」的样子
+    expect(mockGlossary.calls).toHaveLength(1);
+    // 页面层不自己弹 toast（反向断言；正向的 toast 归 utils/request.ts）
+    expect(mockWx.showToast).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();                 // 但有排障留痕，不是悄悄吞掉
+
+    mockGlossary.reject = false;                       // 服务恢复
+    await ctx.collectTipWord();
+    expect(mockGlossary.calls).toHaveLength(2);        // ← 真的重试了（第 2 次请求）
+    expect(ctx.data.tipCollect).toBe('done');
+    expect(ctx.data.tipCollectLabel).toBe('已收藏');
+    errSpy.mockRestore();
+  });
+
   it('结果回来时卡片已关 → 不改按钮态（不把结果写到下一个词上）', async () => {
     const ctx = makeCtx();
     openCard(ctx);
@@ -300,6 +343,28 @@ describe('D2 点空白关闭词卡（不吃点词、不加遮罩）', () => {
     expect(ctx.data.overlay).toMatchObject({ kind: 'wordtip', word: 'engineer' });
   });
 
+  /**
+   * 🔴 回归口子（原型复测第二轮提醒）：词节点必须是 `catchtap`，它同时决定两件事 ——
+   *  ① 冒泡被阻断 → 根节点收不到 → 不关；
+   *  ② 只有它自己那个处理器会把 `overlay.word` 换掉 → **换内容**。
+   * 若哪天改成 `bindtap`（比如为接埋点），①因为根节点有 `dataset.w` 兜底**照样不关**，
+   * 于是「不关」测不出来、「换内容」才是唯一会露馅的判据。所以这里单独断内容已换。
+   */
+  it('🔴 点另一个生词 → 内容真的换了（独立断言 overlay.word，不是只断「没关」）', () => {
+    const ctx = makeCtx();
+    ctx.data.detail.words = [
+      { word: 'engineer', pos: 'n.', def: '工程师', phonetic: '/en/' },
+      { word: 'doctor', pos: 'n.', def: '医生', phonetic: '/dr/' },
+    ];
+    openCard(ctx, 'engineer');
+    expect(ctx.data.overlay).toMatchObject({ kind: 'wordtip', word: 'engineer' });
+    // 模拟改成 bindtap 的双处理器顺序：词节点先跑，事件再冒泡到根节点
+    ctx.onWordTap({ currentTarget: { dataset: { i: 0, w: 'doctor', hasdef: true } } });
+    ctx.onPageTap({ target: { dataset: { w: 'doctor', i: 0, hasdef: true } } });
+    expect(ctx.data.overlay).toMatchObject({ kind: 'wordtip', word: 'doctor' });  // ← 内容换了
+    expect(ctx.data.overlay).not.toBeNull();                                       // ← 且没被关
+  });
+
   it('行为：抽屉打开时点空白不动它（抽屉有自己的遮罩 / ✕ / 下滑三条通道）', () => {
     const ctx = makeCtx();
     ctx.onLongPress({ currentTarget: { dataset: { i: 0 } } });
@@ -363,7 +428,7 @@ describe('D7 打开时的初始态读本地缓存（别只靠内存 flag）', ()
     store.dachengzi_collected_words = ['engineer'];
     const ctx = makeCtx();
     ctx.onWordLongPress({ currentTarget: { dataset: { i: 0, w: 'engineer', hasdef: true } } });
-    expect(ctx.data.collectedKeys).toEqual(['collect-line', 'collect-word']);
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-line', 'collect-word']));
   });
 
   it('句档抽屉只给 line 一个 key（上一词留下的 word key 不许串进来）', () => {
@@ -371,7 +436,7 @@ describe('D7 打开时的初始态读本地缓存（别只靠内存 flag）', ()
     store.dachengzi_collected_words = ['engineer'];
     const ctx = makeCtx({ collectedKeys: ['collect-word'] });
     ctx.onLongPress({ currentTarget: { dataset: { i: 0 } } });
-    expect(ctx.data.collectedKeys).toEqual(['collect-line']);
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-line']));
   });
 
   it('静态：key 集合经**一个**属性交给组件（组件不 import 任何 services，A8 不动）', () => {
