@@ -91,6 +91,39 @@ function noCasesExitCode() {
   return process.env.MP_E2E_REQUIRE_ENV === '1' ? 2 : 1;
 }
 
+/**
+ * 整卡全 BLOCKED 开关（README 第④章）：status=BLOCKED 且 steps 非空且全 BLOCKED 的用例，
+ * 说明该功能在此基建下无任何有效 PASS/FAIL，不应静默通过。
+ * 默认关闭（仅 warning + exit 0），不打破存量合法 BLOCKED（README §⑤① E3 先例：
+ * 同卡仍有 E1/E2 PASS）。MP_E2E_BLOCKED_AS_FAIL=1 时打 console.error 并计失败。
+ * 与 noCasesExitCode / exitCodeOf 的逃生门语义一致：warning 提示 + 开关控制是否变红。
+ * @param {Array<{status: string, steps?: Array<{status: string}>}>} results 用例级结果
+ * @param {object} env 注入的环境变量（默认 process.env），便于纯函数单测
+ * @returns {number} 0（默认/无整卡全 BLOCKED）或 1（开关打开且有整卡全 BLOCKED）
+ */
+function blockedAsFailExitCode(results, env = process.env) {
+  const wholeBlocked = results.filter(
+    (r) =>
+      r.status === 'BLOCKED' &&
+      Array.isArray(r.steps) &&
+      r.steps.length > 0 &&
+      r.steps.every((s) => s.status === 'BLOCKED'),
+  );
+  if (wholeBlocked.length === 0) return 0;
+
+  if (env.MP_E2E_BLOCKED_AS_FAIL !== '1') {
+    console.warn(`[mp-e2e] warning: ${wholeBlocked.length} 张用例整卡全 BLOCKED（无有效 PASS/FAIL）——默认不计失败；`);
+    console.warn('[mp-e2e] 如需计入失败，设置 MP_E2E_BLOCKED_AS_FAIL=1（README 第④/⑤章）');
+    return 0;
+  }
+
+  for (const r of wholeBlocked) {
+    console.error(`[mp-e2e] 整卡全 BLOCKED：${r.name}（steps 全为 BLOCKED，无有效 PASS/FAIL 断言）`);
+  }
+  console.error('[mp-e2e] MP_E2E_BLOCKED_AS_FAIL=1：整卡全 BLOCKED 计失败（拒绝静默通过）');
+  return 1;
+}
+
 /** 用例发现：casesDir 下 *.js 按文件名排序；命名不符合 <字母>-<slug>.js 打 warning（M3） */
 function discoverCases(casesDir, filter) {
   if (!fs.existsSync(casesDir)) return [];
@@ -249,7 +282,10 @@ async function runSuite({ configPath, filter }) {
   }
 
   summary(caseResults);
-  return exitCodeOf(caseResults, { envUnavailable: false });
+  return Math.max(
+    exitCodeOf(caseResults, { envUnavailable: false }),
+    blockedAsFailExitCode(caseResults),
+  );
 }
 
-module.exports = { run, blocked, skipped, summary, deriveCaseStatus, exitCodeOf, noCasesExitCode, discoverCases, buildCtx, runSuite };
+module.exports = { run, blocked, skipped, summary, deriveCaseStatus, exitCodeOf, noCasesExitCode, blockedAsFailExitCode, discoverCases, buildCtx, runSuite };
