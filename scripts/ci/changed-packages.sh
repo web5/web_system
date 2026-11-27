@@ -11,7 +11,15 @@
 #   - 对每个包跑 build（内含 vue-tsc/tsc/nest build 类型检查）
 #   - 有 typecheck 脚本的包跑 typecheck（小程序 app 的 build 是 echo 占位，类型检查全靠这一步，9198）
 #   - 有 test 脚本的包再跑 test（jest --runInBand CI 模式）
+#   - 改了共享层 scripts/lib/** 时，动态补跑「引用共享层的子包」（见下方 why）
 #   - set -e：任何包 build 非零即整体失败（门禁不吞错）
+#
+# 🔴 为什么要补跑共享层引用方（2026-11-27 发现）：
+#   下面的包归属判据只认 apps|servers|packages 三个前缀。只改 `scripts/lib/**`
+#   （preflight 门禁 / git-identity 版本判据 / 各种共享工具）时，`changed_dirs` 为空，
+#   脚本会直接打印「未命中任何子包改动，跳过 build/test」并 exit 0 ——
+#   也就是**共享层判据被改坏时 CI 一个测试都不跑**，绿灯是假的。
+#   共享层没有自己的 package.json，只能从「谁引用它」反推要跑哪些包。
 # ============================================================
 set -euo pipefail
 
@@ -26,6 +34,30 @@ cd "$ROOT"
 changed_dirs="$(git diff --name-only "$RANGE" 2>/dev/null \
   | awk -F/ '{ if ($1=="apps"||$1=="servers"||$1=="packages") print $1"/"$2 }' \
   | sort -u)"
+
+# ---- 共享层改动 → 补跑引用它的子包 ----
+# scripts/lib/** 不在 apps|servers|packages 下，上面收集不到任何包；不补这一段就会 exit 0 跳过。
+# 发现方式：谁在源码/测试里出现 `scripts/lib/` 这个字符串（require / import / path.resolve 都算）。
+#   - apps/*：两个小程序 app 的 preflight 走共享层
+#   - packages/*：mp-e2e 的 version-guard 直接 require 共享层判据（它的单测就是共享层的直接判据）
+# servers/* 有意不扫：那里只有个别 spec 的临时目录字符串恰好含该路径，不是真依赖，扫进来只是白跑构建。
+shared_refs=""
+if git diff --name-only "$RANGE" 2>/dev/null | grep -q '^scripts/lib/'; then
+  shared_refs="$(grep -rl --include=*.ts --include=*.js 'scripts/lib/' apps/*/ packages/*/ 2>/dev/null \
+    | grep -v node_modules | cut -d/ -f1-2 | sort -u || true)"
+  if [ -z "$shared_refs" ]; then
+    # 🔴 兜底：动态发现失效时**不许静默退化成「跳过」**（那正是这段要修的毛病）。
+    # 可能原因：引用方式改成路径拼装/别名 import、或首次引入共享层还没人引用。
+    echo "⚠️  改了共享层 scripts/lib/**，但动态发现不到任何引用它的子包。" >&2
+    echo "    这不等于「无需验证」：**必须人工确认**本次共享层改动该由哪些包来验证，" >&2
+    echo "    并手动跑这些包的 build/test。" >&2
+  else
+    echo "== 共享层 scripts/lib/** 改动 → 补跑引用方：$(echo "$shared_refs" | tr '\n' ' ')=="
+  fi
+fi
+
+# 合并去重（未改 scripts/lib 时 shared_refs 为空，输出与改前逐字相同）
+changed_dirs="$(printf '%s\n%s\n' "$changed_dirs" "$shared_refs" | sed '/^$/d' | sort -u)"
 
 if [ -z "$changed_dirs" ]; then
   echo "== 未命中任何子包改动（可能只改 docs/.github/scripts/.codebuddy），跳过 build/test =="
