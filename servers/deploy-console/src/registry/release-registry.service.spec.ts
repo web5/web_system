@@ -117,21 +117,21 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
 
   it('setPointer 重复写相同版本时保留真实 previousVersion', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'admin', deployMode: 'env-dir' });
-    appVersionRepo.findOne.mockResolvedValue({ appKey: 'admin', envId: 'dev', currentVersion: 'v2', previousVersion: 'v1' });
+    appVersionRepo.findOne.mockResolvedValue({ appKey: 'admin', envId: 'dev', currentVersion: 'c0ffee02', previousVersion: 'c0ffee01' });
 
-    await svc.setPointer({ env: 'dev', moduleKey: 'admin', currentVersion: 'v2', taskId: 'pipeline-finalize' });
+    await svc.setPointer({ env: 'dev', moduleKey: 'admin', currentVersion: 'c0ffee02', taskId: 'pipeline-finalize' });
 
-    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'v2', previousVersion: 'v1' }));
+    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'c0ffee02', previousVersion: 'c0ffee01' }));
     expect(splitWriter.mirrorPointer).toHaveBeenCalled();
   });
 
   it('syncAppEnvPointer 重复同步时不丢失回滚目标', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
-    appVersionRepo.findOne.mockResolvedValue({ appKey: 'shell', envId: 'dev', currentVersion: 'v2', previousVersion: 'v1' });
+    appVersionRepo.findOne.mockResolvedValue({ appKey: 'shell', envId: 'dev', currentVersion: 'c0ffee02', previousVersion: 'c0ffee01' });
 
-    await svc.syncAppEnvPointer({ env: 'dev', moduleKey: 'shell', currentVersion: 'v2' });
+    await svc.syncAppEnvPointer({ env: 'dev', moduleKey: 'shell', currentVersion: 'c0ffee02' });
 
-    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'v2', previousVersion: 'v1' }));
+    expect(appVersionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ currentVersion: 'c0ffee02', previousVersion: 'c0ffee01' }));
   });
 
   it('currentVersion 返回指针版本', async () => {
@@ -155,33 +155,33 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
 
   it('setPointer 双写：env-dir 应用同步写 deploy_app_env_versions', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
-    await svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2', deployedBy: 'op' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee02', deployedBy: 'op' });
     // legacy 照旧写
     expect(deploymentRepo.save).toHaveBeenCalled();
     // 新模型也写，且 previousVersion 留空（首次）
     const saved = appVersionRepo.save.mock.calls[0][0];
-    expect(saved).toMatchObject({ appKey: 'portal', envId: 'prod', currentVersion: 'v2', status: 'deployed' });
+    expect(saved).toMatchObject({ appKey: 'portal', envId: 'prod', currentVersion: 'c0ffee02', status: 'deployed' });
   });
 
   it('setPointer 双写：已有指针时把旧版本存为 previousVersion', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'admin', deployMode: 'env-dir' });
-    appVersionRepo.findOne.mockResolvedValue({ appKey: 'admin', envId: 'prod', currentVersion: 'v1' });
-    await svc.setPointer({ env: 'prod', moduleKey: 'admin', currentVersion: 'v2' });
+    appVersionRepo.findOne.mockResolvedValue({ appKey: 'admin', envId: 'prod', currentVersion: 'c0ffee01' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'admin', currentVersion: 'c0ffee02' });
     const saved = appVersionRepo.save.mock.calls[0][0];
-    expect(saved).toMatchObject({ currentVersion: 'v2', previousVersion: 'v1' });
+    expect(saved).toMatchObject({ currentVersion: 'c0ffee02', previousVersion: 'c0ffee01' });
   });
 
   it('setPointer 双写：site-version（基座 shell）也写新表（gateway 停用 legacy 后读它）', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
-    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee09' });
     const saved = appVersionRepo.save.mock.calls[0][0];
-    expect(saved).toMatchObject({ appKey: 'shell', envId: 'prod', currentVersion: 'v9' });
+    expect(saved).toMatchObject({ appKey: 'shell', envId: 'prod', currentVersion: 'c0ffee09' });
     expect(deploymentRepo.save).toHaveBeenCalled();
   });
 
   it('setPointer 双写：后端服务（未登记到 deploy_apps）只写 legacy', async () => {
     appRepo.findOne.mockResolvedValue(null);
-    await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'v9' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'c0ffee09' });
     expect(appVersionRepo.save).not.toHaveBeenCalled();
     expect(deploymentRepo.save).toHaveBeenCalled();
   });
@@ -190,7 +190,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     appVersionRepo.save.mockRejectedValueOnce(new Error('db down'));
     await expect(
-      svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' }),
+      svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee03' }),
     ).rejects.toThrow('db down');
     // legacy 已写成功，但 deploy_app_env_versions 是 gateway 前端唯一读取源，写失败必须让发布失败
     expect(deploymentRepo.save).toHaveBeenCalled();
@@ -200,9 +200,9 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
 
   it('分流：本地写成功后调用云库镜像（prod 指针由 writer 决定是否落云库）', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
-    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9', taskId: 't-9' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee09', taskId: 't-9' });
     expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
-      expect.objectContaining({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9', taskId: 't-9' }),
+      expect.objectContaining({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee09', taskId: 't-9' }),
     );
     // legacy 指针也镜像（应急读取源）
     expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     appVersionRepo.save.mockRejectedValueOnce(new Error('db down'));
     await expect(
-      svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v3' }),
+      svc.setPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee03' }),
     ).rejects.toThrow('db down');
     expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
   });
@@ -221,7 +221,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appRepo.findOne.mockResolvedValue({ key: 'shell', deployMode: 'site-version' });
     splitWriter.mirrorPointer.mockRejectedValueOnce(new Error('云库公网不通'));
     await expect(
-      svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v9' }),
+      svc.setPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee09' }),
     ).rejects.toThrow(/云库公网不通/);
     // 本地已写成功（回滚目标仍在），错误必须上抛让任务失败
     expect(appVersionRepo.save).toHaveBeenCalled();
@@ -229,7 +229,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
 
   it('分流：后端服务（未登记应用）本地不写新表 → 也不镜像指针', async () => {
     appRepo.findOne.mockResolvedValue(null);
-    await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'v9' });
+    await svc.setPointer({ env: 'prod', moduleKey: 'auth-service', currentVersion: 'c0ffee09' });
     expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
     // legacy 是后端服务唯一指针，仍需镜像
     expect(splitWriter.mirrorLegacyPointer).toHaveBeenCalled();
@@ -244,19 +244,19 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appVersionRepo.findOne.mockResolvedValue({
       appKey: 'portal',
       envId: 'prod',
-      currentVersion: 'v1',
-      previousVersion: 'v0',
+      currentVersion: 'c0ffee01',
+      previousVersion: 'c0ffee00',
     });
     const r = await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v2',
+      currentVersion: 'c0ffee02',
       deployedBy: 'u1',
     });
-    expect(r).toEqual({ from: 'v1', previous: 'v0', unchanged: false });
+    expect(r).toEqual({ from: 'c0ffee01', previous: 'c0ffee00', unchanged: false });
     expect(appVersionRepo.save).toHaveBeenCalled();
     expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
-      expect.objectContaining({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' }),
+      expect.objectContaining({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee02' }),
     );
   });
 
@@ -265,12 +265,12 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appVersionRepo.findOne.mockResolvedValue({
       appKey: 'portal',
       envId: 'prod',
-      currentVersion: 'v1',
+      currentVersion: 'c0ffee01',
     });
     const r = await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v1',
+      currentVersion: 'c0ffee01',
     });
     expect(r.unchanged).toBe(true);
     expect(appVersionRepo.save).not.toHaveBeenCalled();
@@ -281,14 +281,14 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
     splitWriter.mirrorPointer.mockRejectedValueOnce(new Error('云库公网不通'));
     await expect(
-      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' }),
+      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee02' }),
     ).rejects.toThrow(/云库公网不通/);
   });
 
   it('setAppEnvPointer：应用未登记于 deploy_apps → 抛 404（不静默空转）', async () => {
     appRepo.findOne.mockResolvedValue(null);
     await expect(
-      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'ghost', currentVersion: 'v2' }),
+      svc.setAppEnvPointer({ env: 'prod', moduleKey: 'ghost', currentVersion: 'c0ffee02' }),
     ).rejects.toThrow(/未登记/);
   });
 
@@ -297,22 +297,135 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appVersionRepo.findOne.mockResolvedValue({
       appKey: 'portal',
       envId: 'prod',
-      currentVersion: 'v2',
-      previousVersion: 'v9',
+      currentVersion: 'c0ffee02',
+      previousVersion: 'c0ffee09',
     });
     await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v1',
-      previousVersion: 'v0',
+      currentVersion: 'c0ffee01',
+      previousVersion: 'c0ffee00',
     });
     const saved = appVersionRepo.save.mock.calls[0][0];
     // 补偿要把旧值带回来，不能让 previous 指向那个没生效的失败目标
-    expect(saved).toMatchObject({ currentVersion: 'v1', previousVersion: 'v0' });
+    expect(saved).toMatchObject({ currentVersion: 'c0ffee01', previousVersion: 'c0ffee00' });
+  });
+
+  // ==================== #9027：版本指针列只写纯 commit ====================
+
+  it('#9027：带模板前缀的 versionTag 落库前归一（current + previous + 云库镜像）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+      previousVersion: 'portal/a1b2c3d4',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'portal/c5d6e7f8',
+    });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved).toMatchObject({ currentVersion: 'c5d6e7f8', previousVersion: 'b6ec9950' });
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ currentVersion: 'c5d6e7f8' }),
+    );
+    // 返回给调用方的 from/previous 保持原值（只收敛落库值，不改编读取语义）
+    expect(r).toMatchObject({ from: 'portal/b6ec9950', previous: 'portal/a1b2c3d4' });
+  });
+
+  it('#9027：同 commit 仅前缀不同 → 写一次纯 commit 自愈，previous 不被自指覆盖', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+      previousVersion: 'a1b2c3d4',
+    });
+    const r = await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'b6ec9950',
+    });
+    expect(r.unchanged).toBe(false);
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved).toMatchObject({ currentVersion: 'b6ec9950', previousVersion: 'a1b2c3d4' });
+  });
+
+  it('#9027：syncAppEnvPointer（legacy 双写路径）同样归一，不写脏 previous', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'portal/b6ec9950',
+    });
+    await svc.syncAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'portal/b6ec9950',
+    });
+    const saved = appVersionRepo.save.mock.calls[0][0];
+    expect(saved.currentVersion).toBe('b6ec9950');
+    expect(saved.previousVersion).toBeUndefined();
+    expect(splitWriter.mirrorPointer).toHaveBeenCalledWith(
+      expect.objectContaining({ currentVersion: 'b6ec9950' }),
+    );
+  });
+
+  it('#9027 核验：归一失败（// / .. / 超短）→ 400，且不写库、不镜像（绝不回退脏值）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    for (const bad of ['//', '   ', 'portal/../etc', '..', 'ab']) {
+      await expect(
+        svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: bad }),
+      ).rejects.toThrow(/非法/);
+    }
+    expect(appVersionRepo.save).not.toHaveBeenCalled();
+    expect(splitWriter.mirrorPointer).not.toHaveBeenCalled();
+
+    // legacy 双写路径同口径
+    await expect(
+      svc.syncAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: '//' }),
+    ).rejects.toThrow(/非法/);
+    expect(appVersionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('#9027 核验：显式 previous_version 也走列契约（带前缀归一，非法 400，null 保留语义）', async () => {
+    appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'b6ec9950',
+    });
+    await svc.setAppEnvPointer({
+      env: 'prod',
+      moduleKey: 'portal',
+      currentVersion: 'c5d6e7f8',
+      previousVersion: 'portal/a1b2c3d4',
+    });
+    expect(appVersionRepo.save.mock.calls[0][0]).toMatchObject({
+      currentVersion: 'c5d6e7f8',
+      previousVersion: 'a1b2c3d4',
+    });
+
+    // 第二次：重新查一次（row 已被上一步改写），非法 previous 必须 400
+    appVersionRepo.findOne.mockResolvedValue({
+      appKey: 'portal',
+      envId: 'prod',
+      currentVersion: 'b6ec9950',
+    });
+    await expect(
+      svc.setAppEnvPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'c5d6e7f8',
+        previousVersion: 'portal/../etc',
+      }),
+    ).rejects.toThrow(/非法/);
   });
 
   it('clearAppEnvPointer：本地删行 + 云库删除补偿（首次写入回滚用）', async () => {
-    const row = { appKey: 'portal', envId: 'prod', currentVersion: 'v1' };
+    const row = { appKey: 'portal', envId: 'prod', currentVersion: 'c0ffee01' };
     appVersionRepo.findOne.mockResolvedValue(row);
     await svc.clearAppEnvPointer('portal', 'prod');
     expect(appVersionRepo.remove).toHaveBeenCalled();
@@ -337,7 +450,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v2',
+      currentVersion: 'c0ffee02',
       lock: { owner: 'ui:alice' },
     });
     expect(locks.acquireEx).toHaveBeenCalledWith('portal', 'prod', 'ui:alice', undefined);
@@ -350,7 +463,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v2',
+      currentVersion: 'c0ffee02',
       lock: { owner: 'pipeline-1' },
     });
     expect(locks.release).not.toHaveBeenCalled();
@@ -363,7 +476,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       svc.setAppEnvPointer({
         env: 'prod',
         moduleKey: 'portal',
-        currentVersion: 'v2',
+        currentVersion: 'c0ffee02',
         lock: { owner: 'ui:alice' },
       }),
     ).rejects.toThrow(ConflictException);
@@ -384,7 +497,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
       .setAppEnvPointer({
         env: 'prod',
         moduleKey: 'portal',
-        currentVersion: 'v2',
+        currentVersion: 'c0ffee02',
         lock: { owner: 'ui:alice' },
       })
       .catch((e: unknown) => e);
@@ -394,7 +507,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
 
   it('#6：不传 lock → 完全不碰锁（流水线自带锁，向后兼容）', async () => {
     appRepo.findOne.mockResolvedValue({ key: 'portal', deployMode: 'env-dir' });
-    await svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'v2' });
+    await svc.setAppEnvPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'c0ffee02' });
     expect(locks.acquireEx).not.toHaveBeenCalled();
     expect(locks.release).not.toHaveBeenCalled();
   });
@@ -404,15 +517,15 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appVersionRepo.findOne.mockResolvedValue({
       appKey: 'portal',
       envId: 'prod',
-      currentVersion: 'v2',
-      previousVersion: 'v1',
+      currentVersion: 'c0ffee02',
+      previousVersion: 'c0ffee01',
     });
     await expect(
       svc.setAppEnvPointer({
         env: 'prod',
         moduleKey: 'portal',
-        currentVersion: 'v3',
-        expectedFrom: 'v1',
+        currentVersion: 'c0ffee03',
+        expectedFrom: 'c0ffee01',
       }),
     ).rejects.toThrow(/版本已被并发修改/);
     expect(appVersionRepo.save).not.toHaveBeenCalled();
@@ -424,19 +537,19 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     appVersionRepo.findOne.mockResolvedValue({
       appKey: 'portal',
       envId: 'prod',
-      currentVersion: 'v2',
-      previousVersion: 'v1',
+      currentVersion: 'c0ffee02',
+      previousVersion: 'c0ffee01',
     });
     const r = await svc.setAppEnvPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v3',
-      expectedFrom: 'v2',
+      currentVersion: 'c0ffee03',
+      expectedFrom: 'c0ffee02',
     });
-    expect(r).toMatchObject({ from: 'v2', unchanged: false });
+    expect(r).toMatchObject({ from: 'c0ffee02', unchanged: false });
     expect(appVersionRepo.save.mock.calls[0][0]).toMatchObject({
-      currentVersion: 'v3',
-      previousVersion: 'v2',
+      currentVersion: 'c0ffee03',
+      previousVersion: 'c0ffee02',
     });
   });
 
@@ -445,7 +558,7 @@ describe('ReleaseRegistryService（版本表/指针工具）', () => {
     await svc.setPointer({
       env: 'prod',
       moduleKey: 'portal',
-      currentVersion: 'v2',
+      currentVersion: 'c0ffee02',
       lock: { owner: 'deploy:portal' },
     });
     // 内嵌的 syncAppEnvPointer 走 inner，不再重复申请

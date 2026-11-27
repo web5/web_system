@@ -7,34 +7,11 @@
     "pages/mine/bind-email/bind-email",
     "pages/mine/agreement/agreement",
     "pages/mine/settings/settings",
-    "pages/mine/discover-settings/discover-settings",
     "pages/mine/about/about",
     "pages/mine/glossary/index",
     "pages/nce/index/index",
-    "pages/nce/detail/detail",
-    "pages/chat/index/index",
-    "pages/chat/history/history"
+    "pages/nce/detail/detail"
   ],
-  "subpackages": [
-    {
-      "root": "packageTranslate",
-      "pages": [
-        "pages/translate/index/index",
-        "pages/translate/settings/settings",
-        "pages/translate/history/history"
-      ]
-    }
-  ],
-  "preloadRule": {
-    "pages/discover/index/index": {
-      "network": "all",
-      "packages": ["packageTranslate"]
-    },
-    "pages/mine/index/index": {
-      "network": "all",
-      "packages": ["packageTranslate"]
-    }
-  },
   "window": {
     "backgroundTextStyle": "light",
     "backgroundColor": "#F5F8FF",
@@ -62,11 +39,6 @@
         "text": "我的"
       }
     ]
-  },
-  "permission": {
-    "scope.record": {
-      "desc": "用于语音输入，将你的语音转为文字"
-    }
   },
   "resizable": true,
   "style": "v2",

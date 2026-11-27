@@ -1,7 +1,12 @@
 /**
  * 微信小程序上传脚本
  * 使用方法: npm run upload
- * 
+ *
+ * 🔴 出码前门禁（P1–P6）在**本文件第一行代码**就执行（台账 9122）：
+ *    判据实现只有 scripts/preflight.js 一份，本文件不再自带任何判据。
+ *    直连 `node scripts/upload.js` 与走 `npm run upload`（publish.js）过的是同一道门。
+ *    逃生口：--skip-preflight / --allow-any-dir / --expect-version / --expect-sha / --require-dir。
+ *
  * 前提条件:
  * 1. 安装微信开发者工具
  * 2. 在微信开发者工具中登录并开启服务端口
@@ -11,6 +16,31 @@
 
 const path = require('path');
 const fs = require('fs');
+const preflight = require('./preflight');
+
+/* ---------- 0. 出码前门禁：本文件的**第一条动作**（台账 9122） ----------
+ *
+ * 🔴 本文件是「上传开发版本」这件事的真载体：谁调它都过**同一道门禁** —— 直接
+ *    `node scripts/upload.js`、经 npm 入口、还是经别的包装脚本，走的都是这一处。
+ *
+ * 🔴 为什么排在加载 miniprogram-ci / 读 project.config.json / 读 private.key 之前：
+ *    门禁若排在「读私钥」之后，缺私钥的场景会先报「缺少私钥」而看不到真正的雷
+ *    （站错目录 / 版本不对 / 包根带私钥）。
+ *
+ * 🔴 判据不在这里：只在 preflight.runPreflight 一份（P1–P6）；「哪些入口要过门禁」的
+ *    清单也只在 preflight.js 头注释与 tests/preflight-wiring.test.ts 里。本文件只调用、
+ *    打印、失败即退，不带自己的判据（复制即违规）。
+ *    ⚠️ 别在注释里写「哪条路仍绕过」这类清单 —— 那种清单必然过期，以 preflight.js 为准。
+ *
+ * 🔴 防重复执行：上游会以 MINIPROGRAM_PREFLIGHT_GATE=done 声明「已跑过」，
+ *    此时只打一行痕、不重复判定（同一链上只要一份报表）。
+ */
+const gateOpts = preflight.parsePreflightArgs(process.argv.slice(2));
+// 上传根就是本包：不接受 --root 把门禁指到别处（门禁查的根必须 == 出码的根）
+delete gateOpts.root;
+// 本文件走 miniprogram-ci：mode 固定 ci（P2 允许包根私钥但要求 ignore 覆盖，P6 不判开发者工具）
+gateOpts.mode = 'ci';
+preflight.runGateOrExit(gateOpts, 'upload');
 
 /**
  * 依赖加载：默认从干净安装目录（MINIPROGRAM_CI_PATH）加载 miniprogram-ci。

@@ -10,11 +10,6 @@
     <view class="r" bindtap="clearCache"><text>清除缓存</text><text class="v">{{cacheText}} ›</text></view>
   </view>
 
-  <view class="sec-t">功能</view>
-  <view class="list">
-    <view class="r" bindtap="goDiscoverSettings"><text>发现设置</text><text class="v">›</text></view>
-  </view>
-
   <view class="sec-t">关于</view>
   <view class="list">
     <view class="r" bindtap="goAgreement"><text>用户协议与隐私政策</text><text class="v">›</text></view>

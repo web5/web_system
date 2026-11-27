@@ -7,7 +7,6 @@
 import * as appearance from '../../../utils/appearance';
 import { logout, isLoggedIn } from '../../../services/auth';
 import { getToken, getRefreshToken, setToken } from '../../../utils/request';
-import { TRANSLATE_HISTORY_KEY, TRANSLATE_PARAMS_KEY, TRANSLATE_SETTINGS_KEY } from '../../../utils/translate-keys';
 
 /**
  * 清理缓存时**必须保留**的本地存储 key —— 白名单之外的 key 一律视为可清缓存。
@@ -16,12 +15,9 @@ import { TRANSLATE_HISTORY_KEY, TRANSLATE_PARAMS_KEY, TRANSLATE_SETTINGS_KEY } f
  * 语义边界：**清临时数据，不清用户资产与偏好**。
  * - 登录凭证 / 主动退出标志 / 接口域名：见 utils/request.ts 的 TOKEN_KEY、REFRESH_TOKEN_KEY、
  *   LOGGED_OUT_KEY、api_base。清掉会直接把人踢下线，或让后续请求丢掉 apiBase
- * - 界面偏好：utils/appearance.ts 的 STORAGE_KEY（圆角风格）；nce-mode / nce-font
- *   （课文阅读模式与字号偏好，见 pages/nce/detail/detail.ts）
- * - 用户资产与业务偏好（kd_*）：翻译记录 / 翻译入参 / 翻译默认参数。
- *   历史页无服务端备份，清掉即永久丢失，用户会当成「我的记录莫名消失」
- * ⚠️ NCE 课文学习进度**尚未落库**（pages/nce 下只有 nce-mode / nce-font 两个偏好 key），
- *   将来落库时（无论叫 kd_nce_progress 还是别的名字）必须同步加进本名单，否则清缓存会吃掉进度。
+ * - 界面偏好：utils/appearance.ts 的 STORAGE_KEY（圆角风格）；nce-font（课文字号偏好）
+ * - 常用功能：utils/features.ts 的 feature_pinned（首页常用功能 id 列表）
+ * ⚠️ NCE 课文学习进度**尚未落库**，将来落库时必须同步加进本名单，否则清缓存会吃掉进度。
  */
 const PRESERVE_KEYS: string[] = [
   'access_token',
@@ -29,10 +25,7 @@ const PRESERVE_KEYS: string[] = [
   'account_logged_out',
   'api_base',
   appearance.STORAGE_KEY,
-  TRANSLATE_HISTORY_KEY,
-  TRANSLATE_PARAMS_KEY,
-  TRANSLATE_SETTINGS_KEY,
-  'nce-mode',
+  'feature_pinned',
   'nce-font',
 ];
 
@@ -116,7 +109,7 @@ Page({
     }
     wx.showModal({
       title: '清除缓存',
-      content: '将清理本机临时缓存，你的翻译记录、学习进度与偏好设置会保留。',
+      content: '将清理本机临时缓存，你的收藏、学习进度与偏好设置会保留。',
       confirmText: '清除',
       cancelText: '取消',
       success: (res: WechatMiniprogram.ShowModalSuccessCallbackResult) => {
@@ -155,12 +148,7 @@ Page({
     wx.navigateTo({ url: '/pages/mine/agreement/agreement' });
   },
 
-  /** 发现设置（本地功能开关页：对话练习 / 文本翻译，PRD v0.4 §4） */
-  goDiscoverSettings() {
-    wx.navigateTo({ url: '/pages/mine/discover-settings/discover-settings' });
-  },
-
-  /** 关于与免责（品牌、免责正文、AI 生成内容提示） */
+  /** 关于与免责（品牌、免责正文） */
   goAbout() {
     wx.navigateTo({ url: '/pages/mine/about/about' });
   },

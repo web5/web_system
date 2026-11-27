@@ -27,6 +27,10 @@
         "value": "node_modules"
       },
       {
+        "type": "folder",
+        "value": ".ci-output"
+      },
+      {
         "type": "file",
         "value": "tsconfig.json"
       },
@@ -45,6 +49,10 @@
       {
         "type": "file",
         "value": "project.private.config.json"
+      },
+      {
+        "type": "file",
+        "value": "private.key"
       }
     ],
     "include": []

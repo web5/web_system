@@ -1,0 +1,212 @@
+/* 长按动作抽屉（变体 B）— 样式真源：原型 `原型-变体B-底部抽屉.html`（sha b039064b83b9c6e7）
+   设计稿以 375px 为基准，本文件按 1px = 2rpx 换算。
+
+   口径落点：
+   - D1 高度：内容自适应 + `max-height: 40vh`；`<360px` 屏放宽到 `48vh`（C-B1）
+   - D2 排布：2×2（行 = 对象：上句 / 下词；列 = 动词：左朗读 / 右收藏）+ 顶部标题区
+   - D6 配色：不透明白底 #FFFFFF + 遮罩 rgba(17,24,39,.34)（沉浸档也**不**半透明）
+   - D7 安全区：底部内边距 calc(24rpx + env(safe-area-inset-bottom))
+     （**tabBar 页**开启 `liftBottom` 后安全区项由 tabBar 让出，内边距降为 24rpx —— 见 .ad-lift）
+   - AC-B.20 热区：格高 96rpx（375 屏 ≈48pt）；<360px 补到 104rpx（≈44.4pt）
+   - AC-B.16 关闭动效只改 transform，不改定位方式
+
+   ⚠️ 组件内**禁用标签名选择器**（官方：它不受样式隔离限制，会对全应用生效）与属性选择器
+   （官方：不受支持），本文件全部用 class。组件 `styleIsolation: isolated`（见 index.json），
+   页面 `.page.mode-immersion` 等祖先 class 不会穿透进来 —— D6 的不透明白底因此天然成立。
+
+   CSS 变量走 `var(--x, 兜底值)`：变量定义在 `app.wxss` 的 `page` 选择器上（标签名选择器
+   全局生效 + 自定义属性天然继承），但组件要能独立成立，故一律带兜底值。 */
+
+/* 遮罩：z-index 1000（规范 §1.3 要求 < 抽屉） */
+.ad-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: rgba(17, 24, 39, .34);
+}
+
+/* 抽屉：贴底通栏、不测任何坐标；只看 transform */
+.ad-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1001;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: 40vh;
+  padding: 0 32rpx calc(24rpx + env(safe-area-inset-bottom, 0px));
+  background: #FFFFFF;
+  border-top: 1rpx solid rgba(0, 0, 0, .08);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, .06);
+  transition: transform .2s cubic-bezier(.22, .61, .36, 1);
+  will-change: transform;
+  animation: ad-rise .18s ease-out;
+}
+/* 拖拽中：关掉 transition，抽屉跟手（松手后再开回来做回弹 / 收起动画） */
+.ad-drawer.ad-dragging { transition: none; }
+
+/* ═══ 首页（tabBar 页）让位：整体抬到自定义 tabBar 之上 ═══
+   仅 `liftBottom=true` 时生效（`.ad-lift` 由 index.wxml 挂在根节点 `.ad` 上）。
+
+   🔴 为什么是「抬高」而不是「提 z-index」：微信**自定义 tabBar 是框架层独立根节点**
+   （`custom-tab-bar/` 由框架单独挂载，不在页面节点树里），层级恒在页面内任何
+   `position: fixed` 之上 —— z-index 提到 9999 也压不过它。要让抽屉底部的动作按钮
+   可见可点，唯一出路是把抽屉抬到 tabBar 高度之上。
+
+   🔴 107rpx 的来源（与 tabBar 盒子模型逐一对应，改 tabBar 尺寸时必须一起改这里）：
+   `custom-tab-bar/index.wxss` 的 tabBar 实际占位 = **107rpx + 安全区**：
+     · `.tb { height: 100rpx }` —— 内容盒 100rpx（`box-sizing: content-box`）
+     · `.tb { padding-bottom: 6rpx }` —— content-box 下 padding 另计，+6rpx
+     · `.tabbar { border-top: 1rpx solid }` —— 外框另计，+1rpx
+     · `.tabbar { padding-bottom: env(safe-area-inset-bottom) }` —— 安全区，由 calc 里的 env() 叠加
+   ⇒ `calc(107rpx + env(safe-area-inset-bottom, 0px))`。
+   若只按 100rpx 抬（`.tb` 高度），抽屉/遮罩下沿会压进 tabBar 顶部 7rpx（盖住 `.tb` 的
+   6rpx 内边距与 1rpx 上边框，视觉上把 tabBar 的上边界切掉）。
+
+   🔴 遮罩**必须一起抬**（不能只抬抽屉）：tabBar 那条带要露出来、可见且可点。
+   点 tabBar 切页 → 页面 `onHide` → 抽屉走既有归零逻辑（方案 §5.3），是**正常路径**；
+   若遮罩继续盖住 tabBar，用户点不动会以为整页卡死，比原缺陷（按钮被遮）体验更差。
+   反之遮罩留在 `bottom:0` 也做不到「只盖到 tabBar 上沿」——遮罩 z-index 1000 同样在
+   tabBar 之下，那 107rpx 依旧是黑的死区。 */
+
+/* tabBar 占位 107rpx = .tb 内容盒 100rpx + padding-bottom 6rpx + 外层 border-top 1rpx；safe-area 由 env() 叠加。改 tabBar 高度时同步改这里。 */
+.ad-lift .ad-mask,
+.ad-lift .ad-drawer {
+  bottom: calc(107rpx + env(safe-area-inset-bottom, 0px));
+}
+
+/* 抬高后底部安全区已由 tabBar 让出：抽屉底边现在位于 home indicator 之上
+   「107rpx + 安全区」，按钮离屏幕物理底边已经足够远，原 `padding-bottom` 里的
+   `env(safe-area-inset-bottom)` 若原样留着，底部会白多出一截（刘海屏 ≈ 68rpx，
+   叠加 24rpx 呼吸量后动作区离抽屉下沿过远、看着像没对齐）。
+   推算依据（原型 D7：内边距 = 24rpx 呼吸量 + 安全区）：
+     - 24rpx 呼吸量保留（设计稿定的按钮与抽屉下沿间距，与 tabBar 无关）；
+     - `env(safe-area-inset-bottom)` 项去掉（该职责已由 tabBar 自身的
+       `padding-bottom: env(safe-area-inset-bottom)` 承担，仍被整体抬高 107rpx）。
+   ⇒ padding-bottom = 24rpx（小屏 20rpx，见文件末尾 media 块）。 */
+.ad-lift .ad-drawer {
+  padding-bottom: 24rpx;
+}
+@keyframes ad-rise {
+  from { transform: translateY(80rpx); opacity: .55; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* 顶部拖拽把手（D4 的可发现性提示） */
+.ad-grab {
+  flex: none;
+  width: 64rpx;
+  height: 8rpx;
+  margin: 16rpx auto 0;
+  border-radius: 6rpx;
+  background: rgba(0, 0, 0, .16);
+}
+
+/* 标题区：词档 = 词 + 元信息一行 + 所在句；句档 = 「第 N 句」+ 整句 */
+.ad-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 20rpx 0 24rpx;
+}
+.ad-head-main { flex: 1; min-width: 0; }
+.ad-row1 { display: flex; align-items: baseline; gap: 12rpx; min-width: 0; }
+.ad-word {
+  flex: none;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 40rpx;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1D4ED8;
+}
+.ad-meta {
+  min-width: 0;
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: #6B7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* E2：普通词没有音标 → 用「暂无释义」占**音标同一行**（不是释义内容，两档标题区同高） */
+.ad-none { font-size: 22rpx; color: #9CA3AF; letter-spacing: .4rpx; }
+.ad-lineno { font-size: 22rpx; font-weight: 600; line-height: 1.4; color: #0E9B8C; letter-spacing: .6rpx; }
+.ad-ctx {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #4B5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 句档原文最多 2 行省略，长句不撑高抽屉（BB10 / V-B7） */
+.ad-ctx-serif {
+  margin-top: 8rpx;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28rpx;
+  line-height: 1.45;
+  color: #10131A;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* 右上 ✕ = 明确可见的出口（D4 第三通道） */
+.ad-close {
+  flex: none;
+  width: 36rpx;
+  height: 36rpx;
+  padding: 4rpx;
+  font-size: 28rpx;
+  line-height: 1;
+  color: #9CA3AF;
+  text-align: center;
+  border-radius: 50%;
+}
+.ad-close:active { background: #F3F4F6; }
+
+.ad-sep { flex: none; height: 1rpx; margin: 0 0 24rpx; background: rgba(0, 0, 0, .08); }
+
+/* 动作区：2 列 × 2 行，行优先铺 = actionsOf() 的固定顺序 */
+.ad-acts {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16rpx;
+}
+.ad-act {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96rpx;
+  border: 1rpx solid rgba(0, 0, 0, .10);
+  border-radius: 12rpx;
+  background: #FFFFFF;
+  font-size: 26rpx;
+  color: #10131A;
+  transition: background .12s ease, border-color .12s ease;
+}
+.ad-act:active,
+.ad-act-pressed { background: #EFF6FF; border-color: #DBEAFE; }
+
+/* 小屏（<360px）：96rpx 折算只有 41px < 44pt（D7 / AC-B.20），格高补到 104rpx；
+   40vh 在 320×568 装不下四项（C-B1），max-height 放宽到 48vh */
+@media (max-width: 359px) {
+  .ad-drawer { max-height: 48vh; padding: 0 28rpx calc(20rpx + env(safe-area-inset-bottom, 0px)); }
+  /* 小屏 + 首页让位：同 `.ad-lift` 口径去掉安全区项，保留小屏更紧的 20rpx 呼吸量。
+     特异度与上面那条 `.ad-drawer` 相同（0,2,0 > 0,1,0 已胜出），此处按源序再收一次尺寸。 */
+  .ad-lift .ad-drawer { padding: 0 28rpx 20rpx; }
+  .ad-act { height: 104rpx; font-size: 24rpx; }
+  .ad-word { font-size: 36rpx; }
+  .ad-head { padding: 16rpx 0 20rpx; }
+  .ad-grab { margin-top: 14rpx; }
+}

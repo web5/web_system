@@ -1,18 +1,19 @@
 {
   "name": "@web-system/dachengzi-minigram",
-  "version": "1.0.14",
+  "version": "1.0.18",
   "description": "大橙子个人助理小程序（dachengzi-minigram · WeChat Mini Program）",
   "main": "app.ts",
   "scripts": {
     "dev": "echo 'Mini app development'",
     "build": "echo 'Mini app build'",
-    "preview": "node scripts/preview.js",
+    "preview": "node scripts/publish.js preview",
     "preview:push": "node scripts/preview-push.js",
-    "upload": "node scripts/upload.js",
+    "upload": "node scripts/publish.js upload",
     "publish": "node scripts/publish.js",
     "test": "jest tests --config tests/jest.config.js",
     "test:watch": "jest tests --config tests/jest.config.js --watch",
     "test:e2e": "mp-e2e",
+    "test:e2e:strict": "MP_E2E_REQUIRE_ENV=1 mp-e2e",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

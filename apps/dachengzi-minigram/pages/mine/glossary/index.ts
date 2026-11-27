@@ -1,22 +1,93 @@
 /**
- * 生词本 / 收藏页
+ * 收藏页（原生词本）
  *
- * 入口：我的 → 我的数据 → 生词本。
- * 收藏是用户主动行为数据（落 user-service），存译文快照，原对话删除后仍保留。
+ * 入口：我的 → 收藏。
+ * 收藏是用户主动行为数据（落 user-service），存句子快照，原课文删除后仍保留。
+ *
+ * 需求②（V9–V20，本页为三数据页之一）：
+ * - V11 页面级 authExpired 标志 + load() catch 分流；本页 empty 与 error 共用态，须特判：
+ *   会话过期时保持骨架、不误判空态；非 401 失败沿用原「空态」显示。
+ * - V12/V13/V18 会话过期弹窗（login-gate modal 态叠加层）+ 页面级订阅（onLoad on / onUnload off）。
+ * - V16 登录成功后由广播回调显式重拉，不依赖 onShow()。
+ * - V17 稍后→常驻提示条→再唤起；登录成功前提示条不消失。
  */
 import { listGlossary, removeGlossary, GlossaryItem } from '../../../services/glossary';
 
+/**
+ * E3 灰标文案（唯一真源）：口径 `需求口径确认-B版.md` E3 选项 B
+ * 「加『未收录』灰标记」—— 解释「为什么这个词没有释义」，避免用户以为收藏坏了。
+ * 与抽屉标题区的「暂无释义」（E2）是**两处不同措辞**：抽屉说的是「没有释义内容」，
+ * 列表说的是「这个词没进课文词表」，不要为了「统一文案」擅自改成同一句。
+ */
+const UNLISTED_TEXT = '未收录';
+
 interface GlossaryViewItem extends GlossaryItem {
-  /** 语气 · 方向 拼成的 meta 展示文本 */
+  /** meta 展示文本：nce 来源「Lesson N · 第 M 句」，旧 tone/direction 兜底 */
   metaText: string;
+  /**
+   * E3（2026-11-26 19:15 用户拍板）：「未收录」灰标文案；`''` = 不渲染该标。
+   *
+   * 🔴 判据只认 `meta.hasDef === false`（收藏时明确标记为「课文词表外普通词」）：
+   *    - `tag='word'` 且 `hasDef === false` → 显示「未收录」（解释「为什么这个词没有释义」）；
+   *    - `hasDef` **缺失**（`undefined`，本轮之前的历史收藏）→ **不显示**。
+   *      用 `!m.hasDef` / `m.hasDef !== true` 之类的写法会把全部历史收藏标成未收录 —— 那是数据诬陷。
+   */
+  unlistedText: string;
 }
 
 Page({
+  _offAuthExpired: null as (() => void) | null,
+  _offAuthLogged: null as (() => void) | null,
+
   data: {
     radiusClass: "",
     loading: true,
     empty: false,
     items: [] as GlossaryViewItem[],
+    /** V11 页面级会话过期标志（由 auth:expired 订阅置位） */
+    authExpired: false,
+    /** V12 会话过期弹窗（login-gate modal 态） */
+    showAuthModal: false,
+    /** V17 稍后后的常驻提示条（登录成功前不消失） */
+    showReloginTip: false,
+  },
+
+  onLoad() {
+    // V13/V18：页面级订阅（onLoad on / onUnload off；先按旧引用退订防重复订阅）
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus) {
+      if (this._offAuthExpired) __bus.off('auth:expired', this._offAuthExpired);
+      if (this._offAuthLogged) __bus.off('auth:logged', this._offAuthLogged);
+      this._offAuthExpired = () => {
+        // T2：置页面级标志 + 弹 modal-auth；保持骨架/原内容，不置裸失败态
+        this.setData({ authExpired: true, showAuthModal: true, showReloginTip: false });
+      };
+      __bus.on('auth:expired', this._offAuthExpired);
+      this._offAuthLogged = () => {
+        // V16：回调内显式重拉，不依赖 onShow()
+        this.setData({ authExpired: false, showAuthModal: false, showReloginTip: false });
+        void this.load();
+      };
+      __bus.on('auth:logged', this._offAuthLogged);
+    }
+    // 数据仍由 onShow 首拉（本页既有语义）；重登重拉由 auth:logged 回调显式承接
+  },
+
+  onUnload() {
+    // V18：页面级退订（与 onLoad 成对，同一 handler 引用 off；组件内不订阅）
+    const __app = getApp<IAppOption>();
+    const __bus = __app && __app.eventBus;
+    if (__bus) {
+      if (this._offAuthExpired) {
+        __bus.off('auth:expired', this._offAuthExpired);
+        this._offAuthExpired = null;
+      }
+      if (this._offAuthLogged) {
+        __bus.off('auth:logged', this._offAuthLogged);
+        this._offAuthLogged = null;
+      }
+    }
   },
 
   onShow() {
@@ -33,18 +104,52 @@ Page({
       const { list } = await listGlossary(1, 50);
       this.apply(list);
     } catch {
+      // V11：会话过期不裸失败；保持骨架/原内容（loading 保持 true），准备弹窗。
+      // 本页 empty/error 共用 empty:true,items:[]，会话过期时不得误判为空态。
+      if (this.data.authExpired) return;
       this.setData({ loading: false, empty: true, items: [] });
     }
   },
 
   apply(list: GlossaryItem[]) {
     const items: GlossaryViewItem[] = list.map((it) => {
-      const m = (it.meta || {}) as { tone?: string; direction?: string };
-      const parts = [
-        m.tone,
-        m.direction === 'zh2en' ? '中文→英语' : m.direction,
-      ].filter(Boolean);
-      return { ...it, metaText: parts.join(' · ') };
+      const m = (it.meta || {}) as {
+        tone?: string;
+        direction?: string;
+        book?: string;
+        lessonId?: number;
+        lineIndex?: number;
+        /** 2026-11-26：单词收藏（tag='word'）来源锚点 */
+        word?: string;
+        /**
+         * 2026-11-26 E3：该词是否是课文词表直收词。
+         * 只有 `false` 是明确信号（普通词 → 未收录灰标）；`undefined` = 老数据，不可推定。
+         */
+        hasDef?: boolean;
+      };
+      let metaText = '';
+      if (m.word) {
+        // 单词收藏：Lesson N · 单词 xxx（没有再落「第 M 句」，避免把词收藏说得像句子收藏）
+        metaText = [
+          typeof m.lessonId === 'number' ? `Lesson ${m.lessonId}` : '',
+          `单词 ${m.word}`,
+        ].filter(Boolean).join(' · ');
+      } else if (typeof m.lessonId === 'number') {
+        const parts = [`Lesson ${m.lessonId}`];
+        if (typeof m.lineIndex === 'number') parts.push(`第 ${m.lineIndex + 1} 句`);
+        metaText = parts.join(' · ');
+      } else {
+        const parts = [
+          m.tone,
+          m.direction === 'zh2en' ? '中文→英语' : m.direction,
+        ].filter(Boolean);
+        metaText = parts.join(' · ');
+      }
+      // E3：`tag='word'` 且 **严格** `hasDef === false` 才标。
+      // tag 条件不是多余的：`hasDef` 是词维度字段，句收藏里出现它属于异常数据，
+      // 不该在句子上冒出一个「未收录」词标（灰标的语义是「这个词没进课文词表」）。
+      const unlistedText = it.tag === 'word' && m.hasDef === false ? UNLISTED_TEXT : '';
+      return { ...it, metaText, unlistedText };
     });
     this.setData({ items, empty: items.length === 0, loading: false });
   },
@@ -64,7 +169,17 @@ Page({
     }
   },
 
-  goTranslate() {
-    wx.navigateTo({ url: '/packageTranslate/pages/translate/index/index' });
+  goNce() {
+    wx.navigateTo({ url: '/pages/nce/index/index' });
+  },
+
+  /** V17「稍后」：收起弹窗 + 常驻提示条（不是纯关闭弹窗） */
+  onAuthDefer() {
+    this.setData({ showAuthModal: false, showReloginTip: true });
+  },
+
+  /** V17 点提示条再次唤起同一 modal-auth；提示条登录成功前不消失 */
+  onReopenAuth() {
+    this.setData({ showAuthModal: true });
   },
 });

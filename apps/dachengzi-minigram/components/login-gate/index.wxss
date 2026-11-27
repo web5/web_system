@@ -1,4 +1,5 @@
-/* 登录引导卡：铺满所在页面（页面容器需为 relative），未登录态整页拦截 */
+/* 登录引导卡（唯一共享面）：page 整页墙 + modal 会话过期弹窗 */
+/* ── page 态：铺满所在页面（页面容器需为 relative），未登录态整页拦截 ── */
 .gate {
   position: absolute;
   left: 0;
@@ -52,6 +53,7 @@
   align-items: center;
   justify-content: center;
 }
+.gate-btn.disabled { opacity: .6; }
 .gate-note {
   margin-top: 16px;
   font-size: 11px;
@@ -61,3 +63,57 @@
 .gate-link {
   color: var(--brand-txt);
 }
+
+/* ── modal 态：会话过期弹窗（叠加层，不整页替换，底层骨架/内容保持可见） ── */
+.modal-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 300;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 48rpx;
+}
+.modal-box {
+  width: 100%;
+  max-width: 560rpx;
+  background: var(--page-bg);
+  border-radius: var(--r-control);
+  padding: 40rpx 32rpx 28rpx;
+}
+.modal-t {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--t1);
+  text-align: center;
+}
+.modal-d {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--t2);
+  line-height: 1.7;
+  text-align: center;
+}
+.modal-acts {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+.modal-btn {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-btn.ghost { background: var(--brand-soft); color: var(--brand-txt); }
+.modal-btn.disabled { opacity: .6; }

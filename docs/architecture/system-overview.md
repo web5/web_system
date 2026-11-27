@@ -5,6 +5,7 @@
 >
 > | 版本 | 日期 | 说明 |
 > |---|---|---|
+> | v1.6 | 2026-11-27 | 增补分层总览、产物 URL 两形态（§4）、发布九阶段修正（§8）、本地新旧双路径架构结论（§9.2）；操作细节外移到 AI 知识库 `local-env-dual-path.md` |
 > | v1.5 | 2026-10-14 | 增补**发布主链路技术流程图**（`deploy-pipeline-flow.svg`：控制面 / 数据面 / 目标机三段 + 门禁 + 生效验证 + Fact 对账；生成脚本 `scripts/gen-pipeline-flow-diagram.mjs`） |
 > | v1.4 | 2026-10-13 | 增补 AI 域**落地路线图**（`agent-evolution-roadmap.md`：B0→B5 分批 / 依赖顺序 / 动作门对照） |
 > | v1.3 | 2026-10-13 | 增补 Agent 消息清单（`agent-message-schedule.md`：SSE/HTTP 消息清单与消费方矩阵） |
@@ -19,6 +20,16 @@
 > **AI 域落地路线图**：`agent-evolution-roadmap.md`（B0→B5 分批 / 依赖顺序 / 动作门对照）—— 想问「下一步改什么」先看它
 
 ---
+
+> **一页分层总览**（AI 快速定位用，细节见后续各章）：
+>
+> `浏览器 → nginx(443 终止 SSL) → gateway:6000 → 服务层(12 NestJS，纯 HTTP) → MySQL 多逻辑库`
+> `  ├─ /api/* 反代各服务    ├─ /api/mcp/* 与 /mcp → mcp-gateway:6006（发布端点）`
+> `  └─ /cdn/* nginx 直出磁盘静态资源`
+>
+> 前端 = `shell` 基座 + `admin` / `portal` 子应用（`System.register` 微前端，非 iframe / qiankun）；
+> 发布 = mcp-gateway:6006 `/mcp/tools/call` → deploy-console:6200（仅内网）；
+> 6000 = HTTP BFF、6006 = MCP 发布端点，**两个不同服务**（发布找错端口是高频错）。
 
 ## 1. 仓库组成
 
@@ -69,6 +80,14 @@
 
 **端口矩阵差异**：本机 local 的 `auth-service` 是 **6101**（6001 被他项目占用，写在 `ecosystem.apps.cjs`）；dev/prod 用 6001（写在发布目录的 `ecosystem.config.js`）。
 
+> 🔴 **发布相关三端口，别找错**（2026-11-27 补，AI 接单高频错)：
+> - **6000 = `gateway`（BFF / HTTP 入口）**：出 shell HTML、反代 `/api/*`、分发 manifest、托管静态资源。前端发布生效看 `/__manifest__`。
+> - **6006 = `mcp-gateway`（MCP 网关 / 发布端点）**：`/mcp/deploy`、`/mcp/tools/call` 走这里，**这才是发布流水线真正的入口**。它和 6000 是**两个不同服务**，不是同一个 gateway 的两个端口——把 6006 当 gateway、拿 6000 调 MCP 工具，是发布找错端口的最常见形态。
+> - **6200 = `deploy-console`（发布平台本体）**：只在服务器内网，本地直连 502。
+> - 三个端口都由 gateway 机 nginx 按域名/SNI 反代；探活 6000 用 `curl` / `node:http`，**别用 `fetch`**（WHATWG blocked port）。
+
+**环境边界与数据库维护**：deploy-console **自身的部署只涉及 local / dev，prod 不涉及**（prod 线上 pm2 无 console 进程，本体更新走 `scripts/release-deploy-console.sh` 手动）。这与"发 prod"不矛盾——发 prod 指其它模块经流水线发布到 prod，console 只是执行者。但**发布相关库表按环境区分**：prod 走云库严格模式（`DEPLOY_CLOUD_DB_STRICT=true`，写失败 503），dev/local 写本机库不镜像；prod 机上的运行检查点捕获、手工 DDL、`.env` 修订仍需按环境脚本手动维护，详见 `~/AiWorkspace/20-私域资产/部署凭证与通道-索引.md`。
+
 > 📌 pm2 清单自 2026-10-09 起按**域拆分**，本机侧不再是单一文件：
 > `ecosystem.config.cjs` 是**全量入口**（只做合并），
 > 真实定义在 `ecosystem.apps.cjs`（11 个业务服务）+ `ecosystem.console.cjs`（deploy-console）。
@@ -93,6 +112,17 @@
 - CSS 隔离：postcss 给每条选择器加 `:where([data-module="<name>"])`，优先级归零避免误伤 antdv
 - 产物目录（env-dir）：`static/modules/<key>/<envId>/<commit>/` + **无版本入口指针** `static/modules/<key>/<envId>/index.js`
 - 缓存三段式（gateway `isContentAddressed()`）：固定名入口 → `no-cache`+ETag；带 hash 分包 → `immutable`；`/static/cdn/**` → `no-cache`
+
+**产物 URL 两种形态**（`servers/gateway/src/static/asset-url.ts` 统一生成，三种 env 的静态根见 §9.1）：
+
+| 形态 | URL | 跳数 / 指针 | 生效开关 |
+|---|---|---|---|
+| CDN（新） | `/cdn/<env>/<app>/<commit>/<file>` | 一跳，env 在前、无指针层 | `ASSET_URL_MODE=cdn` + `ASSET_ORIGIN=<带域名的完整 URL>` |
+| legacy（旧） | `/static/modules/<app>/<env>[/<commit>]/<file>` | 两跳，app 在前、有指针层 | `DEPLOY_LEGACY_READ=1` 或 mode 非 cdn |
+
+- `ASSET_ORIGIN` 必须是带域名的完整 URL（强制 https，拒绝 `/cdn/` 相对值），允许自定义端口如 `:9443`。
+- `DEPLOY_LEGACY_READ` 在 **manifest 组装层**生效（决定 `buildManifest()` 走 legacy 表还是 NEW 表），`asset-url.ts` 本身不读它；`=1` 强制旧 URL，**CDN 模式下必须为 0**。
+- 两套产物是**不同的版本真相源与目录布局**，不能互相替代；为什么 local 两套都要保留见 §9.2，操作步骤见 AI 知识库 `~/skills/web-system-deploy/references/local-env-dual-path.md`。
 
 ## 5. 共享包
 
@@ -158,7 +188,7 @@
 
 三条通道并存：
 
-1. **流水线**（主力）：`GitHub Actions release.yml` → HMAC 签名投递 `POST /api/hooks/release` → 平台流水线 → 轮询终态。七阶段：pull / build / upload / restart / version / pointer / verify / cleanup，动作脚本存在 DB。
+1. **流水线**（主力）：`GitHub Actions release.yml` → HMAC 签名投递 `POST /api/hooks/release` → 平台流水线 → 轮询终态。**九阶段**（真源 `servers/deploy-console/src/entities/deploy-pipeline.entity.ts`，旧文档写"七阶段"已过时）：`check → pull → build → upload → restart → version → pointer → verify → cleanup`，动作脚本存在 DB。切指针发生在 verify **之后**（verify 未过不切），网关版本缓存约 10s。生效唯一判据 `verify_release.verdict == verified`；`status=succeeded` 只说明脚本跑完，不算生效（执行侧细节见 `~/skills/web-system-deploy/SKILL.md`）。
 2. **传统发布**：`scripts/publish-deploy-console.sh --env dev|prod`（deploy-console 专用，带备份替换 + 探活 + 失败自动回滚）。
 3. **本地调试**：本机 nginx + `local.kedouai.com`。
 
@@ -186,6 +216,19 @@
 | local | `~/web_system_release/servers/gateway/public/static/modules/` |
 | dev | dev 机 gateway `public/static/modules/` |
 | prod | **外置** `/data/web_system_static/public`（由根 `.env.production` 的 `STATIC_PUBLIC_ROOT` 注入；必须写在根 env 因其在 import 期求值，早于 `@nestjs/config`） |
+
+### 9.2 本地为何新旧两套都要保留（架构层结论）
+
+本机 local **legacy（旧）与 CDN（新）两套路径并存**，两者解决不同问题、无法互相替代（操作怎么做见 AI 知识库 `~/skills/web-system-deploy/references/local-env-dual-path.md`，完整 Runbook 见 `30-任务产物/2026-11-06-R11b修复与锚点试水/06-本地CDN环境方案与Runbook.md`）：
+
+| 维度 | legacy（旧） | CDN（新） |
+|---|---|---|
+| 解决什么 | 零环境依赖的本机日常开发 / 历史回归 / 紧急发布；URL 与改造前逐字节兼容 | 复现 prod 的 CDN 专属机制与盲区（一跳化、去指针化、`__ASSET_BASE__` 注入、CSP） |
+| 静态根 | gateway `ServeStatic` 直出 `public/static/modules/` | nginx `/cdn/` location 直出磁盘 `~/.local-cdn/cdn/` |
+| 依赖 | 只需 gateway + 发布目录 | 额外需 nginx 9443 + hosts + 自签证书 + NEW 域指针 seed |
+| 与 prod 等价 | 有盲区（老 URL 形态） | 路径规范逐字一致（差异仅在部署位置 / 域名 / 端口 / 证书 / 静态目录） |
+
+**为什么不能删 legacy**：`asset-url.ts` 文件头明确——未配 `ASSET_ORIGIN` 且 mode 非 cdn 时输出与改造前逐字节一致，gateway 全量单测以此作回归网，是**线上零风险兼容底座**。两套的版本真相源不同（legacy 七表 + 磁盘指针 vs NEW 域指针 + 去指针化产物），目录布局也不同，一套覆盖不了另一套的验证场景。
 
 ## 10. 配置与密钥
 

@@ -1,6 +1,7 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { CloudDbService } from './cloud-db.service';
 import { redactSecretsAndAddress } from '../common/redact';
+import { normalizeCommitRef } from '../pipeline/release-paths';
 
 export interface MirrorPointerInput {
   env: string;
@@ -59,6 +60,16 @@ export class EnvSplitWriterService {
       return { outcome: 'skipped', reason: `env=${input.env} 数据留本地库，不镜像` };
     }
 
+    // 列契约（台账 #9027）：云库版本列同样只接受纯 commit。这里作为镜像的最后一道，
+    // 无论调用方传什么（含 `portal/b6ec9950`）都归一；归一失败**直接拒绝**，
+    // 绝不回退原始串（`//`、空串这类输入回退就等于把脏值写进云库）。
+    const currentVersion = normalizeCommitRef(input.currentVersion);
+    if (!currentVersion) {
+      throw new BadRequestException(
+        `current_version 非法：${JSON.stringify(input.currentVersion)}（云库版本列只接受纯 commit）`,
+      );
+    }
+
     try {
       // 先取旧值，保证云库的 previous_version 与本地语义一致（旧 current → previous）。
       // 不做「ON DUPLICATE 里引用自身列」的写法：赋值顺序语义依赖 MySQL 版本，易踩坑。
@@ -67,9 +78,10 @@ export class EnvSplitWriterService {
         [input.moduleKey, input.env],
       );
       const existing = rows?.[0];
-      const previous = existing?.current_version === input.currentVersion
-        ? existing.previous_version ?? null
-        : existing?.current_version ?? null;
+      // 云库历史脏值同样归一；归一不了的一律不参与 previous（宁可缺，不留坏值）
+      const existingCurrent = normalizeCommitRef(existing?.current_version) ?? null;
+      const existingPrevious = normalizeCommitRef(existing?.previous_version) ?? null;
+      const previous = existingCurrent === currentVersion ? existingPrevious : existingCurrent;
 
       await this.cloud.query(
         `INSERT INTO deploy_app_env_versions
@@ -85,7 +97,7 @@ export class EnvSplitWriterService {
         [
           input.moduleKey,
           input.env,
-          input.currentVersion,
+          currentVersion,
           previous,
           new Date(),
           input.deployedBy ?? null,
@@ -93,7 +105,7 @@ export class EnvSplitWriterService {
         ],
       );
       this.logger.log(
-        `prod 指针已同步云库：${input.moduleKey} → ${input.currentVersion}` +
+        `prod 指针已同步云库：${input.moduleKey} → ${currentVersion}` +
           (previous ? `（previous=${previous}）` : ''),
       );
       return { outcome: 'ok' };

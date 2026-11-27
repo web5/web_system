@@ -13,6 +13,23 @@ import { DeployDeploymentEntity } from '../entities/deploy-deployment.entity';
 import { DeployAppEntity } from '../entities/deploy-app.entity';
 import { DeployAppEnvVersionEntity } from '../entities/deploy-app-env-version.entity';
 import { EnvSplitWriterService } from '../cloud-db/env-split-writer.service';
+import { normalizeCommitRef } from '../pipeline/release-paths';
+
+/**
+ * 版本列写入断言（台账 #9027 核验修正）：归一失败直接 400。
+ *
+ * 🔴 **不允许** `normalizeCommitRef(x) ?? x` 这种「归一失败回退原值」——
+ * `//`、全空白这类最需要兜住的输入恰好归一为 undefined，回退就等于把脏值原样落库。
+ */
+function requireCommitRef(ref: string | null | undefined, field: string): string {
+  const v = normalizeCommitRef(ref);
+  if (!v) {
+    throw new BadRequestException(
+      `${field} 非法：${JSON.stringify(ref ?? null)}（版本列只接受 ^[A-Za-z0-9._-]{4,64}$，且不允许 . / ..）`,
+    );
+  }
+  return v;
+}
 
 export interface RegisterVersionInput {
   env: string;
@@ -226,21 +243,28 @@ export class ReleaseRegistryService {
 
   private async syncAppEnvPointerInner(input: SetPointerInput): Promise<void> {
     let written = false;
+    let currentVersion: string | null = null;
     try {
       const app = await this.appRepo.findOne({ where: { key: input.moduleKey } });
       if (!app) return; // 后端服务 / 未登记模块：新模型无此实体（legacy 仍是唯一指针）
 
+      // 列契约（台账 #9027）：本表版本列只允许纯 commit；归一失败即 400，不回退脏值。
+      // 放在 app 判定之后：未登记的后端服务只写 legacy，不受本表契约约束。
+      currentVersion = requireCommitRef(input.currentVersion, 'current_version');
       const row =
         (await this.appVersionRepo.findOne({
           where: { appKey: input.moduleKey, envId: input.env },
         })) ?? this.appVersionRepo.create();
       if (!row.appKey) row.appKey = input.moduleKey;
       if (!row.envId) row.envId = input.env;
-      // 旧版本留作回滚目标
-      if (row.currentVersion !== input.currentVersion) {
-        row.previousVersion = row.currentVersion ?? null;
+      // 旧值同样归一：避免出现「current=b6ec9950、previous=portal/b6ec9950」这种同版本自指；
+      // 归一失败的垃圾值不写进 previous（列契约优先，回滚目标宁可缺也不留坏值）。
+      const fromCommit = normalizeCommitRef(row.currentVersion);
+      if (fromCommit !== currentVersion) {
+        // 旧版本留作回滚目标
+        row.previousVersion = fromCommit ?? null;
       }
-      row.currentVersion = input.currentVersion;
+      row.currentVersion = currentVersion;
       row.status = 'deployed';
       row.deployedAt = new Date();
       row.deployedBy = input.deployedBy;
@@ -254,10 +278,10 @@ export class ReleaseRegistryService {
       throw e; // 本地新表写失败 → 抛出（2026-11-13 翻转）：不会走到镜像，天然没有可信数据可镜像，上抛让 setPointer 判 failed，不留「半发布」
     }
 
-    if (!written) return;
+    if (!written || !currentVersion) return;
 
     // 分流：prod 的指针镜像到云库（prod gateway 的读取源）。失败按严格语义抛出。
-    await this.splitWriter.mirrorPointer(input);
+    await this.splitWriter.mirrorPointer({ ...input, currentVersion });
   }
 
   /**
@@ -304,13 +328,29 @@ export class ReleaseRegistryService {
       );
     }
 
-    const unchanged = from === input.currentVersion;
+    // 列契约（台账 #9027）：本表版本列只允许纯 commit。上游 versionTag 可能是
+    // `<templateKey>/<commit>`（如 portal/b6ec9950），落库前归一；归一失败即 400。
+    const currentVersion = requireCommitRef(input.currentVersion, 'current_version');
+    // 比较也用归一值：历史脏值 `portal/b6ec9950` 与纯 commit 是同一版本（否则每次都被判成真变更、
+    // 刷 deployed_at）；但拼写不同仍写一次，让存量脏值自愈。
+    const sameCommit = normalizeCommitRef(from) === currentVersion;
+    const unchanged = from === currentVersion;
 
     if (!unchanged) {
       if (!row.appKey) row.appKey = input.moduleKey;
       if (!row.envId) row.envId = input.env;
-      row.previousVersion = input.previousVersion !== undefined ? input.previousVersion : from;
-      row.currentVersion = input.currentVersion;
+      if (input.previousVersion !== undefined) {
+        row.previousVersion =
+          input.previousVersion === null
+            ? null
+            : requireCommitRef(input.previousVersion, 'previous_version');
+      } else if (sameCommit) {
+        // 只是历史拼写差异（portal/b6ec9950 vs b6ec9950），不是真变更 → 保留原 previous（归一后）
+        row.previousVersion = normalizeCommitRef(previous) ?? null;
+      } else {
+        row.previousVersion = normalizeCommitRef(from) ?? null;
+      }
+      row.currentVersion = currentVersion;
       row.status = 'deployed';
       row.deployedAt = new Date();
       row.deployedBy = input.deployedBy;
@@ -320,7 +360,7 @@ export class ReleaseRegistryService {
 
     // 分流：prod 必须镜像到云库（gateway 的读取源）。strict 下失败即抛。
     if (!unchanged) {
-      await this.splitWriter.mirrorPointer(input);
+      await this.splitWriter.mirrorPointer({ ...input, currentVersion });
     }
 
     return { from, previous, unchanged };
@@ -361,6 +401,33 @@ export class ReleaseRegistryService {
    * 统一口径：**指针表的 previous_version 优先**（它就是「上一次生效的版本」，
    * 写指针时同步维护，语义最准）；指针表没有记录时才回落历史表（后端 legacy 只写
    * `deploy_deployments`，新表里可能压根没行）。
+   *
+   * **契约边界（台账 #9027 第二轮，方案 A″，2026-11-26）**：本函数只回答「回滚到哪个
+   * 版本**引用**」，**不做跨契约归一**，三个分支都原样返回来源里的值（`explicit` 传入值、
+   * `previous_version` 原值、历史行 `versionTag` 原值）。
+   *
+   * - `deploy_app_env_versions.*_version` 的**纯 commit 契约**由三个写入处各自校验保证
+   *   （`setAppEnvPointerInner` / `syncAppEnvPointerInner` 用 `requireCommitRef`；
+   *   `mirrorPointer` 在 `env-split-writer.service.ts` 内联判等后 throw）—— 归一只发生在写列处。
+   * - 归一**比对**仍在本函数内保留（只用于「判断是不是同一个版本」）：历史脏值
+   *   `portal/b6ec9950` 与 `b6ec9950` 必须视为同版本，否则会把当前版本自己选成回滚目标
+   *   → 下游 `from === currentVersion` → 静默 no-op（P1 回归）。
+   * - **`previous == current` 是合法状态，不是脏数据**（第五轮补充）：同一 commit 连续发布
+   *   两次时，`previous_version` 会忠实记录成与 `current_version` 相同的值（如 prod shell 的
+   *   `a82270f9` 于 14:23 / 14:33 各发一次，见台账 #9027 数据侧取证）。本函数视其为
+   *   「没有可用的 previous」，继续回落历史表找真正更早的**不同**版本 —— 而不是抛错，
+   *   因为抛错会把「本可自救」变成「不可自救」（历史表里通常还有更早的版本）。
+   * - `explicit` 分支是唯一**没有回落路径**的入口，故它做两道前置校验（归一值**只用于判等**，
+   *   **返回值仍是原始引用**）：归一失败（`..` / 空段）→ 400，堵住下游 `path.join` 穿越；
+   *   归一后等于 current → 400（否则「回滚到当前版本」会被下游 `unchanged: true` 静默吃掉）。
+   * - 两类消费者需求**相反**，故不能统一成一种形态：
+   *   - app / env-dir：`doSwitchVersion` 的三个 IO 点（`hasVersion` / `writePointer` /
+   *     指针列）本就对原始引用容错 —— `env-artifact.service.ts` 的 `hasVersion` 与
+   *     `writePointer` 都经 `resolveVersion()`，其 `legacyVersionCandidates` 是
+   *     **原始值优先、归一值兜底**。所以传原始引用最稳（`portal/b6ec9950` 也命中）。
+   *   - 后端：`applyBackendVersion` 直接
+   *     `path.join(ws,'servers',dir,versionTag)`，`runtime-checkpoint/<id>` 是磁盘上
+   *     **真实的一级目录**，剥掉前缀会指向不存在的目录。
    */
   async resolveRollbackTarget(input: {
     env: string;
@@ -373,11 +440,48 @@ export class ReleaseRegistryService {
       where: { appKey: input.moduleKey, envId: input.env },
     });
     const from = row?.currentVersion ?? null;
+    // 比较口径统一归一（台账 #9027）：历史脏值 `portal/b6ec9950` 与 `b6ec9950` 是同一版本。
+    const fromCommit = normalizeCommitRef(from);
 
-    if (explicit) return { from, to: explicit, source: 'explicit' };
+    // 三种来源都要覆盖：explicit / previous_version / 历史表 versionTag。
+    // 三者都原样返回来源引用（契约边界见函数头 JSDoc）：列归一只在写列处做，
+    // 产物解析侧的 `resolveVersion` 已「原始值优先、归一值兜底」。
+    if (explicit) {
+      // 格式校验（台账 #9027 第五轮 · D11）：归一失败（`..` / 空段 / 超短）→ 400，
+      // 堵住下游 `applyBackendVersion` 的 path.join(ws,'servers',dir,versionTag) 路径穿越；
+      // 但**返回的仍是原始引用** —— `runtime-checkpoint/<id>` 与 `portal/<commit>` 都要原样透传。
+      // 🔴 校验与归一是**两件事**：A″ 之前把「撤掉剥前缀」和「撤掉校验」当成一件事一起做，
+      //    才是这处回退的根因 —— 不需要在「剥前缀」和「不校验」之间二选一。
+      // 🔴 `explicitRef` 是**归一值，仅用于判等**；返回值仍是**原始引用** `explicit`
+      //    （`portal/b6ec9950` 与 `b6ec9950` 判等相等，但下游要的是原样引用）。
+      const explicitRef = requireCommitRef(explicit, '回滚目标');
+      // 「回滚到当前版本」= 退化操作。`explicit` 分支**没有回落路径**（不像 previous 分支
+      // 还能继续找更早版本），留着必被下游吃掉：app 链 `unchanged: true` 静默成功
+      // （apps.service.ts:585，线上一个字没改却报成功）。
+      // 🔴 适用面：本判等只在「指针表有该模块行」时生效（app / env-dir 链）。
+      //    后端模块在 deploy_app_env_versions 无行 → fromCommit = undefined → 本判等恒 false，
+      //    故**对后端链不生效**；后端仍靠 deploy.service.ts:1193 的精确比较，
+      //    跨拼写时最终由 deploy.service.ts:613 的 !fs.existsSync(src) 响亮失败（非静默）。
+      //    文案要与上面格式校验的 400 区分开，便于排查。
+      if (explicitRef === fromCommit) {
+        throw new BadRequestException(`回滚失败: ${explicit} 就是当前版本（${from}），无需回滚`);
+      }
+      return { from, to: explicit, source: 'explicit' };
+    }
 
     if (row?.previousVersion) {
-      return { from, to: row.previousVersion, source: 'pointer' };
+      // normalizeCommitRef 只作**有效性判定**：无效（历史垃圾值如 `..`）视同没有 → 回落历史表；
+      // 有效则返回**原始**值（可能是合法的 `portal/c0ffee02` 形态）。
+      const prevRef = normalizeCommitRef(row.previousVersion);
+      // 🔴 `previous == current` 是**合法状态**，不是脏数据（台账 #9027 第五轮）：
+      // 同一 commit 连续发布两次时（如 shell@prod 的 a82270f9 于 14:23 与 14:33 各发一次），
+      // 第 2 次发布时 current 已是 a82270f9，previous 便忠实记录成同一个值。
+      // 但它不能当回滚目标 —— 那是「回滚到自己」：app 链 doSwitchVersion 会
+      // `unchanged: true` 静默成功（apps.service.ts:585），又是一次静默 no-op。
+      // 故视同「没有可用的 previous」，继续回落历史表找真正更早的**不同**版本。
+      if (prevRef && prevRef !== fromCommit) {
+        return { from, to: row.previousVersion, source: 'pointer' };
+      }
     }
 
     // 回落历史表（后端 legacy）
@@ -388,16 +492,19 @@ export class ReleaseRegistryService {
       where: { env: input.env, component: input.moduleKey },
       order: { releasedAt: 'DESC' } as never,
     });
-    const prev = rows.find(
-      (r) => r.versionTag && r.versionTag !== (row?.currentVersion ?? dep?.currentVersion),
-    );
-    if (!prev?.versionTag) {
+    // 比对用**归一值**（P1 修复不动）：命中的行返回它**原始**的 versionTag，
+    // 因为下游要拿原始引用来拼产物路径 / 后端目录（见函数头 JSDoc 的契约边界）。
+    const prevRow = rows.find((r) => {
+      const ref = normalizeCommitRef(r.versionTag);
+      return !!ref && ref !== fromCommit && ref !== normalizeCommitRef(dep?.currentVersion);
+    });
+    if (!prevRow?.versionTag) {
       throw new BadRequestException(
         `没有可回滚的历史版本：${input.moduleKey}@${input.env} 的指针表无 previous_version，` +
           `deploy_versions 里也没有其他版本`,
       );
     }
-    return { from: from ?? dep?.currentVersion ?? null, to: prev.versionTag, source: 'history' };
+    return { from: from ?? dep?.currentVersion ?? null, to: prevRow.versionTag, source: 'history' };
   }
 
   /** 按版本标签查版本记录（复用产物时回填 gitCommit 用；跨 env 任意一条即可） */

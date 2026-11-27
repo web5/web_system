@@ -15,7 +15,7 @@ export interface CollectResult {
 /** 列表项（去掉内部字段） */
 export interface GlossaryListItem {
   id: number;
-  sourceType: string;
+  tag: string;
   sourceText: string | null;
   enMain: string;
   note: string | null;
@@ -47,7 +47,7 @@ export class GlossaryService {
     const entry = this.repo.create({
       userId,
       contentHash,
-      sourceType: dto.sourceType,
+      tag: dto.tag,
       sourceText: dto.sourceText ?? null,
       enMain: dto.enMain,
       note: dto.note ?? null,
@@ -75,7 +75,7 @@ export class GlossaryService {
 
     const list: GlossaryListItem[] = rows.map((r) => ({
       id: r.id,
-      sourceType: r.sourceType,
+      tag: r.tag,
       sourceText: r.sourceText,
       enMain: r.enMain,
       note: r.note,

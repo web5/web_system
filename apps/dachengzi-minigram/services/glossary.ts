@@ -8,7 +8,7 @@ import { get, post, del } from '../utils/request';
 
 export interface GlossaryItem {
   id: number;
-  sourceType: string;
+  tag: string;
   sourceText: string | null;
   enMain: string;
   note: string | null;
@@ -26,7 +26,7 @@ interface Wrapped<T> {
 const BASE = '/api/glossary';
 
 export type CollectPayload = {
-  sourceType: 'chat' | 'translate';
+  tag: string;
   sourceText?: string;
   enMain: string;
   note?: string;

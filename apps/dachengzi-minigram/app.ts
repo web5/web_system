@@ -1,5 +1,6 @@
 import { ensureLogin, isLoggedIn } from './services/auth';
 import { currentClass, applyFromServer } from './utils/appearance';
+import { prefetchDailyQuotes } from './services/daily-quotes';
 
 /**
  * 后端地址按运行环境切换（wx.getAccountInfoSync().miniProgram.envVersion）：
@@ -51,7 +52,12 @@ App<IAppOption>({
     void (async () => {
       try {
         await this.autoLogin();
-        if (isLoggedIn()) await applyFromServer();
+        if (isLoggedIn()) {
+          await applyFromServer();
+          // 今日一句精选池：登录态内静默预取一次，失败 / 断网由 service 内部吞掉，
+          // 不阻塞首页渲染（本 IIFE 整体不 await；service 自身 silent + catch）。
+          await prefetchDailyQuotes();
+        }
       } catch {
         // 保持本地值
       }

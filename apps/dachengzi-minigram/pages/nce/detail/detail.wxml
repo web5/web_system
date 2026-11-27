@@ -1,18 +1,23 @@
-<!-- 新概念英语 · 课文详情（默认纯英文，中文按需揭示） -->
-<view class="page f{{fontStep}} {{radiusClass}}">
+<!-- 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图；点句中文 / 点词 tip / 长按气泡 / 单句朗读） -->
+<view class="page f{{fontStep}} mode-{{readMode}} {{radiusClass}}" data-font="{{fontStep === 0 ? 's' : (fontStep === 2 ? 'l' : 'm')}}">
+  <!-- 顶部工具条：阅读档三档 + 字号三档，两组 seg 正交（切档互不复位）；不提供任何整篇连播入口 -->
   <view class="bar">
-    <view class="seg">
-      <view class="seg-i {{mode === 'immersion' ? 'on' : ''}}" data-mode="immersion" bindtap="setMode">沉浸</view>
-      <view class="seg-i {{mode === 'tap' ? 'on' : ''}}" data-mode="tap" bindtap="setMode">点按</view>
-      <view class="seg-i {{mode === 'bilingual' ? 'on' : ''}}" data-mode="bilingual" bindtap="setMode">对照</view>
+    <view class="bar-segs">
+      <view class="seg mode">
+        <view class="seg-i {{readMode === 'immersion' ? 'on' : ''}}" data-mode="immersion" bindtap="setReadMode">沉浸</view>
+        <view class="seg-i {{readMode === 'bilingual' ? 'on' : ''}}" data-mode="bilingual" bindtap="setReadMode">双语</view>
+        <view class="seg-i {{readMode === 'tap' ? 'on' : ''}}" data-mode="tap" bindtap="setReadMode">点按</view>
+      </view>
+      <view class="seg font">
+        <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
+        <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
+        <view class="seg-i {{fontStep === 2 ? 'on' : ''}}" data-step="2" bindtap="setFont">A+</view>
+      </view>
     </view>
-    <view class="seg font">
-      <view class="seg-i {{fontStep === 0 ? 'on' : ''}}" data-step="0" bindtap="setFont">A-</view>
-      <view class="seg-i {{fontStep === 1 ? 'on' : ''}}" data-step="1" bindtap="setFont">A</view>
-      <view class="seg-i {{fontStep === 2 ? 'on' : ''}}" data-step="2" bindtap="setFont">A+</view>
-    </view>
+    <view class="bar-note">通篇阅读 · 点句看译文</view>
   </view>
 
+  <!-- 骨架 / 失败态：与弹窗叠加层并存，不整页替换（V12 底层可见 ≥1） -->
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{error}}" class="state err" bindtap="onRetry">{{error}}（点击重试）</view>
 
@@ -21,45 +26,68 @@
       <view class="lno">Lesson {{detail.id}}</view>
       <view class="h1">{{detail.title}}</view>
       <view class="title-cn" wx:if="{{detail.titleCn}}">{{detail.titleCn}}</view>
-      <view class="lead" wx:if="{{detail.leadQuestionCn || detail.leadQuestion}}">
-        <view class="lead-zh">{{detail.leadQuestionCn || detail.leadQuestion}}</view>
-        <view class="lead-en" wx:if="{{detail.leadQuestionCn && detail.leadQuestion}}">{{detail.leadQuestion}}</view>
+    </view>
+
+    <!-- D-04 / D-11：句子列表外包 .card + 分区标题 + 操作提示（长按气泡可发现性） -->
+    <view class="card">
+      <view class="sect-h">
+        <text>通篇阅读视图</text>
+        <text class="sub">D1 主定义 · 英文全文不打断</text>
       </view>
-      <view class="src {{detail.textSource}}">{{detail.textSource === 'xdf' ? '权威全文' : '字幕拼接版'}}</view>
-      <view wx:if="{{!readingActive}}" class="read-entry" bindtap="onReadTap">
-        <text wx:if="{{resumeLineIdx > 0}}">继续朗读 · 第 {{resumeLineIdx + 1}} 句</text>
-        <text wx:else>整体朗读</text>
+      <view class="hint">{{readMode === 'immersion' ? '沉浸通读，逐句换行；整篇中文见文末参考译文' : (readMode === 'bilingual' ? '双语对照，全部中文常显' : '点按精读，点句看译文、点生词看释义')}}；点生词看释义，长按任意单词朗读/收藏单词，长按句子空白朗读/收藏整句</view>
+
+      <view class="sentences">
+        <view wx:for="{{lines}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
+          class="sent {{expandedIdx === si ? 'expanded' : ''}} {{readingLineIdx === si ? 'playing' : ''}}"
+          data-i="{{si}}" bindtap="toggleLine" bindlongpress="onLongPress">
+          <view class="sline">
+            <view class="sn">{{si + 1}}</view>
+            <view class="stx">
+              <view class="en">
+                <!-- 🔴 2026-11-26 R-READ-04（AC-B.28 / V-B17）：**所有**英文单词都渲染成节点。
+                     原来 wx:if 的条件是「tk.w 且 tk.hasDef」，非生词走 wx:else 纯文本、根本没有节点
+                     → 普通词物理上无法长按。现在：
+                       · wx:if 只判 tk.w（是否英文词），has-def 点线改由插值控制；
+                       · catchlongpress 挂**全部**单词（长按任意词 → 抽屉四项，含普通词）；
+                       · catchtap 也挂全部，函数首行用 hasDef 守卫回落成「点句子」（E1：
+                         点普通词不弹词卡，点按档仍展开该句译文）；
+                       · 普通词**不加任何静态视觉标记**（无点线 / 无下划线 / 无色差，E4）——
+                         可长按这件事只通过手势结果（抽屉升起）表达。 -->
+                <block wx:for="{{line.tokens}}" wx:key="idx" wx:for-item="tk">
+                  <!-- E4 后半（盲测 D-4）·长按瞬间按下高亮 = 反馈，不是暗示：
+                       `<text>` 不支持 hover-class（微信仅 view / button / navigator 支持），
+                       裸 `.w:active` 又被「点非生词不得有词级高亮」的既有守卫禁止，
+                       故用长按态 class：touchstart 记 key（si*1000+tk.idx，同一行内唯一）、
+                       touchend/cancel 清空 → wxml 插值出 w-pressed 浅蓝底，松手/出抽屉即消失。 -->
+                  <text wx:if="{{tk.w}}" class="w {{tk.hasDef ? 'has-def' : ''}} {{pressedWordKey === si * 1000 + tk.idx ? 'w-pressed' : ''}}" data-w="{{tk.w}}" data-i="{{si}}" data-hasdef="{{tk.hasDef}}" data-k="{{si * 1000 + tk.idx}}" catchtap="onWordTap" catchlongpress="onWordLongPress" bindtouchstart="onWordPressStart" bindtouchend="onWordPressEnd" bindtouchcancel="onWordPressEnd" hover-class="w-pressed" hover-start-time="0" hover-stay-time="600">{{tk.t}}</text>
+                  <text wx:else>{{tk.t}}</text>
+                </block>
+                <!-- 🔴 U1（2026-11-26 19:15 用户拍板）：句子朗读中，在该句**行尾**显示一个极小的 ■ 停止按钮。
+                     只在 readingLineIdx === si 时渲染（不播放时节点不存在），点击 = stopSpeak()。
+                     与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突：①只在播放中渲染、非常驻；
+                     ②它是「停止」而不是「播放 / 收藏」入口；③它替代的正是 B 变体删掉的唯一停止路径
+                     （长按气泡「朗读此句」再点一次 = 停），没有它用户点完朗读就再也停不下来。
+                     详见 detail.ts 的 stopLineSpeak() 注释。 -->
+                <text wx:if="{{readingLineIdx === si}}" class="sent-stop" catchtap="stopLineSpeak">■</text>
+              </view>
+            </view>
+          </view>
+          <!-- V25 双语档全部中文常显（不依赖 expandedIdx）；tap 档仍由 expandedIdx 逐句展开；沉浸档不渲染
+               🔴 AC-B.27（盲测 D-7 修）：`catchlongpress` 吞掉长按 —— 长按中文行**不弹抽屉**。
+                 长按只对英文原文区（.en 内的单词 / 句子空白）生效，与首页「长按只挂 .daily-en」同口径。
+                 catch 会阻断冒泡，故 .sent 上的 bindlongpress 收不到这次事件；点按（tap）不受影响。 -->
+          <view wx:if="{{readMode === 'bilingual' || expandedIdx === si}}" class="sent-cn show" catchlongpress="onCnLongPress">{{line.cn}}</view>
+        </view>
       </view>
     </view>
 
-    <view class="sentences">
-      <view wx:if="{{mode === 'tap'}}" class="tap-hint">轻点任意句子看中文，再点一次收起 · 点带虚线的生词查词</view>
-      <!-- 外层 si / 内层 ti 显式命名：避免嵌套 wx:for 的默认 index 相互遮蔽，
-           否则生词上的 data-i 会拿到 token 下标，揭示错句译文。 -->
-      <view wx:for="{{linesView}}" wx:key="idx" wx:for-item="line" wx:for-index="si"
-        id="line-{{si}}"
-        class="sent {{mode === 'tap' ? 'tappable' : ''}} {{readingLineIdx === si ? 'reading' : ''}}"
-        data-i="{{si}}" bindtap="toggleLine">
-        <view class="en">
-          <block wx:for="{{line.tokens}}" wx:for-item="tk" wx:key="k">
-            <text wx:if="{{tk.isWord}}" class="w" data-wi="{{tk.wi}}" data-i="{{si}}" catchtap="onWord">{{tk.text}}</text>
-            <text wx:else>{{tk.text}}</text>
-          </block>
-        </view>
-        <view wx:if="{{line.cn && (mode === 'bilingual' || line.showCn)}}" class="cn">{{line.cn}}</view>
-        <!-- 查词卡就地插在该句下方：不做固定浮层，绝不盖住后面句子的点按区域 -->
-        <view wx:if="{{activeWord && wordLineIdx === si}}" class="word-card" catchtap="closeWord">
-          <view class="wc-close">×</view>
-          <view class="wd">{{activeWord.word}} <text class="ph">{{activeWord.phonetic}}</text></view>
-          <view class="df">{{activeWord.pos}} {{activeWord.def}}</view>
-          <view wx:if="{{activeWord.example}}" class="eg">{{activeWord.example}}</view>
-        </view>
+    <!-- V24 参考译文 / 中文解释：沉浸档文末折叠区（默认收起），内容 = 整篇 lines[].cn 拼接（含空值兜底） -->
+    <view wx:if="{{readMode === 'immersion'}}" class="cn-fold">
+      <view class="cn-fold-h" bindtap="toggleCnSection">
+        <text>参考译文 / 中文解释</text>
+        <text class="cn-fold-tog">{{cnExpanded ? '收起' : '展开'}}</text>
       </view>
-    </view>
-
-    <view class="trans">
-      <view class="link" bindtap="toggleTrans">{{showTranslation ? '收起参考译文' : '查看参考译文'}}</view>
-      <view wx:if="{{showTranslation}}" class="trans-body">{{detail.translation}}</view>
+      <view wx:if="{{cnExpanded}}" class="cn-fold-c">{{fullCn}}</view>
     </view>
 
     <view class="pager">
@@ -70,47 +98,74 @@
     <view class="pad" />
   </block>
 
-  <!-- 习题：吸底按钮 + 半屏浮层，读完再展开 -->
-  <view wx:if="{{!readingActive}}" class="fab" bindtap="openSheet">开始练习</view>
-
-  <!-- 整篇朗读控制条：与「开始练习」互斥，朗读态吸底占位 -->
-  <view wx:if="{{readingActive}}" class="read-bar">
-    <view wx:if="{{readingPhase === 'loading'}}" class="rb-loading">请稍候…</view>
-    <block wx:else>
-      <view class="rb-btn" bindtap="onPauseToggle">{{readingPhase === 'paused' ? '继续' : '暂停'}}</view>
-      <view class="rb-ticks">
-        <view wx:for="{{linesView}}" wx:key="idx" wx:for-index="si"
-          class="tick {{si < readingLineIdx ? 'done' : ''}} {{si === readingLineIdx ? 'cur' : ''}}"
-          data-i="{{si}}" bindtap="onTickTap"></view>
-      </view>
-      <view class="rb-label">{{readingLineIdx + 1}}/{{linesView.length}}</view>
-      <view class="rb-btn stop" bindtap="onStopRead">停止</view>
-    </block>
-  </view>
-  <view wx:if="{{exSheet}}" class="scrim" bindtap="closeSheet" />
-  <view wx:if="{{exSheet}}" class="sheet" catchtap="noop">
-    <view class="sh-head">
-      <text class="sh-t">习题</text>
-      <text class="sh-x" catchtap="closeSheet">×</text>
-    </view>
-    <scroll-view scroll-y class="sh-body">
-      <block wx:if="{{!exOpen}}">
-        <view class="gate">先读完课文，再开始练习。</view>
-        <view class="btn" bindtap="startEx">开始练习（{{detail.exercises.length}} 题）</view>
-      </block>
-      <block wx:else>
-        <view wx:for="{{detail.exercises}}" wx:key="index" wx:for-item="q" wx:for-index="qi" class="quiz">
-          <view class="q">{{qi + 1}}. {{q.q}}</view>
-          <view wx:for="{{q.options}}" wx:key="index" wx:for-item="o" wx:for-index="oi"
-            class="opt {{answers[qi] >= 0 && oi === q.answer ? 'right' : ''}} {{answers[qi] === oi && oi !== q.answer ? 'wrong' : ''}}"
-            data-qi="{{qi}}" data-oi="{{oi}}" bindtap="choose">
-            {{letters[oi]}}. {{o}}
-          </view>
-          <view wx:if="{{answers[qi] >= 0}}" class="exp {{answers[qi] === q.answer ? 'ok' : ''}}">
-            {{answers[qi] === q.answer ? '正确' : '再想想'}} · {{q.exp}}
-          </view>
+  <!-- 19:11 ③ 点词中文 tip = 移动端底部统一浮层（position:fixed / bottom:0），作废 16:30「就近锚定」。
+       2026-11-26 变体 B：浮层收敛到**单槽位** `overlay`（kind='wordtip'），与动作抽屉互斥；
+       本节点不绑任何 left/top（抽屉与词卡都不测坐标）。关闭：右上 ✕ / 点句子空白（_applyLineTap
+       清 overlay）/ 再点其它词替换内容。word / phonetic / pos / def / example 缺失省略；
+       表外词「暂无释义」且保留可点。 -->
+  <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="word-tip on">
+    <view class="wt-head">
+      <view class="wt-w">{{overlay.word}}</view>
+      <view class="wt-tools">
+        <!-- 🔴 AC-3.1 / AC-3.3 / AC-3.4（2026-11-26 盲测 D-1 修）：词卡朗读按钮是**圆形播放图标**，
+             不是文字「朗读 / 停止」。
+               · 形态：原型 `.btn-icon`（原型-变体B-底部抽屉.html:294-302 + ICON.play/stop:613-614）
+                 —— 未播 = ▶ 三角、播放中 = ■ 方块，图标由 CSS 画（不引图片、不新增依赖）；
+               · 尺寸（AC-3.3）：热区 88rpx（.wt-play 外框，直接可点）⊃ 视觉圆 60rpx（.wt-ico）
+                 ⊃ 图标 32rpx（.wt-ico::before）；
+               · 无障碍（AC-3.4）：aria-role=button + aria-label 随形态在「朗读单词 / 停止朗读」间切换
+                 （文案真源 utils/line-actions 的 ARIA_WORD_PLAY / ARIA_WORD_STOP，不在此写字面量）。 -->
+        <view class="wt-play {{tipPlaying ? 'on' : ''}}" catchtap="speakTipWord" hover-class="wt-play-hv"
+              aria-role="button" aria-label="{{tipPlaying ? ariaStopWord : ariaPlayWord}}">
+          <view class="wt-ico"></view>
         </view>
-      </block>
-    </scroll-view>
+        <view class="wt-x" catchtap="closeTip">✕</view>
+      </view>
+    </view>
+    <view wx:if="{{overlay.phonetic}}" class="wt-p">{{overlay.phonetic}}</view>
+    <view wx:if="{{overlay.pos}}" class="wt-pos">{{overlay.pos}}</view>
+    <view wx:if="{{overlay.none}}" class="wt-none">暂无释义（课文词汇表未收录该词）</view>
+    <view wx:elif="{{overlay.def}}" class="wt-def">{{overlay.def}}</view>
+    <view wx:if="{{overlay.example}}" class="wt-ex">{{overlay.example}}</view>
   </view>
+
+  <!-- 2026-11-26 变体 B：长按动作抽屉（句空白两项 / 任意单词四项）。
+       组件只抛事件，页面调 services（朗读 / 收藏 / 未登录守卫 / toast 全在本页，见 detail.ts）。
+       🔴 原「长按气泡」两个节点（.bubble / .word-bubble，带内联锚点坐标）已整体删除 ——
+       抽屉贴底通栏、不测任何坐标。
+       🔴 **本页不传 `lift-bottom`**（保持默认 false = bottom: 0）：详情页是 navigateTo 打开的
+       普通页，**没有 tabBar**，抬高 107rpx 只会在底部凭空多出一条空白，且遮罩盖不到那条带
+       （点空白处关不掉抽屉）。首页是 tabBar 页，才需要开启让位。 -->
+  <action-drawer
+    visible="{{overlay && overlay.kind === 'drawer'}}"
+    scope="{{overlay && overlay.kind === 'drawer' ? overlay.scope : ''}}"
+    line-text="{{overlay && overlay.kind === 'drawer' ? overlay.lineText : ''}}"
+    line-index="{{overlay && overlay.kind === 'drawer' ? overlay.lineIndex : -1}}"
+    word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
+    word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
+    phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+    bind:speak-line="onDrawerSpeakLine"
+    bind:speak-word="onDrawerSpeakWord"
+    bind:collect-line="onDrawerCollectLine"
+    bind:collect-word="onDrawerCollectWord"
+    bind:close="onDrawerClose"
+  />
+
+  <!-- 需求① T1 从未登录守卫（内联 modal-login「请先登录」；三态分离，不弹会话过期弹窗） -->
+  <view wx:if="{{guestLoginShow}}" class="modal" id="modal-login">
+    <view class="box">
+      <view class="m-t">请先登录</view>
+      <view class="m-d">登录后学习进度与收藏跟着账号走。登录由小程序静默完成。</view>
+      <view class="m-acts">
+        <view class="btn ghost sm" bindtap="onCloseGuest">取消</view>
+        <view class="btn sm" bindtap="onGuestLogin">去登录</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 需求② T2 会话过期弹窗：login-gate 的 modal 态（叠加层，底层骨架/内容不销毁） -->
+  <login-gate wx:if="{{showAuthModal}}" mode="modal" bind:defer="onAuthDefer" />
+
+  <!-- V17 常驻提示条：稍后收起弹窗后显示，点击再次唤起同一 modal-auth；登录成功前不消失 -->
+  <view wx:if="{{showReloginTip}}" class="relogin-tip" bindtap="onReopenAuth">登录已过期，数据未更新 · 点此重新登录</view>
 </view>

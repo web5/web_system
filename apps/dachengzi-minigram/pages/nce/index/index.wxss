@@ -18,7 +18,6 @@
 .cn { font-size: 24rpx; color: #6B7280; }
 .tag { font-size: 20rpx; padding: 3rpx 12rpx; border-radius: var(--r-chip); background: #ECFDF5; color: #047857; }
 .tag.lrc { background: #EFF6FF; color: #B45309; }
-.lead { margin-top: 12rpx; padding: 12rpx 16rpx; background: #EFF6FF; border-left: 4rpx solid #3B82F6; border-radius: 0 var(--r-chip) var(--r-chip) 0; font-size: 24rpx; }
 .meta { margin-top: 12rpx; font-size: 22rpx; color: #9CA3AF; }
 .state { padding: 80rpx 0; text-align: center; color: #6B7280; font-size: 26rpx; }
 .state.err { color: #DC2626; }

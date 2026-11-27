@@ -16,6 +16,7 @@
       confirm-type="search" bindinput="onSearch" />
   </view>
 
+  <!-- 骨架 / 失败态：与弹窗叠加层并存，不整页替换（V12 底层可见 ≥1） -->
   <view wx:if="{{loading}}" class="state">加载中…</view>
   <view wx:elif="{{error}}" class="state err" bindtap="onRetry">{{error}}（点击重试）</view>
   <view wx:elif="{{groups.length === 0}}" class="state">没有匹配的课文</view>
@@ -33,9 +34,14 @@
           <text class="cn" wx:if="{{l.titleCn}}">{{l.titleCn}}</text>
           <text class="tag {{l.textSource}}" >{{l.textSource === 'xdf' ? '权威全文' : '字幕拼接'}}</text>
         </view>
-        <view class="lead" wx:if="{{l.leadQuestionCn || l.leadQuestion}}">{{l.leadQuestionCn || l.leadQuestion}}</view>
-        <view class="meta">{{l.lineCount}} 句 · {{l.wordCount}} 词 · {{l.exerciseCount}} 题</view>
+        <view class="meta">{{l.lineCount}} 句 · {{l.wordCount}} 词</view>
       </view>
     </block>
   </block>
+
+  <!-- 需求② T2 会话过期弹窗：login-gate 的 modal 态（叠加层，底层骨架/内容不销毁） -->
+  <login-gate wx:if="{{showAuthModal}}" mode="modal" bind:defer="onAuthDefer" />
+
+  <!-- V17 常驻提示条：稍后收起弹窗后显示，点击再次唤起同一 modal-auth；登录成功前不消失 -->
+  <view wx:if="{{showReloginTip}}" class="relogin-tip" style="position:fixed;left:0;right:0;bottom:0;z-index:150;padding:22rpx 30rpx;background:#FEF3C7;color:#92400E;font-size:26rpx;text-align:center" bindtap="onReopenAuth">登录已过期，数据未更新 · 点此重新登录</view>
 </view>

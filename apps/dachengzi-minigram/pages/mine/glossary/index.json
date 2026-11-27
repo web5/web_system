@@ -1,4 +1,6 @@
 {
-  "navigationBarTitleText": "生词本",
-  "usingComponents": {}
+  "navigationBarTitleText": "收藏",
+  "usingComponents": {
+    "login-gate": "/components/login-gate/index"
+  }
 }

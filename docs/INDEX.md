@@ -35,7 +35,8 @@
 
 | 你要问的 | 唯一真源 | 路径 / 命令 |
 |---|---|---|
-| **怎么发布 / 上线 / 让代码在 dev·prod 生效** | `web-system-deploy` skill | `~/skills/web-system-deploy/SKILL.md`（§怎么选调用方式）；🔴 **后端 10 服务与前端 `admin`/`portal` 都走同一 MCP 流水线**（2026-11-04 订正）：后端推荐 `publish.sh`（封装 prod 闸门），前端常用 tools/call，`deploy-console` 自身永远手动；预演 `bash ~/skills/web-system-deploy/scripts/publish.sh plan dev <svc>` |
+| 🔴 **接单第一步**：「出码 / 预览码 / 二维码」还是「发 dev / 发 prod / 发布服务流水线」？**两链判链** | **发布与出码 · 接单路由卡** | [`development/发布与出码-接单路由卡.md`](./development/发布与出码-接单路由卡.md)（🔴 唯一接单入口：术语归一 → 决策表 → 动手前核对 → 完成判据 → 卡住去哪；链 A 出码 / 链 B 服务发布合一，判不准停手问人） |
+| **怎么发布 / 上线 / 让代码在 dev·prod 生效** | `web-system-deploy` skill | `~/skills/web-system-deploy/SKILL.md`（**§一「路由：先判模块，再选调用方式」**，2026-11-20 订正旧写「§怎么选调用方式」为节名失联）；🔴 **后端 10 服务与前端 `admin`/`portal` 都走同一 MCP 流水线**（2026-11-04 订正）：后端推荐 `publish.sh`（封装 prod 闸门），前端常用 tools/call，`deploy-console` 自身永远手动；预演 `bash ~/skills/web-system-deploy/scripts/publish.sh plan dev <svc>` |
 | **开发维护知识库全貌 / 怎么保证 AI 不跑偏** | 知识库拓扑总图 | [`知识库拓扑.md`](./知识库拓扑.md)（五层载体 / 注入链 / 门禁 / 禁止路径 / 冲突优先级 / 已知缺口）；图片版 `architecture/知识库拓扑.svg`，由 `scripts/gen-kb-topology.mjs` 生成，**禁手改 SVG** |
 | 回滚 / 灰度 / 查线上版本 / 发布后验证 | 同上 | `publish.sh rollback\|status <svc>`；判据只看 `verify_release` 的 `verdict` |
 | 发布通道为什么这么分 / 平台侧语义 | 工程总入口 | `README.md` §7.1 |
@@ -76,7 +77,8 @@
 > 🔴 **本表只登记「当前事实」的真源，不给存档史料建索引**。
 > 问「当时为什么这么定 / 2026-09 怎么发布」属**考古**，不在路由范围：史料不承载当前事实，
 > 不列路径、不给链接；只有人显式指定路径时才可追溯，AI 不得据此判断线上现状。
-> 发布类问句一律走本表第 1 行（skill），**不要顺着旧手册往下找**。
+> 🔴 **发布类问句一律先走本表「接单第一步」行判链**（出码链 A / 服务发布链 B），再由路由卡指向唯一真源；
+> **不要顺着旧手册往下找**，也不要直接跳到第 2 行 skill（小程序出码不走 deploy-console 流水线）。
 
 ---
 

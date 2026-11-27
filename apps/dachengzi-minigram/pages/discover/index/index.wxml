@@ -1,44 +1,22 @@
-<!-- 大橙子英语 · 发现（tab 2）：默认态只呈现新概念英语（纯学习工具）；
-     「对话练习」「文本翻译」卡由本地开关控制（utils/feature-flags.ts）；
-     功能开关入口在「我的 → 设置 → 发现设置」（PRD v0.4 §4），本页不放设置入口卡。
-     备案文案已按 P0 从代码中删除（非条件隐藏）。 -->
+<!-- 大橙子英语 · 发现（tab 2）：全部功能列表 + 每项「添加常用」开关 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
-  <!-- 未登录：只渲染登录引导卡（Q1 必须登录才可用），不发起任何业务请求 -->
+  <!-- 未登录：只渲染登录引导卡，不发起任何业务请求 -->
   <login-gate wx:if="{{!loggedIn}}" desc="发现页的能力与记录都关联你的账号" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <view class="sec-t">{{(flags.chat || flags.translate) ? '扩展功能' : '英语学习'}}</view>
+    <view class="sec-t">全部功能</view>
 
-  <!-- 对话练习：flags.chat 开启时出现（文案恒定中性） -->
-  <view wx:if="{{flags.chat}}" class="cap" bindtap="openChat">
-    <view class="ic c">话</view>
-    <view class="tx">
-      <view class="b">对话练习</view>
-      <view class="e">和伙伴自由对话 · 随时追问</view>
+    <view class="cap" wx:for="{{features}}" wx:key="id" data-path="{{item.path}}" bindtap="openFeature">
+      <view class="ic {{item.iconClass}}">{{item.icon}}</view>
+      <view class="tx">
+        <view class="b">{{item.title}}</view>
+        <view class="e">{{item.desc}}</view>
+      </view>
+      <view class="toggle {{item.pinned ? 'on' : ''}}" data-id="{{item.id}}" catchtap="toggleFeature">
+        {{item.pinned ? '已添加' : '+ 添加'}}
+      </view>
     </view>
-    <text class="go">›</text>
-  </view>
 
-  <!-- 文本翻译：flags.translate 开启时出现（恒定中性改名版） -->
-  <view wx:if="{{flags.translate}}" class="cap" bindtap="openTranslate">
-    <view class="ic t">译</view>
-    <view class="tx">
-      <view class="b">文本翻译</view>
-      <view class="e">多语种互译 · 语气风格可选</view>
-    </view>
-    <text class="go">›</text>
-  </view>
-
-  <!-- 新概念英语：NCE 逐句精读，常驻入口（与 PC portal「发现」对齐） -->
-  <view class="cap" bindtap="openNce">
-    <view class="ic n">英</view>
-    <view class="tx">
-      <view class="b">新概念英语</view>
-      <view class="e">NCE 逐句精读 · 点句出译文 · 生词就地查</view>
-    </view>
-    <text class="go">›</text>
-  </view>
-
-  <view class="foot">更多内容持续更新中</view>
+    <view class="foot">更多内容持续更新中</view>
   </block>
 </view>

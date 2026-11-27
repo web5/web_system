@@ -1,16 +1,14 @@
 /**
  * F. 清缓存白名单（判据 V45）
- * 预置白名单 key（token / 偏好 / 历史）+ 非白名单垃圾 key，
+ * 预置白名单 key（token / 偏好 / 常用功能）+ 非白名单垃圾 key，
  * 走「我的→设置→清除缓存」clearCache 逻辑（二次确认 mock 为 confirm），
  * 断言：白名单 key 全保留、非白名单 key 被清。
  */
 const TOKEN = 'e2e-cache-token';
 const REFRESH = 'e2e-cache-refresh';
 const RADIUS = 'crisp';
-const HISTORY = [{ id: 'h1', text: 'a', natural: 'A', srcLang: '中文', tgtLang: '英语', register: '正式', style: '完整', conversationId: '', ts: 1 }];
-const SETTINGS = { srcLang: '日语', tgtLang: '英语', register: '正式', style: '完整', stream: true };
-const NCE_MODE = 'bilingual';
-const NCE_FONT = 'large';
+const PINNED = ['nce', 'glossary'];
+const NCE_FONT = 2;
 const JUNK1 = 'junk_e2e_key';
 const JUNK2 = 'temp_foo';
 
@@ -24,9 +22,7 @@ module.exports = {
       await ctx.setStorage(mp, ctx.KEYS.refreshToken, REFRESH);
       await ctx.removeStorage(mp, ctx.KEYS.loggedOut);
       await ctx.setStorage(mp, ctx.KEYS.radius, RADIUS);
-      await ctx.setStorage(mp, ctx.KEYS.history, HISTORY);
-      await ctx.setStorage(mp, ctx.KEYS.settings, SETTINGS);
-      await ctx.setStorage(mp, ctx.KEYS.nceMode, NCE_MODE);
+      await ctx.setStorage(mp, ctx.KEYS.featurePinned, PINNED);
       await ctx.setStorage(mp, ctx.KEYS.nceFont, NCE_FONT);
       await ctx.setStorage(mp, JUNK1, 'garbage-1');
       await ctx.setStorage(mp, JUNK2, { foo: 42 });
@@ -57,11 +53,9 @@ module.exports = {
       ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.refreshToken), REFRESH, 'refresh_token');
     });
 
-    await ctx.run('F5 白名单：偏好/历史保留', async () => {
+    await ctx.run('F5 白名单：偏好/常用功能保留', async () => {
       ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.radius), RADIUS, 'appearance_radius');
-      ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.history), HISTORY, 'kd_tr_history');
-      ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.settings), SETTINGS, 'kd_tr_settings');
-      ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.nceMode), NCE_MODE, 'nce-mode');
+      ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.featurePinned), PINNED, 'feature_pinned');
       ctx.assertEqual(await ctx.getStorage(mp, ctx.KEYS.nceFont), NCE_FONT, 'nce-font');
     });
 

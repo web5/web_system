@@ -1,10 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsObject, MaxLength } from 'class-validator';
 
 export class CreateGlossaryDto {
-  @ApiProperty({ description: '来源', enum: ['chat', 'translate'], example: 'chat' })
-  @IsIn(['chat', 'translate'])
-  sourceType: 'chat' | 'translate';
+  @ApiProperty({ description: '来源标记，自由字符串', example: 'nce' })
+  @IsString()
+  @MaxLength(64)
+  tag: string;
 
   @ApiPropertyOptional({ description: '中文原文', example: '非常感谢你的帮助' })
   @IsOptional()

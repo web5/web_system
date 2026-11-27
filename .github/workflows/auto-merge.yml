@@ -18,6 +18,9 @@
 #     不用这个标签就得每次 `gh pr merge <n> --disable-auto` 跟本 workflow 抢跑（2026-10-29 实测抢了两次）。标签是双向的：enable 排除它，disable job 负责撤已挂上的。
 #   - 合并仍需分支保护放行（checks 全绿 + 与 master 同步），本 workflow **不绕过任何门禁**：
 #     它只是把「等绿了自动合」这件事挂上，绿灯之前不会合。
+#   - 2026-11-25 补修 P1：enable job 里「落后 master 时自动同步分支」step 只在 pull_request
+#     路径跑（step 级 if）—— workflow_run payload 没有 pull_request 字段，该 step 直接读它会崩。
+#     workflow_run 路径的同步职责由独立的 sync-behind-on-master job 覆盖（监听 master push）。
 #
 # 凭据：与 auto-pr.yml 同源的 Secret `AUTO_PR_TOKEN`（PAT，需 pull_requests:write +
 #       contents:write）。**缺失即失败**，不回退 GITHUB_TOKEN —— 静默回退是 2026-09-24
@@ -30,6 +33,14 @@ on:
     # 只加标签而不重新推送提交时，`enable-auto-merge` 会被 if 跳过 —— 跳过就等于**没人去撤**
     # 已经挂上的 auto-merge，标签形同虚设。必须有一个「反向动作」把已挂的撤掉。
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
+  # 🔴 2026-11-25 补「CI 全绿后重试」触发点（修 #666 自指死锁）：
+  #   pull_request 事件在 PR 打开/更新瞬间就跑，此刻必需检查（红线扫描 + 改动包 build/test）
+  #   通常仍 pending → GitHub 以 "unstable status" 拒绝 enable → 旧实现 setFailed 让自己变成
+  #   failed check → failed check 又维持 unstable，且后续 CI 全绿**没有任何事件重跑挂载** → 永久自锁。
+  #   quality-gate 正是必需检查所在的 workflow，它 completed=success 时再挂一次即可破锁。
+  workflow_run:
+    workflows: [quality-gate]
+    types: [completed]
   # master 前进后扫一遍开放 PR（修 #407 的残留缺口）——
   # 「master 前进导致 PR 落后」**不产生 pull_request 事件**，只靠上面的触发点，
   # 落后的 PR 会一直等到有人往它上面推代码为止。
@@ -50,11 +61,23 @@ jobs:
     #   加它的场景（实测踩过）：① 同一 PR 上还会继续推修正提交，过早合入会让后续提交变孤儿
     #   （2026-10-29 #487：CI 一绿自动合并了错误方向的版本，修正 `cada3806` 只能 cherry-pick
     #   另开 #489 补救）② PR 内容涉及流程本身 / 需要人复核语义，而不只是"机器能验过"。
+    # 两条触发路径共用本 job，逃生口两条都要守：
+    #   - pull_request：沿用原有 if（同仓库 / 非草稿 / 非 manual-review / 无 no-automerge 标签）
+    #   - workflow_run：payload 里没有 pull_request，只能用 workflow_run 的字段守同仓库、
+    #     success、非 manual-review 分支；draft 与标签由脚本从 PR 本体复核（见下方 script）。
     if: >-
-      github.event.pull_request.head.repo.full_name == github.repository
-      && github.event.pull_request.draft == false
-      && !startsWith(github.event.pull_request.head.ref, 'feature/manual-review/')
-      && !contains(github.event.pull_request.labels.*.name, 'no-automerge')
+      (
+        github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && github.event.pull_request.draft == false
+        && !startsWith(github.event.pull_request.head.ref, 'feature/manual-review/')
+        && !contains(github.event.pull_request.labels.*.name, 'no-automerge')
+      ) || (
+        github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.head_repository.full_name == github.repository
+        && !startsWith(github.event.workflow_run.head_branch, 'feature/manual-review/')
+      )
     steps:
       - name: 校验 AUTO_PR_TOKEN
         env:
@@ -77,44 +100,130 @@ jobs:
             // 「PR 全绿自动合入」这条承诺实际上从未生效过（PR #394 实测：全绿后静默挂起）。
             // REST 侧只有读接口 GET /pulls/{n}（读 auto_merge），**没有 enable 动作**；
             // 真正能挂上的是 GraphQL mutation `enablePullRequestAutoMerge`。
+            //
+            // 🔴 2026-11-25 修 #666 自指死锁（两条改动缺一不可）：
+            //   ① 错误分流：GitHub 在 PR 必需检查仍 pending 时拒绝 enable（"unstable status"）。
+            //      这是**时序性**状态，不是配置/权限错误 —— 若 setFailed 会让自己变成 failed check，
+            //      failed check 又维持 unstable，形成自锁。故这类错误只 notice，等下一次事件重试；
+            //      其它错误（配置/权限/回查不一致）仍然 setFailed，绝不倒退 #396 的判红承诺。
+            //   ② workflow_run 重试点：quality-gate 成功后再挂一次，此时检查已绿，挂载能成功。
+            //      两种事件 payload 不同：pull_request 取 payload.pull_request.number；
+            //      workflow_run 取 payload.workflow_run.pull_requests[].number。
             const { repo, owner } = context.repo;
-            const pull_number = context.payload.pull_request.number;
+            const payload = context.payload || {};
 
-            const QUERY = `query($owner:String!,$repo:String!,$num:Int!){
+            // 取本次要处理的 PR 号；workflow_dispatch 等无关联 PR 的场景安全结束。
+            let nums = [];
+            if (payload.workflow_run) {
+              // job 的 if 已过滤 conclusion；这里再挡一次，防止将来改 if 后在失败的 CI 上挂载。
+              if (payload.workflow_run.conclusion !== 'success') {
+                console.log(`workflow_run conclusion=${payload.workflow_run.conclusion}，非 success，跳过`);
+                return;
+              }
+              nums = ((payload.workflow_run.pull_requests || [])
+                .map((p) => p && p.number)
+                .filter((n) => Number.isInteger(n)));
+            } else if (payload.pull_request) {
+              nums = [payload.pull_request.number];
+            }
+            if (nums.length === 0) {
+              console.log('本事件未关联 PR，无需挂自动合入');
+              return;
+            }
+
+            const AM_QUERY = `query($owner:String!,$repo:String!,$num:Int!){
               repository(owner:$owner,name:$repo){ pullRequest(number:$num){
-                id state isDraft
+                id state isDraft headRefName
+                labels(first:100){ nodes{ name } }
                 autoMergeRequest { enabledAt mergeMethod }
               } } }`;
 
-            try {
-              const got = await github.graphql(QUERY, { owner, repo, num: pull_number });
-              const pr = got.repository.pullRequest;
-              if (!pr) throw new Error(`读不到 PR #${pull_number}`);
+            const ENABLE_MUTATION = `mutation($id:ID!,$m:PullRequestMergeMethod!){
+              enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:$m}){
+                pullRequest { number autoMergeRequest { enabledAt mergeMethod } } } }`;
+
+            // 逐条取错误文本：e.message 本身 + e.errors[].message（GraphQL 一次可返回多条）。
+            const errList = (e) => [
+              (e && e.message) || String(e),
+              ...((e && Array.isArray(e.errors))
+                ? e.errors.map((x) => (x && x.message) || String(x))
+                : []),
+            ];
+            // 留全文用于 setFailed / notice 文案：判红时保留全部错误，便于排查。
+            const errText = (e) => errList(e).join(' | ');
+            // 🔴 2026-11-25 补修 P2（PR #667 盲测）：必须「所有错误都是 unstable」才算时序。
+            // 旧写法 errText(e) 拼成串后只要有一条含 "unstable status" 就命中 → 同批次里的真失败
+            // （如 Resource not accessible by integration）被 notice + return 静默吞掉（#396）。
+            // 逐条 every：有一条真失败就 setFailed，宁可误红不可静默不合。
+            // 单行写法便于变异测试精确定位（WF_MUTATE 按整行匹配）。
+            const isUnstable = (e) => { const es = errList(e); return es.length > 0 && es.every((s) => /unstable status/i.test(s)); };
+
+            const enableOne = async (num) => {
+              const read = async () =>
+                (await github.graphql(AM_QUERY, { owner, repo, num })).repository.pullRequest;
+
+              const pr = await read();
+              if (!pr) { console.log(`读不到 PR #${num}`); return; }
               if (pr.state !== 'OPEN') {
-                console.log(`PR #${pull_number} 当前是 ${pr.state}，无需挂自动合入`);
-              } else if (pr.autoMergeRequest) {
-                console.log(`PR #${pull_number} 自动合入已启用（mergeMethod=${pr.autoMergeRequest.mergeMethod}），幂等跳过`);
-              } else {
-                await github.graphql(
-                  `mutation($id:ID!,$m:PullRequestMergeMethod!){
-                     enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:$m}){
-                       pullRequest { number autoMergeRequest { enabledAt mergeMethod } } } }`,
-                  { id: pr.id, m: 'MERGE' },
-                );
-                // 回查实际状态，不看调用是否抛错 —— 这正是 #396 的回归判据：
-                // 「日志没 warning」不等于「真的挂上了」（warning 消失也可能只是把 catch 删了）。
-                const after = await github.graphql(QUERY, { owner, repo, num: pull_number });
-                const enabled = after.repository.pullRequest.autoMergeRequest;
-                if (!enabled) {
-                  throw new Error('enablePullRequestAutoMerge 未报错，但 autoMergeRequest 仍为 null');
-                }
-                console.log(`PR #${pull_number} 已启用自动合入（mergeMethod=${enabled.mergeMethod}）：CI 全绿且与 master 同步后自动合并`);
+                console.log(`PR #${num} 当前是 ${pr.state}，无需挂自动合入`);
+                return;
               }
+              // 逃生口逐条复核：workflow_run 路径没有 pull_request payload，必须从 PR 本体读。
+              if (pr.isDraft) { console.log(`PR #${num} 是草稿，跳过`); return; }
+              const labels = ((pr.labels && pr.labels.nodes) || []).map((l) => l && l.name);
+              if (labels.includes('no-automerge')) {
+                console.log(`PR #${num} 带 no-automerge 标签，跳过`);
+                return;
+              }
+              if (String(pr.headRefName || '').startsWith('feature/manual-review/')) {
+                console.log(`PR #${num} 是 manual-review 分支，跳过`);
+                return;
+              }
+              if (pr.autoMergeRequest) {
+                console.log(`PR #${num} 自动合入已启用（mergeMethod=${pr.autoMergeRequest.mergeMethod}），幂等跳过`);
+                return;
+              }
+
+              // 有限重试：覆盖 quality-gate 刚绿、GitHub 合并状态尚未刷新的传播窗口。
+              const MAX_ATTEMPTS = 3;
+              for (let i = 1; i <= MAX_ATTEMPTS; i += 1) {
+                try {
+                  await github.graphql(ENABLE_MUTATION, { id: pr.id, m: 'MERGE' });
+                  // 回查实际状态，不看调用是否抛错 —— 这正是 #396 的回归判据：
+                  // 「日志没 warning」不等于「真的挂上了」（warning 消失也可能只是把 catch 删了）。
+                  const after = await read();
+                  const enabled = after && after.autoMergeRequest;
+                  if (!enabled) {
+                    throw new Error('enablePullRequestAutoMerge 未报错，但 autoMergeRequest 仍为 null');
+                  }
+                  console.log(`PR #${num} 已启用自动合入（mergeMethod=${enabled.mergeMethod}）：CI 全绿且与 master 同步后自动合并`);
+                  return;
+                } catch (e) {
+                  const text = errText(e); // 仅用于 notice / 判红文案；分类按逐条错误（见 isUnstable）
+                  if (isUnstable(e)) {
+                    if (i < MAX_ATTEMPTS) {
+                      console.log(`PR #${num} 时序性 unstable（第 ${i}/${MAX_ATTEMPTS} 次），短暂等待后重试`);
+                      await new Promise((r) => setTimeout(r, 3000));
+                      continue;
+                    }
+                    // 不判红：留 notice，等下一次事件（quality-gate 成功 / 新提交 / master 前进）重试。
+                    core.notice(
+                      `PR #${num} 暂时处于 unstable status（必需检查可能仍在进行），本次不判红、未挂自动合入；` +
+                      `CI 全绿后 workflow_run 会再触发一次挂载。原始错误：${text}`,
+                    );
+                    return;
+                  }
+                  throw e; // 真失败 → 交给外层 setFailed
+                }
+              }
+            };
+
+            try {
+              for (const num of nums) await enableOne(num);
             } catch (e) {
-              // 本 job 的唯一职责就是挂自动合入，挂不上就**必须红**。
-              // 原实现降级为 warning 的代价是：一条承诺过的能力悄悄不存在，半年没人发现。
+              // 真失败必须判红暴露（#396：降级 warning 导致全绿静默不合半年没人发现）。
               core.setFailed(
-                `PR #${pull_number} 启用自动合入失败：${e.message}｜` +
+                `PR #${nums.join(',')} 启用自动合入失败：${errText(e)}｜` +
                 `检查：Settings→General 勾选 Allow auto-merge；master 分支保护允许 merge commit；` +
                 `AUTO_PR_TOKEN 需 pull_requests:write（GraphQL 同样走此权限）`,
               );
@@ -132,6 +241,12 @@ jobs:
       # token 没给 contents 写时这里**只 warning 不判红** —— 因为「PR 该不该合」没被破坏，
       # 只是没自动补齐条件；判红会让每次落后都红一片，反而盖住真正的问题。
       - name: 落后 master 时自动同步分支
+        # 🔴 2026-11-25 补修 P1（PR #667 盲测）：本 step 直接读 payload.pull_request.number，
+        # workflow_run 事件没有 pull_request 字段 —— 上方 step1 已兼容双 payload，这里漏改会崩
+        # TypeError → job failure → 每次 quality-gate 全绿都留下一个红 run（与 #396「红必须真问题」冲突）。
+        # 故只在 pull_request 路径跑；workflow_run 路径的同步由独立 sync-behind-on-master job 覆盖，
+        # 不必在这里重复同步（它监听 master push，不依赖 pull_request payload）。
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.AUTO_PR_TOKEN }}

@@ -2,13 +2,19 @@
  * 微信小程序预览脚本（生成开发版二维码）
  * 使用方法: npm run preview
  *
+ * 🔴 出码前门禁（P1–P6）在**本文件第一行代码**就执行（台账 9136）：
+ *    判据实现只有仓库根共享层 `scripts/lib/miniprogram-preflight.js` 一份（与大橙子共用），
+ *    本文件不再自带任何判据、也不另存一份 preflight.js。
+ *    直连 `node scripts/preview.js` 与走 `npm run preview` 过的是同一道门。
+ *    逃生口：--skip-preflight / --allow-any-dir / --expect-version / --expect-sha / --require-dir。
+ *
  * 前提条件:
  * 1. private.key 已放在 apps/kedou-ai-minigram/private.key（已 gitignore，切勿入库）
  * 2. 公众平台已把**执行机器**的公网 IP 加入白名单（本地跑加本机，dev 机器跑加 dev 机器）
  * 3. miniprogram-ci 依赖已装
  *
  * 可选环境变量:
- *   PREVIEW_PAGE    预览直达页，默认 pages/chat/index/index
+ *   PREVIEW_PAGE    预览直达页，默认 pages/welcome/index/index
  *   PREVIEW_QUERY   页面参数，如 "id=123"
  *   PREVIEW_SCENE   场景值，默认 1011（扫描二维码）
  *   QRCODE_FORMAT   terminal | image | base64，默认 image
@@ -30,6 +36,38 @@
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const preflight = require('../../../scripts/lib/miniprogram-preflight');
+
+/* ---------- 0. 出码前门禁：本文件的**第一条动作**（台账 9136） ----------
+ *
+ * 🔴 本文件是「出码」这件事的真载体：谁调它都过**同一道门禁** —— 直接
+ *    `node scripts/preview.js`、经 npm 入口、还是经别的包装脚本，走的都是这一处。
+ *    门禁排在这里而不是「外层某个脚本里」，是因为外层可以有很多个，载体只有一个。
+ *
+ * 🔴 为什么排在 require('miniprogram-ci') / 读 project.config.json / 读 private.key 之前：
+ *    站错目录 / 版本不对 / 包根带私钥时，要先看到真判据，而不是先看到下游的连带错误
+ *    （例如「缺少私钥」会把「站错目录」这颗雷盖住）。
+ *
+ * 🔴 判据不在这里：只在共享层 miniprogram-preflight 一份（P1–P6）；「哪些入口要过门禁」的
+ *    清单见共享层文件头与 tests/preflight-wiring.test.ts。本文件只做「调用 + 打印 + 不通过就退」，
+ *    **不带自己的判据**（复制即违规）。⚠️ 别在注释里写「哪条路仍绕过」这类清单 —— 那种清单必然过期。
+ *
+ * 🔴 防重复执行：由上游经 MINIPROGRAM_PREFLIGHT_GATE=done 声明「已跑过」，
+ *    runGateOrExit 会只打一行「不重复执行」而不判定；未经上游直接跑本文件时它照常判定。
+ */
+const gateOpts = preflight.parsePreflightArgs(process.argv.slice(2));
+// 出码根就是本包：不接受 --root 把门禁指到别处（否则「门禁查的根 ≠ 出码的根」，比没有门禁更坏）
+delete gateOpts.root;
+gateOpts.root = path.join(__dirname, '..');
+// 本文件走 miniprogram-ci：mode 固定 ci（P2 允许包根私钥但要求 ignore 覆盖，P6 不判开发者工具）
+gateOpts.mode = 'ci';
+// 🔴 版本真源：本包**没有**编译期版本常量（关于页不展示版本号，版本真源只有 package.json）。
+//    不为了让 P1 的「utils/version.ts 必须存在」这条子判据成立而凭空造一个文件 —— 那会改动
+//    已提审包的内容。声明成空数组是共享层支持的合法配置：P1 仍核 package.json.version 存在，
+//    且（给了 --expect-version 时）必须等于期望版本。站错目录由 P3（--expect-sha）/ P4 兜。
+//    ⚠️ 这不是「把判据删掉」：判据仍然只有共享层那一份，这里声明的是「本包的真源在哪」。
+gateOpts.versionSources = [];
+preflight.runGateOrExit(gateOpts, 'preview');
 
 /**
  * 依赖加载：默认从干净安装目录（MINIPROGRAM_CI_PATH）加载 miniprogram-ci。

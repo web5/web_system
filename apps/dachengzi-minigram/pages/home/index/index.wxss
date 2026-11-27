@@ -19,6 +19,14 @@ page {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  /* 登录引导卡是 absolute 铺满，父级需定位上下文 */
+  position: relative;
+}
+
+/* 未登录：锁滚动，登录墙不会被滚出视野 */
+.page.locked {
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ---------- 问候 hero ---------- */
@@ -79,22 +87,141 @@ page {
   border-radius: var(--r-card);
   box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
 }
+/* 册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill，
+   与真机蓝色系 --accent-soft 同族；深青字 --accent-ink 过 WCAG AA（4.92:1）。 */
+.daily-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
 .daily-k {
   font-size: 22rpx;
   color: var(--brand-txt);
-  margin-bottom: 12rpx;
+}
+.badge-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 2rpx 14rpx;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  border: 1rpx solid rgba(14, 155, 140, .18);
+  color: var(--accent-ink);
+  font-size: 20rpx;
+  line-height: 30rpx;
+  white-space: nowrap;
 }
 .daily-cn {
   font-size: 30rpx;
   color: var(--t1);
   line-height: 1.65;
 }
+/* 🔴 AC-1.2（盲测 D-3 / P1）：英文句「看着像没有」的**可见层**根因。
+   原来是 `font-size: 23rpx; color: var(--t3)` —— `--t3` 是 rgba(60,60,67,.34)（app.wxss:41），
+   半透明灰合成白底 ≈ #C2C2C4，WCAG 对比度实测 1.88:1（阈值 4.5:1），字号也低于 26rpx 下限。
+   现在：字号 26rpx + 正文近黑 #1A1A1F（与详情页英文正文 .w 同一色）→ 对比度 ≈17:1。
+   🔴 只改本页「今日一句」的英文句，**不动全局 --t3**（它还被别处灰字依赖，改它会连带改一片）。 */
 .daily-en {
   margin-top: 12rpx;
-  font-size: 23rpx;
-  color: var(--t3);
+  font-size: 26rpx;
+  color: #1A1A1F;
   line-height: 1.6;
 }
+
+/* ---------- 今日一句交互（2026-11-26 ⑤：点词 / 朗读 / 收藏） ---------- */
+/* 渲染结构改造（2026-11-26 step2）：所有英文 token 都是 .dw 节点（长按载体），
+   但**只有**课文生词（.has-def）带下点线与可点视觉——普通词外观仍是纯文本，
+   避免「看起来能点」的误导（E1：点按普通词无反应，它不是可点控件）。 */
+.dw.has-def {
+  color: var(--brand-txt);
+  border-bottom: 1rpx dotted rgba(37, 99, 235, .55);
+}
+.dw.has-def:active { opacity: .6; }
+/* E4 后半（盲测 D-4）：**普通词也要有按下反馈** —— 按下瞬间浅蓝底，松手 / 出抽屉即消失。
+   这不是静态暗示（点线/下划线/色差仍然只给生词），只是「按了有反应」的兜底。
+   hover-class 见 index.wxml 的 .dw 节点（hover-start-time=0 不延迟，覆盖 350ms 长按窗口）。 */
+.dw-pressed { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
+/* 真机兜底：万一 hover-class 在内联 <text> 上不生效，:active 也给出同一个按下态 */
+.dw:active { background: rgba(37, 99, 235, .12); border-radius: 6rpx; }
+/* 首页**不实现** U1 行尾 .sent-stop（2026-11-26 去重）：停止入口只保留页脚 .dq-act，
+   两个 ■ 同屏会让用户困惑。详情页 detail.wxss 的 .sent-stop 是那边唯一停止入口，保留。 */
+.daily-foot {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+.dq-act {
+  font-size: 22rpx;
+  color: var(--t2);
+  padding: 8rpx 20rpx;
+  border: 1rpx solid rgba(0, 0, 0, .08);
+  border-radius: 999rpx;
+  line-height: 1.5;
+}
+.dq-act:active { background: rgba(0, 0, 0, .04); }
+.dq-act.on {
+  color: var(--brand-txt);
+  border-color: rgba(37, 99, 235, .45);
+  background: rgba(37, 99, 235, .06);
+}
+
+/* 今日一句词卡：底部浮层（形态对齐课文详情页 .word-tip，前缀独立防跨页耦合） */
+.q-tip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  padding: 26rpx 30rpx 44rpx;
+  background: var(--card);
+  border-top: 1rpx solid rgba(37, 99, 235, .18);
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -12rpx 40rpx rgba(0, 0, 0, .14);
+  box-sizing: border-box;
+}
+.q-tip-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+.q-tip-w {
+  font-family: Georgia, serif;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--brand-txt);
+}
+.q-tip-tools { display: flex; align-items: center; gap: 8rpx; }
+.q-tip-btn {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--brand-txt);
+  padding: 4rpx 18rpx;
+  border: 1rpx solid rgba(37, 99, 235, .28);
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+.q-tip-btn.on { background: rgba(37, 99, 235, .10); }
+/* 🔴 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮改**圆形播放图标**（原型 .btn-icon 同形）。
+   与同排「收藏」文字胶囊的区别只在 .q-tip-play 这一层：热区 88rpx（≥88rpx 下限）⊃ 视觉圆 60rpx
+   ⊃ 图标 ≈32rpx；未播 ▶ 三角、播放中 ■ 方块，全部 CSS 画（不引图片/不加依赖）。 */
+.q-tip-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; line-height: 1; }
+.q-tip-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.q-tip-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+.q-tip-play.on { background: transparent; }
+.q-tip-play.on .q-tip-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
+.q-tip-play.on .q-tip-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
+.q-tip-play-hv .q-tip-ico { background: #EFF6FF; }
+.q-tip-x { font-size: 30rpx; line-height: 1.2; color: var(--t3); padding: 0 6rpx; }
+.q-tip-p { font-size: 24rpx; color: var(--t3); margin-top: 6rpx; }
+.q-tip-pos { font-size: 22rpx; color: var(--brand-txt); margin-top: 8rpx; }
+.q-tip-def { font-size: 28rpx; color: var(--t1); margin-top: 10rpx; line-height: 1.6; }
+.q-tip-none { font-size: 26rpx; color: var(--t3); margin-top: 10rpx; }
+.q-tip-ex { font-size: 24rpx; color: var(--t2); margin-top: 10rpx; font-style: italic; }
 
 /* ---------- 新对话快捷入口（hero 区，首页唯一的能力入口） ---------- */
 .newchat {
@@ -255,6 +382,46 @@ page {
   border: 1rpx dashed var(--brand-100);
   border-radius: var(--r-control);
 }
+
+/* ---------- 常用功能卡（注册表 pinned 项） ---------- */
+.fcard {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-top: 20rpx;
+  padding: 26rpx 28rpx;
+  background: var(--card);
+  border: 1rpx solid rgba(37, 99, 235, .10);
+  border-radius: var(--r-card);
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .06);
+}
+.fcard:active { opacity: .85; }
+.fc-ic {
+  flex: 0 0 60rpx;
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 600;
+}
+.fc-ic.ic-n { background: rgba(14, 165, 164, .10); color: #0EA5A4; }
+.fc-ic.ic-g { background: var(--brand-soft); color: var(--brand-txt); }
+.fc-tx { flex: 1; min-width: 0; }
+.fc-b { font-size: 29rpx; font-weight: 700; color: var(--t1); }
+.fc-e { font-size: 22rpx; color: var(--t3); margin-top: 4rpx; }
+.fc-go { color: var(--t3); font-size: 36rpx; flex: 0 0 auto; margin-left: 12rpx; }
+
+.more {
+  margin-top: 20rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--brand-txt);
+  padding: 20rpx 0;
+}
+.more:active { opacity: .7; }
 
 /* ---------- 合规两行（复用全局 .claim：21rpx = 10.5px、居中） ---------- */
 .claim-foot {

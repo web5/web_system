@@ -1,85 +1,139 @@
 <!-- 大橙子英语 · 首页（tab 1 / 启动页）
-     结构：问候 hero → 今日一句 → [新对话卡 | 开关关闭时隐藏] → 新概念英语卡（常驻）
-           → [最近对话 | 默认关态仅提示语] 。
-     功能开关：「新对话」卡与「最近对话」区由本地开关 flags.chat 控制（utils/feature-flags.ts），
-     默认关 = 纯 NCE 英语学习工具呈现；学习进度卡本版撤下（PRD v0.4「后续迭代」）；
-     备案文案已按 P0 从代码中删除（非条件隐藏）。
-     ⚠️ 首页只保留快捷入口，能力清单统一归「发现」页。 -->
+     整改后：问候 hero → 今日一句 → 常用功能（默认 NCE）→ 更多功能跳发现。 -->
 <view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
   <!-- 未登录：整页只渲染登录引导卡（login-gate），不发任何业务请求 -->
-  <login-gate wx:if="{{!loggedIn}}" desc="{{flags.chat ? '对话记录都跟着账号走，登录后接着聊' : '学习进度和生词本都跟着账号走'}}" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
+  <login-gate wx:if="{{!loggedIn}}" desc="学习进度和收藏都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
   <block wx:if="{{loggedIn}}">
-  <!-- 问候 hero -->
-  <view class="hero">
-    <view class="logo">橙</view>
-    <view class="hero-tx">
-      <view class="hi">下午好</view>
-      <view class="hi-sub">今天想学哪一课？</view>
+    <!-- 问候 hero -->
+    <view class="hero">
+      <view class="logo">橙</view>
+      <view class="hero-tx">
+        <view class="hi">{{greetingText}}</view>
+        <view class="hi-sub">今天想学哪一课？</view>
+      </view>
     </view>
-  </view>
 
-  <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换（本轮不加「换一句」） -->
-  <view class="daily">
-    <view class="daily-k">今日一句</view>
-    <view class="daily-cn">{{quote.cn}}</view>
-    <view class="daily-en">{{quote.en}}</view>
-  </view>
-
-  <!-- 新对话：hero 区快捷入口（flags.chat 开启时显示；文案恒定中性，不出现 AI 字样） -->
-  <view wx:if="{{flags.chat}}" class="newchat" hover-class="newchat-hover" bindtap="goChat">
-    <view class="n-ic">＋</view>
-    <view class="n-tx">
-      <view class="n-b">新对话</view>
-      <view class="n-e">和伙伴自由对话 · 随时追问</view>
+    <!-- 今日一句：本地文案池按日期取模，同天稳定、隔天自动换
+         册别角标（A3 方案① / 原型 d3c3730281e758d8）：标题行右侧浅青 pill；
+         book 缺失时 bookBadge 为空串 → wx:if 隐藏，不显 undefined
+         2026-11-26 ⑤：点整句朗读（bindtap），生词可点开词卡；词卡内可朗读/收藏单词
+         2026-11-26 step2：长按英文单词 / 英文句子空白 → 底部动作抽屉（components/action-drawer） -->
+    <view class="daily" bindtap="speakQuote">
+      <view class="daily-top">
+        <view class="daily-k">今日一句</view>
+        <view class="badge-pill" wx:if="{{showBookBadge && bookBadge}}">{{bookBadge}}</view>
+      </view>
+      <view class="daily-cn">{{quote.cn}}</view>
+      <!-- 🔴 长按只挂英文句子容器（catchlongpress），**不许挂整张 .daily 卡**：
+           挂卡片上会让中文行与「朗读 / 收藏」按钮的长按也弹出句子抽屉（越界触发）。
+           点按：卡片 bindtap 读整句；单词节点 catchtap 会吞掉冒泡 → 普通词由 `onQuoteWordTap`
+           首行守卫 return（E1 点按普通词无反应），生词出词卡。 -->
+      <view class="daily-en" catchlongpress="onQuoteLineLongPress">
+        <!-- 渲染结构改造（方案 K12）：**所有**英文 token 都渲染成 <text class="dw"> 节点，
+             不再「生词有节点 / 表外词是裸文本」—— 否则普通词没有载体，长按无从挂起。
+             `has-def` 点线只给课文词表直收词（生词），普通词是纯文本外观但可长按。
+             标点 token（tk.w 为空）仍走 wx:else 纯文本，不参与点按/长按。
+             🔴 wx:for-item="tk" 必须保留：漏写时迭代变量恒为 item，循环体内 tk.* 全部求值
+                undefined → 整段英文渲染为空（P0 缺陷，见 tests/wxml-for-item-scope.test.ts）。 -->
+        <block wx:for="{{quoteTokens}}" wx:key="idx" wx:for-item="tk">
+          <!-- E4 后半（盲测 D-4）·长按瞬间按下高亮 = 反馈，不是暗示：
+               · `<text>` **不支持** hover-class（微信仅 view / button / navigator 支持，
+                 官方文档 text 属性表里没有该项），故不能只靠 hover-class；
+               · 裸 `.dw:active` 又被「点非生词不得有词级高亮」的既有守卫禁止；
+               · 故用「长按态 class」：touchstart 记下当前词 key、touchend/cancel 清空，
+                 wxml 按 key 插值出 dw-pressed（浅蓝底），松手 / 出抽屉即消失。 -->
+          <text
+            wx:if="{{tk.w}}"
+            class="dw {{tk.hasDef ? 'has-def' : ''}} {{pressedWordKey === tk.idx ? 'dw-pressed' : ''}}"
+            data-w="{{tk.w}}"
+            data-hasdef="{{tk.hasDef}}"
+            data-k="{{tk.idx}}"
+            catchtap="onQuoteWordTap"
+            catchlongpress="onQuoteWordLongPress"
+            bindtouchstart="onWordPressStart"
+            bindtouchend="onWordPressEnd"
+            bindtouchcancel="onWordPressEnd"
+            hover-class="dw-pressed"
+            hover-start-time="0"
+            hover-stay-time="600"
+          >{{tk.t}}</text>
+          <text wx:else>{{tk.t}}</text>
+        </block>
+      </view>
+      <!-- 🔴 停止朗读入口**只有这一处**（2026-11-26 去重）：
+           U1 的初衷是补详情页「关掉抽屉后没有任何停止入口」这个空洞；首页页脚本来就有
+           「▶ 朗读 / ■ 停止」+「☆ 收藏」一组动作按钮，再叠一个行尾 ■ 会让用户看到两个 ■。
+           故**首页不重复实现 U1**（行尾 ■ 已删），停止入口统一在页脚 .dq-act。
+           详情页 pages/nce/detail/ 的 U1 保留不动——那边没有别的停止入口。 -->
+      <view class="daily-foot">
+        <view class="dq-act {{quotePlaying ? 'on' : ''}}" catchtap="speakQuote">{{quotePlaying ? '■ 停止' : '▶ 朗读'}}</view>
+        <view class="dq-act" catchtap="collectQuote">☆ 收藏</view>
+      </view>
     </view>
-    <text class="n-go">›</text>
-  </view>
 
-  <!-- 新概念英语：常驻卡（默认态下占据主入口槽位，开启后保留为第二入口） -->
-  <view class="ncecard" hover-class="ncecard-hover" bindtap="goNce">
-    <view class="nc-ic">英</view>
-    <view class="nc-tx">
-      <view class="nc-b">新概念英语</view>
-      <view class="nc-e">NCE 逐句精读 · 点句出译文</view>
+    <!-- 今日一句词卡：底部浮层（跟课文详情页同一形态，独立 .q-tip 前缀避免跨页样式耦合）
+         单槽位：只在 overlay.kind === 'wordtip' 时渲染，与抽屉互斥（同一个 overlay 字段） -->
+    <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="q-tip">
+      <view class="q-tip-head">
+        <view class="q-tip-w">{{overlay.word}}</view>
+        <view class="q-tip-tools">
+          <!-- 🔴 AC-3.1 / AC-3.3 / AC-3.4（2026-11-26 盲测 D-1 修）：词卡朗读按钮是圆形播放图标，
+               不是文字「朗读 / 停止」。形态照原型 `.btn-icon`：未播 ▶ 三角、播放中 ■ 方块，CSS 画。
+               热区 88rpx ⊃ 视觉圆 60rpx ⊃ 图标 ≈32rpx；aria-label 随形态切换
+               （文案真源 utils/line-actions 的 ARIA_WORD_PLAY / ARIA_WORD_STOP）。 -->
+          <view class="q-tip-btn q-tip-play {{quoteWordPlaying ? 'on' : ''}}" catchtap="speakQuoteWord"
+                hover-class="q-tip-play-hv" aria-role="button"
+                aria-label="{{quoteWordPlaying ? ariaStopWord : ariaPlayWord}}">
+            <view class="q-tip-ico"></view>
+          </view>
+          <view class="q-tip-btn" catchtap="collectQuoteWord">收藏</view>
+          <view class="q-tip-x" catchtap="closeQuoteTip">✕</view>
+        </view>
+      </view>
+      <view wx:if="{{overlay.phonetic}}" class="q-tip-p">{{overlay.phonetic}}</view>
+      <view wx:if="{{overlay.pos}}" class="q-tip-pos">{{overlay.pos}}</view>
+      <view wx:if="{{overlay.none}}" class="q-tip-none">暂无释义（课文词汇表未收录该词）</view>
+      <view wx:elif="{{overlay.def}}" class="q-tip-def">{{overlay.def}}</view>
+      <view wx:if="{{overlay.example}}" class="q-tip-ex">{{overlay.example}}</view>
     </view>
-    <text class="nc-go">›</text>
-  </view>
 
-  <block wx:if="{{flags.chat}}">
-  <!-- 最近对话（会话维度）：三态（骨架 / 有会话 / 空态）+ 异常态；点卡片恢复该会话 -->
-  <view class="sec-t">最近对话<text wx:if="{{!recentLoading && !recent && !recentError}}" class="em">暂无记录</text></view>
+    <!-- 长按动作抽屉（变体 B）：**复用** components/action-drawer，本页不画任何抽屉结构。
+         7 个属性 + 5 个事件与方案 §3.1/§3.2 契约逐字对齐；hidden 由 overlay 单槽位驱动。
+         🔴 不要在页面里出现第二份 .ad-* 结构 / 第二份 ACTIONS 表：
+            动作顺序（朗读此句 → 收藏此句 → 朗读单词 → 收藏单词）只有 utils/line-actions 一份真源。
+         🔴 `lift-bottom` 只在本页开：首页是 tabBar 页，自定义 tabBar 是框架层独立根节点，
+            z-index 压不过它，只能把抽屉与遮罩一起抬到 tabBar 高度之上（细节见
+            components/action-drawer/index.wxss 的 .ad-lift 段）。
+            **详情页不许跟着开** —— 详情页无 tabBar，抬高会凭空多出一条空白且遮罩盖不住那条带。 -->
+    <action-drawer
+      lift-bottom="{{true}}"
+      visible="{{overlay && overlay.kind === 'drawer'}}"
+      scope="{{overlay && overlay.kind === 'drawer' ? overlay.scope : ''}}"
+      line-text="{{overlay && overlay.kind === 'drawer' ? overlay.lineText : ''}}"
+      line-index="{{overlay && overlay.kind === 'drawer' ? overlay.lineIndex : -1}}"
+      word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
+      word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
+      phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+      bind:speak-line="onDrawerSpeakLine"
+      bind:speak-word="onDrawerSpeakWord"
+      bind:collect-line="onDrawerCollectLine"
+      bind:collect-word="onDrawerCollectWord"
+      bind:close="onDrawerClose"
+    />
 
-  <!-- 加载骨架：尺寸对齐真实卡片，切换不跳变 -->
-  <view wx:if="{{recentLoading}}" class="w-recent">
-    <view class="wr-item">
-      <view class="sk sk-t"></view>
-      <view class="sk sk-c1"></view>
-      <view class="sk sk-c2"></view>
-      <view class="sk sk-m"></view>
+    <!-- 常用功能：注册表 pinned 项（默认 NCE 常驻；收藏可在发现页「添加常用」） -->
+    <view class="sec-t">常用功能</view>
+    <view class="fcard" wx:for="{{features}}" wx:key="id" data-path="{{item.path}}" bindtap="goFeature">
+      <view class="fc-ic ic-{{item.iconClass}}">{{item.icon}}</view>
+      <view class="fc-tx">
+        <view class="fc-b">{{item.title}}</view>
+        <view class="fc-e">{{item.desc}}</view>
+      </view>
+      <text class="fc-go">›</text>
     </view>
-  </view>
+    <view class="more" bindtap="goMore">更多功能 ›</view>
 
-  <view wx:elif="{{recent}}" class="w-recent">
-    <!-- 有会话：最近一次会话卡片（标题 + 预览 + 时间） -->
-    <view class="wr-item" data-id="{{recent.id}}" bindtap="openConv">
-      <view class="wr-q">{{recent.title}}</view>
-      <view wx:if="{{recent.preview}}" class="wr-c">{{recent.preview}}</view>
-      <view class="wr-m">{{recent.timeText}}</view>
-    </view>
-  </view>
-
-  <view wx:else class="w-recent">
-    <!-- 接口异常：可点重试（区别于真·空态） -->
-    <view wx:if="{{recentError}}" class="empty retry" bindtap="loadRecent">加载失败，点此重试</view>
-    <!-- 真·空态：保留原空态文案（中性化，不出现 AI 字样） -->
-    <view wx:else class="empty">还没有记录。和伙伴聊一次后会出现在这里；登录后换设备也能接着看。</view>
-  </view>
-
-  <view class="hint">直接对话，进来就能用 —— 不需要先学会怎么用。</view>
-  </block>
-
-  <!-- 默认关态：今日一句 + NCE 常驻卡 + 提示语（学习进度卡本版撤下，见 PRD v0.4「后续迭代」） -->
-  <view wx:else class="hint">每天一句，稳步进阶。</view>
+    <view class="hint">每天一句，稳步进阶。</view>
   </block>
 </view>

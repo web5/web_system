@@ -31,7 +31,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
     it('未启用 → skipped（行为等同人工同步现状）', async () => {
       const { cloud } = makeCloud({ enabled: false });
       const svc = new EnvSplitWriterService(cloud);
-      const r = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v1' });
+      const r = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee01' });
       expect(r.outcome).toBe('skipped');
       expect(cloud.query).not.toHaveBeenCalled();
     });
@@ -39,7 +39,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
     it('非 prod 环境 → skipped（dev/local 数据留本地库）', async () => {
       const { cloud } = makeCloud({ enabled: true });
       const svc = new EnvSplitWriterService(cloud);
-      const r = await svc.mirrorPointer({ env: 'dev', moduleKey: 'portal', currentVersion: 'v1' });
+      const r = await svc.mirrorPointer({ env: 'dev', moduleKey: 'portal', currentVersion: 'c0ffee01' });
       expect(r.outcome).toBe('skipped');
       expect(r.reason).toContain('dev');
       expect(cloud.query).not.toHaveBeenCalled();
@@ -75,22 +75,56 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
     it('prod 且云库无历史行 → previous_version 为 null', async () => {
       const { cloud, calls } = makeCloud({ enabled: true });
       const svc = new EnvSplitWriterService(cloud);
-      await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v1' });
+      await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee01' });
       expect(calls[1].params[3]).toBeNull();
     });
 
     it('重复镜像相同版本时保留云库原 previous_version，仍重试镜像写入', async () => {
       const { cloud, calls, setQuery } = makeCloud({ enabled: true });
       setQuery(async (sql: string) => sql.startsWith('SELECT')
-        ? [{ current_version: 'v2', previous_version: 'v1' }]
+        ? [{ current_version: 'c0ffee02', previous_version: 'c0ffee01' }]
         : []);
       const svc = new EnvSplitWriterService(cloud);
 
-      const result = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v2' });
+      const result = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee02' });
 
       expect(result.outcome).toBe('ok');
       expect(calls).toHaveLength(2);
-      expect(calls[1].params.slice(0, 4)).toEqual(['shell', 'prod', 'v2', 'v1']);
+      expect(calls[1].params.slice(0, 4)).toEqual(['shell', 'prod', 'c0ffee02', 'c0ffee01']);
+    });
+
+    it('#9027：带模板前缀的版本落云库前归一（current 只存纯 commit，previous 也归一）', async () => {
+      const { cloud, calls, setQuery } = makeCloud({ enabled: true });
+      setQuery(async (sql: string) =>
+        sql.startsWith('SELECT')
+          ? [{ current_version: 'portal/a1b2c3d4', previous_version: 'portal/0912abc3' }]
+          : [],
+      );
+      const svc = new EnvSplitWriterService(cloud);
+
+      const r = await svc.mirrorPointer({
+        env: 'prod',
+        moduleKey: 'portal',
+        currentVersion: 'portal/b6ec9950',
+      });
+
+      expect(r.outcome).toBe('ok');
+      expect(calls[1].params.slice(0, 4)).toEqual(['portal', 'prod', 'b6ec9950', 'a1b2c3d4']);
+    });
+
+    it('#9027：云库已是同 commit 的脏值 → current 写成纯 commit 自愈，previous 保留并归一', async () => {
+      const { cloud, calls, setQuery } = makeCloud({ enabled: true });
+      setQuery(async (sql: string) =>
+        sql.startsWith('SELECT')
+          ? [{ current_version: 'portal/b6ec9950', previous_version: 'portal/a1b2c3d4' }]
+          : [],
+      );
+      const svc = new EnvSplitWriterService(cloud);
+
+      await svc.mirrorPointer({ env: 'prod', moduleKey: 'portal', currentVersion: 'b6ec9950' });
+
+      // 不能变成 previous_version = portal/b6ec9950（同版本自指）
+      expect(calls[1].params.slice(0, 4)).toEqual(['portal', 'prod', 'b6ec9950', 'a1b2c3d4']);
     });
 
     it('严格模式：prod 写云库失败 → 抛出（任务必须红掉，不能静默不一致）', async () => {
@@ -98,7 +132,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       (cloud.query as jest.Mock).mockRejectedValue(new Error('ETIMEDOUT'));
       const svc = new EnvSplitWriterService(cloud);
       await expect(
-        svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v1' }),
+        svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee01' }),
       ).rejects.toThrow(/prod 指针未生效/);
     });
 
@@ -106,7 +140,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       const { cloud } = makeCloud({ enabled: true, strict: false });
       (cloud.query as jest.Mock).mockRejectedValue(new Error('ETIMEDOUT'));
       const svc = new EnvSplitWriterService(cloud);
-      const r = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'v1' });
+      const r = await svc.mirrorPointer({ env: 'prod', moduleKey: 'shell', currentVersion: 'c0ffee01' });
       expect(r.outcome).toBe('failed');
       expect(r.error).toContain('ETIMEDOUT');
     });
@@ -119,7 +153,7 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       const r = await svc.mirrorLegacyPointer({
         env: 'prod',
         moduleKey: 'auth-service',
-        currentVersion: 'v1',
+        currentVersion: 'c0ffee01',
       });
       expect(r.outcome).toBe('ok');
       expect(calls[0].sql).toContain('INSERT INTO deploy_deployments');
@@ -129,14 +163,14 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
       const { cloud } = makeCloud({ enabled: true });
       (cloud.query as jest.Mock).mockRejectedValue(new Error('conn lost'));
       const svc = new EnvSplitWriterService(cloud);
-      const r = await svc.mirrorLegacyPointer({ env: 'prod', moduleKey: 'x', currentVersion: 'v1' });
+      const r = await svc.mirrorLegacyPointer({ env: 'prod', moduleKey: 'x', currentVersion: 'c0ffee01' });
       expect(r.outcome).toBe('failed');
     });
 
     it('dev 环境不镜像', async () => {
       const { cloud } = makeCloud({ enabled: true });
       const svc = new EnvSplitWriterService(cloud);
-      const r = await svc.mirrorLegacyPointer({ env: 'dev', moduleKey: 'x', currentVersion: 'v1' });
+      const r = await svc.mirrorLegacyPointer({ env: 'dev', moduleKey: 'x', currentVersion: 'c0ffee01' });
       expect(r.outcome).toBe('skipped');
       expect(cloud.query).not.toHaveBeenCalled();
     });
@@ -208,8 +242,8 @@ describe('EnvSplitWriterService（按环境分流 → 云数据库镜像写）',
     it('同一「表 + 唯一键」多次写只保留最后一次（去重，避免公网写放大）', async () => {
       const { cloud, calls } = makeCloud({ enabled: true });
       const svc = new EnvSplitWriterService(cloud);
-      svc.mirrorRow('deploy_services', { key: 'svc-a', name: 'v1' });
-      svc.mirrorRow('deploy_services', { key: 'svc-a', name: 'v2' });
+      svc.mirrorRow('deploy_services', { key: 'svc-a', name: 'c0ffee01' });
+      svc.mirrorRow('deploy_services', { key: 'svc-a', name: 'c0ffee02' });
       svc.mirrorRow('deploy_services', { key: 'svc-a', name: 'v3' });
       await svc.flush();
       const upserts = calls.filter((c) => c.sql.includes('INSERT INTO deploy_services'));

@@ -2,6 +2,9 @@
  * 微信小程序「开发版出码 + 企业微信推送」一键脚本
  * 使用方法:
  *   MINIPROGRAM_CI_PATH=~/mp-ci/node_modules node scripts/preview-push.js
+ *   # 门禁参数原样透传给 scripts/preview.js（判据在 preflight.js，执行点在 preview.js 本体）：
+ *   node scripts/preview-push.js --expect-version 1.0.18 --expect-sha 2f344b8f \
+ *       --require-dir '^web_system-<任务号>$'
  *
  * 解决什么问题:
  *   每次出开发版二维码后要人工处理两件重复劳动:
@@ -15,7 +18,16 @@
  * 与 preview.js 的关系:
  *   不重写出码逻辑。通过 spawn 子进程调 scripts/preview.js（注入 IPv4/清代理环境），
  *   出码成功后读 .ci-output/preview-qr.meta.json 拿版本/gitSha/有效期做企微推送。
- *   preview.js 既有行为零改动。
+ *
+ * 🔴 出码前门禁（P1–P6）不在这里（台账 9122）：
+ *   本脚本**不再自带**任何门禁判据。判据只有 scripts/preflight.js 一份，执行点只有
+ *   scripts/preview.js 本体一份 —— 本脚本 spawn 它时把 --expect-version / --expect-sha /
+ *   --require-dir / --allow-any-dir / --allow-dirty / --skip-preflight **原样透传**，
+ *   于是「preview-push → preview.js」与「npm run preview」过的是同一道门。
+ *   此前这里自带的 preflight() 只查「私钥在不在 / miniprogram-ci 能不能加载 / wecom-cli 授权」，
+ *   既不含 P1 版本对账、也不含 P4 目录白名单 —— 同一条规矩两套实现，必漂。
+ *   （这批判据重复已在 9122 删除；此处保留的只有「推送所需的运行时前置」，
+ *    那是 push 这条链路自己的事，不是门禁判据。）
  *
  * 可选环境变量（除 preview.js 支持的全部变量外）:
  *   WECOM_PUSH=0      只出码，不做企微推送（预检也会跳过 wecom-cli 授权检查）
@@ -25,13 +37,15 @@
  * 降级原则:
  *   企微推送失败（未授权/找不到会话/上传或发送失败）不影响出码产物，
  *   脚本降级为「只出本地卡片」，末尾总结如实报告推送失败原因，退出码仍为 0。
- *   只有预检失败或出码失败才 exit 1。
+ *   只有推送运行时前置失败、门禁失败或出码失败才 exit 1。
  */
 
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawnSync, execFileSync } = require('child_process');
+// 只借一个常量：GATE_ENV（门禁状态环境变量名）。判据一律不从这里拿。
+const { GATE_ENV } = require('./preflight');
 
 const ROOT = path.join(__dirname, '..');
 const PREVIEW_SCRIPT = path.join(__dirname, 'preview.js');
@@ -48,22 +62,26 @@ function fail(title, lines) {
   process.exit(1);
 }
 
-/* ---------------- 1. 预检 ---------------- */
+/* ---------------- 1. 推送运行时前置（**不是门禁**） ---------------- */
 
-function preflight() {
-  console.log('[PreviewPush] ── 预检 ──');
+/**
+ * 只查「推送这条链路自己」的运行时前置，两件：
+ *   1.1 miniprogram-ci 可加载（本仓库是 pnpm monorepo，提升的包与它的编译链不兼容，需隔离安装）
+ *   1.2 wecom-cli 已授权（仅 WECOM_PUSH 开启时）
+ *
+ * 🔴 这里**故意不查**下面这些 —— 它们是门禁判据，唯一实现在 scripts/preflight.js，
+ *    由 preview.js 本体在出码前执行（本脚本 spawn 它时透传 --expect-* 等参数即可）：
+ *      · 包根私钥是否存在 / 是否会被打进包（P2）
+ *      · 版本号是否对得上（P1）
+ *      · worktree 目录是否在发布白名单（P4）
+ *    以前本函数叫 preflight() 且自己实现了一份「只查私钥 + 可加载 + 授权」的判据，
+ *    于是同一条规矩有了两套实现：走 preview.js 的路径查 P1/P4，走本脚本的路径不查
+ *    —— 台账 9122 已把这份删掉（判据只剩 preflight.js 一份）。
+ */
+function checkPushRuntime() {
+  console.log('[PreviewPush] ── 推送运行时前置（非门禁；出码门禁由 preview.js 本体执行）──');
 
-  // 1.1 private.key
-  const keyPath = path.join(ROOT, 'private.key');
-  if (!fs.existsSync(keyPath)) {
-    fail('缺少私钥 private.key', [
-      '请从公众平台下载「小程序代码上传密钥」，保存为 apps/dachengzi-minigram/private.key',
-      '路径: mp.weixin.qq.com → 开发管理 → 开发设置 → 小程序代码上传',
-    ]);
-  }
-  console.log('[PreviewPush] ✅ private.key 存在');
-
-  // 1.2 miniprogram-ci 可加载（与 preview.js 同一套隔离安装约定）
+  // 1.1 miniprogram-ci 可加载（与 preview.js 同一套隔离安装约定）
   const ciRoot = process.env.MINIPROGRAM_CI_PATH;
   try {
     require.resolve(ciRoot ? path.join(ciRoot, 'miniprogram-ci') : 'miniprogram-ci');
@@ -77,7 +95,7 @@ function preflight() {
   }
   console.log(`[PreviewPush] ✅ miniprogram-ci 可加载（${ciRoot || '仓库 node_modules'}）`);
 
-  // 1.3 wecom-cli 已授权（仅推送开启时检查）
+  // 1.2 wecom-cli 已授权（仅推送开启时检查）
   if (WECOM_PUSH) {
     let status;
     try {
@@ -106,11 +124,38 @@ function preflight() {
 
 /* ---------------- 2. 出码（spawn preview.js，注入 IPv4 + 清代理环境） ---------------- */
 
+/**
+ * 需要原样透传给 preview.js 的**门禁参数**（本脚本不解释它们，只是搬运工）：
+ * preview.js 本体用 preflight.parsePreflightArgs 解析同一批参数，判据全在 preflight.js。
+ * 带上「值型 / 布尔型」区分，避免把下一个 token 误当参数值吞掉。
+ */
+const GATE_VALUE_FLAGS = ['--expect-version', '--expect-sha', '--require-dir'];
+const GATE_BOOL_FLAGS = ['--allow-any-dir', '--allow-dirty', '--skip-preflight'];
+
+/** 从 argv 里挑出门禁相关参数并以 argv 形态返回（--x v 与 --x=v 两种写法都支持）。 */
+function gateArgs(argv) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    const valueFlag = GATE_VALUE_FLAGS.find((f) => a === f || a.startsWith(`${f}=`));
+    if (valueFlag) {
+      out.push(a);
+      if (a === valueFlag) out.push(argv[++i]); // 值型：把下一个 token 一起带上
+      continue;
+    }
+    if (GATE_BOOL_FLAGS.includes(a)) out.push(a);
+  }
+  return out;
+}
+
 function runPreview() {
   console.log('');
   console.log('[PreviewPush] ── 出码（复用 scripts/preview.js） ──');
   const env = { ...process.env };
   PROXY_VARS.forEach((k) => delete env[k]);
+  // 🔴 本脚本**没有**跑过门禁，所以绝不能让下游以为「上游已跑过」：
+  //    父 shell 里残留的 GATE_ENV=done 必须清掉，否则 preview.js 会跳过门禁（等于开门）。
+  delete env[GATE_ENV];
   if (FORCE_IPV4) {
     // 本机出口默认 IPv6，公众平台白名单只认已加的 IPv4。
     // --dns-result-order=ipv4first 让 dns.lookup 优先返回 v4 地址，miniprogram-ci 内部请求随之走 v4。
@@ -122,7 +167,11 @@ function runPreview() {
   const cleared = PROXY_VARS.filter((k) => process.env[k]);
   console.log('[PreviewPush] 已清除代理环境变量: ' + (cleared.join(', ') || '(本进程无代理变量)'));
 
-  const r = spawnSync(process.execPath, [PREVIEW_SCRIPT], { cwd: ROOT, env, stdio: 'inherit' });
+  // 门禁参数原样透传：判据在 preflight.js，执行点在 preview.js 本体（本脚本不解释、不判定）
+  const forwarded = gateArgs(process.argv.slice(2));
+  if (forwarded.length) console.log(`[PreviewPush] 门禁参数透传给 preview.js: ${forwarded.join(' ')}`);
+
+  const r = spawnSync(process.execPath, [PREVIEW_SCRIPT, ...forwarded], { cwd: ROOT, env, stdio: 'inherit' });
   if (r.error) fail('preview.js 启动失败', [String(r.error.message)]);
   if (r.status !== 0) {
     fail('出码失败（preview.js 退出码 ' + r.status + '）', [
@@ -262,7 +311,7 @@ function pushToWecom(meta, qrPng) {
 /* ---------------- 主流程 ---------------- */
 
 function main() {
-  preflight();
+  checkPushRuntime();
   runPreview();
 
   const { meta, qrPng } = readMeta();

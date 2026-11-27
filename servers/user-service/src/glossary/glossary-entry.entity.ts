@@ -28,9 +28,9 @@ export class GlossaryEntryEntity {
   @Column({ type: 'varchar', length: 64, comment: 'enMain 归一化 sha256 截 64' })
   contentHash: string;
 
-  /** chat=聊天页翻译卡片；translate=翻译结果页 */
-  @Column({ type: 'varchar', length: 16, comment: '来源 chat/translate' })
-  sourceType: string;
+  /** 来源标记，自由字符串（如 nce / chat / translate） */
+  @Column({ type: 'varchar', length: 64, comment: '来源标记，自由字符串' })
+  tag: string;
 
   @Column({ type: 'text', nullable: true, comment: '中文原文' })
   sourceText: string | null;
