@@ -72,7 +72,7 @@ module.exports = {
 |---|---|
 | 微信开发者工具 | 仅 macOS 本地可跑（GUI 自动化）；默认 cli 路径 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli` |
 | 服务端口 | 开发者工具「设置 → 安全设置 → 服务端口」必须开启，否则全部用例 SKIP |
-| 环境变量 | `WECHAT_DEVTOOLS_CLI`（覆盖 cli 路径）、`MP_AUTOMATOR_LAUNCH_TIMEOUT`（慢机调大，默认 20000ms）、`MP_E2E_REQUIRE_ENV=1`（严格模式，见第④章） |
+| 环境变量 | `WECHAT_DEVTOOLS_CLI`（覆盖 cli 路径）、`MP_AUTOMATOR_LAUNCH_TIMEOUT`（慢机调大，默认 20000ms）、`MP_E2E_REQUIRE_ENV=1`（严格模式，见第④章）、`MP_E2E_EXPECT_SHA`（版本一致性硬判据，默认不设=只打印不判定，见第⑥章「版本一致性」） |
 | CI | 不适用（devtools GUI 仅本地）。E2E 不进 CI 门禁 |
 
 字段优先级：**环境变量 > e2e.config.js > 包内默认值**（仅 cliPath / launchTimeoutMs 支持环境变量覆盖）。
@@ -155,7 +155,7 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 
 ---
 
-## ⑥ KEYS 与漂移守卫
+## ⑥ 静态守卫：KEYS 漂移、page 注册与版本一致性
 
 **KEYS 单一真源的两级做法**：
 
@@ -169,6 +169,45 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 - **Follow-up（不进 M 档）**：产品侧把 storage key 收敛为纯 JS 常量模块，产品 TS 与 e2e.config.js 同源 require，单独立项。
 
 **约定**：用例卡与 case 文件中引用 storage key 一律用 e2e.config.js 别名（`ctx.KEYS.<别名>`），**禁字面量**（漂移守卫与卡片规范 M1/M4 的共同前提）。
+
+### 版本一致性（`MP_E2E_EXPECT_SHA`）
+
+**要解决的问题**：E2E 说「全 PASS」时，你得能回答「测的是哪份代码」。本包此前**从不核对 git HEAD**
+（`projectPath` 只是 `e2e.config.js` 所在目录，测哪些文件由 cwd 决定）。2026-11-27 事故里两个 worktree
+并存（坏的 diag / 好的 fix），开发者工具开着 A 目录、命令跑在 B 目录 → 结论一度错判。
+
+runner 在第一道静态守卫**之前**打印一行版本信息（`scripts/lib/git-identity.js` 提供判据）：
+
+```
+[mp-e2e] 版本：feat/xxx@abc1234
+[mp-e2e] 版本：（工作区有未提交改动，测的不是已提交版本）   ← 仅当工作区脏时追加
+```
+
+| 情形 | 行为 |
+|---|---|
+| 未设 `MP_E2E_EXPECT_SHA`（**默认**） | **只打印，不判定** —— 与引入本守卫前 100% 一致，不会让任何人变红 |
+| 非 git 工作区 / git 不可用 + 未设变量 | 打印「无法读取」，不失败 |
+| 工作区脏（dirty） | 只追加一行 warn，**不失败**（现网开发流长期有未提交改动） |
+| 设了且匹配 | 打印「版本一致性 OK」；sha 前缀比较、大小写不敏感，逗号分隔多候选命中任一即通过 |
+| 设了且不匹配 | **FAIL-fast（exit 1）**，文案含实际 sha / 期望候选 / 被测目录绝对路径 / 修法 |
+| 设了但读不到 git | **FAIL-fast（exit 1）** —— 声明了期望就必须能核对，不许静默放过 |
+
+推荐用法：
+
+```bash
+# 本地回归：确认测的就是当前检出的那份代码
+MP_E2E_EXPECT_SHA=$(git rev-parse --short HEAD) pnpm --filter <app> test:e2e
+
+# 多 worktree 排查：锁死到某个已提交版本（传错必须红，不许「跑了但测的是别的」）
+MP_E2E_EXPECT_SHA=0aafdbfa pnpm --filter <app> test:e2e
+
+# 期望两个基线之一都算合法
+MP_E2E_EXPECT_SHA=0aafdbfa,8f2bcb62 pnpm --filter <app> test:e2e
+```
+
+注意：本守卫核对的是 **`projectPath`（开发者工具打开的那个目录）**，不是 cwd —— 多 worktree 并存时这两件事
+是两个独立事实。另：`scripts/lib/git-identity.js` 是 `miniprogram-preflight.js` P3 判据的抽取副本，
+preflight 侧同名实现尚待单独收敛（本轮刻意不动 52KB 出码核心）。
 
 ---
 
