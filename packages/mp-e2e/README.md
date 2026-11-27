@@ -127,6 +127,7 @@ module.exports = {
 |---|---|---|
 | 全部 PASS（BLOCKED 不计失败） | 四态汇总表 | **0** |
 | ≥1 条 FAIL（含 preflight 静态守卫不通过、配置错误） | 汇总表 + 失败详情 | **1** |
+| 整卡全 BLOCKED（用例 status=BLOCKED 且 steps 全 BLOCKED） | warning（默认）/ `console.error`（开关打开） | **0**（默认，BLOCKED 不计失败）/ **1**（`MP_E2E_BLOCKED_AS_FAIL=1`） |
 | 环境不可用（devtools 未装/服务端口未开/launch 超时） | 醒目横幅 + 全部用例标 SKIP + 排查提示 | **0**（默认）/ **2**（`MP_E2E_REQUIRE_ENV=1`） |
 | 零用例命中（casesDir 空 / `--filter` 零命中） | 错误提示（拒绝静默绿） | **1**（`MP_E2E_REQUIRE_ENV=1` 时 **2**） |
 
@@ -142,6 +143,10 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 ---
 
 ## ⑤ 已知限制
+
+> **整卡全 BLOCKED 开关**：若某用例 steps 全为 BLOCKED（无有效 PASS/FAIL），说明该功能在本基建下测不了。
+> 默认仅打 warning、exit 0（不打破存量合法 BLOCKED，如① E3 同卡仍有 E1/E2 PASS）；
+> 设 `MP_E2E_BLOCKED_AS_FAIL=1` 则打 `console.error` 并 exit 1，拒绝静默通过。判据见附录 A §3.4。
 
 1. **① close()→launch() 之间 devtools 自动化会清空 wx storage**（仅 api_base 因 onLaunch 重写残留）→ 跨进程持久化用例判 `BLOCKED`，不当产品 bug（E3 先例）。⚠️ 2026-11-11 探针实测：现版 devtools 可能已不再清空（close→launch 后 appearance_radius 仍在），待复核——复核确认前 BLOCKED 口径不变。
 2. **② 仅 macOS 本地可跑**；需开发者工具「设置 → 安全设置 → 服务端口」开启；CI 不适用。
