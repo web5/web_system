@@ -72,7 +72,7 @@ module.exports = {
 |---|---|
 | 微信开发者工具 | 仅 macOS 本地可跑（GUI 自动化）；默认 cli 路径 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli` |
 | 服务端口 | 开发者工具「设置 → 安全设置 → 服务端口」必须开启，否则全部用例 SKIP |
-| 环境变量 | `WECHAT_DEVTOOLS_CLI`（覆盖 cli 路径）、`MP_AUTOMATOR_LAUNCH_TIMEOUT`（慢机调大，默认 20000ms）、`MP_E2E_REQUIRE_ENV=1`（严格模式，见第④章）、`MP_E2E_EXPECT_SHA`（版本一致性硬判据，默认不设=只打印不判定，见第⑧章） |
+| 环境变量 | `WECHAT_DEVTOOLS_CLI`（覆盖 cli 路径）、`MP_AUTOMATOR_LAUNCH_TIMEOUT`（慢机调大，默认 20000ms）、`MP_E2E_REQUIRE_ENV=1`（严格模式，见第④章）、`MP_E2E_EXPECT_SHA`（版本一致性硬判据，默认不设=只打印不判定，见第⑥章「版本一致性」） |
 | CI | 不适用（devtools GUI 仅本地）。E2E 不进 CI 门禁 |
 
 字段优先级：**环境变量 > e2e.config.js > 包内默认值**（仅 cliPath / launchTimeoutMs 支持环境变量覆盖）。
@@ -155,7 +155,7 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 
 ---
 
-## ⑥ KEYS 与漂移守卫
+## ⑥ 静态守卫：KEYS 漂移、page 注册与版本一致性
 
 **KEYS 单一真源的两级做法**：
 
@@ -170,39 +170,7 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 
 **约定**：用例卡与 case 文件中引用 storage key 一律用 e2e.config.js 别名（`ctx.KEYS.<别名>`），**禁字面量**（漂移守卫与卡片规范 M1/M4 的共同前提）。
 
----
-
-## ⑦ FAQ
-
-**Q：pollPath 为什么吞掉 currentPage 的竞态报错？**
-页面切换期间 webview 重建，getCurrentPage 偶发 rawPath 竞态报错，属过渡期噪声；轮询重试即可，
-竞态不是信号。不要把「偶尔超时」当产品 bug——真超时（12s）会抛错带 expected/actual。
-
-**Q：为什么不用 automator 的 changeRoute / page.callMethod？**
-changeRoute 内部前后各调一次 currentPage，webview 重建期会抛 rawPath 竞态——故导航封装直连
-wx 方法 + 轮询当前页。page.callMethod 对本项目 Proxy 页面失效（this.xxx is not a function）——
-调页面方法用 `mp.evaluate(() => { getCurrentPages().pop().someMethod(); })`（D3/F3 先例）。
-
-**Q：BLOCKED 什么时候用？**
-仅当**同时满足**：① 依赖的能力被第⑤章「已知限制」明文条目挡住（引用条目编号）；② 已确认非产品 bug
-（附证据）；③ 同用例内仍有 ≥1 步正常 PASS/FAIL。详见附录 A §3.4。环境问题不是 BLOCKED，是 SKIP（runner 判）。
-
-**Q：用例间会互相污染 storage 吗？**
-runner 对每条用例独立 launch/close；但同一 devtools 项目内 storage **key 跨会话保留**（2026-11-27
-复核：已知限制①指「会话内写入不跨 launch 持久化、读到项目快照旧值」，并非清空 key）。用例若写了
-垃圾 key，自行在用例内清理或断言后清（F 用例的垃圾 key 即被产品逻辑清掉）。
-
-**Q：E 用例内部 close→launch 后，runner 还会 close 吗？**
-runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 launch 的新会话自行 close（E3 先例）。
-
-**Q：切换系统代理会影响跑测吗？**
-不影响。automator 与 devtools 之间走 127.0.0.1 本地端口，不经过系统代理（macOS 代理例外列表
-默认含 `127.*`/`localhost`）；2026-11-11 实测代理切换前后 PASS/FAIL/BLOCKED 分布一致。
-唯一例外：代理工具开 TUN/增强模式劫持回环时 automator launch 可能异常——遇到先关 TUN 再复跑。
-
----
-
-## ⑧ 版本一致性（`MP_E2E_EXPECT_SHA`）
+### 版本一致性（`MP_E2E_EXPECT_SHA`）
 
 **要解决的问题**：E2E 说「全 PASS」时，你得能回答「测的是哪份代码」。本包此前**从不核对 git HEAD**
 （`projectPath` 只是 `e2e.config.js` 所在目录，测哪些文件由 cwd 决定）。2026-11-27 事故里两个 worktree
@@ -240,6 +208,36 @@ MP_E2E_EXPECT_SHA=0aafdbfa,8f2bcb62 pnpm --filter <app> test:e2e
 注意：本守卫核对的是 **`projectPath`（开发者工具打开的那个目录）**，不是 cwd —— 多 worktree 并存时这两件事
 是两个独立事实。另：`scripts/lib/git-identity.js` 是 `miniprogram-preflight.js` P3 判据的抽取副本，
 preflight 侧同名实现尚待单独收敛（本轮刻意不动 52KB 出码核心）。
+
+---
+
+## ⑦ FAQ
+
+**Q：pollPath 为什么吞掉 currentPage 的竞态报错？**
+页面切换期间 webview 重建，getCurrentPage 偶发 rawPath 竞态报错，属过渡期噪声；轮询重试即可，
+竞态不是信号。不要把「偶尔超时」当产品 bug——真超时（12s）会抛错带 expected/actual。
+
+**Q：为什么不用 automator 的 changeRoute / page.callMethod？**
+changeRoute 内部前后各调一次 currentPage，webview 重建期会抛 rawPath 竞态——故导航封装直连
+wx 方法 + 轮询当前页。page.callMethod 对本项目 Proxy 页面失效（this.xxx is not a function）——
+调页面方法用 `mp.evaluate(() => { getCurrentPages().pop().someMethod(); })`（D3/F3 先例）。
+
+**Q：BLOCKED 什么时候用？**
+仅当**同时满足**：① 依赖的能力被第⑤章「已知限制」明文条目挡住（引用条目编号）；② 已确认非产品 bug
+（附证据）；③ 同用例内仍有 ≥1 步正常 PASS/FAIL。详见附录 A §3.4。环境问题不是 BLOCKED，是 SKIP（runner 判）。
+
+**Q：用例间会互相污染 storage 吗？**
+runner 对每条用例独立 launch/close；但同一 devtools 项目内 storage **key 跨会话保留**（2026-11-27
+复核：已知限制①指「会话内写入不跨 launch 持久化、读到项目快照旧值」，并非清空 key）。用例若写了
+垃圾 key，自行在用例内清理或断言后清（F 用例的垃圾 key 即被产品逻辑清掉）。
+
+**Q：E 用例内部 close→launch 后，runner 还会 close 吗？**
+runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 launch 的新会话自行 close（E3 先例）。
+
+**Q：切换系统代理会影响跑测吗？**
+不影响。automator 与 devtools 之间走 127.0.0.1 本地端口，不经过系统代理（macOS 代理例外列表
+默认含 `127.*`/`localhost`）；2026-11-11 实测代理切换前后 PASS/FAIL/BLOCKED 分布一致。
+唯一例外：代理工具开 TUN/增强模式劫持回环时 automator launch 可能异常——遇到先关 TUN 再复跑。
 
 ---
 

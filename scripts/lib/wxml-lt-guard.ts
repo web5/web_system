@@ -2,17 +2,37 @@
 /**
  * wxml-lt-guard — 「WXML 注释里裸 `<` / 注释边界字面量 / 注释落在开始标签内部」判据的**唯一实现**
  *
- * 三条判据（R1 / R2 / R3）连同文件收集都住在本文件；两个小程序各有一个入口测试：
- *   `apps/dachengzi-minigram/tests/wxml-comment-lt-guard.test.ts`
- *   `apps/kedou-ai-minigram/tests/wxml-comment-lt-guard.test.ts`
- * 入口只做 import + 断言，**不要在这里之外再抄一份判据**。
+ * 三条判据（R1 / R2 / R3）、扫描面、以及**六组测试用例**都住在本文件；
+ * 两个小程序的测试文件只做**接线**（各 1 个 `registerWxmlLtGuardSpecs({ appRoot, … })` 调用）：
  *
- * 为什么必须共享而不是各 app 各抄一份：
+ *     apps/dachengzi-minigram/tests/wxml-comment-lt-guard.test.ts
+ *     apps/kedou-ai-minigram/tests/wxml-comment-lt-guard.test.ts
+ *
+ * 🔴 纪律：**app 侧测试文件不许写断言、不许复制规则**。判据改一处，两个 app 同时生效。
+ *
+ * 为什么必须共享、且必须两个 app 各一个入口：
  *   `scripts/ci/changed-packages.sh` 按 diff 归属的包逐个跑 test（`:25-27` 取 `apps/<pkg>`，
- *   `:86-97` 只对该包跑 test）——kedou 有改动时只跑 kedou 的 tests，dachengzi 反之。
- *   两个 app 各要一个入口；规则若写两份，改判据时必然漏改一处、慢慢漂移（与
- *   `scripts/lib/no-dev-copy-in-wxml.ts` 同一个理由）。
- *   R3 原先只写在大橙子侧，科豆完全无覆盖 —— 本次上移正是为了补这个洞。
+ *   `:86-97` 只对该包跑 test）—— kedou 有改动时只跑 kedou 的 tests，dachengzi 反之。
+ *   所以两个 app 各要一个入口；但规则若写两份，改判据时必然漏改一处、慢慢漂移。
+ *   同一条理由写在 `scripts/lib/no-dev-copy-in-wxml.ts` 里（本文件的结构与它对齐：
+ *   纯函数分离 + `registerXxxSpecs()` 导出 + 大段「为什么」注释）。
+ *   R3 原先只写在大橙子侧，科豆完全无覆盖 —— 本次上移就是为了补这个洞。
+ *
+ * ─────────────────────── 两个「会假绿 / 会必红」的实现约定（别改回去） ───────────────────────
+ *
+ * 🔴 约定 1：**扫描根由接线方显式传入，共享层绝不自己推算。**
+ *   原文件里是 `const APP = path.resolve(__dirname, '..')` —— 它写在 `apps/<app>/tests/` 下时
+ *   恰好等于 app 根。一旦这段推演搬进 `scripts/lib/`，同一个 `path.resolve(__dirname, '..')`
+ *   会算成 `scripts/`：扫到 0 个 wxml 或扫到无关目录，而 `expect(offenders).toEqual([])` **依然全绿**
+ *   —— 典型假绿（判据没跑，但它「没报错」）。所以 `appRoot` 必须是 `registerWxmlLtGuardSpecs`
+ *   的必填入参，由 app 侧用 `path.resolve(__dirname, '..')`（在 app 的 tests 目录下算出来才是 app 根）传进来。
+ *
+ * 🔴 约定 2：**「防空转」不能硬编码文件名。**
+ *   原文件里断言 `withComment` 必须包含 `pages/nce/detail/detail.wxml`、`pages/home/index/index.wxml`
+ *   —— 那是大橙子的事实。搬到共享层后科豆接线会**直接红**（科豆没有这些文件）。
+ *   故把「必须被扫到的文件」变成 `mustScan` 入参、把「至少扫到多少」变成 `minFiles` 入参，
+ *   由接线方传各自 app 的真实事实；`mustScan` 传空数组时该断言退化为只校验
+ *   `files.length >= minFiles`（**不跳过整条用例**）。
  *
  * ─────────────────────────── 判据来源（2026-11-27 出码失败 P0） ───────────────────────────
  *
@@ -34,8 +54,10 @@
  *  - **为什么用「小于」而不是 `&lt;`**：注释不参与渲染，`&lt;` 在注释里不会被解码，
  *    读者看到的是一串实体，可读性差且容易被下一个人「顺手改回来」；写中文零歧义。
  *
- * 🔴 每个入口测试的第一组用例都是**守守卫**（纯函数鉴别力）：只对真实文件断言，
- *    哪天正则被写成恒不匹配，全量扫描照样全绿 —— 那就是「只绿不红」的假守卫。
+ * 🔴 六组用例里的前三组是**守守卫**（纯函数鉴别力）：只对真实文件断言的话，
+ *    哪天判据被写成恒不匹配，全量扫描照样全绿 —— 那就是「只绿不红」的假守卫。
+ *    注意反向也成立：**扫描用例只能证明「当下干净」，证明不了「判据有鉴别力」**
+ *    （干净仓库 + 坏判据，全仓扫描这一层不可区分），两组装不了对方。
  *
  * ── R2：注释正文里写了**注释边界字面量** ──
  * 同一次事故还有第二颗雷，而且是「修 bug 引入的」：
@@ -93,13 +115,6 @@ export function findNakedLt(src: string): NakedLt[] {
   }
   return out;
 }
-
-/**
- * 兼容别名：大橙子侧入口测试沿用的原函数名（`findNakedLtInComments`）。
- * 保留别名是为了让上移这次重构**不动既有用例名与断言**（只改 import），
- * 新代码请直接用 `findNakedLt`。
- */
-export const findNakedLtInComments = findNakedLt;
 
 /**
  * R2：找出「注释正文里写了注释边界字面量」的地方。
@@ -213,21 +228,29 @@ export function findCommentInsideStartTag(src: string): CommentInTag[] {
 }
 
 /**
- * 扫描面：不进入的目录名。
- * `node_modules` / `.git` 是原口径；`miniprogram_npm` / `dist` 是构建产物目录
- * （npm 构建产出的 miniprogram_npm、出码 dist）—— 它们不是源码，扫进去只会制造假红。
+ * 扫描面：不进入的目录名 —— **沿用原测试的口径，只排除这两个**。
+ *
+ * 为什么不顺手把 `miniprogram_npm` / `dist` / `prototype` 也排掉（2026-11-27 实测记录）：
+ *   - 两个 app 都**没有** `miniprogram_npm/` 与 `dist/`（`ls` 实测），加了等于凭空写政策；
+ *   - `prototype/` 两个 app 都有（大橙子、科豆），但**其下 0 个 wxml**，
+ *     且科豆 `app.json` 里 `"prototype/` 命中数为 0（不进小程序包）—— 没有 wxml 就不影响扫描面。
+ *   将来真有依赖目录里带 wxml 的 app，用 `excludeDirs` 入参在接线处显式排除，
+ *   **而不是**在这里替所有 app 预先决定。
  */
-export const DEFAULT_EXCLUDED_DIRS: readonly string[] = ['node_modules', '.git', 'miniprogram_npm', 'dist'];
+export const DEFAULT_EXCLUDED_DIRS: readonly string[] = ['node_modules', '.git'];
 
 /**
  * 递归收集 `root` 下所有 `.wxml`（默认跳过 DEFAULT_EXCLUDED_DIRS）。
  *
- * @param {string} root 应用根目录
- * @param {{ excludeDirs?: readonly string[] }} [opts] 覆盖排除目录（默认 DEFAULT_EXCLUDED_DIRS）
- * @returns {string[]} 绝对路径列表
+ * ⚠️ `root` 必须是**调用方算好并传进来的** app 根 —— 见文件头「约定 1」：
+ *    本文件用 `__dirname` 推不出任何 app 根，推出来的永远是 `scripts/` 那一层。
+ *
+ * @param root 应用根目录（绝对路径）
+ * @param excludeDirs 不进入的目录名（默认 DEFAULT_EXCLUDED_DIRS）
+ * @returns 绝对路径列表
  */
-export function collectWxmlFiles(root: string, opts: { excludeDirs?: readonly string[] } = {}): string[] {
-  const excluded = new Set(opts.excludeDirs || DEFAULT_EXCLUDED_DIRS);
+export function collectWxmlFiles(root: string, excludeDirs: readonly string[] = DEFAULT_EXCLUDED_DIRS): string[] {
+  const excluded = new Set(excludeDirs);
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -239,4 +262,262 @@ export function collectWxmlFiles(root: string, opts: { excludeDirs?: readonly st
   };
   walk(root);
   return out;
+}
+
+/** 接线方入参：每个 app 必须自己声明「扫哪里、至少扫到多少、哪些文件必须被扫到」 */
+export interface WxmlLtGuardSpecsOptions {
+  /** app 根目录（绝对路径）。接线方传，共享层不推算 —— 见文件头「约定 1」 */
+  appRoot: string;
+  /**
+   * 防空转锚点：这些**相对 appRoot 的 wxml 路径**必须出现在扫描结果里。
+   * 一个都不出现 ⇒ 扫描器根本没在正确目录上跑（换根 / 改排除项 / 目录搬家）。
+   * 传空数组时退化为只校验 `files.length >= minFiles`，**不跳过整条用例**。
+   * 选锚点的原则：优先选生命周期稳定的文件（如自定义 tabbar），别选会被改版重构掉的业务页。
+   */
+  mustScan?: string[];
+  /** 扫描下界：少于这个数说明扫描面塌了。按各 app 实际 wxml 数取明显下界 */
+  minFiles?: number;
+  /** 覆盖排除目录（默认 DEFAULT_EXCLUDED_DIRS）；只有确实存在依赖目录带 wxml 时才需要 */
+  excludeDirs?: readonly string[];
+}
+
+/**
+ * 注册 WXML 注释守卫的全部用例（六组）：前三组守判据本身，后三组扫全仓库。
+ *
+ * **只能在 jest 测试文件里调用**（依赖 describe / it / expect 全局）。
+ *
+ * @param opts 见 WxmlLtGuardSpecsOptions
+ * @throws {Error} 未传 appRoot / appRoot 不存在 / 不在 jest 环境
+ */
+export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
+  if (typeof describe !== 'function' || typeof it !== 'function' || typeof expect !== 'function') {
+    throw new Error('[wxml-lt-guard] registerWxmlLtGuardSpecs 只能在 jest 测试文件里调用（需要 describe/it/expect 全局）');
+  }
+
+  const { appRoot, mustScan = [], minFiles = 1, excludeDirs = DEFAULT_EXCLUDED_DIRS } = opts || ({} as WxmlLtGuardSpecsOptions);
+
+  // 把「接线方传错根」变成一句能读懂的红，而不是一堆 ENOENT 堆栈
+  if (!appRoot || typeof appRoot !== 'string') {
+    throw new Error('[wxml-lt-guard] registerWxmlLtGuardSpecs 必须传 appRoot（共享层不自己推算扫描根，见文件头约定 1）');
+  }
+  if (!fs.existsSync(appRoot)) {
+    throw new Error(`[wxml-lt-guard] appRoot 不存在：${appRoot} —— 接线方传错了根，扫描会变空转`);
+  }
+
+  // 统一成正斜杠比较，避免 Windows 下 path.relative 的反斜杠造成假红
+  const toPosix = (p: string): string => String(p).split(path.sep).join('/');
+  const relOf = (f: string): string => toPosix(path.relative(appRoot, f));
+  const read = (f: string): string => fs.readFileSync(f, 'utf8');
+  const anchors = mustScan.map(toPosix);
+
+  // ═════════════════════ 守守卫：判据本身必须有鉴别力 ═════════════════════
+  describe('判据自身（纯函数）', () => {
+    it('🔴 裸 `<` 必须被抓到：空格 / 中文 / 数字 三种形态', () => {
+      const cases = [
+        '<!-- 胶囊高 48rpx < 朗读圆钮 88rpx 热区 -->',   // ← 本次事故形态（后面是空格）
+        '<!-- 胶囊高 48rpx <朗读圆钮 88rpx 热区 -->',     // 后面直接中文
+        '<!-- 尺寸 <48rpx 就够 -->',                      // 后面数字
+      ];
+      for (const src of cases) {
+        expect(findNakedLt(src).length).toBeGreaterThan(0);
+      }
+    });
+
+    it('合法标签名引用不许误报（`<view>` / `<text` / 闭合 `</view>` / `<!DOCTYPE`）', () => {
+      const ok = [
+        '<!-- 用 <view> 包一层 -->',
+        '<!-- 这里是 <text class="dw"> 节点 -->',
+        '<!-- 闭合写成 </view> 即可 -->',
+        '<!-- 不要写 <!DOCTYPE -->',
+        '<!-- 三元 <view wx:if="{{a}}"> 合法 -->',
+      ];
+      for (const src of ok) expect(findNakedLt(src)).toEqual([]);
+    });
+
+    it('行号按文件内绝对行数算（不是注释内相对行）', () => {
+      const src = 'line1\nline2\n<!-- 前面正常\n这里有裸 < 号\n-->\nline6\n';
+      const hits = findNakedLt(src);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(4);                    // 「这里有裸 < 号」是第 4 行
+    });
+
+    it('注释外的 `<` 不归本守卫管（那是模板语法自己的事，别制造假红）', () => {
+      // 正文里的 `<` 必然是标签开头，非法写法会被开发者工具在别处直接报错
+      expect(findNakedLt('<view>{{ a }} is fine</view>')).toEqual([]);
+    });
+  });
+
+  // ═════════════════════ 守守卫 · R2：注释边界字面量 ═════════════════════
+  describe('判据自身 · R2（注释正文里的注释边界字面量）', () => {
+    it('🔴 正文里写注释开头 → 必须抓到（v1.0.21 第二颗雷的真实形态）', () => {
+      const bad = '<!-- 🔴 注释只能写在标签外面：起始标签内部不认 <!-- 那套写法，写进去会炸 -->';
+      const hits = findCommentBoundaryLiteral(bad);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(1);
+    });
+
+    it('🔴 裸反引号紧跟小于号（第二颗雷炸出来的那个字符）也要能被这条兜住', () => {
+      // 真实事故里剩下的裸文本是 `...unexpected character <` 的闭合反引号
+      const bad = '<!-- 说明：不认 <!-- -->，剩下的 ` 会再炸一次 -->';
+      expect(findCommentBoundaryLiteral(bad).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('正文里写注释结尾字面量（贪婪配对时的形态）也要被抓', () => {
+      // 非贪婪配对下这条用例构造不出「命中」，所以直接喂贪婪匹配语义的字符串：
+      // 一旦有人把配对改成贪婪，正文里就会出现 `-->`，这条判据仍然有效。
+      const src = '<!-- a <!-- b --> c -->';
+      const hits = findCommentBoundaryLiteral(src);
+      expect(hits.length).toBeGreaterThanOrEqual(1);      // 命中 `<!--`（正文里的嵌套开头）
+    });
+
+    it('没配成对的 `<!--`（把后面内容全吞掉）算违规', () => {
+      const src = '<view>\n<!-- 这段注释没有收尾\n id="x"\n</view>\n';
+      const hits = findCommentBoundaryLiteral(src);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(2);
+    });
+
+    it('合法注释（无边界字面量）不许误报', () => {
+      const ok = [
+        '<!-- 祖先链是 ad → 页面根 <view class="page"> -->',
+        '<!-- 三个短横连写是允许的：— 与 - 不同；但注释边界字面量不许写 -->',
+        '<view class="a"><!-- 注释在标签外面 --></view>',
+        '<!-- 多行\n     正文继续\n     再一行 -->',
+      ];
+      for (const src of ok) expect(findCommentBoundaryLiteral(src)).toEqual([]);
+    });
+  });
+
+  // ═════════════════════ 守守卫 · R3：注释落在开始标签属性列表内部 ═════════════════════
+  describe('判据自身 · R3（注释落在开始标签属性列表内部）', () => {
+    it('🔴 真实事故形态必须抓到：属性列表中间插注释（v1.0.21 首版 home:146 的形态）', () => {
+      const bad = [
+        '<view class="page">',
+        '  <action-drawer',
+        '    id="drawer"',
+        '    <!-- D7 已收藏动作 key 的唯一通道 -->',
+        '    collected-keys="{{collectedKeys}}"',
+        '  />',
+        '</view>',
+      ].join('\n');
+      const hits = findCommentInsideStartTag(bad);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(4);                 // 指向注释那一行，不是标签行
+      expect(hits[0].tag).toBe('action-drawer');
+      expect(hits[0].snippet).toContain('D7');
+    });
+
+    it('同一标签里插两条注释 → 两条都抓到（不是报第一条就收工）', () => {
+      const bad = '<action-drawer\n  <!-- a -->\n  id="x"\n  <!-- b -->\n/>';
+      const hits = findCommentInsideStartTag(bad);
+      expect(hits).toHaveLength(2);
+      expect(hits.map((h) => h.line)).toEqual([2, 4]);
+      expect(hits.every((h) => h.tag === 'action-drawer')).toBe(true);
+    });
+
+    it('合法形态一律不许误报：标签前 / 自闭合后 / 单行已闭合标签之后 / 多行标签之后', () => {
+      const ok = [
+        '<!-- 在开始标签之前 -->\n<action-drawer id="x" collected-keys="{{a}}" />',
+        '<action-drawer id="x" />\n<!-- 在自闭合标签之后 -->',
+        '<view class="a"><!-- ok --></view>',                       // 注释在已闭合开始标签之后
+        '<action-drawer\n  id="x"\n  collected-keys="{{a}}"\n/>\n<!-- 在整段属性之后 -->',
+        '<!-- 前 -->\n<view>\n  <!-- 中 -->\n  <text>{{t}}</text>\n</view>\n<!-- 后 -->',
+        '<view>\n  <text>读作 a 小于 b</text>\n</view>\n<!-- 收尾注释 -->',
+      ];
+      for (const src of ok) expect(findCommentInsideStartTag(src)).toEqual([]);
+    });
+
+    it('属性值里的 `>` / 引号 / `{{ }}` 不许把标签边界切断（既不误报也不漏报）', () => {
+      // 属性值里的 `>` 不能让解析器提前认为标签结束 → 无注释，不该报
+      expect(findCommentInsideStartTag('<view title="{{a > b}}" id="x" />')).toEqual([]);
+      // 同一个文件里，属性值含 `>` 之后紧跟的注释仍必须判为「在标签内」
+      const bad = '<view title="{{a > b}}"\n  <!-- 仍在属性列表里 -->\n  id="x" />';
+      const hits = findCommentInsideStartTag(bad);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(2);
+      expect(hits[0].tag).toBe('view');
+    });
+
+    it('文本态注释里的 `<` / `>` 不许干扰状态机（必须整块跳过）', () => {
+      // 注释正文里提到 <view> / <text>：若不跳过，注释里的 `>` 会被当成标签结尾而错乱
+      const src = '<!-- 提到 <view> 与 ad → 页面根 -->\n<!-- 提到 <text> -->\n<view id="x" />\n<!-- 尾 -->';
+      expect(findCommentInsideStartTag(src)).toEqual([]);
+      // 反向：跳过注释后，紧随其后的「标签内注释」仍要能抓到
+      const mixed = '<!-- 前面 <view> 正常 -->\n<view\n  <!-- 这条在属性列表里 -->\n  id="x" />';
+      const hits = findCommentInsideStartTag(mixed);
+      expect(hits).toHaveLength(1);
+      expect(hits[0].line).toBe(3);
+      expect(hits[0].tag).toBe('view');
+    });
+  });
+
+  // 扫描只做一次，三个扫描 describe 共用（每个 describe 不再各扫一遍 37 个文件）
+  const files = collectWxmlFiles(appRoot, excludeDirs);
+  const rels = files.map(relOf);
+
+  // ═════════════════════ 真实文件全量扫描 · R1 ═════════════════════
+  describe('全仓库 WXML 注释零裸小于号', () => {
+    it('凡是出现在注释里的 `<`，后面必须是标签名（否则整包编译失败）', () => {
+      const offenders: string[] = [];
+      for (const f of files) {
+        for (const hit of findNakedLt(read(f))) {
+          offenders.push(`${relOf(f)}:${hit.line}  …${hit.snippet}…`);
+        }
+      }
+      // 失败信息直接给出「文件:行号 + 片段」：出码事故里最耗时间的就是定位是哪一行
+      expect(offenders).toEqual([]);
+    });
+
+    it('防空转：扫到足够多 wxml，判据在真实文件里真的跑过，且锚点文件确实被扫到', () => {
+      expect(files.length).toBeGreaterThanOrEqual(minFiles);
+      const withTagRef = files.filter((f) => /<!--[\s\S]*?<[A-Za-z/]/.test(read(f)));
+      expect(withTagRef.length).toBeGreaterThan(0);   // 扫到 0 说明正则坏了（不是「没问题」）
+      for (const a of anchors) expect(rels).toContain(a);
+    });
+  });
+
+  // ═════════════════════ 真实文件全量扫描 · R2 ═════════════════════
+  describe('全仓库 WXML 注释正文零注释边界字面量（R2）', () => {
+    it('任何注释块的正文里都不许出现 `<!--` / `-->`，也不许留下没配对的 `<!--`', () => {
+      const offenders: string[] = [];
+      for (const f of files) {
+        for (const hit of findCommentBoundaryLiteral(read(f))) {
+          offenders.push(`${relOf(f)}:${hit.line}  …${hit.snippet}…`);
+        }
+      }
+      expect(offenders).toEqual([]);
+    });
+
+    it('防空转：判据在真实文件里真的跑过（配对成功数 > 0，且锚点文件确实含注释）', () => {
+      expect(files.length).toBeGreaterThanOrEqual(minFiles);
+      const withComment = files.filter((f) => /<!--([\s\S]*?)-->/.test(read(f)));
+      expect(withComment.length).toBeGreaterThan(0);
+      const commented = withComment.map(relOf);
+      for (const a of anchors) expect(commented).toContain(a);
+    });
+  });
+
+  // ═════════════════════ 真实文件全量扫描 · R3（本次真因） ═════════════════════
+  describe('全仓库 WXML 注释零「落在属性列表内部」（R3）', () => {
+    it('任何注释块的起始位置都不许落在某个开始标签的属性列表内部', () => {
+      const offenders: string[] = [];
+      for (const f of files) {
+        for (const h of findCommentInsideStartTag(read(f))) {
+          // 失败信息给「文件:行号 + 标签名 + 片段」，出码事故里最耗时的就是定位
+          offenders.push(`${relOf(f)}:${h.line}  <${h.tag}>  …${h.snippet}…`);
+        }
+      }
+      expect(offenders).toEqual([]);
+    });
+
+    it('防空转：扫到足够多 wxml，多行开始标签与注释同时存在的文件被扫到，且锚点文件确实被扫到', () => {
+      expect(files.length).toBeGreaterThanOrEqual(minFiles);
+      const withComment = files.filter((f) => /<!--/.test(read(f)));
+      expect(withComment.length).toBeGreaterThan(0);
+      // 「多行开始标签 + 紧贴其前的注释」正是事故形态；一个都扫不到说明扫描器没在跑（恒绿）
+      const multiLineTag = files.filter((f) => /<[A-Za-z][\w-]*[^>]*\n[\s\S]*?\/?>/.test(read(f)));
+      expect(multiLineTag.length).toBeGreaterThan(0);
+      for (const a of anchors) expect(rels).toContain(a);
+    });
+  });
 }
