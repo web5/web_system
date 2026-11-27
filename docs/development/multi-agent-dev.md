@@ -88,7 +88,12 @@
 | 4 | 包目录内直跑 | `cd servers/deploy-console && pnpm run __no_such_script__` | **1** | `ERR_PNPM_NO_SCRIPT  Missing script: …` | ✅ 正确失败 |
 | 5 | `--filter` + `exec` 子进程失败 | `pnpm --filter deploy-console-server exec node -e "process.exit(3)"` | **1**（非 3） | `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 3` | ⚠️ 失败可见，退出码被压成 1 |
 
-🔴 **承认缺口**：本节开头那条示例 `pnpm --filter @kedouai/ai-agent build` 是**简写形态**（等价形态 3，不带 `run`）。原有判据 1/2/3 全部针对「包名写错」，对形态 1/2/3 的第二种成因**是失效的**。所以下面是补完后的判据，不是新增知识点。
+**第二种成因与判据的关系（判据本身没错，是覆盖不全）**：
+
+- **现象**：`pnpm --filter <pkg> <script>`（简写、不带 `run`）在**脚本名不存在**时，打印 `None of the selected packages has a "<script>" script`，但**退出码 0**。包名全对也一样。
+- **位置**：这正是下方判据 1 示例所用的形态，**读者最容易顺手沿用**。
+- **缺口只在判据 1**：判据 1 只防「包名写错」，对「包名对、脚本名错」不覆盖。判据 2（验产物时间戳）与判据 3（`--reporter=append-only` 看有没有真的执行 build 步骤）**对两类成因都有效**——脚本没跑，产物就不会更新，append-only 下也看不到任何 build 步骤。
+- **所以判据 2/3 是必守项，不因其「看起来像辅助手段」而省略**；要根治则改用安全形态（见判据 4）。
 
 判据（建议 1+2 叠加；构建/测试一律追加 4）：
 
