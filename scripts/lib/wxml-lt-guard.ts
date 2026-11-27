@@ -367,6 +367,11 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
       it('注释外的 `<` 不归本守卫管（那是模板语法自己的事，别制造假红）', () => {
         // 正文里的 `<` 必然是标签开头，非法写法会被开发者工具在别处直接报错
         expect(findNakedLt('<view>{{ a }} is fine</view>')).toEqual([]);
+        // 🔴 2026-11-28 盲测补（变异体 M2「扫全文而非只扫注释」）：上面那条样例**在注释外没有裸 `<`**，
+        //    所以「扫全文」的错误实现与正确实现都返回 `[]` —— 该用例等于空转（20 例全绿也拦不住 M2）。
+        //    下面两条才是真有鉴别力的：注释外确实有裸 `<`，但本判据只许管注释内。
+        expect(findNakedLt('<view>读作 a < b</view>')).toEqual([]);
+        expect(findNakedLt('a < b\n</view>')).toEqual([]);
       });
     });
 
@@ -386,6 +391,10 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
       });
 
       it('正文里写注释结尾字面量（贪婪配对时的形态）也要被抓', () => {
+        // ⚠️ 2026-11-28 盲测标注：本用例与上一条（正文里的 `<!--`）**实质重复**，且它名义上
+        // 守的 `-->` 分支在**当前非贪婪配对下不可达**（源码 findCommentBoundaryLiteral 的注释
+        // ② 已自认：`m[1]` 里不可能出现 `-->`）。保留原样是给「配对方式哪天被改成贪婪」留网，
+        // **不作为鉴别力依据** —— 判据有鉴别力这件事由上一条与下面「任意 `--` 不许误报」承担。
         // 非贪婪配对下这条用例构造不出「命中」，所以直接喂贪婪匹配语义的字符串：
         // 一旦有人把配对改成贪婪，正文里就会出现 `-->`，这条判据仍然有效。
         const src = '<!-- a <!-- b --> c -->';
@@ -406,6 +415,12 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
           '<!-- 三个短横连写是允许的：— 与 - 不同；但注释边界字面量不许写 -->',
           '<view class="a"><!-- 注释在标签外面 --></view>',
           '<!-- 多行\n     正文继续\n     再一行 -->',
+          // 🔴 2026-11-28 盲测补（变异体 M13「任意 `--` 都判违规」）：上面的样例里**没有
+          //    「连续两个短横 `--` 但不成 `-->`」的合法形态 —— 「三个短横连写」那句写的是
+          //    `—`（破折号）与单个 `-`，所以「见到 `--` 就报」的错误实现照样绿（确证空转）。
+          //    下面两条才是真有鉴别力的：单/双短横相邻是合法正文，只有 `<!--` / `-->` 才违规。
+          '<!-- 范围 a--b 合法（连续两个短横不是注释边界） -->',
+          '<!-- 单横与双横都合法：a-b / a--b / a---b -->',
         ];
         for (const src of ok) expect(findCommentBoundaryLiteral(src)).toEqual([]);
       });
@@ -459,6 +474,22 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
         expect(hits).toHaveLength(1);
         expect(hits[0].line).toBe(2);
         expect(hits[0].tag).toBe('view');
+        // 🔴 2026-11-28 盲测补（变异体 M6「找标签结尾时不跳成对引号」）：
+        //    上面三条样例的 `>` 全部包在 `{{ }}` 里，`{{ }}` 分支**先把 `>` 吃掉了**，
+        //    「跳过引号」那条分支从未被考验 —— 于是「不跳引号」的错误实现照样绿。
+        //    下面两条直接用纯字符串属性值（`{{ }}` 不介入），才真正考验引号分支。
+        //    ⚠️ 2026-11-28 复审（PR #734 A5）：这里原写成无注释的
+        //    `<view title="a > b" id="x" />` → `[]`，那是**装饰断言** —— 输入里没有 `<!--`，
+        //    而本函数只有「撞上 `<!--`」一个 push 点，所以任何实现都返回 `[]`（实测 M6 下仍绿）。
+        //    改成「属性值含 `>` **且**后面紧跟标签内注释」：正确实现整段跳过引号 → 报 1；
+        //    不跳引号的实现（M6）在引号内的 `>` 处就认为标签结束，`<!--` 落到文本态被当合法注释 → 漏报 0。
+        expect(findCommentInsideStartTag('<view title="a > b" id="x" <!-- c --> />')).toHaveLength(1);
+        //    ② 不漏报：切断后「标签内注释」必须仍然抓到（M6 在这里返回 []）
+        const quoted = '<view title="a > b"\n  <!-- 在属性列表里 -->\n  id="x" />';
+        const qHits = findCommentInsideStartTag(quoted);
+        expect(qHits).toHaveLength(1);
+        expect(qHits[0].line).toBe(2);
+        expect(qHits[0].tag).toBe('view');
       });
 
       it('文本态注释里的 `<` / `>` 不许干扰状态机（必须整块跳过）', () => {
@@ -471,6 +502,12 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
         expect(hits).toHaveLength(1);
         expect(hits[0].line).toBe(3);
         expect(hits[0].tag).toBe('view');
+        // 🔴 2026-11-28 盲测补（变异体 M5「R3 不跳过文本态注释」）：
+        //    上面三条样例里，文本态注释内部**没有值得误判的形态**（`<view>` / `<text>` 都能正常跳过），
+        //    所以「不跳过文本态注释」的错误实现与正确实现输出相同 —— 该用例对 M5 无鉴别力。
+        //    下面这条才是真有鉴别力的：注释未闭合 + 正文里紧跟 `<!--`，若不跳过，正文里的 `<!--`
+        //    会被当成「落在 `!` 开始标签属性列表内部」而误报（盲测最小反例，base `[]` / M5 报 1）。
+        expect(findCommentInsideStartTag('/><!--\n<!--{{}}--text\n\n\n')).toEqual([]);
       });
     });
 
@@ -492,12 +529,22 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
         const withTagRef = files.filter((f) => /<!--[\s\S]*?<[A-Za-z/]/.test(read(f)));
         expect(withTagRef.length).toBeGreaterThan(0);   // 扫到 0 说明正则坏了（不是「没问题」）
         for (const a of anchors) expect(rels).toContain(a);
+        // 🔴 扫描根**下界**（2026-11-28 盲测补，变异体 M10「把根上移到仓库根」）：
+        //    上面三条都拦不住「扫得更大」——「把根上移到仓库根」时 app 内文件的
+        //    `path.relative(appRoot, f)` **完全不变**（锚点照命中）、`files.length` 只会更大
+        //    （实测 14 → 51，其中 37 个属于别的 app / 其它目录），真实文件也干净 → 全绿。
+        //    危害：大橙子的守卫去扫科豆的 wxml，科豆一旦有违规，红在大橙子这边（归因错误）。
+        //    故这里补一条**上界之外的**约束：扫到的每一个文件都必须落在 appRoot 之下。
+        expect(files.every((f) => f.startsWith(appRoot + path.sep))).toBe(true);
       });
     });
 
     // ═════════════════════ 真实文件全量扫描 · R2 ═════════════════════
     describe('全仓库 WXML 注释正文零注释边界字面量（R2）', () => {
       it('任何注释块的正文里都不许出现 `<!--` / `-->`，也不许留下没配对的 `<!--`', () => {
+        // ⚠️ 2026-11-28 盲测标注：本条是**设计上承认的快照型** —— 它只断言「当下全仓干净」，
+        // 判据本身有鉴别力这件事由 R2 前四组（守守卫）承担（文件头「只绿不红」那段已说明
+        // 「扫描用例证明不了判据有鉴别力」）。**不作为鉴别力依据**，保留原样不加强。
         const offenders: string[] = [];
         for (const f of files) {
           for (const hit of findCommentBoundaryLiteral(read(f))) {
