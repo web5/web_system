@@ -142,11 +142,28 @@ interface CapabilityRef {
 
 ## 5. 改应用时必须知道的 5 个坑
 
-### 5.1 `model` 必须带 `deepseek/` 前缀
+### 5.1 `model` 必须逐字等于**本环境字典**里某个启用的 `value`
 
-`model` 写的是 **ai-agent 侧 ClientRegistry 的注册键**（带 `deepseek/` 前缀），不是 TokenHub 网关短名。两者不匹配时 **ai-agent 不报错，只静默回退到 hy3**（更慢更贵），表现为「徽标对、模型悄悄换了」。2026-10-08 一次路由事故就是这个（涉及 deploy / web-system-dev / general 三个）。
+`model` 写的是 ai-agent 侧 ClientRegistry 的注册键。注册来源是**当前环境字典** `dict_items`（`type_code='llm_models'`）里**启用项的 `value` 逐字**：
 
-可用注册键见 `servers/ai-agent/src/agent/model-catalog.service.ts` 的 `BUILTIN_TOKENHUB_MODELS`。
+- `model-catalog.service.ts` 的 `fetchFromDict()` 只取 `row.value`，`attrs` 不参与模型注册（`attrs` 只被 `dict-pricing.provider.ts` 用来读单价）；
+- 注册是 `registry.register(new TokenHubClient(m))`，ClientRegistry 内部是 **Map 精确匹配，没有前缀归一化**。
+
+所以 `agent_definitions.model` 必须与字典 `value` 一字不差。对不上时 **ai-agent 不报错，只静默回退到 hy3**（更慢更贵），表现为「徽标对、模型悄悄换了」，只在 `web-ai-agent-error.log` 留一条 `ClientRegistry 模型 xxx 未注册`。
+
+🔴 **`deepseek/` 前缀既不是必需的，也不能当规范**：带前缀的写法只有在字典里恰好存在同名 `value` 时才可解析。2026-11-27 实测 dev 与 prod 的字典均为 3 项**全裸名**（`deepseek-v4-flash` / `deepseek-v4-pro` / `hy4-preview`），因此 `deepseek/deepseek-v4-flash` 在这两个环境**必然**回落 hy3。本机当时就有 3 条 agent 这么写着（合同翻译官 / 语言翻译官 / 通用问答），已改为裸名。
+
+> 历史注记：2026-10-08 那次路由事故（deploy / web-system-dev / general 三个回落 hy3）确实存在，当时的成因是「网关短名 ≠ 注册键」，本节曾据此写成「必须带前缀」。2026-11-27 复核发现该结论会随字典内容变化而失效 —— **真正的判据是「与本环境字典 value 是否逐字相等」，不是「有没有前缀」**。
+
+兜底层级：字典 → `TOKENHUB_MODELS` 环境变量 → 代码内置 `BUILTIN_TOKENHUB_MODELS`（60s 轮询）。**兜底清单不是可用键的权威列表**，只有字典是。
+
+自查（返回 0 行才算干净）：
+
+```sql
+SELECT name, model FROM agent_definitions
+ WHERE model NOT IN (SELECT value FROM dict_items WHERE type_code='llm_models' AND enabled=1)
+   AND model <> 'hy3';   -- hy3 是常驻模型，不在字典内属设计如此
+```
 
 ### 5.2 `capabilities` 要 NULL 不要 `[]`
 
