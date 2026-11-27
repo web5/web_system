@@ -154,7 +154,13 @@ page {
   gap: 16rpx;
   margin-top: 18rpx;
 }
+/* 页脚动作按钮（朗读 / 收藏）。2026-11-27：图标与文案拆成两个节点 ——
+   图标走同一套 SVG（32rpx，三处统一基准），文案只留「朗读 / 停止」「收藏 / 已收藏」。
+   🔴 `image` 必须显式宽高，否则按 24px 固有像素撑开，按钮会被图标顶高。 */
 .dq-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
   font-size: 22rpx;
   color: var(--t2);
   padding: 8rpx 20rpx;
@@ -162,11 +168,18 @@ page {
   border-radius: 999rpx;
   line-height: 1.5;
 }
+.dq-ico { flex: none; width: 32rpx; height: 32rpx; }
 .dq-act:active { background: rgba(0, 0, 0, .04); }
 .dq-act.on {
   color: var(--brand-txt);
   border-color: rgba(37, 99, 235, .45);
   background: rgba(37, 99, 235, .06);
+}
+/* 已收藏态（2026-11-27 用户反馈①）：与抽屉收藏按钮同口径 —— 青绿底/边/字（--accent-ink） */
+.dq-act.done {
+  color: var(--accent-ink);
+  border-color: rgba(15, 118, 110, .32);
+  background: var(--accent-soft);
 }
 
 /* 今日一句词卡：底部浮层（形态对齐课文详情页 .word-tip，前缀独立防跨页耦合） */
@@ -197,6 +210,9 @@ page {
 }
 .q-tip-tools { display: flex; align-items: center; gap: 8rpx; }
 .q-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4rpx;
   font-size: 24rpx;
   line-height: 1.6;
   color: var(--brand-txt);
@@ -206,15 +222,18 @@ page {
   white-space: nowrap;
 }
 .q-tip-btn.on { background: rgba(37, 99, 235, .10); }
+/* 已收藏态（2026-11-27 用户反馈①）：文案 「收藏 → 已收藏」+ 图标 ☆ → ✓ */
+.q-tip-btn.done { color: var(--accent-ink); border-color: rgba(15, 118, 110, .32); background: var(--accent-soft); }
+/* 词卡收藏按钮里的图标：比播放圆小一档（胶囊内 28rpx，视觉与 24rpx 文字同高） */
+.q-tip-btn-ico { flex: none; width: 28rpx; height: 28rpx; }
 /* 🔴 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮改**圆形播放图标**（原型 .btn-icon 同形）。
    与同排「收藏」文字胶囊的区别只在 .q-tip-play 这一层：热区 88rpx（≥88rpx 下限）⊃ 视觉圆 60rpx
-   ⊃ 图标 ≈32rpx；未播 ▶ 三角、播放中 ■ 方块，全部 CSS 画（不引图片/不加依赖）。 */
+   ⊃ 图标 32rpx。🔴 2026-11-27：▶/■ 由 CSS 三角改为同一套 SVG（assets/icons/play.svg · stop.svg）。 */
 .q-tip-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: none; background: transparent; line-height: 1; }
 .q-tip-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-.q-tip-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+.q-tip-ico-img { width: 32rpx; height: 32rpx; }
 .q-tip-play.on { background: transparent; }
 .q-tip-play.on .q-tip-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
-.q-tip-play.on .q-tip-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
 .q-tip-play-hv .q-tip-ico { background: #EFF6FF; }
 .q-tip-x { font-size: 30rpx; line-height: 1.2; color: var(--t3); padding: 0 6rpx; }
 .q-tip-p { font-size: 24rpx; color: var(--t3); margin-top: 6rpx; }

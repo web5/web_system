@@ -309,12 +309,20 @@ describe('需求③ V12~V18：长按单词 → 抽屉（朗读单词 / 收藏单
     expect(ctx.data.overlay.scope).toBe('word');
   });
 
-  it('V14 点「朗读单词」→ speakText(该词) 恰好一次，抽屉收起（V-B11）', async () => {
+  /**
+   * 🔴 2026-11-26 变体 C 改写（用户拍板：朗读下沉到抽屉组件）。
+   * 原用例：`onDrawerSpeakWord → speakText('play') + 抽屉收起`。
+   * 现在「朗读单词」在组件内直接 speakText，页面既拿不到事件、也不会收起抽屉
+   * （抽屉不关是这次改动的核心，用户要在抽屉里点 ■ 停止）。
+   * 组件侧行为（speakText 参数 / 播放态 / 不 emit）由 `tests/action-drawer.test.ts` 覆盖；
+   * 这里只守住「页面别再插手」这一条，防止有人把 handler 加回来造成重复朗读。
+   */
+  it('V14（变体 C）点「朗读单词」不再经过页面：页面无该 handler，抽屉也不会被页面收起', async () => {
     const ctx = await loaded();
     ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
-    ctx.onDrawerSpeakWord({ detail: { word: 'play', lineIndex: 0 } });
-    expect(mockTts.speakCalls).toEqual(['play']);
-    expect(ctx.data.overlay).toBeNull();
+    expect((ctx as any).onDrawerSpeakWord).toBeUndefined();
+    // 长按出来的抽屉仍在（朗读不再触发 closeOverlay）
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
   });
 
   it('V15 点「收藏单词」→ collectGlossary tag=word 且 meta 字段齐备', async () => {
@@ -330,12 +338,14 @@ describe('需求③ V12~V18：长按单词 → 抽屉（朗读单词 / 收藏单
     expect(p.sourceText).toContain('Lesson 7');
   });
 
-  it('V15 反例：收藏接口失败 → 不抛、不崩、抽屉已收起', async () => {
+  it('V15 反例：收藏接口失败 → 不抛、不崩、抽屉不关（失败回原态，不假成功）', async () => {
     const ctx = await loaded();
     mockGlossary.reject = true;
     ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     await expect(ctx.onDrawerCollectWord({ detail: { word: 'play', lineIndex: 0, hasDef: true } })).resolves.toBeUndefined();
-    expect(ctx.data.overlay).toBeNull();
+    // 🔴 2026-11-27 方案 B 口径变更：收藏**成功/失败都不关抽屉**（原断言 toBeNull()），
+    //    反馈就地发生在按钮上（失败 → 回「☆ 收藏单词」）。只有未登录路径才先收起。
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
   });
 
   it('V18 未登录收藏单词 → 弹「请先登录」，不调接口', async () => {
@@ -443,7 +453,9 @@ describe('回归：切页/回前台后的播放态残留（onHide 先退订再 s
   it('朗读中切后台再回来 → 句子高亮 / 词卡按钮态必须复位', async () => {
     const ctx = await loaded({ readMode: 'tap' });
     ctx.onShow(); // 订阅
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
+    // 2026-11-26 变体 C：页面已无 onDrawerSpeakLine（朗读下沉组件）→ 直接驱动 tts 桩，
+    // 等价于「抽屉内点朗读后 tts 推状态」，页面侧判据不变。
+    mockTts.speak(LINES[0].en);
     expect(ctx.data.readingLineIdx).toBe(0);
     ctx.onHide();  // 退订 + stopSpeak
     ctx.onShow();  // 回来再订阅
@@ -464,24 +476,33 @@ describe('回归：切页/回前台后的播放态残留（onHide 先退订再 s
 });
 
 describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）', () => {
-  it('气泡「朗读此句」→ speakText(line.en) 恰好一次，仅该句高亮', async () => {
+  /**
+   * 🔴 2026-11-26 变体 C：页面的 `onDrawerSpeakLine` 已删除（朗读下沉到抽屉组件，
+   * 组件内直接 speakText、抽屉不关）。下面这些用例验的是**页面播放态回流**
+   * （`_onSpeakState` → readingLineIdx / wordPlaying / tipPlaying），与朗读入口无关 ——
+   * 入口改成直接驱动 tts 桩（真机里由组件调用 speakText，状态同样从 tts 推给页面），
+   * 页面侧判据一个字都没改。
+   */
+  const speakLine = (text: string) => mockTts.speak(text);
+
+  it('整句朗读 → speakText(line.en) 恰好一次，仅该句高亮', async () => {
     const ctx = await loaded();
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
+    speakLine(LINES[1].en);
     expect(mockTts.speakCalls).toEqual(['He plays well.']);
     expect(ctx.data.readingLineIdx).toBe(1);
   });
 
   it('再点同句 → 停止，高亮复位', async () => {
     const ctx = await loaded();
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 1, text: LINES[1].en } });
+    speakLine(LINES[1].en);
+    speakLine(LINES[1].en);   // 忠实桩：同文本再调 = 停止（services/tts 的 same-text 语义）
     expect(ctx.data.readingLineIdx).toBe(-1);
     expect(mockTts.playingText).toBe('');
   });
 
   it('读单词时不得把「句子高亮」点亮 / 读句子时不得把「词卡按钮」点亮', async () => {
     const ctx = await loaded();
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
+    speakLine(LINES[0].en);
     expect(ctx.data.wordPlaying).toBe('');
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.speakTipWord();
@@ -491,16 +512,16 @@ describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）'
 
   it('句子 A 播放中再朗读句子 B → B 必须高亮（切句不断高亮）', async () => {
     const ctx = await loaded();
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } });
+    speakLine(LINES[0].en);
     expect(ctx.data.readingLineIdx).toBe(0);
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 2, text: LINES[2].en } });
+    speakLine(LINES[2].en);
     expect(ctx.data.readingLineIdx).toBe(2); // 期望：高亮跟随到新的朗读句
     expect(ctx.data.readingPhase).toBe('playing');
   });
 
   it('句子播放中从词卡点「朗读」→ 词卡按钮必须进入「停止」态', async () => {
     const ctx = await loaded();
-    ctx.onDrawerSpeakLine({ detail: { lineIndex: 0, text: LINES[0].en } }); // 先有语音在播
+    speakLine(LINES[0].en); // 先有语音在播
     ctx.onWordTap({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     ctx.speakTipWord();
     expect(ctx.data.tipPlaying).toBe(true); // 期望：正在读该词 → 按钮显示「停止」
@@ -513,6 +534,27 @@ describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）'
     expect(p.tag).toBe('nce');
     expect(p.enMain).toBe('Do you like plays');
     expect(p.meta).toMatchObject({ book: 'NCE2', lessonId: 7, lineIndex: 2 });
+  });
+
+  /**
+   * 🔴 2026-11-27 新增（方案 B + 变异验证补洞）：
+   * 上面那条只验证了 payload，**没有一条断言「整句收藏成功后抽屉仍开着」**。
+   * 把 `onDrawerCollectLine` 里加一句 `this.closeOverlay()` 全绿通过 ——
+   * 而那正是方案 B 明确要杜绝的行为（用户要在抽屉里看到 ✓ 已收藏，且能接着点朗读单词）。
+   * 同时钉住「结果经 `drawer.onCollectDone(kind, ok, existed)` 回传」这条 A8 契约（组件不碰 service）。
+   */
+  it('收藏整句（已登录）→ 抽屉不关 + 经 onCollectDone(line, ok, existed) 回传（方案 B / A8）', async () => {
+    const ctx = await loaded();
+    ctx.onLongPress({ currentTarget: { dataset: { i: '2' } } });        // 打开抽屉
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line' });
+    const onCollectDone = jest.fn();
+    ctx.selectComponent = (sel: string) => (sel === '#drawer' ? { onCollectDone } : null);
+    await ctx.onDrawerCollectLine({ detail: { lineIndex: 2, text: LINES[2].en } });
+    // 抽屉仍在（只有未登录路径才先收起）
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 2 });
+    expect(ctx.data.guestLoginShow).toBe(false);
+    expect(onCollectDone).toHaveBeenCalledTimes(1);
+    expect(onCollectDone).toHaveBeenCalledWith('line', true, false);
   });
 
   it('load 后所有浮层/播放态归零（换课不残留旧浮层、旧词卡与旧坐标字段）', async () => {

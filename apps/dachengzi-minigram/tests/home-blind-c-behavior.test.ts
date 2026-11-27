@@ -256,26 +256,20 @@ describe('C5 K9 tab 页归零（切 tab / navigateTo 详情回来不得「抽屉
 });
 
 describe('C6 动作 → services（AC-B.15 / E3 / 权限）', () => {
-  it('朗读此句：speakText(整句) 恰好一次 + 抽屉立即收起', () => {
-    const ctx = makeThis();
-    pageConfig.onQuoteWordLongPress.call(ctx, ev({ w: 'get', hasdef: false }));
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 0, text: EN } });
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenCalledWith(EN);
-    expect(ctx.data.overlay).toBeNull();
-  });
-
-  it('朗读单词：普通词同样 speakText(word)，不查释义、不因无释义被拦', () => {
+  /**
+   * 🔴 2026-11-26 变体 C（用户拍板）：朗读下沉到抽屉组件 ——
+   * 组件内直接 `speakText`，**抽屉不关**、按钮自切 ▶/■；页面不再有
+   * `onDrawerSpeakLine / onDrawerSpeakWord`（原三条朗读用例的判据对象已消失）。
+   * 这里反转成「不得回潮」断言，行为侧由 `tests/action-drawer.test.ts` 的
+   * 「变体 C · 朗读下沉」组覆盖（speakText 参数 / 切态 / 再点即停 / 不 emit）。
+   */
+  it('朗读不再经过页面：onDrawerSpeakLine / onDrawerSpeakWord 都不存在，且不调 speakText', () => {
     const ctx = makeThis();
     pageConfig.onQuoteWordLongPress.call(ctx, ev({ w: 'bed', hasdef: false }));
-    pageConfig.onDrawerSpeakWord.call(ctx, { detail: { word: 'bed', lineIndex: 0 } });
-    expect(speakTextMock).toHaveBeenCalledWith('bed');
-    expect(ctx.data.overlay).toBeNull();
-  });
-
-  it('朗读单词：空 payload 不得调用 speakText', () => {
-    const ctx = makeThis();
-    pageConfig.onDrawerSpeakWord.call(ctx, { detail: { word: '' } });
+    expect((pageConfig as any).onDrawerSpeakLine).toBeUndefined();
+    expect((pageConfig as any).onDrawerSpeakWord).toBeUndefined();
+    // 长按出来的抽屉仍在（朗读不再触发 closeOverlay）
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
     expect(speakTextMock).not.toHaveBeenCalled();
   });
 
@@ -287,7 +281,9 @@ describe('C6 动作 → services（AC-B.15 / E3 / 权限）', () => {
     expect(payload.tag).toBe('word');
     expect(payload.meta.hasDef).toBe(false);
     expect(payload.enMain).toBe('bed');
-    expect(ctx.data.overlay).toBeNull();
+    // 🔴 2026-11-27 方案 B 口径变更：收藏成功**不再收抽屉**（原断言 toBeNull()）。
+    //    三态反馈就发生在抽屉按钮上，抽屉必须留在原地；只有未登录路径才先收起（见下一条用例）。
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
   });
 
   it('收藏生词：meta.hasDef === true', async () => {

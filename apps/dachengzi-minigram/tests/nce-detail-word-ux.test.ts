@@ -104,7 +104,15 @@ function makeThis() {
   // 2026-11-26 变体 B：`_anchorFloat` 已删除；单槽位重构后新增 openOverlay / closeOverlay。
   // 2026-11-26 盲测 D-8：新增 `_resolveLineIdx`（文本→句下标的唯一入口，U1 ■ 定位用），
   // 桩必须同步，否则 `_onSpeakState` 在桩上下文里取不到它。
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip', '_subscribeReading', '_lineIdxOf', '_resolveLineIdx', '_resetPlayingState']) {
+  // 2026-11-27 D1：收藏的 payload 组装抽到 `_collectWord` / `_collectLine`（词卡与抽屉共用），
+  // 词卡三态走 `_tipCollectPatch` / `_setTipCollect` / `_clearTipCollectTimer` —— 桩必须同步。
+  for (const k of [
+    '_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip',
+    '_subscribeReading', '_lineIdxOf', '_resolveLineIdx', '_resetPlayingState',
+    '_collectWord', '_collectLine', '_tipCollectPatch', '_setTipCollect', '_clearTipCollectTimer',
+    // 2026-11-27 D7 双向同步：抽屉已收藏 key 集合的两个算口（桩必须与调用面同步）
+    '_drawerCollectedKeys', '_withCollectedKey',
+  ]) {
     ctx[k] = pageConfig[k];
   }
   return ctx;
@@ -180,16 +188,20 @@ describe('③ 长按任意单词 → 抽屉（朗读此句 / 收藏此句 / 朗�
     expect(actionsOf('word')).toHaveLength(4);    // 与生词档完全一致，不因 hasDef 少项
   });
 
-  it('「朗读单词」：恰好一次 speakText(word)，并收起抽屉（V-B11）', () => {
+  /**
+   * 🔴 2026-11-26 变体 C（用户拍板）：朗读下沉到抽屉组件 ——
+   * 组件内直接 `speakText(word)`，**抽屉不关**（用户要在抽屉里点 ■ 停止）。
+   * 所以页面侧既没有 `onDrawerSpeakWord`，也不会 `closeOverlay`。
+   * 组件侧（speakText 参数 / 播放态 / 不 emit）由 `tests/action-drawer.test.ts` 覆盖。
+   */
+  it('「朗读单词」不再经过页面：页面无该 handler，抽屉保持打开', () => {
     const ctx = makeThis();
     seedLines(ctx);
     pageConfig.onWordLongPress.call(ctx, {
       currentTarget: { dataset: { w: 'engineer', i: 0, hasdef: true } },
     });
-    pageConfig.onDrawerSpeakWord.call(ctx, { detail: { word: 'engineer', lineIndex: 0 } });
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenCalledWith('engineer');
-    expect(ctx.data.overlay).toBeNull();
+    expect((pageConfig as any).onDrawerSpeakWord).toBeUndefined();
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word', word: 'engineer' });
   });
 
   it('「收藏单词」：collectGlossary 走 tag=word，enMain/meta 齐备', async () => {

@@ -4,7 +4,8 @@
  * 判据：
  *  - AC-B.5/6：word=4 项 / line=2 项，顺序固定（换档重算）
  *  - 契约 1：组件**不自己关**（遮罩/下滑/✕ 只 triggerEvent('close')，visible 由页面改）
- *  - 契约 2：busy 锁 300ms 防连点
+ *  - 契约 2：busy 锁防连点（2026-11-27 起 = 「保持到页面回传 onCollectDone」+ 8s 安全超时兜底，
+ *    不再是旧的 300ms 自动放开，理由见 F3 段的「口径变更」）
  *  - D4/V-B9：下滑 ≥48rpx 关、<48rpx 回弹、上滑不位移
  *  - BB6：下滑手势起点在**按钮上**时应不响应拖拽（避免「想点按却把抽屉拖走」）
  *  - K9/§5.3：pageLifetimes.hide 必须把组件局部态（swipeY/busy/pressedKey/_hasStart）归零
@@ -20,6 +21,23 @@ const wxMock: any = {
   getSystemInfoSync: jest.fn(() => ({ windowWidth: 375 })),
 };
 
+/**
+ * tts 桩：变体 C（2026-11-26 用户拍板）后组件内直接调 `speakText / stopSpeak / onSpeakState`，
+ * 这里只记调用、推状态，不碰网络（组件单测不该走 services/tts 的真实现）。
+ */
+const mockTts: any = {
+  listeners: new Set<(s: any) => void>(),
+  calls: [] as string[],
+};
+jest.mock('../services/tts', () => ({
+  speakText: (t: string) => { mockTts.calls.push(`speak:${t}`); return Promise.resolve(true); },
+  stopSpeak: () => { mockTts.calls.push('stop'); },
+  onSpeakState: (cb: (s: any) => void) => {
+    mockTts.listeners.add(cb);
+    return () => { mockTts.listeners.delete(cb); };
+  },
+}));
+
 let cfg: any = null;
 
 beforeAll(() => {
@@ -31,6 +49,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   wxMock.getSystemInfoSync.mockReturnValue({ windowWidth: 375 });
+  mockTts.listeners.clear();
+  mockTts.calls = [];
 });
 
 /** 造一个组件实例：properties 走 data，methods 互为兄弟 */
@@ -88,7 +108,7 @@ describe('F1 换档重算动作集合（AC-B.5/6/7）', () => {
 });
 
 describe('F2 事件契约（组件只抛信号，不碰业务）', () => {
-  it('四个动作分别抛 speak-line / collect-line / speak-word / collect-word，payload 正确', () => {
+  it('两个收藏动作分别抛 collect-line / collect-word，payload 正确', () => {
     const inst = makeInst({ scope: 'word', lineIndex: 2, lineText: 'Stay in bed.', word: 'bed', wordHasDef: false });
     cfg.lifetimes.attached.call(inst);
     // busy 锁会挡连点：每次点前手动解锁，等价于 300ms 已过
@@ -97,17 +117,33 @@ describe('F2 事件契约（组件只抛信号，不碰业务）', () => {
       inst.onActionTap({ currentTarget: { dataset: { key } } });
     };
 
-    tap('speak-line');
-    expect(inst.triggerEvent).toHaveBeenLastCalledWith('speak-line', { lineIndex: 2, text: 'Stay in bed.' });
-
     tap('collect-line');
     expect(inst.triggerEvent).toHaveBeenLastCalledWith('collect-line', { lineIndex: 2, text: 'Stay in bed.' });
 
-    tap('speak-word');
-    expect(inst.triggerEvent).toHaveBeenLastCalledWith('speak-word', { word: 'bed', lineIndex: 2 });
-
     tap('collect-word');
     expect(inst.triggerEvent).toHaveBeenLastCalledWith('collect-word', { word: 'bed', lineIndex: 2, hasDef: false });
+  });
+
+  /**
+   * 🔵 2026-11-26 变体 C（用户拍板）：朗读下沉到组件 ——
+   * `speak-line` / `speak-word` **不再是"抛给页面的事件"**，而是组件内直接 `speakText`，
+   * 且抽屉不关（用户要在抽屉里点 ■ 停止）。本用例把这条与收藏反向钉住：
+   * 谁把朗读改回 triggerEvent，这里立刻红。
+   */
+  it('两个朗读动作**不抛事件**，改为组件内直接 speakText（抽屉不关）', () => {
+    const inst = makeInst({ scope: 'word', lineIndex: 2, lineText: 'Stay in bed.', word: 'bed', wordHasDef: false });
+    cfg.lifetimes.attached.call(inst);
+    const tap = (key: string) => {
+      inst.onActionTap({ currentTarget: { dataset: { key, kind: 'speak' } } });
+    };
+
+    tap('speak-line');
+    expect(mockTts.calls).toContain('speak:Stay in bed.');   // 抽屉持有原文，直接朗读
+    tap('speak-word');
+    expect(mockTts.calls).toContain('speak:bed');
+
+    expect(inst.triggerEvent).not.toHaveBeenCalled();        // 一个事件都不许抛
+    expect(inst.data.playingKey).toBe('speak-word');         // 同一时刻只有最后一个在播
   });
 
   it('collect-word 的 hasDef 透传（普通词也必须原样回传，页面据此写 meta）', () => {
@@ -135,15 +171,54 @@ describe('F2 事件契约（组件只抛信号，不碰业务）', () => {
   });
 });
 
-describe('F3 busy 锁（防连点）', () => {
-  it('300ms 内连点只生效一次', () => {
+/**
+ * 🔴 2026-11-27 口径变更（方案 B，用户拍板「这个交互应该通用的」）：
+ * 旧语义「300ms 后 busy **自动**放开」已废弃。旧实现的真实缺陷形态就是本轮真机反馈 ①：
+ * 页面还没拿到收藏结果、图标还没变，组件已经把锁放开并把 pressedKey 清掉 →
+ * 用户看到「点了没反应、icon 不变」，且这 300ms 内再点会被吞掉。
+ * 新语义：busy 一直保持到页面 `onCollectDone(kind, ok, existed)` 回传为止（那才是真防连点），
+ * 组件只留 8s 安全超时兜底（页面忘了回传时不至于把收藏按钮永久禁用）。
+ * 因此「防连点」的窗口从「300ms」改成「回传之前」——不是放宽，是变严。
+ */
+describe('F3 busy 锁（防连点 · **只锁收藏**，朗读走 60ms 同帧防抖）', () => {
+  it('提交中（页面未回传）连点只生效一次，且不因时间流逝自行放开', () => {
     jest.useFakeTimers();
     const inst = makeInst({ scope: 'word' });
-    inst.onActionTap({ currentTarget: { dataset: { key: 'speak-line' } } });
+    cfg.lifetimes.attached.call(inst);
     inst.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
+    inst.onActionTap({ currentTarget: { dataset: { key: 'collect-word' } } });
     expect(inst.triggerEvent).toHaveBeenCalledTimes(1);
-    expect(inst.data.pressedKey).toBe('speak-line'); // E4：按下高亮
-    jest.advanceTimersByTime(300);
+    expect(inst.data.pressedKey).toBe('collect-line'); // E4：按下高亮
+
+    // 3s 后仍不许自行放开（旧实现 300ms 就放了，这正是缺陷）
+    jest.advanceTimersByTime(3000);
+    expect(inst.data.busy).toBe(true);
+    expect(inst.data.pressedKey).toBe('collect-line');
+    jest.useRealTimers();
+  });
+
+  it('8s 安全超时兜底：页面忘回传时按钮自救回 idle（防永久禁用）', () => {
+    jest.useFakeTimers();
+    const inst = makeInst({ scope: 'word' });
+    cfg.lifetimes.attached.call(inst);
+    inst.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
+    jest.advanceTimersByTime(7999);
+    expect(inst.data.collect.line).toBe('busy');   // 差 1ms 不许提前放
+    jest.advanceTimersByTime(1);
+    expect(inst.data.collect.line).toBe('idle');
+    expect(inst.data.busy).toBe(false);
+    expect(inst.data.pressedKey).toBe('');
+    jest.useRealTimers();
+  });
+
+  it('页面回传 onCollectDone 后立刻放开，不必等 8s', () => {
+    jest.useFakeTimers();
+    const inst = makeInst({ scope: 'word' });
+    cfg.lifetimes.attached.call(inst);
+    inst.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
+    expect(inst.data.busy).toBe(true);
+    inst.onCollectDone('line', true, false);
+    expect(inst.data.collect.line).toBe('done');
     expect(inst.data.busy).toBe(false);
     expect(inst.data.pressedKey).toBe('');
     jest.useRealTimers();
@@ -152,10 +227,11 @@ describe('F3 busy 锁（防连点）', () => {
   it('卸载后定时器到点不得 setData（_alive 守卫）', () => {
     jest.useFakeTimers();
     const inst = makeInst({ scope: 'word' });
-    inst.onActionTap({ currentTarget: { dataset: { key: 'speak-line' } } });
+    cfg.lifetimes.attached.call(inst);
+    inst.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
     const calls = inst.setData.mock.calls.length;
     cfg.lifetimes.detached.call(inst);
-    jest.advanceTimersByTime(500);
+    jest.advanceTimersByTime(9000);   // 必须跨过 8s 兜底点，否则这条守卫等于没测
     expect(inst.setData.mock.calls.length).toBe(calls);
     jest.useRealTimers();
   });
@@ -219,14 +295,15 @@ describe('F4 下滑手势（V-B9 / D4）', () => {
 });
 
 describe('F5 K9：pageLifetimes.hide 归零组件局部态', () => {
-  it('hide → swipeY / dragging / busy / pressedKey / _hasStart 全部归零，busy 定时器清掉', () => {
+  it('hide → swipeY / dragging / busy / pressedKey / playingKey / _hasStart 全部归零，busy 定时器清掉', () => {
     jest.useFakeTimers();
     const inst = makeInst({ scope: 'word' });
-    inst.onActionTap({ currentTarget: { dataset: { key: 'speak-line' } } });
+    inst.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
     inst.onTouchStart(touch(100));
     inst.onTouchMove(touch(110));
     expect(inst.data.swipeY).toBe(10);
     expect(inst.data.busy).toBe(true);
+    inst.setData({ playingKey: 'speak-word' });
 
     cfg.pageLifetimes.hide.call(inst);
 
@@ -234,8 +311,10 @@ describe('F5 K9：pageLifetimes.hide 归零组件局部态', () => {
     expect(inst.data.dragging).toBe(false);
     expect(inst.data.busy).toBe(false);
     expect(inst.data.pressedKey).toBe('');
+    expect(inst.data.playingKey).toBe('');   // 2026-11-26 变体 C：隐藏必须清播放态（并已 stopSpeak）
     expect(inst.data._hasStart).toBe(false);
     expect(inst.data._busyTimer).toBe(0);
+    expect(mockTts.calls).toContain('stop');
     jest.useRealTimers();
   });
 
