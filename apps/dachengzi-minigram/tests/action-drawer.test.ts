@@ -564,3 +564,66 @@ describe('契约 6：关闭三通道都必须「先停朗读，再抛 close」�
     expect(c.data.playingKey).toBe('');
   });
 });
+
+// ═══════ 2026-11-27 独立盲测 P1：页面侧关抽屉时组件没停朗读（「关了还在念」）═══════
+//
+// 缺陷形态（盲测实测）：组件自己那三条关闭通道（遮罩 / ✕ / 下滑）都显式先 `stopSpeak()` 再
+// emit，所以自测全绿；但**页面也能关浮层** —— 页面侧 `closeOverlay()` 只把 `visible` 置 false，
+// 组件收到的是 `visible` 的 observer。旧实现在 observer 里只清 `playingKey`、不调 `stopSpeak()`：
+//   · 音频继续念，而抽屉已经消失（页面上再没有停止入口）；
+//   · 更坏的是重新打开抽屉时按钮带着 ■ 残留，点「朗读」实际执行的是「停止」，
+//     用户感知为「点了没声音」。
+// 本组用例就是这条缺陷的证伪器：把 observer 里的 `stopSpeak()` 注释掉，本组必红。
+describe('🔴 页面侧关抽屉（visible=false）必须停朗读（P1「关了还在念」）', () => {
+  /** 开一个正在朗读单词的抽屉（走真实点按路径点亮 playingKey，不用手塞 data） */
+  function speaking(): Record<string, any> {
+    const c = makeDrawer({ visible: true, scope: 'word', lineText: 'He is an engineer.', lineIndex: 2, word: 'engineer' });
+    c.scope('word');
+    c.attached();   // 真机上 observer 触发时组件必然处于挂载态（订阅已建立）
+    c.onActionTap({ currentTarget: { dataset: { key: 'speak-word', kind: 'speak' } } });
+    expect(c.data.playingKey).toBe('speak-word');
+    return c;
+  }
+
+  it('🔴 页面侧关抽屉（visible false）时必须停朗读，不许「关了还在念」', () => {
+    const c = speaking();
+
+    // 记录「stopSpeak 发生的那一刻 playingKey 是什么」—— 同时验证**顺序**（先停、后清态）
+    const seen: string[] = [];
+    const realStop = mockTts.stop;
+    mockTts.stop = () => { seen.push(`stop@${c.data.playingKey}`); realStop(); };
+    try {
+      mockTts.calls = [];          // 只看「关抽屉」这一步产生的调用
+      c.visible(false);            // 页面侧 closeOverlay() 的全部效果：visible 由 true 变 false
+    } finally {
+      mockTts.stop = realStop;
+    }
+
+    // ① 必须停朗读，且**恰好**一次（不能因为多处兜底而重复停到页面别的朗读）
+    expect(mockTts.calls.filter((x) => x === 'stop')).toHaveLength(1);
+    // ② 顺序：stopSpeak 发生时 playingKey 还是非空（= 先停朗读，再清播放态）
+    expect(seen).toEqual(['stop@speak-word']);
+    // ③ 播放态归零：重开抽屉不会带着 ■ 残留（否则「点朗读」变成「停止」→ 用户以为没声音）
+    expect(c.data.playingKey).toBe('');
+  });
+
+  it('playingKey 为空时**不**调 stopSpeak（不误停页面别处的朗读）', () => {
+    const c = makeDrawer({ visible: true, scope: 'line', lineText: 'S.' });
+    c.attached();
+    // tts 确实在播，但播的不是本抽屉发起的（playingKey 仍为空 = 本实例没在播）
+    mockTts.emit({ text: 'some other sentence.', phase: 'playing' });
+    expect(c.data.playingKey).toBe('');
+
+    mockTts.calls = [];
+    c.visible(false);
+    expect(mockTts.calls.filter((x) => x === 'stop')).toHaveLength(0);
+  });
+
+  it('observer 对 visible=true 不做任何停朗读动作（打开抽屉不许把正在播的停掉）', () => {
+    const c = speaking();
+    mockTts.calls = [];
+    c.visible(true);
+    expect(mockTts.calls.filter((x) => x === 'stop')).toHaveLength(0);
+    expect(c.data.playingKey).toBe('speak-word');
+  });
+});

@@ -204,22 +204,66 @@ describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
     /**
      * 🔴🔴 P0（2026-11-26 假绿暴露面审计）：只查 `.ad-acts` + `.ad-drawer` **两处**仍然治不了本病 ——
      * 把 `catchtouchstart` 挪到**最外层 `.ad` 容器**（或任何新的抽屉系祖先节点）上，同一个 bug 原地
-     * 复活（四按钮 tap 全灭）而套件全绿。所以口径改成「**所有抽屉系起始标签**都不得出现它」：
+     * 复活（四按钮 tap 全灭）而套件全绿。所以口径是「**所有抽屉系起始标签**都不得出现它」：
      *   · 取全部 `<view …>` 起始标签；
-     *   · class 里去掉 `{{…}}` 插值后按空白拆 token，含 `ad-drawer` 或恰好是 `ad` 的算「抽屉系」；
-     *   · 先断言数量 ≥2（外框 `.ad` + 抽屉 `.ad-drawer`）防空转，再逐个禁 catchtouchstart。
+     *   · class 里去掉 `{{…}}` 插值后按空白拆 token；
+     *   · 任一 token 命中「抽屉系」判定的算数。
+     *
+     * 🔴🔴 2026-11-27 P2 收严（独立盲测）：「抽屉系」原口径是 token **精确等于** `ad` 或 `ad-drawer`，
+     * 两个漏洞：① 将来新增 `class="ad-inner"` 之类节点**不会被纳入**（它自身或它的祖先能 catch 掉
+     * touchstart，bug 照样复活，而测试全绿）；② 只断 `length >= 2`，挡不住「本该抓到 3 个却只抓到 2 个」。
+     * 现在改成**前缀匹配** + **三个节点点名断言**（外框 `.ad` / 抽屉本体 `.ad-drawer` / 动作区
+     * `.ad-acts` 缺一个即红）。注意 `ad-mask` 上确实有 `catchtouchmove="noop"` —— 只禁
+     * `catchtouchstart`，不许把 touchmove 也禁掉（那是拦页面滚动穿透用的）。
+     *
+     * 抽屉系 token 的判定口径：**前缀** `/^ad(-|$)/`。
+     * 覆盖 `ad` / `ad-drawer` / `ad-acts` / `ad-mask` / `ad-close` / `ad-inner` … 全部；
+     * 不误纳 `adx` / `x-ad` / `bad`（否则将来某个无关 class 会被拖进来当抽屉系白名单成员）。
      */
+    const isDrawerToken = (tok: string): boolean => /^ad(-|$)/.test(tok);
+    // 筛子自测：口径本身也要被钉住，否则「改个正则」就能静默放宽（含「新增节点自动纳入」）
+    for (const t of ['ad', 'ad-drawer', 'ad-acts', 'ad-mask', 'ad-close', 'ad-inner', 'ad-foo-bar']) {
+      expect(isDrawerToken(t)).toBe(true);
+    }
+    for (const t of ['', 'adx', 'x-ad', 'adx-drawer', 'bad', 'ad_acts']) {
+      expect(isDrawerToken(t)).toBe(false);
+    }
+
     const viewTags = w.match(/<view\b[^>]*>/g) || [];
-    const drawerish = viewTags.filter((tag) => {
-      const cls = (tag.match(/class="([^"]*)"/) || ['', ''])[1];
-      const tokens = cls.replace(/\{\{[^}]*\}\}/g, ' ').split(/\s+/);
-      return tokens.indexOf('ad-drawer') >= 0 || tokens.indexOf('ad') >= 0;
-    });
-    expect(drawerish.length).toBeGreaterThanOrEqual(2);   // 防空转：必须真的抓到外框 + 抽屉
+    /** 起始标签 → class token 数组（丢掉 `{{…}}` 插值：里面是三元表达式，不是 class 名） */
+    const tokensOf = (tag: string): string[] =>
+      ((tag.match(/class="([^"]*)"/) || ['', ''])[1])
+        .replace(/\{\{[^}]*\}\}/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+    const drawerish = viewTags.filter((tag) => tokensOf(tag).some(isDrawerToken));
+    /** 按 token **精确**取节点（不走前缀）—— 用于点名断言「这三个确实被抓到了」 */
+    const tagsWithToken = (tok: string): string[] =>
+      viewTags.filter((tag) => tokensOf(tag).indexOf(tok) >= 0);
+
+    // ① 点名断言：三个关键抽屉系节点必须在场，且都被前缀筛选纳入
+    //    外框 `.ad` / 抽屉本体 `.ad-drawer` / 动作区 `.ad-acts` —— 缺一个即红（比 `>=2` 强，
+    //    能挡住「本该抓到 3 个里的 3 个，实际只抓到 2 个」）
+    const NAMED = ['ad', 'ad-drawer', 'ad-acts'];
+    for (const tok of NAMED) {
+      const hits = tagsWithToken(tok);
+      expect(hits.length).toBe(1);              // 唯一命中（同名多节点时下面的断言才有意义）
+      const tag = hits[0];
+      expect(tag).toMatch(/^<view\s/);          // 🔴 先证「真的抓到了那个标签」，防空转
+      expect(drawerish).toContain(tag);         // 且确实被前缀口径纳入（不是漏网后被点名兜住的）
+      // 抽屉系节点不得 catch 掉 touchstart（父节点 catch touchstart → 子按钮 tap 全灭）
+      expect(tag).not.toMatch(/catchtouchstart/);
+      expect(tag).not.toMatch(/catch:touchstart/);
+    }
+
+    // ② 全部抽屉系节点逐条禁 catchtouchstart（前缀口径：新增 ad-* 节点自动纳入）
+    expect(drawerish.length).toBeGreaterThanOrEqual(NAMED.length);   // 防空转
     for (const tag of drawerish) {
       expect(tag).not.toMatch(/catchtouchstart/);
       expect(tag).not.toMatch(/catch:touchstart/);
     }
+    // ③ 反向保险：`.ad-mask` 的 catchtouchmove（拦页面滚动穿透）不许被顺手删掉
+    expect(tagsWithToken('ad-mask')[0] || '').toMatch(/catchtouchmove="noop"/);
     /**
      * 🔴 2026-11-26 补的零覆盖项：根节点必须保留 `bindtouchcancel="onTouchEnd"`。
      * 缺它 → 手势被系统打断（来电 / 下拉通知栏 / 手势冲突）时 touchend 不触发，

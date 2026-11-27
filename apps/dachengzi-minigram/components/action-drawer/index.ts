@@ -24,6 +24,11 @@
  *     （方案 §2.0-B：B 变体把「跨层测量」这个唯一形态级难题直接消灭）。
  *  4. **关了就不许还在念**。三条关闭通道（遮罩 / ✕ / 下滑）都必须先 `stopSpeak()` 再抛 `close`
  *     —— 抽屉一关，页面上就没有停止入口了。`pageLifetimes.hide` 与 `detached` 同样要停。
+ *     🔴 **第四条通道（2026-11-27 盲测 P1 修）：页面自己关浮层**。页面侧 `closeOverlay()` 只把
+ *     `visible` 置 false，**不经过**本组件任何手势分支 —— 组件唯一能感知到的是 `visible` 的
+ *     observer。所以那个 observer 在 `visible` 变 false 时**必须自己先停朗读**，否则
+ *     「抽屉已消失、声音还在念」，且重开时按钮带着 ■ 残留（点「朗读」实际执行的是停止，
+ *     用户感知为「点了没声音」）。
  *
  * 播放态（2026-11-26 变体 C 起**由组件自持**，方案 §5.2 的旧口径已作废）：
  *  - 组件订阅 `onSpeakState`：tts 推文本 → 按文本反查是哪个按钮在播（同一时刻至多一个）；
@@ -86,6 +91,24 @@ const FALLBACK_WINDOW_W = 375;
 interface TouchPoint { clientY?: number; pageY?: number; }
 interface TouchEventLike { touches?: TouchPoint[]; }
 interface TapEventLike { currentTarget?: { dataset?: Record<string, unknown> }; }
+
+/**
+ * 组件实例上的**逻辑层私有字段**（不进 `data`）。
+ *
+ * 为什么不能放 `data`：`data` 是渲染层数据源，进 `data` 的东西会走 setData 的序列化路径 ——
+ * 塞一个函数进去，渲染层拿到的只能是 `null` / 空对象，纯属噪音，还会让「data 里有哪些字段」
+ * 这条自查口径失真。真机支持在 `this` 上挂与 `data` 平级的自定义字段（不参与渲染），
+ * 这也是本项目页面侧 `_offSpeakState` 的既有口径。
+ *
+ * 🔴 `Component()` 的配置对象**没有**「自定义实例字段」这一栏（页面 `Page({...})` 才有），
+ * 所以字段只能在 `attached` 里赋值，类型靠下面这个收窄视图引入 —— 不做全文件 `as any`。
+ */
+interface DrawerInstance {
+  /** `onSpeakState` 的退订闭包（`null` = 未订阅） */
+  _offSpeakState: (() => void) | null;
+}
+/** 取实例的私有字段视图：不复制对象，只做类型收窄（`self` 收成 `unknown` 才允许这样转） */
+const instOf = (self: unknown): DrawerInstance => self as DrawerInstance;
 
 Component({
   properties: {
@@ -154,11 +177,13 @@ Component({
     /** 上一次朗读点按的 key / 时间戳：只用于吞掉同帧重复派发（逻辑层私有） */
     _speakTapKey: '',
     _speakTapAt: 0,
-    /** onSpeakState 的退订函数（逻辑层私有；null = 未订阅） */
-    _offSpeakState: null as null | (() => void),
     /** 组件是否仍挂载（detached 后禁止 setData）。默认 true：实例一旦存在就是活的，
      *  只有显式 detached 才置 false —— 这样「从未 attached 的实例」也不会被误判成已卸载。 */
     _alive: true,
+    /**
+     * 🔴 退订闭包 `_offSpeakState` **不在 data 里**（2026-11-27 清理）：函数不是渲染层数据。
+     * 它挂在组件实例上，类型见文件顶部的 `DrawerInstance` / `instOf`。
+     */
   },
 
   observers: {
@@ -166,9 +191,27 @@ Component({
     scope(scope: string) {
       this.setData({ acts: actionsOf(scope === 'word' ? 'word' : 'line') });
     },
-    /** 关掉时把局部态归零：下次打开不残留上次的下滑位移 / 按下高亮 / 播放态 */
+    /**
+     * 关掉时把局部态归零：下次打开不残留上次的下滑位移 / 按下高亮 / 播放态。
+     *
+     * 🔴 2026-11-27 盲测 P1（「关了还在念」）：**页面也能关浮层** —— 页面侧 `closeOverlay()`
+     * 只把 `visible` 置 false，不经过本组件的遮罩 / ✕ / 下滑三条通道。此时组件唯一能收到的
+     * 信号就是这个 observer，所以「停朗读」必须在这里也做一次，否则：
+     *   · 抽屉已消失、音频继续念（页面上再无停止入口）；
+     *   · 重开抽屉时按钮带着 ■ 残留 → 点「朗读」走的是「停止」分支，用户以为「点了没声音」。
+     *
+     * 🔴 判据是 `this.data.playingKey` 非空**才**调 `stopSpeak()`：页面可能同时在播别的东西
+     * （详情页 tip 朗读 / 首页「今日一句」），本实例没在播就不许误停。
+     * 顺序也是被断言的：**先 stopSpeak 再清 playingKey**（stopSpeak 推回的 null 可能同步到达，
+     * 先清态会让「谁在播」这条信息在 stop 之前就丢了）。
+     *
+     * 三条手势通道（`_emitClose`）里的 `stopSpeak()` 保留 —— 幂等，重复调用无害，
+     * 且「关了就不许还在念」这条红线不能只押在一个 observer 上。
+     */
     visible(visible: boolean) {
-      if (!visible) this._resetLocalState();
+      if (visible) return;
+      if (this.data.playingKey) stopSpeak();
+      this._resetLocalState();
     },
   },
 
@@ -178,16 +221,18 @@ Component({
       this.data._speakTapKey = '';
       this.data._speakTapAt = 0;
       // 订阅 tts 权威状态：自然播完 / 失败 / 被页面停掉 → 按钮自动回 ▶（契约 5）
-      this.data._offSpeakState = onSpeakState((s) => this._syncSpeakState(s));
+      // 🔴 退订闭包挂实例字段（不进 data），见文件顶部 DrawerInstance 的注释
+      instOf(this)._offSpeakState = onSpeakState((s) => this._syncSpeakState(s));
       // 首帧对齐一次：父组件可能在 attached 前就传了 scope
       this.setData({ acts: actionsOf(this.data.scope === 'word' ? 'word' : 'line') });
     },
     detached() {
       this.data._alive = false;
       // 先退订再停：退订后 stopSpeak 推的 null 不会再回到本实例（避免卸载后 setData 告警）
-      if (this.data._offSpeakState) {
-        this.data._offSpeakState();
-        this.data._offSpeakState = null;
+      const inst = instOf(this);
+      if (inst._offSpeakState) {
+        inst._offSpeakState();
+        inst._offSpeakState = null;
       }
       stopSpeak(); // 组件销毁 = 抽屉不可能再被打开：绝不允许「关了还在念」
       this.data.playingKey = '';

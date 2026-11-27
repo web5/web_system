@@ -1,10 +1,17 @@
 <!--
-  长按动作抽屉（变体 B）— 结构：遮罩 + 底部抽屉（把手 + 标题区 + 2×2 动作区）
+  长按动作抽屉（变体 C · 抽屉内朗读）— 结构：遮罩 + 底部抽屉（把手 + 标题区 + 2×2 动作区）
+
+  🔴 与原型「变体 B-底部抽屉」的差异（2026-11-26 用户拍板 → 变体 C）：**朗读在组件内直接调
+     tts**（组件已持有原文），点按不 emit、不关抽屉、按钮自切 ▶/■（播放态归组件自持）；
+     **收藏仍 triggerEvent 回页面**（两页的登录 toast / 内联 modal 差异必须留在页面）。
 
   🔴 三处「不要」：
-   1. 不要在这里绑任何 services / 业务逻辑 —— 组件只 catchtap 后 triggerEvent；
+   1. **services 只允许 tts 这一个**（朗读是纯副作用 + 自有播放态，下沉到组件不污染两页差异；
+      静态断言在 `tests/action-drawer.test.ts` 的 A8 组）；其余 services（glossary / auth / nce /
+      account …）一律禁止 —— 收藏、未登录守卫、payload 组装、toast 文案全部留在页面，
+      **收藏类动作仍然只 `triggerEvent` 回页面**；
    2. 不要用 wx:if 之外的方式控制显隐（visible=false 时整棵子树都不渲染 = 遮罩与抽屉同开同关）；
-   3. 不要出现 left:{{…}}rpx / top:{{…}}rpx 之类坐标绑定（B 变体不测任何坐标）。
+   3. 不要出现 left:{{…}}rpx / top:{{…}}rpx 之类坐标绑定（不测任何坐标）。
 
   动作顺序由 utils/line-actions.actionsOf 固定：
     第 1 行 朗读此句 | 收藏此句（2 项档只渲染这一行）
