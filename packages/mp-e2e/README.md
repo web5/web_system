@@ -412,7 +412,7 @@ runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 
 | app | 用例 | 文件 | 判据溯源 |
 |---|---|---|---|
 | dachengzi | A. 三 tab 渲染 + 选中态 | `apps/dachengzi-minigram/tests/e2e/cases/A-tabs.js` | V21 |
-| dachengzi | ~~B. 返回栈~~ **暂缓** | —（暂缓：目标页 packageTranslate/pages/translate/result 已于 commit 75898073「2026-11-10 对话式翻译改造」废弃；重写走用例卡流程单独立项——新对话流首问会走真 LLM，须评估首问部分转 BLOCKED 或 mock 方案，返回栈断言保留） | V7 / V22 / V23 |
+| dachengzi | B. 返回栈 home→NCE目录→NCE详情→逐级返回 | `apps/dachengzi-minigram/tests/e2e/cases/B-return-stack.js` | V7 / V22 / V23 |
 | dachengzi | E. 圆角设置持久化（E3 BLOCKED） | `apps/dachengzi-minigram/tests/e2e/cases/E-radius-persist.js` | V42 |
 | dachengzi | F. 清缓存白名单 | `apps/dachengzi-minigram/tests/e2e/cases/F-clear-cache.js` | V45 |
 | dachengzi | G. 未登录态首页（仅 login-gate / hero 不渲染 / greetingText 空串） | `apps/dachengzi-minigram/tests/e2e/cases/G-login-gate.js` | 台账 9045/9053/9085 |
