@@ -127,10 +127,13 @@ module.exports = {
 |---|---|---|
 | 全部 PASS（BLOCKED 不计失败） | 四态汇总表 | **0** |
 | ≥1 条 FAIL（含 preflight 静态守卫不通过、配置错误） | 汇总表 + 失败详情 | **1** |
+| 整卡全 BLOCKED（用例 status=BLOCKED 且 steps 全 BLOCKED） | warning（默认）/ `console.error`（开关打开） | **0**（默认，BLOCKED 不计失败）/ **1**（`MP_E2E_BLOCKED_AS_FAIL=1`） |
 | 环境不可用（devtools 未装/服务端口未开/launch 超时） | 醒目横幅 + 全部用例标 SKIP + 排查提示 | **0**（默认）/ **2**（`MP_E2E_REQUIRE_ENV=1`） |
+| 零用例命中（casesDir 空 / `--filter` 零命中） | 错误提示（拒绝静默绿） | **1**（`MP_E2E_REQUIRE_ENV=1` 时 **2**） |
 
 口径说明：**环境失败不红**——环境问题非代码问题，噪声不该混进信号（kedou 既有决策，CI 实测背书）。
 `MP_E2E_REQUIRE_ENV=1` 是本地严格验收的逃生门，防「环境坏了但全绿」的假阳性。
+**验收/交付一律用 `test:e2e:strict`（SKIP 非 0 不算通过）**；普通 `test:e2e` 仅供本地开发看信号。
 
 四态：**PASS / FAIL / BLOCKED / SKIP**。SKIP 由 runner 统一判（环境不可用），用例与用例卡都不需要写 SKIP；
 BLOCKED 由用例显式声明（`ctx.blocked`），判定标准见附录 A §3.4。
@@ -140,6 +143,10 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 ---
 
 ## ⑤ 已知限制
+
+> **整卡全 BLOCKED 开关**：若某用例 steps 全为 BLOCKED（无有效 PASS/FAIL），说明该功能在本基建下测不了。
+> 默认仅打 warning、exit 0（不打破存量合法 BLOCKED，如① E3 同卡仍有 E1/E2 PASS）；
+> 设 `MP_E2E_BLOCKED_AS_FAIL=1` 则打 `console.error` 并 exit 1，拒绝静默通过。判据见附录 A §3.4。
 
 1. **① close()→launch() 之间 devtools 自动化会清空 wx storage**（仅 api_base 因 onLaunch 重写残留）→ 跨进程持久化用例判 `BLOCKED`，不当产品 bug（E3 先例）。⚠️ 2026-11-11 探针实测：现版 devtools 可能已不再清空（close→launch 后 appearance_radius 仍在），待复核——复核确认前 BLOCKED 口径不变。
 2. **② 仅 macOS 本地可跑**；需开发者工具「设置 → 安全设置 → 服务端口」开启；CI 不适用。
@@ -241,7 +248,7 @@ runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 
 #### A.3.1 用例编号与命名规则（与 runner 用例发现对齐）
 
 - **一卡 = 一个 case 文件**（默认，见 A.6.1）。文件落点 `apps/<app>/tests/e2e/cases/<字母>-<slug>.js`，runner 按文件名排序执行。
-- **字母 = 卡在 app 内的编号**：每个 app 独立计数（dachengzi 现有 A–G，新卡从 H 起；kedou 从 A 起）。字母同时是文件名前缀与步骤号前缀，保证「汇总输出 ↔ 卡 ↔ 文件」三方互查。
+- **字母 = 卡在 app 内的编号**：字母 **per-app 独立计数**，**实际清单以 `apps/<app>/tests/e2e/README.md` 为准**（不在本文重复维护，避免双真源）。字母同时是文件名前缀与步骤号前缀，保证「汇总输出 ↔ 卡 ↔ 文件」三方互查。
 - **步骤号 = `<字母><n>`**，从 1 连续编号，对应 case 文件里每个 `ctx.run('<字母><n> <名称>', fn)`。
 - **跨 app 引用用全限定 `<app>:<字母>`**（如 `dachengzi:B`），避免 kedou:A 与 dachengzi:A 撞名。
 - 卡内断言粒度 ≠ 步骤粒度：一步可含多条断言（如 B2 含路径 + 栈深两条），但**一个步骤号对应一个 `ctx.run`**，保证失败定位到步。
@@ -406,9 +413,9 @@ runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 
 |---|---|---|---|
 | dachengzi | A. 三 tab 渲染 + 选中态 | `apps/dachengzi-minigram/tests/e2e/cases/A-tabs.js` | V21 |
 | dachengzi | ~~B. 返回栈~~ **暂缓** | —（暂缓：目标页 packageTranslate/pages/translate/result 已于 commit 75898073「2026-11-10 对话式翻译改造」废弃；重写走用例卡流程单独立项——新对话流首问会走真 LLM，须评估首问部分转 BLOCKED 或 mock 方案，返回栈断言保留） | V7 / V22 / V23 |
-| dachengzi | C. 翻译设置偏好初值闭环 | `apps/dachengzi-minigram/tests/e2e/cases/C-translate-prefs.js` | V52③ |
-| dachengzi | D. 清空历史不误清 | `apps/dachengzi-minigram/tests/e2e/cases/D-clear-history.js` | V53④⑤ |
 | dachengzi | E. 圆角设置持久化（E3 BLOCKED） | `apps/dachengzi-minigram/tests/e2e/cases/E-radius-persist.js` | V42 |
 | dachengzi | F. 清缓存白名单 | `apps/dachengzi-minigram/tests/e2e/cases/F-clear-cache.js` | V45 |
-| dachengzi | G. accent 已删 | `apps/dachengzi-minigram/tests/e2e/cases/G-accent-removed.js` | A2 落地验收 |
+| dachengzi | G. 未登录态首页（仅 login-gate / hero 不渲染 / greetingText 空串） | `apps/dachengzi-minigram/tests/e2e/cases/G-login-gate.js` | 台账 9045/9053/9085 |
+| dachengzi | I. 关于页版本号渲染 | `apps/dachengzi-minigram/tests/e2e/cases/I-about-version.js` | 台账 9060 |
+| dachengzi | J. 长昵称 hero 布局不挤出 | `apps/dachengzi-minigram/tests/e2e/cases/J-hero-layout.js` | 台账 9042 |
 | kedou | A. 启动到达首页 | `apps/kedou-ai-minigram/tests/e2e/cases/A-launch-home.js` | 基建首条 |

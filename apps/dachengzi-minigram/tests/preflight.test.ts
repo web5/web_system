@@ -664,6 +664,25 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   let errSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
 
+  // ---------- 事故回归用「哨兵文件」 ----------
+  //
+  // 用来钉死「测试把用户刚出的预览码删了」这个行为。
+  //
+  // 🔴 为什么哨兵必须在 **beforeAll**（= 本组任意一条用例之前）就铺好，而不能写在哨兵用例体内：
+  //    要绊住的是**上面那条用例**（门禁通过时门禁不误伤）的 finally 清理。若哨兵在它跑完之后才创建，
+  //    「无条件 rmSync」这次变异就永远删不到哨兵 —— 哨兵用例照样绿，回归测试等于空转。
+  //    （实测：哨兵写在用例体内时，把清理行改回无条件写法，全组仍 5 passed，一条都不红。）
+  //    所以铺哨兵的时机必须早于那条用例：beforeAll 先造出「进入时目录已存在且非空」的真现场。
+  const ciOutPath = path.join(__dirname, '..', '.ci-output');
+  const SENTINEL_NAME = `__sentinel-${process.pid}.png`;
+  const SENTINEL_PATH = path.join(ciOutPath, SENTINEL_NAME);
+  const SENTINEL_BODY = 'SENTINEL-MUST-SURVIVE-PREFLIGHT-TEST';
+
+  beforeAll(() => {
+    fs.mkdirSync(ciOutPath, { recursive: true });
+    fs.writeFileSync(SENTINEL_PATH, SENTINEL_BODY);
+  });
+
   beforeEach(() => {
     // 🔴 第一行：先记下本条用例开始时的真值（此刻文件级 beforeEach 已注入 process.execPath），
     //    再让下面的 spy 动手。顺序不能换 —— 挪到 collection 期就是老 bug。
@@ -723,6 +742,14 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
     fs.chmodSync(fakeCli, 0o755);
     process.env.WECHAT_DEVTOOLS_CLI = fakeCli;
 
+    // 🔴 .ci-output 是**仓库里的真实目录**，不是本用例的临时产物 —— 用户刚出的预览码
+    //    （cli-preview-qr.png / cli-preview-qr.meta.json）就躺在里面。
+    //    所以必须在**任何可能触发 mkdir 的调用之前**先记下它进用例前的真值，
+    //    收尾时只清「本用例自己新建的那一个」，其余一律不动。
+    //    取值点放在用例最开头而不是 collection 期 —— 与上面 savedCliEnv 那段同一纪律。
+    const ciOut = path.join(__dirname, '..', '.ci-output');
+    const ciOutExisted = fs.existsSync(ciOut);
+
     try {
       // --allow-any-dir：本 worktree 顶层名不在发布白名单内（CI 里可能本来就在，开关无害）
       expect(() => publishMod.main(['preview', '--no-push', '--allow-any-dir'])).toThrow('exit:1');
@@ -732,8 +759,53 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
       expect(errSpy.mock.calls.map((c) => String(c[0])).join('\n')).toContain('cli 出码失败');
     } finally {
       fs.rmSync(fakeCli, { force: true });
-      // cmdPreview 在调 cli 前会 mkdir .ci-output；清掉空目录，别给工作区留垃圾
-      fs.rmSync(path.join(__dirname, '..', '.ci-output'), { recursive: true, force: true });
+      // 🔴 只在「进用例前 .ci-output 根本不存在」时才删 —— 目录原本存在（哪怕内容为空）也一律不动。
+      //    以前这里无条件 rmSync，一次全量 jest 就把用户刚出的预览码连目录一起清了
+      //    （取证报告 §时间线：第一次清空落在 22:07:03–22:08:27 四次全量 jest 窗口内，第二次精确 22:16:22）。
+      //    保留这种「一行内自带 ciOutExisted 前置条件」的写法，也是
+      //    tests/guard-no-test-deletes-ci-output.test.ts 能把这**一行**精确豁免（而非整个文件）的前提。
+      if (!ciOutExisted) fs.rmSync(ciOut, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * 🔴 事故回归：2026-11-26 两次「用户刚出的预览码凭空消失」（第一次落在
+   * 22:07:03–22:08:27 的连续全量 jest 窗口内，第二次精确到 22:16:22）。
+   *
+   * 机制（已完整还原）：本组上面那条用例（门禁通过时门禁不误伤）的 finally **无条件**
+   * `fs.rmSync('.ci-output')`，删的是**仓库里真实的** `.ci-output/`，里面正是
+   * `cli-preview-qr.png` + `cli-preview-qr.meta.json`；紧接着 `--skip-preflight` 用例走到
+   * publish.js:564 的 `mkdirSync(CI_OUT)` 把目录**重建为空** → 目录存在、为空、mtime 是那一刻。
+   *
+   * 本条的钉法：哨兵由上面的 beforeAll 提前铺进 .ci-output（= 上面那条用例跑之前就存在），
+   * 这里再跑同一条 preview 路径，事后断言哨兵一个字节都没变。
+   *
+   * 变异验证（已实测）：把上面那条用例 finally 里的条件清理改回无条件
+   * `fs.rmSync(ciOut, { recursive: true, force: true });` → 本条的
+   * `expect(fs.existsSync(SENTINEL_PATH)).toBe(true)` 变红（Received: false），
+   * 且**只有本条**红，其余 4 条仍绿；还原后全绿。
+   */
+  it('🔴 不许删除已存在的 .ci-output 内容（22:16:22 预览码被清事故回归）', () => {
+    const fakeCli = path.join(os.tmpdir(), `fake-devtools-cli-sentinel-${process.pid}.sh`);
+    fs.writeFileSync(fakeCli, '#!/bin/sh\nexit 1\n');
+    fs.chmodSync(fakeCli, 0o755);
+    process.env.WECHAT_DEVTOOLS_CLI = fakeCli;
+
+    try {
+      // 同一条 preview 路径（同样 --no-push --allow-any-dir），这是会 mkdir + 写产物那条
+      expect(() => publishMod.main(['preview', '--no-push', '--allow-any-dir'])).toThrow('exit:1');
+
+      // 🔴 核心断言：哨兵必须还在，且内容一个字节没动。
+      //    哨兵不是本用例造的（beforeAll 造的），所以这里绿 = 本组没有任何一条用例
+      //    删掉过「进入时就已经在 .ci-output 里的东西」。
+      expect(fs.existsSync(SENTINEL_PATH)).toBe(true);
+      expect(fs.readFileSync(SENTINEL_PATH, 'utf8')).toBe(SENTINEL_BODY);
+    } finally {
+      fs.rmSync(fakeCli, { force: true });
+      // 清理只删哨兵自己：目录里别的文件（含用户真实产物）一律不碰，目录本身也不删
+      // （本包 tests 里 --skip-preflight 那条本来就会 mkdir 出这个目录，删了也只会被重建，
+      //   徒增「目录在但为空」的现场；要清也该由「目录本不存在」的那条用例按前置条件清）。
+      fs.rmSync(SENTINEL_PATH, { force: true });
     }
   });
 

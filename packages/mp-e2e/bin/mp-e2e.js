@@ -7,7 +7,8 @@
  *   mp-e2e [--config <path>] [--filter <文件名子串>]
  *
  * exit code：0 全过（BLOCKED 不计失败）/ 1 有 FAIL 或 preflight 静态守卫不通过 /
- * 2 环境不可用且 MP_E2E_REQUIRE_ENV=1（默认环境不可用 exit 0，全 SKIP）。
+ * 2 环境不可用且 MP_E2E_REQUIRE_ENV=1（默认环境不可用 exit 0，全 SKIP）/
+ *   零用例命中（casesDir 空或 --filter 零命中）→ 1（REQUIRE_ENV=1 时 2，拒绝静默绿）。
  */
 
 const path = require('path');
