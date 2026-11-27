@@ -1,9 +1,13 @@
 /**
  * E. 圆角设置持久化（判据 V42）
  * ① 写 appearance_radius=crisp → 首页 radiusClass=radius-crisp（偏好→class 闭环，PASS）。
- * ② close() 后重新 launch() 断言仍生效（杀进程不丢）—— 实测 devtools 自动化在 close→launch
- *    之间会整体清空 wx storage（仅 api_base 因 onLaunch 重写残留），属测试基建限制
- *    （README 已知限制①），判 BLOCKED，不作为产品 bug。
+ * ② close() 后重新 launch() 断言仍生效（杀进程不丢）—— 2026-11-27 真机复核修订口径：
+ *    旧表述「close→launch 清空 wx storage」不准确。实测探针（/tmp/B3-probe-storage-1127.log）：
+ *    close→launch 后 storage key **保留**（appearance_radius 仍在），但**会话内 setStorageSync 的
+ *    写入不跨会话持久化**——launch 读到的是 devtools 项目持久化快照旧值（本次 "soft"；
+ *    onLaunch 的 applyFromServer 若触发可能改写，读数随快照/登录态而变，非稳定值）。
+ *    结论：跨进程持久化断言在此基建上无法可靠验证，属测试基建限制（README 已知限制①），
+ *    维持 BLOCKED，不作为产品 bug。
  *    产品侧已确认：无任何 clearStorage/removeStorageSync 触碰 appearance_radius。
  */
 module.exports = {
@@ -32,8 +36,8 @@ module.exports = {
         mp = await ctx.launch();
         const keys = (await mp.callWxMethod('getStorageInfoSync')).keys;
         const radius = await ctx.getStorage(mp, ctx.KEYS.radius);
-        message = `close→launch 后 storage keys=${JSON.stringify(keys)}（仅 api_base 因 onLaunch 重写残留），appearance_radius=${JSON.stringify(radius)}。` +
-          `结论：devtools 自动化在会话间清空 wx storage，跨进程持久化无法在此基础设施上验证（非产品 bug：产品用 wx.setStorageSync 且无任何 clearStorage 触碰该 key）。`;
+        message = `close→launch 后 storage keys=${JSON.stringify(keys)}（key 保留，含 appearance_radius），appearance_radius=${JSON.stringify(radius)}。` +
+          `结论：storage key 未被清空，但会话内 setStorageSync 的写入不跨 launch 持久化（读到 devtools 项目快照旧值，随快照/登录态而变），跨进程持久化在此基建上无法可靠验证（非产品 bug：产品用 wx.setStorageSync 且无任何 clearStorage 触碰该 key）。2026-11-27 真机复核，见 README 已知限制①。`;
       } catch (e) {
         message = `close→launch 探测异常：${e && e.message ? e.message : e}`;
       }

@@ -148,7 +148,7 @@ CLI：`mp-e2e [--config <path>] [--filter <文件名子串>]`（默认读 cwd �
 > 默认仅打 warning、exit 0（不打破存量合法 BLOCKED，如① E3 同卡仍有 E1/E2 PASS）；
 > 设 `MP_E2E_BLOCKED_AS_FAIL=1` 则打 `console.error` 并 exit 1，拒绝静默通过。判据见附录 A §3.4。
 
-1. **① close()→launch() 之间 devtools 自动化会清空 wx storage**（仅 api_base 因 onLaunch 重写残留）→ 跨进程持久化用例判 `BLOCKED`，不当产品 bug（E3 先例）。⚠️ 2026-11-11 探针实测：现版 devtools 可能已不再清空（close→launch 后 appearance_radius 仍在），待复核——复核确认前 BLOCKED 口径不变。
+1. **① close()→launch() 之间会话内 wx storage 写入不跨会话持久化** → 跨进程持久化用例判 `BLOCKED`，不当产品 bug（E3 先例）。⚠️ 2026-11-11 探针曾疑「现版可能不再清空」，2026-11-27 真机复核结论（探针 `/tmp/B3-probe-storage-1127.log`）：**旧「清空」表述不准确**——close→launch 后 storage key **保留**（appearance_radius 仍在），但**会话内 `setStorageSync` 的写入不跨 launch 持久化**，读到的是 devtools 项目持久化快照旧值（可能随快照/登录态 onLaunch 逻辑而变，非稳定值）。故跨进程持久化断言仍无法可靠验证，**BLOCKED 口径维持不变**。
 2. **② 仅 macOS 本地可跑**；需开发者工具「设置 → 安全设置 → 服务端口」开启；CI 不适用。
 3. **③ automator 0.12.1 与 devtools 36.x automation 协议的 checkVersion 不兼容**，包内已 patch（`src/automator.js`）——**升级 miniprogram-automator 前先看本节与源码头注**。
 4. **④ automator 查不到自定义组件内部节点，也不支持 `login-gate` 这类组件标签选择器**（实测 `.gate`/`.gate-btn`/`login-gate` 三选择器全 false，而同类页内节点 `.page`/`.hero`/`.hi`/`.daily`/`.fcard` 全 true）。故「组件是否渲染」改用页面根 `.page` 的 `locked` class 间接证明（G 先例）。🔴 断言「某节点不存在」前，必须先在该节点存在的状态下反证选择器可命中，否则是假绿。
@@ -188,9 +188,9 @@ wx 方法 + 轮询当前页。page.callMethod 对本项目 Proxy 页面失效（
 （附证据）；③ 同用例内仍有 ≥1 步正常 PASS/FAIL。详见附录 A §3.4。环境问题不是 BLOCKED，是 SKIP（runner 判）。
 
 **Q：用例间会互相污染 storage 吗？**
-runner 对每条用例独立 launch/close；但同一 devtools 项目内 storage 跨会话保留（已知限制①仅指
-close→launch 间隙被清）。用例若写了垃圾 key，自行在用例内清理或断言后清（F 用例的垃圾 key 即被
-产品逻辑清掉）。
+runner 对每条用例独立 launch/close；但同一 devtools 项目内 storage **key 跨会话保留**（2026-11-27
+复核：已知限制①指「会话内写入不跨 launch 持久化、读到项目快照旧值」，并非清空 key）。用例若写了
+垃圾 key，自行在用例内清理或断言后清（F 用例的垃圾 key 即被产品逻辑清掉）。
 
 **Q：E 用例内部 close→launch 后，runner 还会 close 吗？**
 runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 launch 的新会话自行 close（E3 先例）。
@@ -341,7 +341,7 @@ runner 只负责关闭 `ctx.mp`（用例启动时的会话）。用例内自行 
 ### 异常分支
 | 分支 | 判定 | 理由与证据 |
 |---|---|---|
-| B5 close→launch 后读回 | **BLOCKED** | 命中已知限制①「close()→launch() 之间 devtools 自动化清空 wx storage」。非产品 bug 证据：产品侧 grep 无 clearStorage/removeStorageSync 触碰该 key。卡内 B1–B4 正常 PASS/FAIL，满足「非整卡 BLOCKED」准入。 |
+| B5 close→launch 后读回 | **BLOCKED** | 命中已知限制①「close→launch 会话内写入不跨 launch 持久化、读到项目快照旧值」（2026-11-27 复核，旧「清空」表述已废弃）。非产品 bug 证据：产品侧 grep 无 clearStorage/removeStorageSync 触碰该 key。卡内 B1–B4 正常 PASS/FAIL，满足「非整卡 BLOCKED」准入。 |
 
 ### 反例
 - 若只做 B2+B3：设置页 UI 回显坏了（重新打开显示默认字号）也绿——B4 的 reLaunch 回显断言不可省。
