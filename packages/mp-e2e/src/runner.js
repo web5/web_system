@@ -86,6 +86,11 @@ function exitCodeOf(results, { envUnavailable }) {
   return 0;
 }
 
+/** 零用例命中的 exit code：casesDir 空 / --filter 零命中 → 拒绝静默绿（默认 1，strict 2），与 exitCodeOf 的逃生门语义一致 */
+function noCasesExitCode() {
+  return process.env.MP_E2E_REQUIRE_ENV === '1' ? 2 : 1;
+}
+
 /** 用例发现：casesDir 下 *.js 按文件名排序；命名不符合 <字母>-<slug>.js 打 warning（M3） */
 function discoverCases(casesDir, filter) {
   if (!fs.existsSync(casesDir)) return [];
@@ -177,8 +182,8 @@ async function runSuite({ configPath, filter }) {
 
   const cases = discoverCases(casesDir, filter);
   if (cases.length === 0) {
-    console.warn('[mp-e2e] 未发现任何用例');
-    return 0;
+    console.error('[mp-e2e] 未发现任何用例（casesDir 为空或 --filter 零命中）——拒绝静默绿');
+    return noCasesExitCode();
   }
 
   // —— preflight ②：试 launch 探测环境 ——
@@ -247,4 +252,4 @@ async function runSuite({ configPath, filter }) {
   return exitCodeOf(caseResults, { envUnavailable: false });
 }
 
-module.exports = { run, blocked, skipped, summary, deriveCaseStatus, exitCodeOf, discoverCases, buildCtx, runSuite };
+module.exports = { run, blocked, skipped, summary, deriveCaseStatus, exitCodeOf, noCasesExitCode, discoverCases, buildCtx, runSuite };

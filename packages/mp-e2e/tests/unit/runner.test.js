@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { exitCodeOf, deriveCaseStatus, discoverCases } = require('../../src/runner');
+const { exitCodeOf, deriveCaseStatus, discoverCases, noCasesExitCode } = require('../../src/runner');
 
 describe('runner.js exit code 映射（§2.6 口径）', () => {
   const env = process.env.MP_E2E_REQUIRE_ENV;
@@ -40,6 +40,16 @@ describe('runner.js exit code 映射（§2.6 口径）', () => {
   test('FAIL 优先级高于 SKIP（FAIL + SKIP → 1，不是 2）', () => {
     process.env.MP_E2E_REQUIRE_ENV = '1';
     expect(exitCodeOf([{ status: 'FAIL' }, { status: 'SKIP' }], { envUnavailable: false })).toBe(1);
+  });
+
+  test('零用例命中（casesDir 空 / --filter 零命中）→ 默认 exit 1，拒绝静默绿', () => {
+    delete process.env.MP_E2E_REQUIRE_ENV;
+    expect(noCasesExitCode()).toBe(1);
+  });
+
+  test('零用例命中 + MP_E2E_REQUIRE_ENV=1 → exit 2', () => {
+    process.env.MP_E2E_REQUIRE_ENV = '1';
+    expect(noCasesExitCode()).toBe(2);
   });
 });
 
