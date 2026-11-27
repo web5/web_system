@@ -194,6 +194,9 @@ function makeThis(cfg: any): any {
     onShow: jest.fn(),
     _unsubscribeReading: jest.fn(),  // detail.onUnload/onHide 既有调用（朗读退订），测试桩需提供
     _subscribeReading: jest.fn(),
+    // 2026-11-27 D1：detail.onUnload 会清「词卡收藏态回落定时器」，桩必须与调用面同步
+    // （上一批同类问题：桩少挂一个方法 → TypeError 把整条用例打红，看起来像生产缺陷）
+    _clearTipCollectTimer: jest.fn(),
   };
 }
 

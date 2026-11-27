@@ -219,7 +219,8 @@ describe('首页开 / 详情页不开（反向断言防「图省事全页抬」�
     for (const prop of ['visible', 'scope', 'line-text', 'line-index', 'word', 'word-has-def', 'phonetic']) {
       expect(tag).toContain(`${prop}="{{`);
     }
-    for (const evt of ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']) {
+    // 2026-11-26 变体 C：朗读下沉组件 → 只剩收藏两项 + close 三个 bind
+    for (const evt of ['collect-line', 'collect-word', 'close']) {
       expect(tag).toContain(`bind:${evt}="`);
     }
   });
@@ -241,8 +242,8 @@ describe('首页开 / 详情页不开（反向断言防「图省事全页抬」�
 
 describe('行为：让位后动作区高度带同步加宽（BB6 逻辑兜底在首页仍成立）', () => {
   // 口径：windowHeight 667 / windowWidth 375 ⇒ 1rpx = 0.5px
-  //   详情页（不抬）：带 = 192rpx = 96px
-  //   首页（抬 107rpx）：带 = 299rpx = 149.5px
+  //   详情页（不抬）：带 = 208rpx = 104px（2 行 × 96 + gap 16）
+  //   首页（抬 107rpx）：带 = 315rpx = 157.5px
   const WH = 667;
 
   it('未开启：距底 120px（按钮带外）允许起拖（= 修前行为，未回退）', () => {
@@ -254,8 +255,8 @@ describe('行为：让位后动作区高度带同步加宽（BB6 逻辑兜底在
   it('开启：同一坐标 120px 落进「按钮带上半截」→ 拒绝起拖', () => {
     const inst = makeInst({ liftBottom: true });
     expect(inst._startedInActsZone(WH - 120)).toBe(true);
-    expect(inst._startedInActsZone(WH - 148)).toBe(true); // 299rpx = 149.5px 的边界内
-    expect(inst._startedInActsZone(WH - 152)).toBe(false); // 越过 299rpx，已到标题区，允许起拖
+    expect(inst._startedInActsZone(WH - 155)).toBe(true); // 315rpx = 157.5px 的边界内
+    expect(inst._startedInActsZone(WH - 160)).toBe(false); // 越过 315rpx，已到标题区，允许起拖
   });
 
   it('脏坐标一律放行（0 / NaN / 负 → 不拦，保证下滑关永远可用）', () => {

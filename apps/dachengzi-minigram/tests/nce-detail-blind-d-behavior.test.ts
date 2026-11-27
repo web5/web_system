@@ -208,14 +208,19 @@ describe('D2 点按（E1：不弹词卡；点按档照常展开译文）', () =>
   });
 });
 
-describe('D3 U1 行尾 ■（19:15 拍板）', () => {
-  it('朗读此句 → readingLineIdx = 该句下标（■ 只在该句渲染）', () => {
+describe('D3 U1 行尾 ■（19:15 拍板；2026-11-26 变体 C 后只剩「页面态回流」这一层）', () => {
+  /**
+   * 🔴 2026-11-26 变体 C 改写（用户拍板：朗读下沉到抽屉组件）。
+   * 页面的 `onDrawerSpeakLine / onDrawerSpeakWord` 已删除（组件内直接 speakText、抽屉不关、
+   * 按钮自切 ▶/■）。本组用例真正要守的是**页面播放态回流**：
+   * tts 推来的权威文本 → `_resolveLineIdx` → `readingLineIdx`（■ 的渲染判据）。
+   * 入口从「点抽屉按钮」换成「直接推 tts 状态」，判据一个字没改。
+   */
+  it('tts 推来某句文本 → readingLineIdx = 该句下标（■ 只在该句渲染）', () => {
     const ctx = makeLoaded();
-    pageConfig.onWordLongPress.call(ctx, ev({ w: 'bed', i: 1, hasdef: false }));
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: ctx.data.lines[1].en } });
+    pageConfig._onSpeakState.call(ctx, { text: ctx.data.lines[1].en, phase: 'playing' });
     expect(ctx.data.readingLineIdx).toBe(1);
-    expect(ctx.data.overlay).toBeNull(); // 动作后立即收起
-    expect(speakTextMock).toHaveBeenCalledWith(ctx.data.lines[1].en);
+    expect(ctx.data.readingPhase).toBe('playing');
   });
 
   it('tts 回流权威文本 → 命中该句才高亮（不按意图标记反推）', () => {
@@ -224,12 +229,11 @@ describe('D3 U1 行尾 ■（19:15 拍板）', () => {
     expect(ctx.data.readingLineIdx).toBe(3);
   });
 
-  it('朗读单词 → readingLineIdx = -1（■ 不出现，避免「读词却显示句子停止按钮」）', () => {
+  it('读单词（文本不是本课任何一句）→ readingLineIdx = -1（■ 不出现，避免「读词却显示句子停止按钮」）', () => {
     const ctx = makeLoaded();
-    pageConfig.onWordLongPress.call(ctx, ev({ w: 'bed', i: 1, hasdef: false }));
-    pageConfig.onDrawerSpeakWord.call(ctx, { detail: { word: 'bed', lineIndex: 1 } });
+    pageConfig._onSpeakState.call(ctx, { text: 'bed', phase: 'playing' });
     expect(ctx.data.readingLineIdx).toBe(-1);
-    expect(speakTextMock).toHaveBeenCalledWith('bed');
+    expect(ctx.data.wordPlaying).toBe('bed');
   });
 
   it('点 ■（stopLineSpeak）→ 真停（stopSpeak）+ 播放态归零', () => {
@@ -243,41 +247,32 @@ describe('D3 U1 行尾 ■（19:15 拍板）', () => {
     expect(ctx.data.wordPlaying).toBe('');
   });
 
-  it('播放中关抽屉（遮罩）→ 不打断朗读，■ 仍在该句且仍可停（U1 的唯一停止路径不能被关掉）', () => {
+  it('关抽屉（遮罩）→ 页面只收 overlay，不越权碰播放态（停止责任已归组件）', () => {
     const ctx = makeLoaded();
-    pageConfig.onWordLongPress.call(ctx, ev({ w: 'bed', i: 1, hasdef: false }));
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: ctx.data.lines[1].en } });
+    pageConfig._onSpeakState.call(ctx, { text: ctx.data.lines[1].en, phase: 'playing' });
     expect(ctx.data.readingLineIdx).toBe(1);
-    // 再开一次抽屉（模拟用户又长按），然后点遮罩关掉
     pageConfig.onWordLongPress.call(ctx, ev({ w: 'stay', i: 1, hasdef: false }));
     pageConfig.onDrawerClose.call(ctx, { detail: { via: 'mask' } });
     expect(ctx.data.overlay).toBeNull();
-    expect(ctx.data.readingLineIdx).toBe(1); // 播放没被打断
+    // 🔴 契约 6（2026-11-26）：关闭抽屉必须停朗读，但**停止动作在组件 `_emitClose` 里**
+    //    （顺序断言在 `tests/action-drawer.test.ts`）。页面侧不该再停一次 —— 那属于越权，
+    //    会打断「非抽屉来源」的播放（例如将来页面自己的整句朗读入口）。
     expect(stopSpeakMock).not.toHaveBeenCalled();
-    // ■ 仍可停
-    pageConfig.stopLineSpeak.call(ctx);
-    expect(stopSpeakMock).toHaveBeenCalledTimes(1);
   });
 
-  it('反例：关抽屉不得把播放态一起清掉（否则 ■ 消失 = 再也停不下来）', () => {
-    const ctx = makeLoaded();
-    pageConfig.onWordLongPress.call(ctx, ev({ w: 'bed', i: 1, hasdef: false }));
-    pageConfig.onDrawerClose.call(ctx, { detail: { via: 'close' } });
-    const before = ctx.data.readingLineIdx;
-    expect(ctx.data.readingLineIdx).toBe(before);
-  });
-
-  it('反例：课文里有两句完全相同 → 朗读第二句时 ■ 落在第一句（文本→下标反查的歧义）', () => {
+  it('重复句：hint 校验分支仍在（页面自己发起整句朗读时 ■ 落在实际那一句）', () => {
     const ctx = makeLoaded();
     // 构造重复句：把第 3 句改成与第 0 句同文
     const dup = ctx.data.lines[0].en;
     ctx.data.lines = ctx.data.lines.map((l: any, i: number) => (i === 3 ? { ...l, en: dup, tokens: tokenize(dup, buildKnown(LESSON.words)) } : l));
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 3, text: dup } });
-    // 模拟 tts 真实回流（speakText 内部 emitState({text: dup, phase:'loading'})）
+    /**
+     * 变体 C 之后**没有生产写入点**了（抽屉朗读发生在组件内，页面拿不到 lineIndex），
+     * 但 `_resolveLineIdx` 的 hint 校验分支必须保住：它是「页面自己发起整句朗读」时
+     * 重复句不歧义的唯一机制（D-8）。这里直接置 hint 验证机制本身没被删掉。
+     */
+    ctx._lineHint = 3;
     pageConfig._onSpeakState.call(ctx, { text: dup, phase: 'loading' });
-    // 用户点的是第 3 句（data-i=3），期望 ■ 留在第 3 句；
-    // 实际实现按「文本→下标反查」命中第一句 → 停止按钮跑到别句上
-    expect(ctx.data.readingLineIdx).toBe(3);
+    expect(ctx.data.readingLineIdx).toBe(3);   // hint 命中 → 不会反查到第 0 句
   });
 });
 

@@ -93,12 +93,25 @@ describe('A2 公共层复用：不许第二份动作表 / 第二份抽屉结构'
     }
   });
 
-  it('组件只 import utils/line-actions，且不 import 任何 services', () => {
+  /**
+   * 🔴 2026-11-26 A8 收窄（与 `tests/action-drawer.test.ts` 的 A8 组同一口径）：
+   * 原断言是「组件只 import utils/line-actions，且不 import 任何 services」。
+   * 朗读下沉到组件是**用户 2026-11-26 拍板**（设计真源 `原型-变体C-抽屉内朗读.html`：
+   * 抽屉持有原文，朗读不再回页面中转）→ 组件必须能调 `services/tts`；其余 services
+   * （glossary / auth / nce / account …）仍一律禁止，收藏与两页授权差异继续留在页面。
+   * 🔴 2026-11-27 再放宽**一格**（不是放宽 services，而是多一个纯函数层）：收藏三态的
+   * 文案/图标下沉到组件（方案 B），路径与文案常量来自 `utils/icons` —— 零副作用纯常量层。
+   * services 侧仍**恰好一个** `services/tts`（这条一个字都不许松）。
+   */
+  it('组件只 import 两个 utils 纯函数层 + 恰好一个 services/tts（其余 services 一律禁止）', () => {
     const ts = read(DRAWER_TS);
     const imports = ts.match(/^import .*$/gm) || [];
-    expect(imports).toHaveLength(1);
+    expect(imports).toHaveLength(3);
     expect(imports[0]).toMatch(/from '\.\.\/\.\.\/utils\/line-actions'/);
-    expect(ts).not.toMatch(/from '[^']*services\//);
+    expect(imports[1]).toMatch(/from '\.\.\/\.\.\/utils\/icons'/);
+    expect(imports[2]).toMatch(/from '\.\.\/\.\.\/services\/tts'/);
+    const servicesImports = ts.match(/from '[^']*services\/[^']*'/g) || [];
+    expect(servicesImports).toEqual(["from '../../services/tts'"]);
     expect(ts).not.toMatch(/require\(['"][^'"]*services\//);
   });
 
@@ -170,21 +183,46 @@ describe('A4 抽屉样式口径（D1/D2/D6/D7 + AC-B.20/B.22）', () => {
 });
 
 describe('A5 U1 停止入口归属（19:15 拍板）', () => {
-  it('详情页：■ 仅在 readingLineIdx===si 时渲染，点击 = stopLineSpeak', () => {
+  /**
+   * 🔴 2026-11-27 附加项改写（**不是放松**，判据换成了更强的形态）：
+   * 原断言逐字钉 `<text … class="sent-stop" …>■</text>` —— 字符 ■ 已按用户拍板换成
+   * `assets/icons/stop.svg`（上一批把三处播放图标统一成 SVG 后，这里是唯一的字符残留）。
+   * 因为微信 `<text>` 只支持嵌套 `<text>`、装不下 `<image>`，外层由 `<text>` 改成了 `<view>`
+   * （`display:inline-block` 保持行内排布，见 detail.wxss 的 .sent-stop）。
+   * 所以本用例改成断言「同一个入口仍然是渲染条件 + 点击 handler + **图标来自 icons.stop**」，
+   * 并反向禁止字符 ■ 回潮（回潮即红 —— 那正是用户反馈的观感不一致来源）。
+   */
+  it('详情页：停止入口仅在 readingLineIdx===si 时渲染，点击 = stopLineSpeak，图标是 stop.svg', () => {
     const w = read(DETAIL_WXML);
-    expect(w).toMatch(
-      /<text\s+wx:if="\{\{readingLineIdx === si\}\}"\s+class="sent-stop"\s+catchtap="stopLineSpeak">■<\/text>/,
-    );
+    const at = w.indexOf('class="sent-stop"');
+    expect(at).toBeGreaterThan(-1);                       // 防空转：真的抓到了那个节点
+    const node = w.slice(Math.max(0, at - 120), at + 240);
+    expect(node).toMatch(/wx:if="\{\{readingLineIdx === si\}\}"/);
+    expect(node).toMatch(/catchtap="stopLineSpeak"/);
+    // 图标 = 同一套 SVG（utils/icons 注入，wxml 不写字面量）。🔴 循环体内取的是行项上的
+    // `line.stopIcon`（不是页面级 `icons.stop`）—— tests/wxml-for-item-scope 要求循环体取值的
+    // 根标识符必须由 wx:for-item 引入，与抽屉 `item.ico` 同一套口径。
+    expect(node).toMatch(/<image class="sent-stop-ico" mode="aspectFit" src="\{\{line\.stopIcon\}\}" \/>/);
+    // 反例：字符 ■ 不许回潮（注释里可以写说明，故先剥注释再扫）
+    const rendered = w.replace(/<!--[\s\S]*?-->/g, '');
+    expect(rendered).not.toMatch(/■/);
   });
   it('首页：不得出现 .sent-stop 行尾节点 / stopQuoteSpeak 绑定（U1 冗余已去重）', () => {
     const w = read(HOME_WXML);
     expect(w).not.toMatch(/class="sent-stop"/);
     expect(w).not.toMatch(/stopQuoteSpeak/);
   });
-  it('首页停止入口唯一：页脚 .dq-act 一处（catchtap="speakQuote"）', () => {
+  it('首页停止入口唯一：页脚 .dq-act 一处（catchtap="speakQuote"，图标 ■ 来自 SVG）', () => {
     const w = read(HOME_WXML).replace(/<!--[\s\S]*?-->/g, '');
-    const stops = w.match(/■\s*停止/g) || [];
-    expect(stops).toHaveLength(1);
+    // 🔴 2026-11-27：■ 由正文字符改成 stop.svg（用户真机反馈②），判据跟着看「图标来源」。
+    //    断言范围限定在**页脚**：词卡里的圆形播放按钮同样有 stop 态图标，扫整页必然误红。
+    const footAt = w.indexOf('class="daily-foot"');
+    expect(footAt).toBeGreaterThan(-1);
+    const foot = w.slice(footAt, w.indexOf('class="daily-foot"') + 700);
+    expect(foot.match(/icons\.stop/g) || []).toHaveLength(1);
+    expect(foot).toMatch(/catchtap="speakQuote"[\s\S]{0,300}?icons\.stop/);
+    // 反例：字符形态的 ■ 停止 不许回潮
+    expect(w).not.toMatch(/■\s*停止/);
   });
 });
 

@@ -9,19 +9,30 @@
  *    「组件知道页面上下文」的隐式耦合。
  *
  * 🔴 事件名为什么用常量而不是字符串字面量散在各处：
- *    ts 侧统一走 `EVT.XXX`（写错即 tsc 报错）；但 **wxml 无法 import 常量**，`bind:speak-line`
+ *    ts 侧统一走 `EVT.XXX`（写错即 tsc 报错）；但 **wxml 无法 import 常量**，`bind:collect-line`
  *    只能写字面量 —— 所以 `EVT` 的值必须与 wxml 里的字面量逐字相同，这条由
  *    `tests/action-drawer.test.ts` 的 grep 静态断言兜住（扫组件 wxml 的 `bind:` / `triggerEvent`
  *    字符串是否都属于 `EVT` 的值集合）。
  *
+ * 🔴 2026-11-26 变体 C 后 `speak-line` / `speak-word` 的**双重身份**（改名前先读这段）：
+ *    ① 作为 `ActionItem.key` / `data-key` 的值 —— 组件的分流标识，仍是「朗读动作」的稳定 id；
+ *    ② **不再是对外事件名** —— 朗读已下沉到组件内直接调 `services/tts`，页面不再 `bind:speak-*`，
+ *       组件也不再 `triggerEvent('speak-*')`。保留在 `EVT` 里是因为 wxml 的 `data-key` 仍需要
+ *       与 `EVT` 逐字一致（actionsOf 的 key 直接来自这里），删掉会让 key 变成散落的字面量。
+ *    `close` / `collect-line` / `collect-word` 三个仍是真正的对外事件。
+ *
  * 设计真源：`公共能力抽象方案.md` §2.1 ③ / §3；`需求口径确认-B版.md` AC-B.5 / AC-B.6 / AC-B.7。
  */
 
-/** 抽屉的 5 个对外事件名（值必须与组件 wxml / 页面 `bind:` 字面量逐字一致） */
+/**
+ * 抽屉的 5 个动作 key / 对外事件名（值必须与组件 wxml 的 `data-key` / 页面 `bind:` 字面量逐字一致）。
+ * ⚠️ 其中 SPEAK_LINE / SPEAK_WORD 自 2026-11-26 变体 C 起**只作动作 key，不再是对外事件**
+ *    （朗读下沉到组件，见文件头的「双重身份」说明）。
+ */
 export const EVT = {
-  /** 点「朗读此句」：payload `{ lineIndex, text }` */
+  /** 「朗读此句」动作 key（payload 已不再 emit：组件内直接 speakText） */
   SPEAK_LINE: 'speak-line',
-  /** 点「朗读单词」：payload `{ word, lineIndex }` */
+  /** 「朗读单词」动作 key（同上） */
   SPEAK_WORD: 'speak-word',
   /** 点「收藏此句」：payload `{ lineIndex, text }` */
   COLLECT_LINE: 'collect-line',
@@ -46,13 +57,27 @@ export const ARIA_WORD_STOP = '停止朗读';
 /** 抽屉动作的作用域：句子空白 = 两项；任意英文单词 = 四项 */
 export type ActionScope = 'line' | 'word';
 
+/**
+ * 动作种类（2026-11-26 变体 C 起）：
+ * - `speak`   —— 朗读**下沉到组件**：组件直接 `services/tts.speakText`，不 emit、不关抽屉，
+ *                按钮本地切 ▶/■ 播放态（用户 2026-11-26 拍板，设计真源
+ *                `30-任务产物/2026-11-26-阅读交互调整-原型稿/原型-变体C-抽屉内朗读.html`）；
+ * - `collect` —— 收藏**仍回页面**：组件只 `triggerEvent`，页面弹 toast / 内联 modal 后收起抽屉
+ *                （两页的授权形态差异**有意保留**，不下沉到组件）。
+ */
+export type ActionKind = 'speak' | 'collect';
+
 export interface ActionItem {
   /** 稳定 key（wxml `wx:key`）：与事件名同值，便于 `data-key` 直接分流 */
   key: string;
-  /** 该动作要 triggerEvent 的事件名（= `EVT` 的某个值） */
+  /** 该动作的事件名（= `EVT` 的某个值）。**只有 `kind='collect'` 才会真的 emit** */
   evt: string;
   /** 按钮文案（只用于渲染，不参与判定） */
   label: string;
+  /** 动作种类：决定组件是「本地调 tts」还是「回页面」（见 ActionKind） */
+  kind: ActionKind;
+  /** 播放中文案（仅 `kind='speak'` 有）：`朗读此句 → 停止此句` / `朗读单词 → 停止单词` */
+  stopLabel?: string;
 }
 
 /**
@@ -68,10 +93,14 @@ export interface ActionItem {
  *    及 `:1016` `actsHTML()` 的 `scope === 'word' ? ACTIONS : ACTIONS.slice(0, 2)`。
  */
 const ACTIONS: ReadonlyArray<Readonly<ActionItem>> = Object.freeze([
-  Object.freeze({ key: EVT.SPEAK_LINE, evt: EVT.SPEAK_LINE, label: '朗读此句' }),
-  Object.freeze({ key: EVT.COLLECT_LINE, evt: EVT.COLLECT_LINE, label: '收藏此句' }),
-  Object.freeze({ key: EVT.SPEAK_WORD, evt: EVT.SPEAK_WORD, label: '朗读单词' }),
-  Object.freeze({ key: EVT.COLLECT_WORD, evt: EVT.COLLECT_WORD, label: '收藏单词' }),
+  Object.freeze({
+    key: EVT.SPEAK_LINE, evt: EVT.SPEAK_LINE, label: '朗读此句', kind: 'speak', stopLabel: '停止此句',
+  }),
+  Object.freeze({ key: EVT.COLLECT_LINE, evt: EVT.COLLECT_LINE, label: '收藏此句', kind: 'collect' }),
+  Object.freeze({
+    key: EVT.SPEAK_WORD, evt: EVT.SPEAK_WORD, label: '朗读单词', kind: 'speak', stopLabel: '停止单词',
+  }),
+  Object.freeze({ key: EVT.COLLECT_WORD, evt: EVT.COLLECT_WORD, label: '收藏单词', kind: 'collect' }),
 ] as ActionItem[]);
 
 /**

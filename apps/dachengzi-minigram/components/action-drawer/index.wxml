@@ -1,10 +1,17 @@
 <!--
-  长按动作抽屉（变体 B）— 结构：遮罩 + 底部抽屉（把手 + 标题区 + 2×2 动作区）
+  长按动作抽屉（变体 C · 抽屉内朗读）— 结构：遮罩 + 底部抽屉（把手 + 标题区 + 2×2 动作区）
+
+  🔴 与原型「变体 B-底部抽屉」的差异（2026-11-26 用户拍板 → 变体 C）：**朗读在组件内直接调
+     tts**（组件已持有原文），点按不 emit、不关抽屉、按钮自切 ▶/■（播放态归组件自持）；
+     **收藏仍 triggerEvent 回页面**（两页的登录 toast / 内联 modal 差异必须留在页面）。
 
   🔴 三处「不要」：
-   1. 不要在这里绑任何 services / 业务逻辑 —— 组件只 catchtap 后 triggerEvent；
+   1. **services 只允许 tts 这一个**（朗读是纯副作用 + 自有播放态，下沉到组件不污染两页差异；
+      静态断言在 `tests/action-drawer.test.ts` 的 A8 组）；其余 services（glossary / auth / nce /
+      account …）一律禁止 —— 收藏、未登录守卫、payload 组装、toast 文案全部留在页面，
+      **收藏类动作仍然只 `triggerEvent` 回页面**；
    2. 不要用 wx:if 之外的方式控制显隐（visible=false 时整棵子树都不渲染 = 遮罩与抽屉同开同关）；
-   3. 不要出现 left:{{…}}rpx / top:{{…}}rpx 之类坐标绑定（B 变体不测任何坐标）。
+   3. 不要出现 left:{{…}}rpx / top:{{…}}rpx 之类坐标绑定（不测任何坐标）。
 
   动作顺序由 utils/line-actions.actionsOf 固定：
     第 1 行 朗读此句 | 收藏此句（2 项档只渲染这一行）
@@ -76,17 +83,61 @@
          覆盖「touchstart 冒泡到根节点」的情形（详见 index.ts 的 _startedInActsZone）。
          两层串联后的完整行为：手指按在按钮上 → touchstart 冒泡到根 → 判定在动作区内 → 不置
          `_hasStart` → touchmove 又被本容器 catch 掉 → 抽屉纹丝不动、tap 正常派发。
-         `tests/action-drawer.test.ts` 的 E5 组已把「本容器不得出现 catchtouchstart」钉成静态断言
-         （mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）。 -->
+         🔴 以下四条**都已有静态守卫**，真实持有者是 `tests/rd-blindfix-1126-guards.test.ts` 的
+         **P2-6 组**（mock 单测跑在渲染层之下，抓不到这类缺陷，只能靠 grep 兜住）：
+           ① `.ad-acts` 上只允许 `catchtouchmove`，不得 `catchtouchstart`；
+           ② **所有抽屉系 `<view>` 起始标签**（class 任一 token 命中 `/^ad(-|$)/` 的都算：`ad` /
+              `ad-mask` / `ad-drawer` / `ad-acts` / `ad-close` / 将来的 `ad-inner` …）都不得
+              `catchtouchstart` —— 只查 `.ad-acts` 一处是不够的：挪到 `.ad-drawer` 或最外层 `.ad`
+              上同一个 bug 原地复活（子按钮 tap 全灭）。口径 2026-11-27 从「精确等于 ad/ad-drawer」
+              收紧成前缀匹配，并对 `ad` / `ad-drawer` / `ad-acts` 三个节点各做一次点名断言。
+              🔴 **覆盖面边界（最容易踩坑的一条，务必读完）**：本守卫是靠 **class token 前缀 `ad-*`**
+              去筛节点的，因此下面三类节点**逃逸**、它根本拦不住：
+                · 逃逸面 ① —— 命名不在 `ad-*` 家族：另起一个 `class="sheet-body"` 的容器节点并挂
+                  `catchtouchstart`，守卫扫不到它；
+                · 逃逸面 ② —— class 全插值：`class="{{wrapCls}}"` 这种，静态扫描剥掉 `{{…}}` 后
+                  拿不到任何 token，同样扫不到；
+                · 逃逸面 ③ —— 非 `view` 标签：`text` / `block` / `scroll-view` 之类的起始标签压根
+                  不在筛选集合里（目前本组件一个也没有）。
+              ①② 已于 2026-11-27 独立盲测实测确认：给上述节点挂上 `catchtouchstart` 后**仍全绿**
+              —— 这不是你漏配了什么，是这条守卫的固有盲区。
+              ⇒ 两条硬要求，给所有后来人：
+                (a) **新增抽屉系节点必须沿用 `ad-` 前缀**（`ad-inner` / `ad-body` 这一类）。否则你
+                    就落进逃逸面 ①：父节点 catch 掉 touchstart 后子按钮 tap 全灭，而测试依旧全绿。
+                (b) 机器兜底**不靠**上面这条前缀守卫，而靠 `tests/rd-blindfix-1126-guards.test.ts`
+                    P2-6 组里的 **④ 绝对口径**：整个 wxml 文件内**任何**起始标签一律禁 `catchtouchstart`
+                    （不依赖 class 名、不依赖标签类型），①②③ 三条一起封死。别删它、别放宽它。
+              ⚠️ 遗留：非 `view` 标签（逃逸面 ③）在本组件当前一个也没有；将来若真加了，④ 会兜住，
+              但 ② 这条前缀守卫的文字说明需同步扩写；
+           ③ `.ad-act` 起始标签必须带 `data-key="{{item.key}}"` 与 `data-kind="{{item.kind}}"`
+              （`data-key` 一丢 → `onActionTap` 首行 `if (!key) return` 静默返回，四按钮全哑）；
+           ④ `.ad-drawer` 必须保留 `bindtouchcancel="onTouchEnd"`（缺它手势被系统打断后抽屉歪着停住）。
+         **不是** `tests/action-drawer.test.ts`（该文件没有 E5 组、也从不 grep catchtouchstart ——
+         旧注释写错了，2026-11-26 纠正；同日假绿审计又发现②③④当时是零断言，已同步补齐）。 -->
     <view class="ad-acts" catchtouchmove="noop">
+      <!-- 2026-11-26 变体 C：朗读按钮 = ▶/■ 图标 + 文案，点按在组件内直接调 speakText（不 emit、不关抽屉）。
+           2026-11-27 方案 B：收藏按钮点按**也不关抽屉**，本地进「收藏中」→ 页面收藏完回传 onCollectDone
+           → 切「✓ 已收藏 / ✓ 已在收藏」，失败回「☆ 收藏」。三态文案/图标都由 ts 侧算好放进 item（不在模板判断）。
+           🔴 图标是 `<image src>` 引 `assets/icons/*.svg`（2026-11-27 用户真机反馈②：三处图标必须同一套 SVG）。
+              `ico` / `icoOn` 由 ts 侧算进 item（`playingKey` 命中就切触发态图标；收藏项两值同源）。
+              🔴 不在这里写 `{{icons.play}}`：本节点在 wx:for 循环里，循环体只允许取 item 作用域内的名字
+                （`tests/wxml-for-item-scope.test.ts` 的 P0 守卫，它守护的是「取值越界导致英文整段空白」）。
+              `mode="aspectFit"` 必须留：默认 scaleToFill 会把三角/方块拉变形。
+           🔴 `data-key` 一个字母都不许改：它是 onActionTap 的唯一分流依据，改成 data-k 会让四个按钮
+              全部哑掉，而「全量测试」在旧守卫下仍会全绿（正是本轮补的假绿盲区）。 -->
       <view
         wx:for="{{acts}}"
         wx:key="key"
-        class="ad-act {{pressedKey === item.key ? 'ad-act-pressed' : ''}}"
+        class="ad-act {{item.kind === 'speak' ? 'ad-act-speak' : ''}} {{playingKey === item.key ? 'is-playing' : ''}} {{pressedKey === item.key ? 'ad-act-pressed' : ''}} {{item.busy ? 'is-busy' : ''}} {{item.collected ? 'is-collected' : ''}}"
         data-key="{{item.key}}"
+        data-kind="{{item.kind}}"
         aria-role="button"
+        aria-label="{{item.kind === 'speak' ? (playingKey === item.key ? item.stopLabel : item.label) : item.label}}"
         catchtap="onActionTap"
-      >{{item.label}}</view>
+      >
+        <image class="ad-ico" mode="aspectFit" src="{{playingKey === item.key ? item.icoOn : item.ico}}" />
+        <text class="ad-act-lb">{{item.kind === 'speak' ? (playingKey === item.key ? item.stopLabel : item.label) : item.label}}</text>
+      </view>
     </view>
   </view>
 </view>
