@@ -9,6 +9,8 @@
 
 ## 一、三条模型决策（用户 2026-11-13 已确认）
 
+> 🔴 **2026-11-27 改判**：第 1、2 条（换 `hy4` / `deepseek-v4.1-flash`）**暂不执行**，理由与重立项条件见 §六；第 3 条（hy3 走 TOKENHUB 凭证）已落地并随 PR #719 合入。
+
 1. `hy4-preview` → 换 `hy4`。
 2. `deepseek-v4-flash` → 换 `deepseek-v4.1-flash`。
 3. `hy3` 走 TOKENHUB：用 `TOKENHUB_API_KEY`，不再依赖单独的 `HY3_API_KEY`。
@@ -55,7 +57,7 @@ PR 原改动只把 ai-agent 的 `BUILTIN_TOKENHUB_MODELS` 换成新名，其余�
 | 位置 | 文件 | 本次动作 |
 | --- | --- | --- |
 | hy3 凭证回落 | `packages/agent-core/src/clients/hy3.client.ts` | **保留**：`getApiKey()` 回落 `TOKENHUB_API_KEY → HY3_API_KEY → LLM_API_KEY`；`getBaseUrl()` 增加 `TOKENHUB_BASE_URL` 优先；错误文案同步 |
-| 内置清单 | `servers/ai-agent/src/agent/model-catalog.service.ts` | **回滚**：恢复 `deepseek-v4-flash` / `hy4-preview`，与 dev/prod 字典逐字一致 |
+| 内置清单 | `servers/ai-agent/src/agent/model-catalog.service.ts` | **回滚**：恢复 `deepseek-v4-flash` / `hy4-preview`，与 dev/prod 字典**重名的 3 个 id 一致**（兜底清单共 8 项，另有 5 个字典外模型，属历史别名与多厂商兜底） |
 
 收窄理由：清单是「三级回落」的最后一级，与字典同步改名才有意义。在字典仍是旧值的情况下先改清单，会制造两个真源，且让字典抖动路径上的意图分类失效。迁移应作为独立任务一次做全。
 
@@ -75,7 +77,7 @@ PR 原改动只把 ai-agent 的 `BUILTIN_TOKENHUB_MODELS` 换成新名，其余�
 用户拍板口径：**以现有 dev 为准**（dev 字典此前已实测验证）。
 
 - dev 与 prod 的 `llm_models` 字典保持现值：`deepseek-v4-flash`、`deepseek-v4-pro`、`hy4-preview`。
-- 代码侧 `BUILTIN_TOKENHUB_MODELS` 已与上述字典逐字一致，不再改名。
+- 代码侧 `BUILTIN_TOKENHUB_MODELS` 中与字典重名的 3 个 id（`deepseek-v4-flash`、`deepseek-v4-pro`、`hy4-preview`）均为旧名，本次不再改名；该兜底清单共 8 项，另含 `deepseek-v4-pro-0813`、`glm-5.3`、`kimi-k3`、`qwen3.5-plus`、`minimax-m3` 这 5 个字典外模型，属历史别名与多厂商兜底，不在本次迁移范围。
 - `intent.service.ts` 的 `INTENT_MODEL` 默认值与 dev/prod `.env` 中的显式值均保持 `deepseek-v4-flash`，不动。
 - 新名 `hy4` / `deepseek-v4.1-flash` 虽已实测可调（200 + 正文），但**本次不迁移**。
 
