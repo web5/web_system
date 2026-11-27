@@ -60,6 +60,8 @@
 | 落错分支**禁 `reset --hard`**（会清掉对方未提交改动） | 改用 `worktree add` + `cherry-pick` + `reset --soft` + 精确 `restore` |
 | 同名但不同物理目录的 worktree，改动**不自动合并** | 别以为"都在 `feature/xxx`"就是同一份；`git worktree list` 看清物理路径 |
 
+- 🔴 **派子代理时同样适用「一分支一 worktree」**。2026-11-27 实测：在同一工作区并行派两个写操作子代理，其中一个切分支并提交，另一个开工时发现 HEAD 已不是预期的 master。虽然逐字节比对源码无差异、产物有效，但这是可控范围内的侥幸。**同一工作区同一时刻只让一个子代理动 git 状态**；需要并行写操作时，各自 `git worktree add` 独立目录。
+
 ---
 
 ## 3. 构建源错位（头号静默坑）
@@ -67,6 +69,20 @@
 - **构建必须在你自己 worktree 的 cwd 里跑。** 流水线 / 脚本若默认在发布目录（常停在 master）构建，你的分支改动永远进不了产物——表现「发布成功但没变」且**无任何报错**。
 - 主仓 `web_system` 当前已回到 `master`（2026-11-09 甲方案修复）；**构建/发布只在 master 工作树做**，别在它上面切分支改业务代码。
 - 验版本（确认构建源没错）：`curl -s http://127.0.0.1:6000/__manifest__` 看网关实际会加载哪个 commit；`bash scripts/health-check.sh local` 做全量巡检。
+
+### 3.1 `pnpm --filter` 包名不匹配时退出码仍为 0（静默假成功）
+
+2026-11-27 实测：执行 `pnpm --filter @kedouai/ai-agent build`，输出 `No projects matched the filters`，但**退出码是 0**。在 `set -e` 或 CI 里看起来是构建成功，实际一个包都没构建，产物时间戳不变。
+
+原因是包名写错：`@kedouai/` 前缀只属于 `packages/agent-core`，服务包实名是 `@web-system/ai-agent`。
+
+判据（三选一，建议叠加前两条）：
+
+1. 先在 workspace 里确认包名存在：`pnpm ls --filter @web-system/ai-agent --depth -1`
+2. 构建后**必须验产物**，不要只看退出码：`ls -l servers/ai-agent/dist/main.js`（时间戳应为本次）+ `grep -c "TOKENHUB_API_KEY" packages/agent-core/dist/clients/hy3.client.js`
+3. 用 `--filter ... --reporter=append-only` 观察是否真的执行了 build 步骤
+
+同一模式适用于所有 `--filter` 用法，不限于构建。
 
 ---
 
