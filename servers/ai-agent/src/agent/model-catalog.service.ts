@@ -16,9 +16,9 @@ import { ClientRegistry, Hy3Client, TokenHubClient } from '@kedouai/agent-core';
  */
 export const BUILTIN_TOKENHUB_MODELS = [
   'deepseek-v4-pro',
-  'deepseek-v4.1-flash',
+  'deepseek-v4-flash',
   'deepseek-v4-pro-0813',
-  'hy4',
+  'hy4-preview',
   'glm-5.3',
   'kimi-k3',
   'qwen3.5-plus',
