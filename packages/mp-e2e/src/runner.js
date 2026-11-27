@@ -7,7 +7,8 @@
  *   BLOCKED  被 README「已知限制」明文条目挡住且确认非产品 bug（不计失败，exit 0）
  *   SKIP     环境不可用（launch 返回 null），runner 统一判（exit 0；MP_E2E_REQUIRE_ENV=1 时 exit 2）
  *
- * 执行模型：preflight（keys-guard + pages-guard + 试 launch）→ 顺序扫 casesDir/*.js
+ * 执行模型：版本一致性（git 身份，默认只打印；设 MP_E2E_EXPECT_SHA 才是硬判据）
+ * → preflight（keys-guard + pages-guard + 试 launch）→ 顺序扫 casesDir/*.js
  * （文件名排序）→ 每条用例独立 launch/close（隔离语义，避免用例间 storage 污染叠加
  * 已知限制①）。
  */
@@ -17,6 +18,7 @@ const path = require('path');
 const { launch, close } = require('./session');
 const { assertKeysInSource } = require('./keys-guard');
 const { assertPagesRegistered } = require('./pages-guard');
+const { checkVersionConsistency } = require('./version-guard');
 const { pollPath, switchTab, navigateTo, reLaunch, navigateBack } = require('./navigate');
 const { currentPath, stackPaths, pageData, waitForData, tabBarSelected } = require('./page');
 const { getStorage, setStorage, removeStorage } = require('./storage');
@@ -203,6 +205,11 @@ async function runSuite({ configPath, filter }) {
 
   console.log(`[mp-e2e] app=${appDir}`);
   console.log(`[mp-e2e] casesDir=${casesDir}${filter ? ` filter='${filter}'` : ''}`);
+
+  // —— 版本一致性：核对「正在测哪份代码」（默认只打印，设 MP_E2E_EXPECT_SHA 才硬判）——
+  // 放在静态守卫之前：连「这是哪份代码」都没确认时，后面的 KEYS/page 对账结论无处安放
+  // （2026-11-27 事故：两个 worktree 并存，devtools 开 A、命令跑在 B，结论一度错判）。
+  checkVersionConsistency({ projectPath });
 
   // —— preflight ①：静态守卫（纯文件 IO、秒级，红在 launch 之前）——
   assertKeysInSource({ keys: cfg.storageKeys || {}, srcDir: appDir });
