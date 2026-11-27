@@ -221,14 +221,46 @@ describe('共享层 scripts/lib/git-identity.js', () => {
     expect(shared.parseShaList('')).toEqual([]);
     expect(shared.parseShaList(undefined)).toEqual([]);
     expect(shared.parseShaList(null)).toEqual([]);
-    // 🔴 2026-11-28 复审补（不新增 it，保持用例数 64）：version-guard 的「共享层缺失」分支用的是
-    //    本地 parseShaListFallback —— 那是**同构的第二份实现**。共享层哪天改了分隔符 / trim 规则，
-    //    它会静默漂移，而漂移只影响「声明了期望却没被识别」这种最不该出错的地方。
-    //    下面逐例对拍，把「两份规则必须等价」钉成断言。
-    for (const v of [undefined, null, '', '   ', ', ,', 'a', 'a, b ,c', 'a , b ,', 'a,,b', ',a',
-      'a1b2c3d,deadbeef', 'deadbeef, cafebabe ,', 123]) {
-      expect(parseShaListFallback(v)).toEqual(shared.parseShaList(v));
+  });
+
+  // 🔴 2026-11-28 独立复审（PR #734）：version-guard 的「共享层缺失」分支用的是本地
+  //    `parseShaListFallback` —— 它是**同构的第二份实现**。共享层哪天改了分隔符 / trim 规则，
+  //    它会静默漂移，而漂移只影响「声明了期望却没被识别」这种最不该出错的地方
+  //    （后果就是共享层缺失时守卫又空转回 2026-11-28 盲测 P1）。
+  //
+  //    所以单独钉一条对拍用例：同一组输入喂给两份实现，**输出必须逐例完全相等**。
+  //    输入特意覆盖「边界与易漂移点」：
+  //      · 空值三态：undefined / null / ''（`String(raw == null ? '' : raw)` 这层兜底最容易只改一侧）
+  //      · 纯空白与纯分隔符：'   ' / ', ,'（trim 与 filter 的先后顺序差异会在这里暴露）
+  //      · 前后 / 中间多余逗号：'a, b ,,c,'（去空是否彻底）
+  //      · 大小写：'ABC,DEF'（解析层不许做任何大小写归一，归一在 isSameSha 里）
+  //      · 中文逗号 'a，b'：**不在分隔符集合内**，必须整串保留为一项
+  //      · 换行 'a,\nb'：trim 是否覆盖 \n（不只是半角空格）
+  test('parseShaListFallback 与共享层 parseShaList 逐例对拍（同构双实现，不许漂移）', () => {
+    const CASES = [
+      undefined,                    // 未设变量
+      null,
+      '',
+      '   ',                        // 纯空白
+      ', ,',                        // 纯分隔符
+      'a',                          // 单值
+      'a,b',                        // 正常多值
+      'a, b ,,c,',                  // trim + 空项 + 尾逗号
+      'ABC,DEF',                    // 大小写必须原样保留
+      'a，b',                       // 中文逗号不在分隔符集合内 → 整串一项
+      'a,\nb',                      // 换行也要被 trim 掉
+      'a , b ,',                    // 空格包住逗号
+      ',a',                         // 前导逗号
+      'deadbeef, cafebabe ,',
+      123,                          // 非字符串入参（String() 兜底）
+    ];
+    for (const v of CASES) {
+      expect({ input: v, out: parseShaListFallback(v) })
+        .toEqual({ input: v, out: shared.parseShaList(v) });
     }
+    // 样例数下限守卫：将来有人删样例（比如删掉中文逗号那条）必须显式改这里，
+    // 而不是静默把鉴别力削薄。
+    expect(CASES.length).toBeGreaterThanOrEqual(11);
   });
 
   test('describeIdentity：正常 branch@sha / detached 裸 sha / git 不可用', () => {

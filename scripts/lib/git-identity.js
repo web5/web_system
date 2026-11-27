@@ -3,9 +3,18 @@
  *
  * ⚠️ 本文件是 **唯一实现**：`scripts/lib/miniprogram-preflight.js`（P3 版本真实性）与
  *    `packages/mp-e2e/src/version-guard.js`（E2E 版本守卫）都 require 本文件，两处不再各留副本。
- *    逻辑从 preflight 侧逐字搬出，零改动（含 `git status --short` 必须保留前导空格的 `keepLeading` 口径）。
  *    **改动此处同时影响出码前预检与 E2E**：任何一侧语义漂移都会让
  *    「出码前预检说版本对」与「E2E 说版本对」得出不同结论。
+ *
+ * ⚠️ 与 preflight 原实现**语义等价、形状不完全相同**（2026-11-27 收敛时逐项核实，
+ *    别以为能直接对拷 —— 一度被写成「逐字搬出」，实测不成立）：
+ *    - 多一个派生字段 `dirty`（`status.trim().length > 0`）。preflight 不读它，只是形状不同。
+ *    - `git status --short` 被提到**最先**执行（原实现是 branch → sha → toplevel → status），
+ *      于是「git 全坏」时本文件返回的 `error` 指向 `status --short`，原实现指向
+ *      `rev-parse --abbrev-ref HEAD`。preflight 的 P3 警告会带上这句 error 文案，
+ *      所以这是**可见文本差异**（不影响 ok/sha 判定，也不影响 P3 结论）。
+ *    - `keepLeading` 口径逐字保留：`git status --short` 只去尾部换行、**不 trim 前导空格**
+ *      （`" M path"` 与 `"M  path"` 语义不同）。
  *
  * 为什么要有它（真实事故，2026-11-27 大橙子整包编译失败）：
  *   两个 worktree 并存（坏的 diag / 好的 fix），开发者工具开着 A 目录、E2E 命令跑在 B 目录，

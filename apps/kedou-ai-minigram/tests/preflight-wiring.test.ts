@@ -21,6 +21,15 @@
  *        且 mode 固定 ci（走 miniprogram-ci，不判开发者工具 CLI）。
  *   W5 · 行为面：真跑一次子进程，用**必然不满足**的 --expect-version 证明它真的拦得住，
  *        且零产物（`.ci-output` 跑前跑后文件数一致）。
+ *   W6 · P3 `--expect-sha` 的正/负向行为（**本文件唯一的判据行为面**，见下）。
+ *
+ * 🔴 为什么破例加 W6（2026-11-27 共享层收敛时发现的真缺口）：
+ *    `readGitIdentity` / `isSameSha` 收敛成 `scripts/lib/git-identity.js` 单一实现后，
+ *    一处坏掉两个 app 都受影响 —— 但当时只有大橙子那边有「expect-sha 比对成功」的用例。
+ *    实测：把共享层 `isSameSha` 改成 `return false`，大橙子 preflight 测试红 3 例，
+ *    科豆 **19 例全绿、一例都没红** —— 也就是说 `isSameSha` 对科豆完全无网。
+ *    本文件此前只钉「接线」（谁在什么时候调判据），不钉判据本身，所以这条缺口自然漏掉。
+ *    W6 只补 P3 这一个方向，不把大橙子的判据测试整套搬过来（那会变成第二份维护面）。
  *
  * 🔴 「不许真出码」的写法：W5 一律带 `--expect-version 9.9.9`（本包版本是 1.0.13，
  *    这条永远不可能通过），并注入 `MINIPROGRAM_CI_PATH=<不存在的目录>` 作第二道保险 ——
@@ -29,6 +38,7 @@
  */
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 jest.setTimeout(120000);
@@ -304,5 +314,125 @@ describe('W5 · 真跑一次：门禁先于出码动作执行，且零产物', (
     expect(r.out).toContain('package.json 版本 ≠ 期望版本');
     expect(r.out).not.toContain('[Upload] 开始上传');
     expect(r.out).not.toContain('[Upload] 版本号:');
+  });
+});
+
+// ============================================================ W6 P3 --expect-sha 正/负向
+
+/**
+ * 共享层判据模块（**只读** require，不 mock 任何一行）。
+ * 用 `SHARED_ABS`（与 W3 同一路径常量）取，保证测的就是「两个 app 共用的那一份」。
+ */
+const preflight = require(SHARED_ABS) as {
+  runPreflight: (opts: Record<string, unknown>) => {
+    ok: boolean;
+    failures: Array<{ code: string; title: string; detail: string; hint?: string }>;
+    info: { headSha: string; branch: string; expectSha: string; warnings: string[] };
+  };
+};
+
+/**
+ * 假 git：把 HEAD、分支、worktree 顶层钉死。
+ *
+ * 🔴 为什么不用真 git（即「真读本仓库 HEAD」）：
+ *    真跑会连带引入本机/CI 的真实状态 —— 顶层目录名要过 P4 白名单、`git status` 决定 P5、
+ *    要不要开发者工具 CLI 决定 P6。任何一项随环境漂，这条用例就不是在测 P3 了，
+ *    而是「本机 luck 好不好」，红/绿都失去意义。P3 要钉的是「注入的 HEAD 与期望 sha 的比对」，
+ *    所以把 HEAD 变成输入。
+ *
+ * ⚠️ 参数顺序有讲究：`status --short` 里也含 `--short`，必须先判 status。
+ */
+const fakeGit = (branch: string, sha: string, toplevel: string) =>
+  (_cmd: unknown, args: unknown): string => {
+    const a = (args as string[]).join(' ');
+    if (a.includes('status')) return '';
+    if (a.includes('--abbrev-ref')) return `${branch}\n`;
+    if (a.includes('--show-toplevel')) return `${toplevel}\n`;
+    if (a.includes('--short')) return `${sha}\n`;
+    throw new Error(`unexpected git args: ${a}`);
+  };
+
+/** W6 造的临时目录，收尾统一清掉（不碰仓库里任何真实文件）。 */
+const w6TmpDirs: string[] = [];
+
+/**
+ * 造一个「科豆形态」的临时包根：只有 package.json，**没有** utils/version.ts。
+ *
+ * 🔴 `versionSources: []` 是科豆的真实声明（见 miniprogram-preflight.js 的 DEFAULT_VERSION_SOURCES
+ *    注释）：科豆包里没有编译期版本常量，P1 只核 package.json.version。
+ *    不传这个参数就会去核一个科豆根本没有的文件 → P1 假红，掩盖真正要断言的 P3。
+ */
+function mkKedouFixture(version = '1.0.13'): { root: string; toplevel: string } {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'kedou-preflight-'));
+  w6TmpDirs.push(base);
+  const root = path.join(base, 'apps', 'kedou-ai-minigram');
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'package.json'),
+    JSON.stringify({ name: 'fixture', version }, null, 2),
+  );
+  // worktree 顶层名走 P4 白名单形态（web_system-<四位任务号>），把 P4 摘出去，只留 P3 说话
+  return { root, toplevel: path.join(base, 'web_system-9136') };
+}
+
+describe('W6 · P3 --expect-sha 正/负向（isSameSha 坏掉时科豆这边必须变红）', () => {
+  afterAll(() => {
+    for (const d of w6TmpDirs) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  /**
+   * 🔴 本条就是补的那个缺口（2026-11-27）：
+   *    `isSameSha` 一旦退化成恒 false，**本条必须红** —— 这是它存在的唯一理由。
+   *    实测变异（把 scripts/lib/git-identity.js 的 isSameSha 改成 `return false`）：
+   *    W6 正向红、负向仍绿（负向本来就在断言「不符」），W1–W5 全绿 —— 与预期一致。
+   */
+  it('声明的 --expect-sha 与 HEAD 一致 → 通过，且留下可 grep 的「核对通过」痕', () => {
+    const { root, toplevel } = mkKedouFixture();
+    const r = preflight.runPreflight({
+      root,
+      mode: 'ci', // 走 miniprogram-ci：P6 不判开发者工具 CLI（与本机装没装无关）
+      versionSources: [],
+      expectSha: 'abc1234',
+      execFileSync: fakeGit('feat/kedou-preflight-w6', 'abc1234', toplevel),
+    });
+
+    // ① 判定通过：不能有任何失败项
+    expect(r.failures).toEqual([]);
+    expect(r.ok).toBe(true);
+    // ② 比对确实发生了（而不是「没读到 git 就跳过」）：
+    //    P3 只有在 isSameSha 命中时才推这条 warning —— 它是「正向路径真的走到了」的唯一可视证据
+    expect(r.info.headSha).toBe('abc1234');
+    expect(r.info.expectSha).toBe('abc1234');
+    expect(r.info.warnings.join('\n')).toContain('--expect-sha 核对通过');
+    // ③ 反面证据：通过不等于「漏判」—— 任何 P3 失败痕迹都不许有
+    expect(r.failures.some((f) => f.code === 'P3')).toBe(false);
+  });
+
+  /**
+   * 负向：期望 sha 与 HEAD 不符 → **必须**报 P3 失败（且要说清「当前是哪个、期望是哪个」）。
+   *
+   * 🔴 为什么负向也要在科豆有一份：只有正向时，「无论给什么 sha 都放行」这种坏法照样绿
+   *    （正向能过=真；但负向漏判=假）。两个方向都有网，这条判据才算被钉住。
+   *    与大橙子 tests/preflight.test.ts「P3 工作区身份」组的写法逐条对齐。
+   */
+  it('声明的 --expect-sha 与 HEAD 不符 → 失败（站错 worktree），且 detail 里两个 sha 都在', () => {
+    const { root, toplevel } = mkKedouFixture();
+    const r = preflight.runPreflight({
+      root,
+      mode: 'ci',
+      versionSources: [],
+      expectSha: '019d282b',
+      execFileSync: fakeGit('feat/kedou-preflight-w6', 'abc1234', toplevel),
+    });
+
+    expect(r.ok).toBe(false);
+    const f = r.failures.find((x) => x.code === 'P3');
+    expect(f).toBeDefined();
+    expect(f!.title).toContain('HEAD 与期望 sha 不符');
+    // 报错三要素里的「现象」：两个值都要在，人才知道差在哪
+    expect(f!.detail).toContain('abc1234');
+    expect(f!.detail).toContain('019d282b');
+    // 且不许把「不符」写成「核对通过」
+    expect(r.info.warnings.join('\n')).not.toContain('--expect-sha 核对通过');
   });
 });
