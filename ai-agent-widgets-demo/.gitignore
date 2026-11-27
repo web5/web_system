@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env*
+
+# 根 workspace 用 pnpm，上层 .gitignore 会忽略 package-lock.json；
+# 本 demo 是自包含 npm 工程，必须反忽略并随代码提交，保证 npm install 可复现。
+!package-lock.json
+
+# public/mf-widgets/*.system.js 是随代码提交的真实 System.register 产物，不要忽略
