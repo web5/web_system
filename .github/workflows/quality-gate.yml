@@ -200,7 +200,43 @@ jobs:
       - name: 构建前端产物（仅 vite build，类型检查归 changed-packages）
         run: |
           # 前端以 dist 消费 workspace 共享包（@web-system/ui 等），不先构建它们 vite resolve 直接失败
-          pnpm --filter @web-system/shared --filter @web-system/types --filter @web-system/ui --filter @web-system/agent-message build
+          #
+          # ⚠️ 为什么这一行必须配「产物断言」而不能只靠退出码（2026-11-27 加固，issue: 静默跳过）：
+          #   pnpm --filter 的「无此脚本」是**静默成功**。实测（pnpm 9.15.0，out=$(cmd); c=$?，未走管道）：
+          #     pnpm --filter X run <不存在的脚本>                 → exit 0（只打 None of the selected packages…）
+          #     pnpm --filter X --fail-if-no-match run <不存在脚本> → exit 0（该 flag 只守「无项目匹配 filter」）
+          #     pnpm --filter X <不存在的脚本>（简写）              → exit 0
+          #     cd <pkg> && pnpm run <不存在的脚本>                → exit 1（ERR_PNPM_NO_SCRIPT）
+          #   也就是说：任一包把 scripts.build 改名/删掉，这一行都会「成功」地跳过那个包，
+          #   下游 vite build 要么拿不到 dist 而报错，要么更糟——静默消费上一次的旧 dist。
+          #   当前 4 个包的 scripts.build 恰好都在，所以安全是**巧合**，不是命令形态保证的。
+          #
+          # 🔒 为什么保留「一条命令构建 4 个包」而不拆成 && 串联：
+          #   pnpm 会按 workspace 依赖拓扑排序（types/shared → ui → agent-message），
+          #   人为罗列顺序等于把拓扑写死，依赖图一变就错。所以顺序交还给 pnpm，
+          #   「是否真的构建了」改用下面的产物断言来兜（顺序不变 + 能发现跳过）。
+          BUILD_MARKER="$RUNNER_TEMP/ci203-build-start"
+          : > "$BUILD_MARKER"
+
+          # --fail-if-no-match：先堵住「包名写错/包被删」这一类（filter 无匹配）
+          pnpm --filter @web-system/shared --filter @web-system/types --filter @web-system/ui --filter @web-system/agent-message --fail-if-no-match build
+
+          # 逐包断言关键产物：必须存在，且新于构建前的标记文件。
+          #   存在 → 抓住「build 脚本缺失被 pnpm 静默跳过」（干净 runner 上 dist 不入库，跳过就必然没有 dist）
+          #   新于标记 → 抓住「有 dist 但没重新产出」（脏工作区/自托管 runner 上消费旧产物）
+          missing=0
+          for p in shared types ui agent-message; do
+            dist="packages/$p/dist"
+            if [ ! -d "$dist" ]; then
+              echo "::error::packages/$p/dist 不存在 —— @web-system/$p 的 build 被静默跳过（scripts.build 缺失/改名？pnpm --filter 对「无此脚本」是 exit 0）"
+              missing=1
+            elif [ -z "$(find "$dist" -type f -newer "$BUILD_MARKER" | head -1)" ]; then
+              echo "::error::packages/$p/dist 没有新产物 —— @web-system/$p 未真正构建（可能消费了上一次的旧 dist）"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+
           pnpm --filter @web-system/portal exec vite build
           pnpm --filter @web-system/admin exec vite build
 
