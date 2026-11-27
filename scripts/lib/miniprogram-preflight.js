@@ -75,6 +75,8 @@
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
+// P3 版本真实性判据的唯一实现在共享层（mp-e2e 版本守卫也 require 同一个文件）
+const { readGitIdentity, isSameSha } = require('./git-identity.js');
 
 /**
  * 待检包根的默认值**不在本文件**：本文件被两个 app 共用，`__dirname` 已不再等于任何一个 app 的包根。
@@ -291,40 +293,7 @@ function dirtyEntryShipsPackage(entry, ignores, pkgPrefix = '') {
   });
 }
 
-/**
- * 取 git 身份；不抛异常（git 不可用 / 非仓库 → 返回 ok:false 由调用方降级为警告）。
- * toplevel = 仓库/worktree 顶层，P4 的目录白名单判的是它（不是 apps/dachengzi-minigram 这级）。
- * status   = `git status --short` 原文（P5 用）。
- */
-function readGitIdentity(root, execFileSync) {
-  const git = (args, { keepLeading = false } = {}) => {
-    const out = execFileSync('git', ['-C', root, ...args], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    const str = typeof out === 'string' ? out : '';
-    // `git status --short` 的前两列是状态码，" M path" 与 "M  path" 语义不同 —— 不能 trim 前导空格
-    return keepLeading ? str.replace(/\n$/, '') : str.trim();
-  };
-  try {
-    return {
-      ok: true,
-      branch: git(['rev-parse', '--abbrev-ref', 'HEAD']),
-      sha: git(['rev-parse', '--short', 'HEAD']),
-      toplevel: git(['rev-parse', '--show-toplevel']),
-      status: git(['status', '--short'], { keepLeading: true }),
-    };
-  } catch (e) {
-    return {
-      ok: false,
-      branch: '',
-      sha: '',
-      toplevel: '',
-      status: '',
-      error: String((e && e.message) || e),
-    };
-  }
-}
+// readGitIdentity / isSameSha 已上移 scripts/lib/git-identity.js（P3 版本真实性判据的唯一实现，禁止在本文件重建副本）
 
 /**
  * P6 的「官方默认安装路径」候选（按平台）。
@@ -832,13 +801,7 @@ function pickProjectName(root, toplevel) {
   return path.basename(root);
 }
 
-/** sha 前缀比较：短 sha 与全 sha 都能对上（大小写不敏感）。 */
-function isSameSha(a, b) {
-  const x = String(a || '').toLowerCase();
-  const y = String(b || '').toLowerCase();
-  if (!x || !y) return false;
-  return x === y || x.startsWith(y) || y.startsWith(x);
-}
+// readGitIdentity / isSameSha 已上移 scripts/lib/git-identity.js（P3 版本真实性判据的唯一实现，禁止在本文件重建副本）
 
 // ---------- 输出 ----------
 
