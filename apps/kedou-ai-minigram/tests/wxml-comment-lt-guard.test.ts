@@ -19,8 +19,11 @@ import { registerWxmlLtGuardSpecs } from '../../../scripts/lib/wxml-lt-guard';
 registerWxmlLtGuardSpecs({
   // 扫描根必须由接线方算好传进来（在 app 的 tests 目录下 `..` 才是 app 根）
   appRoot: path.resolve(__dirname, '..'),
+  appLabel: '科豆',
   // 防空转锚点：custom-tab-bar 生命周期稳定、不随业务改版消失；
-  // contract/index 是带多行开始标签与注释的真实业务页
+  // contract/index 是带多行开始标签与注释的真实业务页。
+  // ⚠️ 科豆也有 `pages/nce/detail/detail.wxml`（master 既有），但那是**同名巧合**：
+  //    内容与大橙子的事故文件不同，别把它当成「同一个文件」引用；此处也不拿它当锚点。
   mustScan: ['custom-tab-bar/index.wxml', 'packageContract/pages/contract/index/index.wxml'],
   minFiles: 20, // 实际 37 个 wxml，取明显下界
 });

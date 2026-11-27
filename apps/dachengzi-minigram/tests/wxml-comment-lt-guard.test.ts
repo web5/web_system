@@ -19,6 +19,7 @@ import { registerWxmlLtGuardSpecs } from '../../../scripts/lib/wxml-lt-guard';
 registerWxmlLtGuardSpecs({
   // 扫描根必须由接线方算好传进来（在 app 的 tests 目录下 `..` 才是 app 根）
   appRoot: path.resolve(__dirname, '..'),
+  appLabel: '大橙子',
   // 防空转锚点：修复后的 home / detail 正是「多行开始标签 + 紧贴其前的注释」形态
   mustScan: ['pages/nce/detail/detail.wxml', 'pages/home/index/index.wxml'],
   minFiles: 11, // 实际 14 个 wxml，下界放宽
