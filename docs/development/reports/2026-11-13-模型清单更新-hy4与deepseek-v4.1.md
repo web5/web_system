@@ -70,15 +70,21 @@ PR 原改动只把 ai-agent 的 `BUILTIN_TOKENHUB_MODELS` 换成新名，其余�
 - 上游：`hy3` 用 `TOKENHUB_API_KEY` 单钥匙返回 200 + 正文（2026-11-27 已实测）。
 - 字典：dev/prod `/internal/dict/llm_models` 保持旧值（本次不改）。
 
-## 六、后续独立任务：模型迁移（待用户拍板后执行）
+## 六、模型迁移：已决定暂不执行（2026-11-27 用户拍板）
 
-必须一次做完，顺序不可颠倒：
+用户拍板口径：**以现有 dev 为准**（dev 字典此前已实测验证）。
 
-1. dev DB 字典改名（参数化 SQL + 改前备份 + 校验 `affectedRows`）。
-2. 代码引用同步：`intent.service.ts` 默认值、`thinking-policy.ts` maxTokens 表（新旧并存过渡）、`ai-service` 同源副本。
-3. dev `ai-agent/.env` 的 `INTENT_MODEL` 更新。
-4. 单测数据更新，全量通过。
-5. 观察一个轮询周期后，再择期迁移 prod 字典（单独一次变更）。
+- dev 与 prod 的 `llm_models` 字典保持现值：`deepseek-v4-flash`、`deepseek-v4-pro`、`hy4-preview`。
+- 代码侧 `BUILTIN_TOKENHUB_MODELS` 已与上述字典逐字一致，不再改名。
+- `intent.service.ts` 的 `INTENT_MODEL` 默认值与 dev/prod `.env` 中的显式值均保持 `deepseek-v4-flash`，不动。
+- 新名 `hy4` / `deepseek-v4.1-flash` 虽已实测可调（200 + 正文），但**本次不迁移**。
+
+重新立项的触发条件（满足任一即需单独立项、一次做全）：
+
+1. 上游下线 `deepseek-v4-flash` / `hy4-preview` 旧别名（当前 `deepseek-v4-flash` 已被上游路由到 `deepseek-v4.1-flash-1017`，属别名可用状态）。
+2. 业务需要 `hy4` / `deepseek-v4.1-flash` 的独有能力，旧名无法替代。
+
+届时必须同步改动（漏一处即意图分类静默失效）：DB 字典 → `intent.service.ts` 默认值 → dev/prod `.env` 的 `INTENT_MODEL` → `packages/agent-core/src/clients/thinking-policy.ts` 的 maxTokens 表 → `servers/ai-service/src/agent/model-catalog.service.ts` 同源副本 → 单测数据。
 
 ## 七、回滚
 
