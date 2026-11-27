@@ -148,7 +148,7 @@
                · 三态由 `tipCollect` 驱动，**文案与图标都经 collectLabel / collectIcon 算好放进 data**
                  （`tipCollectLabel` / `tipCollectIcon`）—— 不在此另写三元文案，避免第二份真源；
                · `busy` = 提交中（置灰 + 手势短路，见 detail.ts 的 collectTipWord 首行守卫）。
-             尺寸按 `.wt-tools` 的 gap 8rpx 收（胶囊高 48rpx < 朗读圆钮 88rpx 热区），
+             尺寸按 `.wt-tools` 的 gap 8rpx 收（胶囊高 48rpx 小于朗读圆钮 88rpx 热区），
              ✕ 仍在最右，不被挤出（`.wt-x` 的 padding 不变）。 -->
         <view class="wt-btn {{tipCollect === 'done' || tipCollect === 'existed' ? 'done' : ''}} {{tipCollect === 'busy' ? 'busy' : ''}}"
               catchtap="collectTipWord" aria-role="button" aria-label="{{tipCollectLabel}}">
