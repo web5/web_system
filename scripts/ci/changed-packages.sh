@@ -9,6 +9,7 @@
 # 设计：
 #   - 从 git diff 文件路径推断属于哪个子包（apps|servers|packages 下含 package.json 的目录）
 #   - 对每个包跑 build（内含 vue-tsc/tsc/nest build 类型检查）
+#   - 有 typecheck 脚本的包跑 typecheck（小程序 app 的 build 是 echo 占位，类型检查全靠这一步，9198）
 #   - 有 test 脚本的包再跑 test（jest --runInBand CI 模式）
 #   - set -e：任何包 build 非零即整体失败（门禁不吞错）
 # ============================================================
@@ -94,6 +95,27 @@ for dir in $changed_dirs; do
       echo "  ✗ test 失败"; fail=1
     fi
     rm -f /tmp/ws-test-$$.log
+  fi
+
+  # R8 typecheck（2026-11-27，台账 9198）
+  #
+  # 为什么必须单列：两个小程序 app 的 `build` 是 `echo 'Mini app build'` 占位，
+  # 不含任何类型检查；它们唯一的类型判据就是 `typecheck` 脚本（tsc --noEmit）。
+  # 此前 changed-packages 只跑 build/test/lint ⇒ PR 里的 TS2339 之类类型错误 CI 全部拦不住，
+  # 只有本地 tsc 能发现（实例：PR #710 的 TS2339 就是本地拦下、CI 放行的）。
+  #
+  # 门禁级别：只对**声明了 typecheck 脚本**的包跑（当前恰好两个小程序 app），
+  # 存量已量：两包在干净 master 上 tsc --noEmit 均 exit 0（100% 通过才配阻断）。
+  # 没声明的包跳过——不为没配该脚本的包临时造判据，避免扩大覆盖面。
+  if has typecheck; then
+    echo "→ pnpm typecheck"
+    if (cd "$dir" && pnpm typecheck); then
+      echo "  ✓ typecheck 通过"
+    else
+      echo "  ✗ typecheck 失败"; fail=1
+    fi
+  else
+    echo "  (无 typecheck 脚本，跳过)"
   fi
 
   # 可选 lint（--lint 档）：只读检查用 lint:ci（无 --fix），无则回退 lint

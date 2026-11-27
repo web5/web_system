@@ -64,18 +64,26 @@
 .wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
 .wt-tools { display: flex; align-items: center; gap: 8rpx; }
 /* 2026-11-26 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮 = 圆形播放图标。
-   原型真源 `.btn-icon`（原型-变体B-底部抽屉.html:294-302）：30px 圆 / 16px 图标 / 描边品牌蓝 /
-   播放态浅蓝底 + 品牌描边；ICON.play = 三角 path、ICON.stop = 圆角方块 rect（:613-614）。
-   小程序不能内联 <svg>，故用 CSS 画同形（不引图片、不加依赖）：
-     热区 88rpx（.wt-play，AC-3.3 下限）⊃ 视觉圆 60rpx（.wt-ico）⊃ 图标 ≈32rpx（.wt-ico::before） */
+   原型真源 `.btn-icon`：30px 圆 / 16px 图标 / 描边品牌蓝 / 播放态浅蓝底 + 品牌描边。
+   尺寸口径：热区 88rpx（.wt-play，AC-3.3 下限）⊃ 视觉圆 60rpx（.wt-ico）⊃ 图标 32rpx（.wt-ico-img）。
+   🔴 2026-11-27：▶/■ 由 CSS border 三角改为**一套 SVG**（assets/icons/play.svg / stop.svg），
+      两个状态靠 `<image src>` 三元切换。`mode="aspectFit"` 必须留（默认 scaleToFill 会拉变形）。 */
 .wt-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; border: none; background: transparent; line-height: 1; }
 .wt-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-/* ▶ 播放三角：18rpx 高 × 14rpx 宽（≈32rpx 图标框内），填品牌蓝 */
-.wt-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+/* 图标 32rpx（三处统一基准；`image` 必须显式宽高，否则按 24px 固有像素撑开） */
+.wt-ico-img { width: 32rpx; height: 32rpx; }
 .wt-play.on .wt-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
-/* ■ 停止方块：14rpx 见方（原型 rect 10.4/24 的等比），填品牌蓝 */
-.wt-play.on .wt-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
 .wt-play-hv .wt-ico { background: #EFF6FF; }
+/* 🔴 2026-11-27 D1：词卡收藏按钮（胶囊，与首页 `.q-tip-btn` 同形同口径）。
+   尺寸口径：高 48rpx（字号 24rpx + 上下 padding 4rpx×2 视觉约 48rpx）、图标 28rpx（与首页 .q-tip-btn-ico 一致），
+   左右 padding 16rpx（首页 18rpx 收到 16rpx，是因为 `.wt-tools` 里还要塞 88rpx 的朗读圆钮与 ✕，
+   不把 ✕ 挤出去）。`flex: none` 必须有：三兄弟在同一 flex 行里，允许收缩会把文字挤成两行。 */
+.wt-btn { flex: none; display: inline-flex; align-items: center; gap: 4rpx; font-size: 24rpx; line-height: 1.6; color: #1D4ED8; padding: 4rpx 16rpx; border: 1rpx solid rgba(37, 99, 235, .28); border-radius: 999rpx; background: #FFFFFF; white-space: nowrap; }
+/* 已收藏态：文案「收藏 → 已收藏」+ 图标 ☆ → ✓（与首页 `.q-tip-btn.done` 同一套色：--accent-ink 系） */
+.wt-btn.done { color: #0F766E; border-color: rgba(15, 118, 110, .32); background: rgba(15, 118, 110, .08); }
+/* 提交中：置灰（禁用感）。真正的防连点是 collectTipWord 首行的 busy 守卫，这里只负责「看起来点不动」 */
+.wt-btn.busy { opacity: .55; }
+.wt-btn-ico { flex: none; width: 28rpx; height: 28rpx; }
 .wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
 .wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }
 .wt-p { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; }
@@ -92,7 +100,12 @@
    只在 readingLineIdx === si 时由 wxml 渲染（不播放时不存在），故不是常驻控件，
    与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突（理由见 detail.ts stopLineSpeak 注释）。
    极小的方块：字面 20rpx，热区靠 padding 撑到 ~40rpx；行内元素，紧跟在句末（沉浸档也是行尾）。 */
-.sent-stop { margin-left: 10rpx; padding: 0 10rpx; font-size: 20rpx; line-height: 1.6; color: #3B82F6; vertical-align: middle; }
+/* 🔴 2026-11-27 附加项：行尾停止入口由「字符 ■」改为 stop.svg。
+   为什么是 inline-block 而不是原来的 inline text：`<image>` 不能放进 `<text>`（微信只支持 text 嵌套），
+   外层必须是 view；display:inline-block + vertical-align:middle 才能继续跟在最后一个单词后面不换行。
+   尺寸：图标 24rpx，与 32rpx 正文行内视觉同高（原来字符是 20rpx 字号）。 */
+.sent-stop { display: inline-block; margin-left: 10rpx; padding: 0 10rpx; line-height: 1; vertical-align: middle; }
+.sent-stop-ico { display: block; width: 24rpx; height: 24rpx; }
 .sent-stop:active { background: #DBEAFE; border-radius: 6rpx; }
 
 .modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 200; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 0 48rpx; }

@@ -262,11 +262,15 @@ describe('resolveTarget', () => {
 });
 
 describe('resolveCliBinary（CLI 路径解析，不硬编码）', () => {
-  const OLD = process.env.WECHAT_DEVTOOLS_CLI;
+  // 🔴 9182：env 在 hook 期捕获，不在 collection 期（const OLD = process.env.X）。
+  // collection 期捕获早于任何 beforeEach 注入，若同文件/框架级 later 注入了 env，
+  // afterEach 会把「本该保留的注入值」误 delete 掉并泄漏给兄弟 describe（preflight.test.ts 踩过）。
+  let savedCliEnv: string | undefined;
+  beforeEach(() => { savedCliEnv = process.env.WECHAT_DEVTOOLS_CLI; });
 
   afterEach(() => {
-    if (OLD === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
-    else process.env.WECHAT_DEVTOOLS_CLI = OLD;
+    if (savedCliEnv === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = savedCliEnv;
     mockChildProcess.execFileSync.mockReset();
   });
 
@@ -341,7 +345,8 @@ describe('describeCliError（真实错误信息拼装，纯函数）', () => {
 });
 
 describe('cmdPreview / cmdUpload：cli 失败时打印真实错误（含 ENOENT 归位）', () => {
-  const OLD = process.env.WECHAT_DEVTOOLS_CLI;
+  // 🔴 9182：同 resolveCliBinary，env 一律 hook 期捕获，避免 collection 期误捕获导致 afterEach 误删。
+  let savedCliEnv: string | undefined;
   let exitSpy: jest.SpyInstance;
   let errSpy: jest.SpyInstance;
   let logSpy: jest.SpyInstance;
@@ -349,6 +354,7 @@ describe('cmdPreview / cmdUpload：cli 失败时打印真实错误（含 ENOENT 
   let writeSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    savedCliEnv = process.env.WECHAT_DEVTOOLS_CLI;
     mockChildProcess.execFileSync.mockReset();
     exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
       throw new Error('process.exit');
@@ -361,8 +367,8 @@ describe('cmdPreview / cmdUpload：cli 失败时打印真实错误（含 ENOENT 
   });
 
   afterEach(() => {
-    if (OLD === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
-    else process.env.WECHAT_DEVTOOLS_CLI = OLD;
+    if (savedCliEnv === undefined) delete process.env.WECHAT_DEVTOOLS_CLI;
+    else process.env.WECHAT_DEVTOOLS_CLI = savedCliEnv;
     exitSpy.mockRestore();
     errSpy.mockRestore();
     logSpy.mockRestore();

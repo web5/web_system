@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { exitCodeOf, deriveCaseStatus, discoverCases } = require('../../src/runner');
+const { exitCodeOf, deriveCaseStatus, discoverCases, noCasesExitCode, blockedAsFailExitCode } = require('../../src/runner');
 
 describe('runner.js exit code 映射（§2.6 口径）', () => {
   const env = process.env.MP_E2E_REQUIRE_ENV;
@@ -41,6 +41,16 @@ describe('runner.js exit code 映射（§2.6 口径）', () => {
     process.env.MP_E2E_REQUIRE_ENV = '1';
     expect(exitCodeOf([{ status: 'FAIL' }, { status: 'SKIP' }], { envUnavailable: false })).toBe(1);
   });
+
+  test('零用例命中（casesDir 空 / --filter 零命中）→ 默认 exit 1，拒绝静默绿', () => {
+    delete process.env.MP_E2E_REQUIRE_ENV;
+    expect(noCasesExitCode()).toBe(1);
+  });
+
+  test('零用例命中 + MP_E2E_REQUIRE_ENV=1 → exit 2', () => {
+    process.env.MP_E2E_REQUIRE_ENV = '1';
+    expect(noCasesExitCode()).toBe(2);
+  });
 });
 
 describe('runner.js 用例级状态推导', () => {
@@ -55,6 +65,43 @@ describe('runner.js 用例级状态推导', () => {
 
   test('fallback（用例体抛错）覆盖步骤推导', () => {
     expect(deriveCaseStatus([{ status: 'PASS' }], 'FAIL')).toBe('FAIL');
+  });
+});
+
+describe('runner.js 整卡全 BLOCKED 开关（MP_E2E_BLOCKED_AS_FAIL）', () => {
+  // deriveCaseStatus 判为 BLOCKED 的形态：steps 非空且全 BLOCKED
+  const wholeBlockedCard = {
+    name: 'X. 整卡全 BLOCKED',
+    status: 'BLOCKED',
+    steps: [
+      { name: 'X1', status: 'BLOCKED', message: '已知限制①' },
+      { name: 'X2', status: 'BLOCKED', message: '已知限制①' },
+    ],
+  };
+
+  test('整卡全 BLOCKED + MP_E2E_BLOCKED_AS_FAIL=1 → 1', () => {
+    expect(blockedAsFailExitCode([wholeBlockedCard], { MP_E2E_BLOCKED_AS_FAIL: '1' })).toBe(1);
+  });
+
+  test('整卡全 BLOCKED + 开关未设置 → 0（存量语义保持）', () => {
+    expect(blockedAsFailExitCode([wholeBlockedCard], {})).toBe(0);
+  });
+
+  test('整卡全 BLOCKED + 开关值非 1 → 0', () => {
+    expect(blockedAsFailExitCode([wholeBlockedCard], { MP_E2E_BLOCKED_AS_FAIL: '0' })).toBe(0);
+  });
+
+  test('混合 PASS+BLOCKED（非整卡全 BLOCKED）+ 开关=1 → 0', () => {
+    const mixed = {
+      name: 'Y. 混合',
+      status: 'PASS',
+      steps: [{ name: 'Y1', status: 'PASS' }, { name: 'Y2', status: 'BLOCKED' }],
+    };
+    expect(blockedAsFailExitCode([mixed], { MP_E2E_BLOCKED_AS_FAIL: '1' })).toBe(0);
+  });
+
+  test('status=BLOCKED 但无 steps 明细 → 不误判为整卡全 BLOCKED', () => {
+    expect(blockedAsFailExitCode([{ name: 'Z', status: 'BLOCKED' }], { MP_E2E_BLOCKED_AS_FAIL: '1' })).toBe(0);
   });
 });
 

@@ -98,6 +98,11 @@ function makeCtx(readMode = 'tap') {
   for (const k of [
     '_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip',
     '_resetPlayingState', '_lineIdxOf', '_onSpeakState', 'stopLineSpeak',
+    // 2026-11-27 D1：收藏 payload 抽到 `_collectLine` / `_collectWord`，词卡三态走
+    // `_tipCollectPatch` / `_setTipCollect` / `_clearTipCollectTimer`（桩必须与调用面同步）
+    '_collectLine', '_collectWord', '_tipCollectPatch', '_setTipCollect', '_clearTipCollectTimer',
+    // 2026-11-27 D7 双向同步：抽屉已收藏 key 集合的两个算口（桩必须与调用面同步）
+    '_drawerCollectedKeys', '_withCollectedKey',
   ]) {
     ctx[k] = pageConfig[k];
   }
@@ -171,19 +176,20 @@ describe('抽屉组件接线（properties / events 一个都不能少）', () =>
     expect(json().usingComponents['action-drawer']).toBe('/components/action-drawer/index');
   });
 
-  it('wxml 传齐 7 个 properties 与 5 个 bind 事件', () => {
+  it('wxml 传齐 7 个 properties 与 3 个 bind 事件', () => {
     const w = wxml();
     for (const prop of ['visible', 'scope', 'line-text', 'line-index', 'word', 'word-has-def', 'phonetic']) {
       expect(w).toContain(`${prop}="{{`);
     }
-    for (const evt of ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']) {
+    // 2026-11-26 变体 C（用户拍板）：朗读下沉到组件 → speak-line / speak-word 两个 bind 已删除，
+    // 只剩「收藏两项 + close」。反向断言防止有人把朗读绑定加回来（会与组件本地朗读重复触发）。
+    for (const evt of ['collect-line', 'collect-word', 'close']) {
       expect(w).toContain(`bind:${evt}="`);
     }
-    // 五个 handler 都必须真实存在（漏实现 = 运行时静默失效）
-    for (const fn of [
-      'onDrawerSpeakLine', 'onDrawerSpeakWord', 'onDrawerCollectLine',
-      'onDrawerCollectWord', 'onDrawerClose',
-    ]) {
+    expect(w).not.toContain('bind:speak-line');
+    expect(w).not.toContain('bind:speak-word');
+    // 三个 handler 都必须真实存在（漏实现 = 运行时静默失效）
+    for (const fn of ['onDrawerCollectLine', 'onDrawerCollectWord', 'onDrawerClose']) {
       expect(typeof pageConfig[fn]).toBe('function');
     }
   });
@@ -202,12 +208,24 @@ describe('抽屉组件接线（properties / events 一个都不能少）', () =>
 
 // ─────────────────────────── 3. U1 行尾 ■ 停止按钮 ───────────────────────────
 
-describe('U1（2026-11-26 19:15 拍板）：句子行尾 ■ 停止按钮', () => {
-  it('静态：■ 只在 readingLineIdx === si 时渲染（不播放时节点不存在）', () => {
+describe('U1（2026-11-26 19:15 拍板）：句子行尾停止按钮', () => {
+  /**
+   * 🔴 2026-11-27 附加项改写（不是放松）：字符 ■ 换成 `assets/icons/stop.svg`
+   * （上一批统一三处播放图标后，这里成了唯一的字符残留）。`<text>` 装不下 `<image>`，
+   * 外层由 `<text>` 改成 `<view>`（display:inline-block 保持行内）。
+   * 判据改为：渲染条件 + 点击 handler + 图标来源（循环体内取行项上的 `line.stopIcon`），
+   * 并反向禁止 ■ 回潮。
+   */
+  it('静态：停止入口只在 readingLineIdx === si 时渲染（不播放时节点不存在），图标 = stop.svg', () => {
     const w = stripWxmlComments(src('pages/nce/detail/detail.wxml'));
-    expect(w).toMatch(/wx:if="\{\{readingLineIdx === si\}\}" class="sent-stop" catchtap="stopLineSpeak">■</);
-    // 渲染层只有这一处 ■（不是常驻控件）
-    expect(w.split('■').length - 1).toBe(1);
+    const at = w.indexOf('class="sent-stop"');
+    expect(at).toBeGreaterThan(-1);   // 防空转：真的抓到了节点
+    const node = w.slice(Math.max(0, at - 120), at + 260);
+    expect(node).toMatch(/wx:if="\{\{readingLineIdx === si\}\}"/);
+    expect(node).toMatch(/catchtap="stopLineSpeak"/);
+    expect(node).toMatch(/<image class="sent-stop-ico" mode="aspectFit" src="\{\{line\.stopIcon\}\}" \/>/);
+    // 渲染层不再出现任何 ■（字符形态回潮即红）
+    expect(w).not.toMatch(/■/);
   });
 
   it('行为：点它 = stopSpeak + 播放态归零', () => {

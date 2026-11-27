@@ -14,7 +14,7 @@
  * 3. miniprogram-ci 依赖已装
  *
  * 可选环境变量:
- *   PREVIEW_PAGE    预览直达页，默认 pages/chat/index/index
+ *   PREVIEW_PAGE    预览直达页，默认 pages/welcome/index/index
  *   PREVIEW_QUERY   页面参数，如 "id=123"
  *   PREVIEW_SCENE   场景值，默认 1011（扫描二维码）
  *   QRCODE_FORMAT   terminal | image | base64，默认 image

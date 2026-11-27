@@ -54,6 +54,25 @@ npm run upload
 
 上传成功后会输出版本号，然后到微信公众平台提交审核。
 
+## 本地测试（draw.test.js · E2E）
+
+`tests/draw.test.js` 是依赖微信开发者工具 CLI 的 E2E 套件（会拉起 GUI 进程）。本机跑法：
+
+```bash
+cd apps/kedou-ai-minigram
+npx jest tests/draw.test.js --config tests/jest.config.js --runInBand
+```
+
+若出现 **用例全 PASS 但 Jest 进程卡住不退出**（open handles），加 `--forceExit` 即可正常退出（实测 ~5.8s）：
+
+```bash
+npx jest tests/draw.test.js --config tests/jest.config.js --runInBand --forceExit
+```
+
+- 根因：第三方库 `miniprogram-automator` 的 `Launcher.launch()` 在 `checkVersion()` 抛错时，spawn 的 CLI 子进程无回收路径，属已知句柄泄漏。
+- **CI 上无微信开发者工具，不存在此问题**，因此无需、也不应全局加 `--forceExit`。
+- 台账 **9200** 已按「已知取舍」关闭：这里仅作本机开发体验注明，**不改 `package.json` 的 `test` 脚本**（避免掩盖 CI 里真实的 open-handle 泄漏）。
+
 ## 注意事项
 
 - **不需要**打开微信开发者工具，也不需要它登录（见 §配置 3）

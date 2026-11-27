@@ -1,6 +1,7 @@
 # dachengzi-minigram E2E 用例索引
 
 基建：`@web-system/mp-e2e`（真源见 `packages/mp-e2e/README.md`）。运行：`pnpm test:e2e`。
+验收/交付一律用 `pnpm test:e2e:strict`，SKIP 非 0 不算通过；普通 `test:e2e` 仅供本地开发看信号。
 
 | 用例 | 文件 | 判据 | 说明 |
 |---|---|---|---|

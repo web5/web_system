@@ -182,7 +182,15 @@ function makeThis(over: Record<string, unknown> = {}): any {
   // 2026-11-26 变体 B：`_anchorFloat` 已随锚点链路整块删除，从桩表移除（不再有该键）。
   // 单槽位重构后 onWordTap / onLongPress 改调 openOverlay / closeOverlay / closeTip，
   // 这些是页面内部方法，同样要挂到桩上（否则 `this.openOverlay is not a function`）。
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip']) {
+  // 2026-11-27 D1：收藏 payload 抽到 `_collectLine` / `_collectWord`（词卡与抽屉共用），
+  // 词卡三态走 `_tipCollectPatch` / `_setTipCollect` / `_clearTipCollectTimer`，桩必须同步
+  // （桩是手搓对象，只挂列表里的方法 —— 漏一个就是 `not a function`）。
+  for (const k of [
+    '_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip',
+    '_collectLine', '_collectWord', '_tipCollectPatch', '_setTipCollect', '_clearTipCollectTimer',
+    // 2026-11-27 D7 双向同步：抽屉已收藏 key 集合的两个算口（桩必须与调用面同步）
+    '_drawerCollectedKeys', '_withCollectedKey',
+  ]) {
     if (typeof (pageConfig as any)[k] === 'function') {
       ctx[k] = (pageConfig as any)[k].bind(ctx);
     }
@@ -271,16 +279,20 @@ describe('C5/V4 · 平台原生 bindlongpress 长按 → 底部动作抽屉（�
    *   ② detail.wxml 挂着抽屉组件的 5 个 bind（一个都不能少，否则某个动作会静默失效）。
    * 🔴 没放松：仍要求「句档只有 2 项、不多不少、顺序固定」。
    */
-  it('句档恰好「朗读此句 / 收藏此句」两项（= 四项前两项），且抽屉 5 个事件全部接线', () => {
+  it('句档恰好「朗读此句 / 收藏此句」两项（= 四项前两项），且抽屉 3 个事件全部接线', () => {
     const acts = actionsOf('line').map((a) => a.label);
     expect(acts).toEqual(['朗读此句', '收藏此句']);
     expect(actionsOf('line')).toHaveLength(2);
     expect(actionsOf('word').slice(0, 2).map((a) => a.label)).toEqual(acts); // 换档不挪位
     const wxml = src('pages/nce/detail/detail.wxml');
     expect(wxml).toMatch(/<action-drawer/);
-    for (const evt of ['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']) {
+    // 2026-11-26 变体 C（用户拍板）：朗读下沉到组件 → speak-line / speak-word 两个 bind 已删除，
+    // 只剩收藏两项 + close。反向断言：不许把朗读绑定加回来（会与组件本地朗读重复一次）。
+    for (const evt of ['collect-line', 'collect-word', 'close']) {
       expect(wxml).toContain(`bind:${evt}="`);
     }
+    expect(wxml).not.toContain('bind:speak-line');
+    expect(wxml).not.toContain('bind:speak-word');
   });
 
   it('长按第 5 句 → 抽屉 scope=line、lineIndex=4，不展开中文（长按与 tap 平台互斥）', () => {
@@ -294,49 +306,30 @@ describe('C5/V4 · 平台原生 bindlongpress 长按 → 底部动作抽屉（�
   });
 });
 
-describe('C6/V5 · 抽屉「朗读此句」= 恰好一次 speakText(line.en)、页面不手写停止分支', () => {
+describe('C6/V5（变体 C 改写）· 抽屉朗读已下沉组件：页面不得再有朗读 handler', () => {
   /**
-   * 2026-11-26 变体 B 改写（原用例断言「再点同句 → stopSpeak 被调用」）：
-   * 停止语义**没有消失，而是下沉**：`services/tts.ts` 内建
-   * `if (playingText === t) { stopSpeak(); … }`（本文件 S4 静态护栏仍在断这句源码）。
-   * 因此页面侧的正确契约不是「点两次时自己调 stopSpeak」，而是：
-   *   ① 两次点击都只是 `speakText(同一文本)`（第二次由 tts 内部转成停止）；
-   *   ② 页面**不得**用本地标记反推播放态（P2-1）——高亮归零一律由 onSpeakState 回流。
-   * 本文件用 dumb jest.fn 桩，无法观测 tts 内部语义 → 「再点同句 = 停 + 高亮复位」
-   * **由 tests/nce-detail-playstate.test.ts 的忠实 tts 桩覆盖**（那里 speakText 同文本即 stop）。
-   * 这里补一条静态断言，防止有人把停止分支重新写回页面。
+   * 🔴 2026-11-26 变体 C（用户拍板）：朗读在抽屉内直接调 `services/tts.speakText`，抽屉不关、
+   * 按钮自切 ▶/■ —— 页面侧 `onDrawerSpeakLine / onDrawerSpeakWord` **已删除**。
+   *
+   * 原用例（「点一次 → speakText 恰好一次 + 抽屉收起 + 不手写 stopSpeak 分支」）所测的那条链路
+   * 整体不存在了，判据对象消失 → 反转成「不得回潮」的断言（不是放宽）：
+   *   · 页面若还留一份朗读 handler，会与组件本地朗读**重复朗读一次**；
+   *   · 页面若再手写 stopSpeak 分支，会与抽屉里的 ■ 抢停止权。
+   * 行为侧（speakText 一次 / 播放态切换 / 再点即停 / 不 emit / 不关抽屉）由
+   * `tests/action-drawer.test.ts` 的「变体 C · 朗读下沉」组覆盖。
    */
-  it('单句朗读仅该句高亮、无整篇调度；再点同句仍只调 speakText（不手写 stopSpeak 分支）', () => {
-    const ctx = makeThis();
-    ctx.data.lines = mockLines();
-    expect(typeof pageConfig.onDrawerSpeakLine).toBe('function'); // 迁移前无 → 红灯
-    speakTextMock.mockClear();
-    stopSpeakMock.mockClear();
-
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: 'He is an engineer.' } });
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenCalledWith('He is an engineer.');
-    expect(ctx.data.readingLineIdx).toBe(1);
-    // V-B11：动作后抽屉立即收起
-    expect(ctx.data.overlay).toBeNull();
-    // 无整篇调度：不会连播第 2..末句
-    expect(speakTextMock.mock.calls.map((c) => c[0])).toEqual(['He is an engineer.']);
-
-    // 再次点同一句 → 仍是「读这一句」（停止由 tts 内建 same-text 语义决定），页面不插手
-    pageConfig.onDrawerSpeakLine.call(ctx, { detail: { lineIndex: 1, text: 'He is an engineer.' } });
-    expect(speakTextMock).toHaveBeenCalledTimes(2);
-    expect(speakTextMock.mock.calls.map((c) => c[0])).toEqual(['He is an engineer.', 'He is an engineer.']);
-    expect(stopSpeakMock).not.toHaveBeenCalled();   // 🔴 页面不得手写停止分支
+  it('页面不得再有 onDrawerSpeakLine / onDrawerSpeakWord，wxml 也不许再有 speak 绑定', () => {
+    expect((pageConfig as any).onDrawerSpeakLine).toBeUndefined();
+    expect((pageConfig as any).onDrawerSpeakWord).toBeUndefined();
+    const wxml = src('pages/nce/detail/detail.wxml');
+    expect(wxml).not.toContain('bind:speak-line');
+    expect(wxml).not.toContain('bind:speak-word');
   });
 
-  it('静态：onDrawerSpeakLine 里不得出现「同句再点 = 停」的手写分支', () => {
-    const ts = src('pages/nce/detail/detail.ts');
-    const m = /onDrawerSpeakLine\(e: DrawerEvent<SpeakLineDetail>\)\s*\{([\s\S]*?)\n  \},/.exec(ts);
-    expect(m).not.toBeNull();
-    const body = (m as RegExpExecArray)[1];
-    expect(body).toMatch(/speakText\(text\)/);
-    expect(body).not.toMatch(/stopSpeak/);                    // 不做手写停止
-    expect(body).not.toMatch(/readingLineIdx\s*===\s*/);       // 不用本地高亮反推是否在播
+  it('反例（防删过头）：收藏两项 + close 三个 handler 必须仍在', () => {
+    for (const fn of ['onDrawerCollectLine', 'onDrawerCollectWord', 'onDrawerClose']) {
+      expect(typeof (pageConfig as any)[fn]).toBe('function');
+    }
   });
 });
 
