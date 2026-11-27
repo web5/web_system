@@ -36,24 +36,42 @@ AI 能力        → 该行的 capabilities / tools 字段（CapabilityRef 引�
 
 ---
 
-## 2. 应用清单：线上共 14 个（2026-11-27 直查 `agent_definitions`）
+## 2. 应用清单：三个环境口径不同（2026-11-27 分环境直查 `agent_definitions`）
 
-| id | 名称 | 模型 | 能力 | 定位 |
-| --- | --- | --- | --- | --- |
-| `acc-agent` | 验收Agent | `hy3` | 1 个 skill（`web-system-paper`；不产生工具） | 验收场景助手，加载论文学习技能出动态 |
-| `baike` | 百科科普 | `hy3` | 无工具（纯模型） | 百科科普问答，先结论后原理 |
-| `bianbian` | 变变创作助手 | `hy3` | 1 个 tool（`image-gen`） | 面向小朋友的形象/场景 AI 生图 |
-| `contract-risk` | 合同翻译官 | `deepseek-v4-flash` | 4 个 tool | 合同条款风险体检，算真实利率与维权金额 |
-| `deploy` | 发布助手 | `deepseek-v4-flash` | 9 个 mcp | 微前端发布、灰度与回滚的流水线助手 |
-| `emotion` | 情感陪聊 | `hy3` | 3 个 tool | 情绪陪伴为主，兼做音乐推荐出卡片 |
-| `general` | 通用助手 | `hy3` | 3 个 tool | 日常问答与闲聊兜底，能力上只剩音乐推荐 |
-| `general-assistant` | 通用问答 | `deepseek-v4-flash` | 3 个 tool（`tools` 里的 `web-search` 被忽略） | 全能问答主入口，联网搜索未生效 |
-| `horoscope` | 星座时运 | `hy3` | 无工具（纯模型） | 星座时运娱乐解读，强制带免责声明 |
-| `study-assistant` | 科豆学习助手 | `hy3` | 1 个 tool（`image-gen`） | 少儿学习辅导，可调用生图辅助讲解 |
-| `tool` | 工具服务 | `hy3` | 无工具（纯模型；虽名为工具服务） | 汇率/天气/计算入口，当前未挂任何工具 |
-| `translate` | 语言翻译官 | `deepseek-v4-flash` | 无工具（纯模型） | 四段式翻译与润色，纯模型无工具 |
-| `web-system-dev` | web_system 研发助手 | `deepseek-v4-flash` | 4 个 mcp（2 个 ref / 4 条授权） | 检索本仓库工程知识答研发问题 |
-| `widget-demo` | Widget 演示助手 | `hy3` | 1 个 tool（`present-widget`） | 对话内生成投票/图表/表单组件演示 |
+> 🔴 **不要再写「线上共 14 个」。** 14 是**本机库**的行数；线上 `kedou-dev` / `kedou-prod` 各只有 **8** 行。
+> 本节按四个口径分别给出 —— 任何单一数字都不足以回答「线上到底有几个应用」。
+
+| 口径 | kedou-dev（线上） | kedou-prod（线上） | 本机 |
+| --- | --- | --- | --- |
+| `agent_definitions` 表内行数 | **8** | **8** | **14** |
+| 已发布可用（`status='published'` 且 `published_at` 非空） | **8** | **7** | 本次未统计 |
+
+prod 比 dev 少的那一条是 `general`：`status='draft'` 且 `published_at=NULL`。
+
+**三环境差集**（逐条核对过；下面那张 14 行表全部是**本机行**）
+
+- **本机独有 7 条**：`acc-agent`、`baike`、`emotion`、`general-assistant`、`horoscope`、`tool`、`widget-demo`
+- **线上独有 1 条**：`music`（音乐推荐官；dev / prod 均 `status='published'` + `enabled=1`，`system_prompt` 488 字）—— **线上有、本机无**，故不在这张表里，详见 §3.2
+- **共有 7 条**：`bianbian`、`contract-risk`、`deploy`、`general`、`study-assistant`、`translate`、`web-system-dev`
+
+即：本机 14 = 7 独有 + 7 共有；线上 8 = 1 独有 + 7 共有；三环境并集 15 个 id。
+
+| id | 名称 | 模型 | 能力 | 定位 | 环境归属 |
+| --- | --- | --- | --- | --- | --- |
+| `acc-agent` | 验收Agent | `hy3` | 1 个 skill（`web-system-paper`；不产生工具） | 验收场景助手，加载论文学习技能出动态 | 本机独有 |
+| `baike` | 百科科普 | `hy3` | 无工具（纯模型） | 百科科普问答，先结论后原理 | 本机独有 |
+| `bianbian` | 变变创作助手 | `hy3` | 1 个 tool（`image-gen`） | 面向小朋友的形象/场景 AI 生图 | 三环境共有 |
+| `contract-risk` | 合同翻译官 | `deepseek-v4-flash` | 4 个 tool | 合同条款风险体检，算真实利率与维权金额 | 三环境共有 |
+| `deploy` | 发布助手 | `deepseek-v4-flash` | 9 个 mcp | 微前端发布、灰度与回滚的流水线助手 | 三环境共有 |
+| `emotion` | 情感陪聊 | `hy3` | 3 个 tool | 情绪陪伴为主，兼做音乐推荐出卡片 | 本机独有 |
+| `general` | 通用助手 | `hy3` | 3 个 tool | 日常问答与闲聊兜底，能力上只剩音乐推荐 | 三环境共有（prod 为 `draft`） |
+| `general-assistant` | 通用问答 | `deepseek-v4-flash` | 3 个 tool（`tools` 里的 `web-search` 被忽略） | 全能问答主入口，联网搜索未生效 | 本机独有 |
+| `horoscope` | 星座时运 | `hy3` | 无工具（纯模型） | 星座时运娱乐解读，强制带免责声明 | 本机独有 |
+| `study-assistant` | 科豆学习助手 | `hy3` | 1 个 tool（`image-gen`） | 少儿学习辅导，可调用生图辅助讲解 | 三环境共有 |
+| `tool` | 工具服务 | `hy3` | 无工具（纯模型；虽名为工具服务） | 汇率/天气/计算入口，当前未挂任何工具 | 本机独有 |
+| `translate` | 语言翻译官 | `deepseek-v4-flash` | 无工具（纯模型） | 四段式翻译与润色，纯模型无工具 | 三环境共有 |
+| `web-system-dev` | web_system 研发助手 | `deepseek-v4-flash` | 4 个 mcp（2 个 ref / 4 条授权） | 检索本仓库工程知识答研发问题 | 三环境共有 |
+| `widget-demo` | Widget 演示助手 | `hy3` | 1 个 tool（`present-widget`） | 对话内生成投票/图表/表单组件演示 | 本机独有 |
 
 **读这张表前必须知道的四件事**
 
@@ -74,7 +92,7 @@ AI 能力        → 该行的 capabilities / tools 字段（CapabilityRef 引�
 
 ## 3. 逐个应用详情
 
-> 本节覆盖 8 条，其中 `music` **在库中不存在**（见 3.2）。库里另有 7 条（`acc-agent` / `baike` / `emotion` / `general-assistant` / `horoscope` / `tool` / `widget-demo`）只有 §2 表格的一行，尚未展开详情。
+> 本节覆盖 8 条，其中 `music` **在本机库中不存在**（线上有，见 3.2）。库里另有 7 条（`acc-agent` / `baike` / `emotion` / `general-assistant` / `horoscope` / `tool` / `widget-demo`）只有 §2 表格的一行，尚未展开详情。
 >
 > 🔴 **本节数字以库为准，与代码种子 `builtinSeeds()`（`servers/ai-service/src/agent-def/agent-def.service.ts`）不一致时以库为准。** 本节历史上是照代码种子写的，2026-11-27 逐条比对后发现 4 节共 9 处实质不符（`translate` / `music` / `general` / `contract-risk`），已修正。
 >
@@ -90,20 +108,28 @@ AI 能力        → 该行的 capabilities / tools 字段（CapabilityRef 引�
 - **注意**：关键词是**字面量子串**匹配（拼成 `|` 正则），所以「英文怎么说」覆盖不了「英语怎么说」——同类说法必须逐个列全。2026-10-08 事故就是这个原因。
 - 另有一份历史种子 `specs/kedou-ai-minigram/agent-translate.sql`，与代码种子 id 相同、name/model 不同，属历史双份；库里的 `name` 是「语言翻译官」。
 
-### 3.2 `music` 音乐推荐官 —— **库中不存在，本节对应的是代码种子**
+### 3.2 `music` 音乐推荐官 —— **线上在跑，本机没有**
 
-2026-11-27 直查：`agent_definitions` **没有 `music` 这一行**，`agent_definition_versions` 里也**没有任何 `music` 版本**——不是被删了，是**从未以这个 id 落库**。
+2026-11-27 分环境直查（同一轮查询同时取了定义表与渠道表）：
 
-本节原来描述的三个能力（`list-music-providers` / `present-music-card` / `save-music-taste`）现在挂在 `general`、`emotion`、`general-assistant` 三条定义上。
+| 环境 | `agent_definitions` 里的 `music` | `music_providers`（渠道配置） |
+| --- | --- | --- |
+| kedou-dev | **有**：`status='published'` + `enabled=1`，`system_prompt` 488 字 | 只有 `qqmusic_h5`（`h5`）一条 |
+| kedou-prod | **有**：`status='published'` + `enabled=1`，`system_prompt` 488 字 | `qqmusic`（`mini_program`）+ `qqmusic_h5`（`h5`）两条 |
+| 本机 | **无**：`agent_definitions` 0 行，`agent_definition_versions` 也无任何 `music` 版本 | 已有 legacy `qqmusic`（`mini_program`）一条，不是零配置 |
 
-过时的直接来源是仓库里仍然存在的**孤儿种子** `scripts/seed-music-agent.sql`（第 38 行仍 `INSERT INTO agent_definitions`）——谁跑了它，谁就会造出一条本节描述的 `music`。
+所以 `scripts/seed-music-agent.sql`（第 38 行 `INSERT INTO agent_definitions`）**不是孤儿种子 —— 它在线上已生效，只是本机未执行**。谁在本机跑它，谁就会补出本节描述的这条 `music`。
 
-本节原有的两条纪律仍然正确，继续适用于现在承载这三个工具的其他 agent：
+⚠️ 三环境的 `music_providers` 并不一致（见上表）：本机是 legacy `mini_program` 渠道、dev 只有 `h5`、prod 两者都有。所以任何「音乐卡片在各环境表现一致」的假设都不成立，比对前先确认渠道。
+
+本机因为没有这条定义，本节描述的三个能力（`list-music-providers` / `present-music-card` / `save-music-taste`）挂在本机的 `general`、`emotion`、`general-assistant` 三条定义上（见 §3.3）。线上 `music` 自身的能力集合本次未逐条核对，引用其字段前请自行直查。
+
+本节原有的两条纪律与环境无关，继续适用于现在承载这三个工具的各条 agent：
 
 - **红线**：歌名歌手必须真实存在，不确定就换一首确定的，绝不编造
 - **注意**：`capabilities` 字段必须是 **NULL 而不是 `[]`**（见 §5.2）——`translate` 恰好是 `[]` 的反例
 
-配套表 `music_providers`（渠道配置，种子 `qqmusic_h5`）与 `user_taste_profiles`（用户口味档案，跨会话记忆）仍然存在。
+配套表 `music_providers`（渠道配置，三环境取值见上表，**不可只按 `qqmusic_h5` 一种口径理解**）与 `user_taste_profiles`（用户口味档案，跨会话记忆）仍然存在。
 
 ### 3.3 `general` 通用助手
 
