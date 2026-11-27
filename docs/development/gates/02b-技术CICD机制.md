@@ -71,7 +71,8 @@
 
 | 机制 | 实现 | 级别 | 说明 |
 |---|---|---|---|
-| D1 类型检查 / build | `scripts/ci/changed-packages.sh` | error | 从改动路径反推子包；**先按拓扑序构建其工作区依赖**（`<name>^...`），否则 CI 全新 checkout 必报 `TS2307` |
+| D1 类型检查 / build | `scripts/ci/changed-packages.sh` | error | 从改动路径反推子包；**先按拓扑序构建其工作区依赖**（`<name>^...`），否则 CI 全新 checkout 必报 `TS2307`。⚠️ 若某包 `build` 是 echo 占位，本门对该包名存实亡，须靠 D1b 兜底 |
+| D1b 独立 typecheck | `changed-packages.sh` 对有 `typecheck` 脚本的包跑 `tsc --noEmit` | error | 2026-11-27 补（9198）：两小程序 app 的 build 是 echo 占位，类型错误曾全放行。加门前须量存量、100% 绿才配阻断 |
 | D2 单元测试 | 同上（有 `test` 脚本的包跑 `jest --runInBand`） | error | `set -e`，任何包非零即整体失败 |
 | D3 ESLint | 两道：`changed-packages --lint`（拦 error）+ 根 `pnpm lint:ci`（warning 水位 328） | error | 2026-10-22 开启。子包 lint:ci 只拦 error；warning 用**总量水位**（只降不升），因为 ESLint 不提供「只报新增行」，按文件判会误伤存量大户 |
 | D4 生成物一致性 | proto-static-check 第一步 | error | build 后 `git diff --quiet` 校验，防「改了源稿没重跑 build」与「手改生成物」 |
