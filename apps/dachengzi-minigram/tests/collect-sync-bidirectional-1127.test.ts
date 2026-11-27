@@ -164,6 +164,14 @@ function tapCollect(comp: any, key: string) {
   expect(comp.data.collect[key === 'collect-word' ? 'word' : 'line']).toBe('busy');
 }
 
+/**
+ * 🔴 `collectedKeys` 是**集合**语义（消费方只有组件的 `includes(key)`），
+ *    「先收句子还是先收单词」不是契约、也随用户操作顺序变。
+ *    一律排序后比较，避免 `toEqual(['collect-line','collect-word'])` 把 push 顺序钉成契约
+ *    （顺序反了会一条绿一条红 —— 原型复测第二轮指出）。
+ */
+const sortedKeys = (keys: readonly string[]): string[] => [...keys].sort();
+
 /* ───────────────────────────── 页面上下文桩 ───────────────────────────── */
 
 function makeHomeCtx(patch: Record<string, unknown> = {}): any {
@@ -211,7 +219,7 @@ describe('方向 1 · 首页：卡片收藏过的句子，长按开抽屉就是 
     ctx.onQuoteLineLongPress();                      // 长按句子空白 → 开抽屉
     syncBindings(ctx, comp);
 
-    expect(ctx.data.collectedKeys).toEqual(['collect-line']);
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-line']));
     expect(comp.data.collect.line).toBe('done');
     expect(renderedCollect(comp, 'collect-line')).toEqual({ label: '已收藏', collected: true });
   });
@@ -228,8 +236,8 @@ describe('方向 1 · 首页：卡片收藏过的句子，长按开抽屉就是 
     ctx.onQuoteWordLongPress({ currentTarget: { dataset: { w: 'engineer', hasdef: true } } });
     syncBindings(ctx, comp);
 
-    expect(ctx.data.collectedKeys).toContain('collect-word');
-    expect(ctx.data.collectedKeys).not.toContain('collect-line');   // 句子没收藏过，不许串台
+    // 🔴 精确等于：只差后缀的两个 key 用 toContain 断，写错一个字会静默通过
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-word']));        // 句子没收藏过，不许串台
     expect(renderedCollect(comp, 'collect-word')).toEqual({ label: '已收藏', collected: true });
     expect(renderedCollect(comp, 'collect-line')).toEqual({ label: '收藏此句', collected: false });
   });
@@ -257,7 +265,7 @@ describe('方向 1 · 详情页：词卡/句子收藏过，长按开抽屉就是
     ctx.onWordLongPress({ currentTarget: { dataset: { i: 0, w: 'engineer', hasdef: true } } });
     syncBindings(ctx, comp);
 
-    expect(ctx.data.collectedKeys).toContain('collect-word');
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-word']));
     expect(renderedCollect(comp, 'collect-word')).toEqual({ label: '已收藏', collected: true });
   });
 
@@ -287,7 +295,7 @@ describe('方向 2 · 首页：抽屉里收藏成功，卡片按钮立刻是 ✓
     await ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: QUOTE_EN } });
 
     expect(ctx.data.quoteCollected).toBe(true);      // ← 卡片按钮的渲染依据
-    expect(ctx.data.collectedKeys).toContain('collect-line');
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-line']));
     expect(comp.data.collect.line).toBe('done');     // ← 抽屉自己也是 ✓（onCollectDone 回传）
     // 关掉再开：卡片仍是已收藏，抽屉也仍是 ✓（同一份缓存）
     ctx.onDrawerClose();
@@ -306,7 +314,7 @@ describe('方向 2 · 首页：抽屉里收藏成功，卡片按钮立刻是 ✓
 
     tapCollect(comp, 'collect-word');
     await ctx.onDrawerCollectWord({ detail: { word: 'engineer', lineIndex: 0, hasDef: true } });
-    expect(ctx.data.collectedKeys).toContain('collect-word');
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-word']));
     expect(comp.data.collect.word).toBe('done');
 
     ctx.onDrawerClose();
@@ -341,7 +349,7 @@ describe('方向 2 · 详情页：抽屉里收藏成功，页面侧状态同步'
 
     tapCollect(comp, 'collect-word');
     await ctx.onDrawerCollectWord({ detail: { word: 'engineer', lineIndex: 0, hasDef: true } });
-    expect(ctx.data.collectedKeys).toContain('collect-word');
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-word']));
     expect(comp.data.collect.word).toBe('done');
 
     ctx.onDrawerClose();
@@ -358,7 +366,7 @@ describe('方向 2 · 详情页：抽屉里收藏成功，页面侧状态同步'
 
     tapCollect(comp, 'collect-line');
     await ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: WORD_LINE } });
-    expect(ctx.data.collectedKeys).toEqual(['collect-line']);
+    expect(sortedKeys(ctx.data.collectedKeys)).toEqual(sortedKeys(['collect-line']));
     expect(comp.data.collect.line).toBe('done');
   });
 });
