@@ -478,8 +478,12 @@ export function registerWxmlLtGuardSpecs(opts: WxmlLtGuardSpecsOptions): void {
         //    上面三条样例的 `>` 全部包在 `{{ }}` 里，`{{ }}` 分支**先把 `>` 吃掉了**，
         //    「跳过引号」那条分支从未被考验 —— 于是「不跳引号」的错误实现照样绿。
         //    下面两条直接用纯字符串属性值（`{{ }}` 不介入），才真正考验引号分支。
-        //    ① 不误报：属性值里的 `>` 不许把标签提前切断（切断后 `<!--` 会被当成在标签外）
-        expect(findCommentInsideStartTag('<view title="a > b" id="x" />')).toEqual([]);
+        //    ⚠️ 2026-11-28 复审（PR #734 A5）：这里原写成无注释的
+        //    `<view title="a > b" id="x" />` → `[]`，那是**装饰断言** —— 输入里没有 `<!--`，
+        //    而本函数只有「撞上 `<!--`」一个 push 点，所以任何实现都返回 `[]`（实测 M6 下仍绿）。
+        //    改成「属性值含 `>` **且**后面紧跟标签内注释」：正确实现整段跳过引号 → 报 1；
+        //    不跳引号的实现（M6）在引号内的 `>` 处就认为标签结束，`<!--` 落到文本态被当合法注释 → 漏报 0。
+        expect(findCommentInsideStartTag('<view title="a > b" id="x" <!-- c --> />')).toHaveLength(1);
         //    ② 不漏报：切断后「标签内注释」必须仍然抓到（M6 在这里返回 []）
         const quoted = '<view title="a > b"\n  <!-- 在属性列表里 -->\n  id="x" />';
         const qHits = findCommentInsideStartTag(quoted);

@@ -161,4 +161,7 @@ function checkVersionConsistency({
   return { ok: true, sha: git.sha, branch: git.branch, dirty: git.dirty, matched: true };
 }
 
-module.exports = { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH };
+module.exports = { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH, parseShaListFallback };
+// 注：`parseShaListFallback` 只为单测「与共享层 parseShaList 逐例等价」的对拍而导出
+// （见 tests/unit/version-guard.test.js 的 parseShaList 用例），**不参与任何运行时判定**，
+// 也不进 `src/index.js` 的公开面。

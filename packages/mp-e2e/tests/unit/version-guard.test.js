@@ -9,7 +9,7 @@
  */
 
 const path = require('path');
-const { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH } = require('../../src/version-guard');
+const { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH, parseShaListFallback } = require('../../src/version-guard');
 
 const PROJECT = '/tmp/mp-app-fixture';
 
@@ -221,6 +221,14 @@ describe('共享层 scripts/lib/git-identity.js', () => {
     expect(shared.parseShaList('')).toEqual([]);
     expect(shared.parseShaList(undefined)).toEqual([]);
     expect(shared.parseShaList(null)).toEqual([]);
+    // 🔴 2026-11-28 复审补（不新增 it，保持用例数 64）：version-guard 的「共享层缺失」分支用的是
+    //    本地 parseShaListFallback —— 那是**同构的第二份实现**。共享层哪天改了分隔符 / trim 规则，
+    //    它会静默漂移，而漂移只影响「声明了期望却没被识别」这种最不该出错的地方。
+    //    下面逐例对拍，把「两份规则必须等价」钉成断言。
+    for (const v of [undefined, null, '', '   ', ', ,', 'a', 'a, b ,c', 'a , b ,', 'a,,b', ',a',
+      'a1b2c3d,deadbeef', 'deadbeef, cafebabe ,', 123]) {
+      expect(parseShaListFallback(v)).toEqual(shared.parseShaList(v));
+    }
   });
 
   test('describeIdentity：正常 branch@sha / detached 裸 sha / git 不可用', () => {
