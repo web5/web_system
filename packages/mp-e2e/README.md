@@ -128,6 +128,7 @@ module.exports = {
 | 全部 PASS（BLOCKED 不计失败） | 四态汇总表 | **0** |
 | ≥1 条 FAIL（含 preflight 静态守卫不通过、配置错误） | 汇总表 + 失败详情 | **1** |
 | 环境不可用（devtools 未装/服务端口未开/launch 超时） | 醒目横幅 + 全部用例标 SKIP + 排查提示 | **0**（默认）/ **2**（`MP_E2E_REQUIRE_ENV=1`） |
+| 零用例命中（casesDir 空 / `--filter` 零命中） | 错误提示（拒绝静默绿） | **1**（`MP_E2E_REQUIRE_ENV=1` 时 **2**） |
 
 口径说明：**环境失败不红**——环境问题非代码问题，噪声不该混进信号（kedou 既有决策，CI 实测背书）。
 `MP_E2E_REQUIRE_ENV=1` 是本地严格验收的逃生门，防「环境坏了但全绿」的假阳性。
