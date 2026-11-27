@@ -18,6 +18,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { EVT } from '../utils/line-actions';
 
 const APP = path.resolve(__dirname, '..');
 const src = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'utf8');
@@ -228,14 +229,55 @@ describe('硬红线 · 组件不得下沉业务 / 不得测坐标 / 必须订阅
     expect(css).toMatch(/height:\s*96rpx/);        // 375 屏基准格高
   });
 
-  it('wxml 里出现的事件名全部属于 EVT 值集合（K11：拼错即红）', () => {
-    const w = wxml();
-    const evtValues = new Set(['speak-line', 'speak-word', 'collect-line', 'collect-word', 'close']);
-    const names = Array.from(w.matchAll(/triggerEvent\('([a-z-]+)'/g)).map((m) => m[1]);
-    names.forEach((n) => expect(evtValues.has(n)).toBe(true));
-    // 组件的 catch/bind 只绑定自身方法，不出现向外的自定义事件名（向外一律 triggerEvent）
-    const binds = Array.from(w.matchAll(/(?:bind|catch)(?::)?([a-z-]+)=/g)).map((m) => m[1]);
-    binds.forEach((b) => expect(evtValues.has(b)).toBe(false));
+  /**
+   * 🔴 2026-11-27 重写（盲测员发现**原用例是空转的**）：旧版第一段是
+   * `w.matchAll(/triggerEvent\('([a-z-]+)'/g)` —— 但**组件 wxml 从不 `triggerEvent`**
+   * （wxml 里 3 处 `triggerEvent` 全在注释里、且都不是 `('…'` 形态），`names` 恒为空数组、
+   * `names.forEach(...)` **一次都不跑**，「K11 拼错即红」的本意丢失。
+   *
+   * 🔴 重写时踩到的**假绿陷阱**（盲测员实测、team-lead 复核）：**不能扫 `triggerEvent\('`** ——
+   * `components/action-drawer/index.ts:14` 的 JSDoc 里恰好有一句 `triggerEvent('close')`。
+   *   · 不剥注释扫 → 命中 `['close']`，看着「非空、有守卫」，实际验的是**一行注释**
+   *     （比原来的空转更危险：它会让人以为已经修好了）；
+   *   · 剥注释再扫 → 又回到空数组，仍然空转。
+   * 所以改用**真实调用点前缀** `this.triggerEvent(` 把注释天然排除（JSDoc 那句没有 `this.`），
+   * 再用「常量形态 + 字面量形态 == 全部调用点」做**计数吻合**，封掉第三种形态
+   * （变量 / 字符串拼接 / 模板串 —— 两条正则都抓不到，不计数就会被静默绕过）。
+   *
+   * 🔴 这条用例的**鉴别力来自 ⑤（EVT 值集合相等断言）**，不是来自 ②：
+   * `EVT` 有 5 个值，而组件 ts 只 emit 3 条（`COLLECT_LINE` / `COLLECT_WORD` / `CLOSE`）——
+   * `SPEAK_LINE` / `SPEAK_WORD` 自变体 C 起不再 emit，只作动作 key 使用。所以 ①②④ 都管不到
+   * 它们，**⑤ 是这 5 个值的唯一守卫**，且必须是「相等」不能是「⊆ 某集合」（否则删一个值、加一个
+   * 值都没人管），而这 5 个值正是 wxml `data-key` 与 `actionsOf` 的 key 逐字依赖的东西。
+   */
+  it('事件名口径：emit 全走 EVT 常量、无字面量、无第三形态，EVT 值集合被钉死（K11：拼错即红）', () => {
+    const t = ts();
+    const EVT_VALUES = Object.values(EVT) as string[];
+
+    // ① 防空转前置：EVT 真有一组值；真实调用点必须扫到（当前实测 3 处 = index.ts:476 / 481 / 498）
+    expect(EVT_VALUES.length).toBeGreaterThanOrEqual(5);
+    const rawSites = Array.from(t.matchAll(/this\.triggerEvent\(/g)).length;
+    expect(rawSites).toBeGreaterThanOrEqual(3);
+
+    // ② 只允许两种形态：`EVT.XXX` 常量 与 字面量；且**字面量必须为 0**（拼错时 tsc 拦不住字符串）
+    const constSites = Array.from(t.matchAll(/this\.triggerEvent\(\s*EVT\.([A-Z_]+)/g));
+    const literalSites = Array.from(t.matchAll(/this\.triggerEvent\(\s*['"]/g));
+    expect(literalSites.length).toBe(0);
+    expect(constSites.map((m) => m[1]).sort()).toEqual(['CLOSE', 'COLLECT_LINE', 'COLLECT_WORD']);
+
+    // ③ 🔴 加固点：没有第三种形态逃过上面两条正则（计数对不上即红）
+    expect(constSites.length + literalSites.length).toBe(rawSites);
+
+    // ④ 常量必须是 `EVT` 上真实存在的键（`EVT.CLOSED` 这种拼错属性 tsc 能拦，这里再兜一层）
+    constSites.forEach((m) => expect(Object.keys(EVT)).toContain(m[1]));
+
+    // ⑤ 🔴 鉴别力所在：EVT 值集合**恰好**是这 5 个（改一个值 / 加一个值 即红）
+    expect([...EVT_VALUES].sort()).toEqual(['close', 'collect-line', 'collect-word', 'speak-line', 'speak-word']);
+
+    // ⑥ wxml 的 bind/catch 只绑自身方法，不出现自定义事件名（向外一律 triggerEvent）
+    const binds = Array.from(wxml().matchAll(/(?:bind|catch)(?::)?([a-z-]+)=/g)).map((m) => m[1]);
+    expect(binds.length).toBeGreaterThanOrEqual(5);      // 防空转前置（现状 14 处 / 去重 5）
+    binds.forEach((b) => expect(EVT_VALUES.indexOf(b)).toBe(-1));
   });
 });
 
