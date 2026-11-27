@@ -6,7 +6,7 @@
 | 用例 | 文件 | 判据 | 说明 |
 |---|---|---|---|
 | A | cases/A-tabs.js | V21 | 三 tab 渲染 + 选中态 |
-| B | —（未迁移） | — | **暂缓**：目标页已随 AI 能力整改废弃，重写走用例卡流程单独立项 |
+| B | cases/B-return-stack.js | V7 / V22 / V23 | 返回栈 home→NCE目录→NCE详情→逐级返回；纯本地栈无 BLOCKED（id=1&book=NCE2 合法；detail.title/lines 真渲染断言 + 三段栈深断言） |
 | E | cases/E-radius-persist.js | V42 | 圆角设置持久化（E3 跨进程持久化判 BLOCKED，见基建 README 已知限制①） |
 | F | cases/F-clear-cache.js | V45 | 清缓存白名单 |
 | G | cases/G-login-gate.js | 台账 9045/9053/9085 | 未登录态首页：只有 login-gate、hero 不渲染、greetingText 空串；G3 静态判据只在 `Page({data})` 块内取值——`loggedIn` 必须是 `isLoggedIn()` 调用，`greetingText` 三元**false 分支必须空串**（实现 `lib/init-state-check.js`，负例矩阵 `tests/init-state-check.test.ts`） |
