@@ -43,7 +43,8 @@ const ACTS_ZONE_RPX = 192;
  * + `.tabbar` 的 `border-top: 1rpx`（`custom-tab-bar/index.wxss`；安全区由 CSS 的 `env()` 另叠）。
  * 只在 `liftBottom=true` 时叠加进「动作区高度带」判定 —— 抽屉被整体抬高 107rpx 后，
  * 按钮带距视口底的距离也整体增加了这 107rpx；不补上就会把按钮带的上半截误判成
- * 「可以起拖」，BB6 第 2 层逻辑兜底随之失效（第 1 层 `.ad-acts` 的 catchtouchstart 仍在）。
+ * 「可以起拖」，BB6 第 2 层逻辑兜底随之失效（第 1 层 `.ad-acts` 的 catchtouchmove 只拦 move，
+ * touchstart 照常冒泡进来，全靠本判定兜住）。
  * 🔴 与 `index.wxss` 的 `.ad-lift` 规则必须同值，测试已把两处绑在一起（改一处就红）。
  */
 const TABBAR_LIFT_RPX = 107;
@@ -171,7 +172,10 @@ Component({
      * 下滑手势起点。🔴 BB6（盲测 D-6）：**触点落在动作按钮区时不起拖拽** ——
      * 「想点按却把抽屉拖走」比「拖不动抽屉」糟得多（前者误关，后者只是少一条手势通道，
      * 下滑之外还有遮罩 / ✕ 两个关闭通道，D4 三通道不受影响）。
-     * 第 1 层是 wxml 结构（.ad-acts catchtouchstart），这里是第 2 层逻辑兜底。
+     * 第 1 层是 wxml 结构的 `.ad-acts` 上的 `catchtouchmove`（拦住 move，抽屉拖不动）；
+     * 🔴 那个容器上**不许**再写 `catchtouchstart` —— 父节点 catch 掉 touchstart 会让子按钮的
+     * tap 失效（真机缺陷根因，详见 index.wxml 里 `.ad-acts` 上方的长注释）。
+     * 这里是第 2 层逻辑兜底：只靠 move 拦截不够（touchstart 会冒泡上来把 `dragging` 打开）。
      */
     onTouchStart(e: TouchEventLike) {
       const t = (e.touches && e.touches[0]) || null;
