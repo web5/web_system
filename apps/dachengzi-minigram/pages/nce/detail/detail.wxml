@@ -176,6 +176,15 @@
        🔴 **本页不传 `lift-bottom`**（保持默认 false = bottom: 0）：详情页是 navigateTo 打开的
        普通页，**没有 tabBar**，抬高 107rpx 只会在底部凭空多出一条空白，且遮罩盖不到那条带
        （点空白处关不掉抽屉）。首页是 tabBar 页，才需要开启让位。 -->
+    <!-- D7（双向同步）：已收藏动作 key 的**唯一通道**。开抽屉前按本地缓存算好（句维度 =
+         当前长按的 lines[lineIndex]），抽屉里收藏成功后本页再加一个 key。
+         元素值是 `EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 data-key 逐字同值。
+         🔴 注释只能写在标签**外面**：WXML 起始标签内部不认 HTML 注释那套写法
+            （尖括号 + 感叹号 + 两个短横），写进去会让后面整段属性被当成文本，
+            编译报 unexpected character 直接失败（v1.0.21 首版就是这么炸的）。
+         🔴 注释正文里也不许出现尖括号 + 感叹号的开头，更不许出现裸的尖括号 ——
+            注释会被提前闭合/被当成标签起始，同一份文件里已有两处栽在这里。
+            要举例就写中文「尖括号」「小于号」。 -->
   <action-drawer
     id="drawer"
     visible="{{overlay && overlay.kind === 'drawer'}}"
@@ -185,9 +194,6 @@
     word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
     word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
     phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
-    <!-- D7（双向同步）：已收藏动作 key 的**唯一通道**。开抽屉前按本地缓存算好（句维度 =
-         当前长按的 lines[lineIndex]），抽屉里收藏成功后本页再加一个 key。
-         元素值是 `EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 data-key 逐字同值。 -->
     collected-keys="{{collectedKeys}}"
     bind:collect-line="onDrawerCollectLine"
     bind:collect-word="onDrawerCollectWord"
