@@ -673,6 +673,11 @@ describe('publish.js 门禁顺序（preview / upload 第一步就是 preflightGa
   //    「无条件 rmSync」这次变异就永远删不到哨兵 —— 哨兵用例照样绿，回归测试等于空转。
   //    （实测：哨兵写在用例体内时，把清理行改回无条件写法，全组仍 5 passed，一条都不红。）
   //    所以铺哨兵的时机必须早于那条用例：beforeAll 先造出「进入时目录已存在且非空」的真现场。
+  //
+  // 🔴 命名约定：哨兵以 **`__` 开头**。同一目录还被 `preflight-entry-sink.test.ts` 的
+  //    「零产物」判据盯着（它数 `.ci-output` 里的文件数），那个判据只忽略 `__` 前缀的
+  //    测试脚手架、其余文件一个都不放过 —— 两边靠这个前缀避免抢同一真实目录（2026-11-27
+  //    并行 flake 的修法）。改哨兵名时**务必保留 `__` 前缀**，否则全量并行又会随机红。
   const ciOutPath = path.join(__dirname, '..', '.ci-output');
   const SENTINEL_NAME = `__sentinel-${process.pid}.png`;
   const SENTINEL_PATH = path.join(ciOutPath, SENTINEL_NAME);
