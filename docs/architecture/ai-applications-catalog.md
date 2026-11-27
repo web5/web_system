@@ -49,6 +49,13 @@ AI 能力        → 该行的 capabilities / tools 字段（CapabilityRef 引�
 | `deploy` | 发布助手 | `deepseek/deepseek-v4-flash` | 9 个 mcp | 微前端模块/后端服务发布、灰度、回滚 |
 | `web-system-dev` | web_system 研发助手 | `deepseek/deepseek-v4-flash` | 4 个 mcp（知识检索） | 检索本仓库工程知识答疑 |
 
+> ⚠️ **本表与本行下方那句均为 2026-10 编写时的快照，2026-11-27 复核已与库不符，勿当现况引用**：
+> - 实际 `agent_definitions` 为 **14 条**，本表只列 8 条，漏 `acc-agent` / `baike` / `emotion` / `general-assistant` / `horoscope` / `tool` / `widget-demo`；
+> - `music` **在库中不存在**；
+> - 模型列 4 处不符：`contract-risk` / `translate` 实为 `deepseek-v4-flash`（非 `hy3`）；`general` 实为 `hy3`（带前缀的是 `general-assistant`）；`deploy` / `web-system-dev` 为**裸名**，不带前缀。
+>
+> **模型列一律以数据库字典为准**，判据与自查 SQL 见 §5.1。本表待按库重写（独立任务，不在本次改动范围）。
+
 其中 `translate` / `music` / `general` 是用户最常提到的三个，也是**外部自动化任务之外**的代表性应用。
 
 ---
