@@ -74,6 +74,16 @@
 .wt-ico-img { width: 32rpx; height: 32rpx; }
 .wt-play.on .wt-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
 .wt-play-hv .wt-ico { background: #EFF6FF; }
+/* 🔴 2026-11-27 D1：词卡收藏按钮（胶囊，与首页 `.q-tip-btn` 同形同口径）。
+   尺寸口径：高 48rpx（字号 24rpx + 上下 padding 4rpx×2 视觉约 48rpx）、图标 28rpx（与首页 .q-tip-btn-ico 一致），
+   左右 padding 16rpx（首页 18rpx 收到 16rpx，是因为 `.wt-tools` 里还要塞 88rpx 的朗读圆钮与 ✕，
+   不把 ✕ 挤出去）。`flex: none` 必须有：三兄弟在同一 flex 行里，允许收缩会把文字挤成两行。 */
+.wt-btn { flex: none; display: inline-flex; align-items: center; gap: 4rpx; font-size: 24rpx; line-height: 1.6; color: #1D4ED8; padding: 4rpx 16rpx; border: 1rpx solid rgba(37, 99, 235, .28); border-radius: 999rpx; background: #FFFFFF; white-space: nowrap; }
+/* 已收藏态：文案「收藏 → 已收藏」+ 图标 ☆ → ✓（与首页 `.q-tip-btn.done` 同一套色：--accent-ink 系） */
+.wt-btn.done { color: #0F766E; border-color: rgba(15, 118, 110, .32); background: rgba(15, 118, 110, .08); }
+/* 提交中：置灰（禁用感）。真正的防连点是 collectTipWord 首行的 busy 守卫，这里只负责「看起来点不动」 */
+.wt-btn.busy { opacity: .55; }
+.wt-btn-ico { flex: none; width: 28rpx; height: 28rpx; }
 .wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
 .wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }
 .wt-p { font-size: 24rpx; color: #6B7280; margin-top: 6rpx; }
@@ -90,7 +100,12 @@
    只在 readingLineIdx === si 时由 wxml 渲染（不播放时不存在），故不是常驻控件，
    与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突（理由见 detail.ts stopLineSpeak 注释）。
    极小的方块：字面 20rpx，热区靠 padding 撑到 ~40rpx；行内元素，紧跟在句末（沉浸档也是行尾）。 */
-.sent-stop { margin-left: 10rpx; padding: 0 10rpx; font-size: 20rpx; line-height: 1.6; color: #3B82F6; vertical-align: middle; }
+/* 🔴 2026-11-27 附加项：行尾停止入口由「字符 ■」改为 stop.svg。
+   为什么是 inline-block 而不是原来的 inline text：`<image>` 不能放进 `<text>`（微信只支持 text 嵌套），
+   外层必须是 view；display:inline-block + vertical-align:middle 才能继续跟在最后一个单词后面不换行。
+   尺寸：图标 24rpx，与 32rpx 正文行内视觉同高（原来字符是 20rpx 字号）。 */
+.sent-stop { display: inline-block; margin-left: 10rpx; padding: 0 10rpx; line-height: 1; vertical-align: middle; }
+.sent-stop-ico { display: block; width: 24rpx; height: 24rpx; }
 .sent-stop:active { background: #DBEAFE; border-radius: 6rpx; }
 
 .modal { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 200; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 0 48rpx; }

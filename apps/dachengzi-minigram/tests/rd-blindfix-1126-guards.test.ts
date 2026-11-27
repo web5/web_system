@@ -507,11 +507,30 @@ describe('P2-8 重复句时 ■ 落在实际朗读的那一句（U1）', () => {
 
 // ═════════════════════ P1-2 收藏 meta.hasDef（两页同口径） ═════════════════════
 describe('P1-2 详情页收藏 meta 带 hasDef（E3/E5）', () => {
+  /**
+   * 🔴 2026-11-27 D1 改写（抽取实现，断言**没有放松**）：
+   * 为了「词卡收藏」与「抽屉收藏」共用同一份 payload，`onDrawerCollectWord` 的组装体已抽到
+   * `_collectWord(word, hasDef, lineIndex)`。所以本用例拆成三条：
+   *  ① 抽屉入口仍保留 hasDef 的**回退口径**（事件没带布尔 → 回落查词结果，不写 undefined、不默认 false）；
+   *  ② `meta.hasDef` 仍然显式写在**唯一实现** `_collectWord` 里（改个函数名/删字段即红）；
+   *  ③ 抽屉入口自己**不再组 payload**（`collectGlossary(` 不许回来）—— 回来就是第二份，
+   *     两处的 sourceText / meta / toast 必然漂移，这正是 D1 要防的东西。
+   */
   it('详情页 meta 显式写 hasDef，取值回落查词结果而不是写死', () => {
     const src = stripJs(read(DETAIL_TS));
     const fn = (src.match(/async onDrawerCollectWord\(e: DrawerEvent<CollectWordDetail>\)\s*\{([\s\S]*?)\n {2}\},/) || ['', ''])[1];
+    expect(fn).not.toBe('');   // 防空转：真的抓到了这个 handler
+    // ① 回退口径留在抽屉入口
     expect(fn).toMatch(/const hasDef = typeof d\.hasDef === 'boolean' \? d\.hasDef : !info\.none/);
-    expect(fn).toMatch(/hasDef,\s*\n?\s*\},/);
+    // ③ 入口只转调，不自己组 payload
+    expect(fn).toMatch(/await this\._collectWord\(/);
+    expect(fn).not.toMatch(/collectGlossary\(/);
+    // ② meta.hasDef 在唯一实现里（词卡与抽屉共用这一份）
+    //    ⚠️ 捕获组必须显式写 `(` —— 少了它 match()[1] 是 undefined，断言会以 TypeError 假红/假绿
+    const impl = (src.match(/async _collectWord\(([\s\S]*?)\n {2}\},/) || ['', ''])[1];
+    expect(impl).not.toBe('');  // 防空转
+    expect(impl).toMatch(/tag: 'word'/);
+    expect(impl).toMatch(/hasDef,\s*\n?\s*\},/);
   });
 
   it('两页写的 meta 都含 hasDef（消费方 pages/mine/glossary 只认 m.hasDef === false）', () => {

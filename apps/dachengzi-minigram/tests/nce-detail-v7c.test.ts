@@ -182,7 +182,15 @@ function makeThis(over: Record<string, unknown> = {}): any {
   // 2026-11-26 变体 B：`_anchorFloat` 已随锚点链路整块删除，从桩表移除（不再有该键）。
   // 单槽位重构后 onWordTap / onLongPress 改调 openOverlay / closeOverlay / closeTip，
   // 这些是页面内部方法，同样要挂到桩上（否则 `this.openOverlay is not a function`）。
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip']) {
+  // 2026-11-27 D1：收藏 payload 抽到 `_collectLine` / `_collectWord`（词卡与抽屉共用），
+  // 词卡三态走 `_tipCollectPatch` / `_setTipCollect` / `_clearTipCollectTimer`，桩必须同步
+  // （桩是手搓对象，只挂列表里的方法 —— 漏一个就是 `not a function`）。
+  for (const k of [
+    '_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip',
+    '_collectLine', '_collectWord', '_tipCollectPatch', '_setTipCollect', '_clearTipCollectTimer',
+    // 2026-11-27 D7 双向同步：抽屉已收藏 key 集合的两个算口（桩必须与调用面同步）
+    '_drawerCollectedKeys', '_withCollectedKey',
+  ]) {
     if (typeof (pageConfig as any)[k] === 'function') {
       ctx[k] = (pageConfig as any)[k].bind(ctx);
     }

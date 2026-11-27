@@ -41,9 +41,13 @@ import { readWordsCache, writeWordsCache } from '../../../utils/quote-words';
 //   - 收藏 toast 文案是唯一纯函数 → `utils/line-actions.collectToastText`
 // 🔴 本页不得再写一份 `actionsOf` / ACTIONS 表：动作顺序（行=对象、列=动词）只有那一份真源，
 //    第二条真源必然漂移（tests/home-action-drawer.test.ts 有静态断言兜住）。
-import { collectToastText, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
+import { collectToastText, EVT, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
 // 图标路径/颜色单一真源（wxml 不能 import ts → 放进 data.icons 供模板插值）
 import { ICONS } from '../../../utils/icons';
+// D7 收藏态跨界面回查（2026-11-27）：本地缓存只作**初值**，收藏入口永不因「已收藏」短路。
+// 后端没有「是否已收藏」存在性接口（只有分页列表 + keyword 模糊），静默回查会给出假否定，
+// 故走缓存 + 写请求纠正兜底 —— 详见 utils/collect-cache.ts 文件头。
+import { isCollectedCached, rememberCollected } from '../../../utils/collect-cache';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
@@ -190,13 +194,31 @@ Page({
     quotePlaying: false,
     /**
      * 今日一句「已收藏」态（2026-11-27 用户真机反馈①：点完收藏 icon 状态没变）。
-     * 由 `collectQuote` / 抽屉「收藏此句」成功后置 true；换句（`_applyQuote`）复位 false。
-     * 🔴 只是**会话内**的乐观显示：页面没有「这句是否已收藏」的查询接口，
-     *    所以按「本次会话内收藏过的这一句」显示，换句即清（详见 utils/icons 与组件 _resetLocalState 注释）。
+     *
+     * 🔴 D7（2026-11-27 第二批）：初值**从本地缓存读**（`utils/collect-cache`），
+     *    不再写死 false —— 这是「收藏过、切走再回来又变 ☆」的真因。
+     *    缓存只当初值：点按钮照样发真实写请求（失效兜底见 `collectQuote` / `_collectLine`）。
+     * 写入口：`collectQuote` / 抽屉「收藏此句」成功后置 true；`_applyQuote` 换句时按缓存重算。
      */
-    quoteCollected: false,
-    /** 词卡「已收藏」态（同上，按当前词卡打开期间有效；换词 / 关词卡复位） */
+    quoteCollected: isCollectedCached('line', INITIAL_QUOTE.en),
+    /** 词卡「已收藏」态（同上：打开词卡时按缓存算初值，换词 / 关词卡复位） */
     quoteWordCollected: false,
+    /**
+     * 🔴 D7（2026-11-27 第二批）抽屉「已收藏」态的**唯一通道**：已收藏的动作 key 数组
+     * （`EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 `data-key` 逐字同值）。
+     *
+     * 双向同步都落在这一个字段上（组件 observer `collectedKeys` → `_seedCollect`）：
+     *  · 卡片/词卡 → 抽屉：开抽屉那一刻按本地缓存重算（`_drawerCollectedKeys`），
+     *    所以「卡片点了收藏 → 长按打开抽屉」里那一项直接是 ✓ 已收藏（用户真机反馈的 bug）；
+     *  · 抽屉 → 卡片/词卡：抽屉收藏成功后先 `_withCollectedKey` 把 key 加进来（抽屉自己即时对齐），
+     *    再 `setData({ quoteCollected / quoteWordCollected: true })` 点亮页面上那颗按钮。
+     *
+     * 🔴 为什么是数组而不是两个布尔：见组件 `collectedKeys` 属性注释 —— 一份事实一个表达，
+     *    页面每次整体重算，不会出现「卡片说已收藏、抽屉说没收藏」的裂缝。
+     * 🔴 缓存只是初值：用户若在收藏页删掉了这条，缓存会残留假「已收藏」，
+     *    所以点「已收藏」照样发真实写请求（`_collectLine` / `_collectWord` 恒写，服务端幂等）。
+     */
+    collectedKeys: [] as string[],
     /** 图标路径（wxml 不能 import ts；三处图标全部来自 utils/icons，模板里不写路径字面量） */
     icons: { play: ICONS.play, stop: ICONS.stop, star: ICONS.star, check: ICONS.check },
     /** 正在朗读的单词（'' = 无），驱动词卡「朗读/停止」文案 */
@@ -523,9 +545,40 @@ Page({
       quote: { cn: src.cn, en: src.en },
       quoteTokens: tokenize(src.en, buildKnown(words)),
       bookBadge: badgeTextOf(src.book, src.lessonId),
-      // 换句 = 换了一个收藏对象：已收藏态必须复位（否则新句子挂着上一句的 ✓ 已收藏）
-      quoteCollected: false,
+      // 换句 = 换了一个收藏对象：已收藏态必须**按新句重新取初值**（D7）
+      // 🔴 原来这里写死 false —— 那就是「收藏过的一句，切走再回来又变 ☆」的第二个成因。
+      quoteCollected: isCollectedCached('line', src.en),
+      // 词卡属于上一句，换句时它的收藏态一并归零
+      quoteWordCollected: false,
+      // 抽屉的已收藏 key 集合也属于上一句：整份作废，下次开抽屉按新句缓存重算
+      collectedKeys: [] as string[],
     });
+  },
+
+  /**
+   * 当前抽屉内容对应的「已收藏」key 集合（**开抽屉那一刻**的唯一算口）。
+   *
+   * 🔴 判据只有本地缓存（`utils/collect-cache`）：它是页面内所有收藏入口（卡片 / 词卡 / 抽屉）
+   *    成功后的唯一落盘点（`rememberCollected`），所以「卡片点了收藏 → 长按开抽屉」天然对齐，
+   *    不需要第二套判断。`quoteCollected` 是**渲染镜像**（同一次成功同时写入），不参与这里。
+   * 🔴 词只用缓存：词卡关掉时 `quoteWordCollected` 已复位，内存里没有可信值。
+   */
+  _drawerCollectedKeys(lineText: string, word?: string): string[] {
+    const keys: string[] = [];
+    const line = String(lineText || '').trim();
+    if (line && isCollectedCached('line', line)) keys.push(EVT.COLLECT_LINE);
+    const w = String(word || '').trim();
+    if (w && isCollectedCached('word', w)) keys.push(EVT.COLLECT_WORD);
+    return keys;
+  },
+
+  /**
+   * 往 key 集合里加一个（**换成新数组**：数组属性的 observer 按引用比较，
+   * `push` 原地改不会触发组件重算）。抽屉里收藏成功后用它即时对齐。
+   */
+  _withCollectedKey(key: string): string[] {
+    const cur = Array.isArray(this.data.collectedKeys) ? this.data.collectedKeys : [];
+    return cur.indexOf(key) >= 0 ? cur.slice() : cur.concat(key);
   },
 
   /**
@@ -565,8 +618,12 @@ Page({
       return;
     }
     // 一次 setData 完成「关抽屉 + 开词卡 + 复位按钮态」，不留中间帧（T9/T10）
-    // 🔴 同时复位「已收藏」：换词 = 换收藏对象，上一词的 ✓ 不许跟着过来
-    this.openOverlay({ ...lookupWord(w, this._quoteWords), kind: 'wordtip' }, { quoteWordPlaying: '', quoteWordCollected: false });
+    // 🔴 同时复位「已收藏」：换词 = 换收藏对象，上一词的 ✓ 不许跟着过来；
+    //    **但初值改成按本地缓存算**（D7）—— 收藏过的词再点开必须是 ✓ 已收藏。
+    this.openOverlay({ ...lookupWord(w, this._quoteWords), kind: 'wordtip' }, {
+      quoteWordPlaying: '',
+      quoteWordCollected: isCollectedCached('word', w),
+    });
   },
 
   /**
@@ -600,6 +657,30 @@ Page({
     }
     this.openOverlay(null, { quoteWordPlaying: '', quoteWordCollected: false });
   },
+
+  /**
+   * D2（2026-11-27）：点页面空白 → 关今日一句词卡（与详情页 `onPageTap` 同口径）。
+   *
+   * 🔴 三点与详情页完全一致，别只改一页：
+   *  ① 不用绝对定位的透明遮罩（会盖住正文、吃掉「点另一个生词换内容」）；
+   *  ② 词节点 `catchtap="onQuoteWordTap"` 阻断冒泡 → 点词到不了根节点，「换词」不受影响；
+   *  ③ `e.target.dataset.w` 是第二道保险：万一将来改成 bindtap（冒泡），根节点看到 target 是词
+   *     就直接 return，仍然不会「先关再开」。判据必须是 `e.target`（触发节点），
+   *     用 `e.currentTarget` 恒为根节点、拿不到词 dataset，等于没写。
+   *
+   * 只处理 `kind === 'wordtip'`：抽屉有遮罩 / ✕ / 下滑三条通道，且组件根节点不许挂 tap，
+   * 所以点抽屉标题区不该把抽屉关掉。
+   */
+  onQuotePageTap(e?: { target?: { dataset?: Record<string, unknown> } }) {
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip') return;
+    const ds = (e && e.target && e.target.dataset) || {};
+    if (String(ds.w || '')) return;   // 点在词上：换词由词节点自己处理
+    this.closeQuoteTip();
+  },
+
+  /** 词卡容器自身的 catchtap：吞掉卡片内的空白点击（否则点释义区会被根节点的 onQuotePageTap 关掉） */
+  noop() { /* 故意留空：只消费事件 */ },
 
   /** 点整句（英文空白/卡片空白）→ 朗读整句；再点同句由 speakText 的 same-text 语义停止 */
   speakQuote() {
@@ -641,7 +722,11 @@ Page({
         hasDef,
         phonetic: (info && info.phonetic) || '',
       },
-      { quoteWordPlaying: '' },
+      {
+        quoteWordPlaying: '',
+        // D7（双向同步·方向 1）：词档抽屉第一行同时含「收藏此句」，两个 key 都要按缓存算
+        collectedKeys: this._drawerCollectedKeys(this.data.quote.en, w),
+      },
     );
   },
 
@@ -654,7 +739,11 @@ Page({
   onQuoteLineLongPress() {
     this.openOverlay(
       { kind: 'drawer', scope: 'line', lineIndex: 0, lineText: String(this.data.quote.en || '') },
-      { quoteWordPlaying: '' },
+      {
+        quoteWordPlaying: '',
+        // D7（双向同步·方向 1）：句档抽屉只有「收藏此句」一个收藏项，按缓存算
+        collectedKeys: this._drawerCollectedKeys(this.data.quote.en),
+      },
     );
   },
 
@@ -691,8 +780,18 @@ Page({
     }
     const drawer = drawerOf(this);
     const r = await this._collectLine(text || q.en, isSameLine ? q.cn : '');
-    // 卡片页脚的「已收藏」态与本抽屉是同一句：成功后一起点亮
-    if (r.ok && isSameLine) this.setData({ quoteCollected: true });
+    if (r.ok) {
+      /**
+       * D7（双向同步·方向 2）：抽屉里收藏成功 → **页面自己的按钮立刻跟着变**。
+       *  · `collectedKeys` 给抽屉：key 集合整体换新数组 → 组件 observer 对齐（抽屉自己先亮）；
+       *  · `quoteCollected` 给卡片页脚 `.dq-act`：同一句才点亮（不同句不该串台）。
+       * 同一个 setData 里写，避免中间帧「抽屉亮了、卡片还写着 ☆」。
+       */
+      this.setData({
+        collectedKeys: this._withCollectedKey(EVT.COLLECT_LINE),
+        ...(isSameLine ? { quoteCollected: true } : {}),
+      });
+    }
     if (drawer) drawer.onCollectDone('line', r.ok, r.existed);
   },
 
@@ -717,6 +816,15 @@ Page({
     const hasDef = typeof d.hasDef === 'boolean' ? d.hasDef : fallbackHasDef;
     const drawer = drawerOf(this);
     const r = await this._collectWord(word, hasDef);
+    if (r.ok) {
+      /**
+       * D7（双向同步·方向 2）：key 集合加 `collect-word` → 抽屉该项即时对齐。
+       * 🔴 这里**故意不动 `quoteWordCollected`**：词卡此刻是关着的（单槽位浮层），
+       *    下一次点开词卡会在 `onQuoteWordTap` 里按缓存重算它 —— 在这里写 true 反而会
+       *    让「收藏了 A 词，接着点开 B 词」的那一帧先亮成已收藏（假状态）。
+       */
+      this.setData({ collectedKeys: this._withCollectedKey(EVT.COLLECT_WORD) });
+    }
     if (drawer) drawer.onCollectDone('word', r.ok, r.existed);
   },
 
@@ -764,9 +872,12 @@ Page({
         sourceText: src,
         meta: { book, lessonId, from: 'daily' },
       });
+      const existed = !!res.existed;
+      // D7：收藏成功刷新本地缓存（新建与「已存在」都算已收藏 —— existed=true 正是缓存纠偏点）
+      rememberCollected('line', en);
       // 文案唯一真源在 utils/line-actions.collectToastText（历史文案零变更）
-      wx.showToast({ title: collectToastText('line', !!res.existed), icon: 'none' });
-      return { ok: true, existed: !!res.existed };
+      wx.showToast({ title: collectToastText('line', existed), icon: 'none' });
+      return { ok: true, existed };
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
       console.error('[home/collectLine]', err);
@@ -818,8 +929,11 @@ Page({
           from: 'daily',
         },
       });
-      wx.showToast({ title: collectToastText('word', !!res.existed), icon: 'none' });
-      return { ok: true, existed: !!res.existed };
+      const existed = !!res.existed;
+      // D7：成功刷新本地缓存（词卡 / 抽屉下次打开按它显示 ✓ 已收藏）
+      rememberCollected('word', info.word || w);
+      wx.showToast({ title: collectToastText('word', existed), icon: 'none' });
+      return { ok: true, existed };
     } catch (err) {
       console.error('[home/collectWord]', err);
       return fail;

@@ -1,5 +1,11 @@
 <!-- 新概念英语 · 课文详情（D1=C / V7-C 通篇阅读视图；点句中文 / 点词 tip / 长按气泡 / 单句朗读） -->
-<view class="page f{{fontStep}} mode-{{readMode}} {{radiusClass}}" data-font="{{fontStep === 0 ? 's' : (fontStep === 2 ? 'l' : 'm')}}">
+<!-- 🔴 2026-11-27 D2：根节点挂 bindtap="onPageTap" = 「点空白关生词卡」这一层的唯一实现。
+     它**不是**透明遮罩层（那会盖住正文、把点词换成内容吃掉）：
+       · 词节点自身 catchtap 阻断冒泡 → 点词根本到不了这里（换词不受影响）；
+       · 词卡容器自己 catchtap="noop" → 点卡片内部不会误关；
+       · 点在其它任何空白（句子 / 标题 / 分页条）→ closeTip()。
+     抽屉不在此列：它有遮罩 / ✕ / 下滑三条通道，根节点 handler 只认 kind==='wordtip'。 -->
+<view class="page f{{fontStep}} mode-{{readMode}} {{radiusClass}}" data-font="{{fontStep === 0 ? 's' : (fontStep === 2 ? 'l' : 'm')}}" bindtap="onPageTap">
   <!-- 顶部工具条：阅读档三档 + 字号三档，两组 seg 正交（切档互不复位）；不提供任何整篇连播入口 -->
   <view class="bar">
     <view class="bar-segs">
@@ -67,8 +73,17 @@
                      与 V7-C「句子区无常驻 ♪/☆ 控件」不冲突：①只在播放中渲染、非常驻；
                      ②它是「停止」而不是「播放 / 收藏」入口；③它替代的正是 B 变体删掉的唯一停止路径
                      （长按气泡「朗读此句」再点一次 = 停），没有它用户点完朗读就再也停不下来。
-                     详见 detail.ts 的 stopLineSpeak() 注释。 -->
-                <text wx:if="{{readingLineIdx === si}}" class="sent-stop" catchtap="stopLineSpeak">■</text>
+                     详见 detail.ts 的 stopLineSpeak() 注释。
+                     🔴 2026-11-27 附加项：字符 ■ → assets/icons/stop.svg（24rpx，行内对齐）。
+                       理由：上一批把三处播放图标统一成 SVG 后，这里成了唯一的字符残留，真机字形随系统变。
+                       为什么外层从 <text> 改 <view>：微信 <text> 只支持嵌套 <text>，里面放 <image> 不渲染；
+                       故用 display:inline-block 的 <view> 保持行内排布（见 detail.wxss 的 .sent-stop）。
+                       为什么图标取 `line.stopIcon` 而不是 `icons.stop`：本节点在 `wx:for="{{lines}}"` 的
+                       循环体内，取页面级 `icons.…` 会被 tests/wxml-for-item-scope 判成作用域越界
+                       （与抽屉 `item.ico` 同一套口径，见 detail.ts 的 NceLineView.stopIcon 注释）。 -->
+                <view wx:if="{{readingLineIdx === si}}" class="sent-stop" catchtap="stopLineSpeak">
+                  <image class="sent-stop-ico" mode="aspectFit" src="{{line.stopIcon}}" />
+                </view>
               </view>
             </view>
           </view>
@@ -102,8 +117,11 @@
        2026-11-26 变体 B：浮层收敛到**单槽位** `overlay`（kind='wordtip'），与动作抽屉互斥；
        本节点不绑任何 left/top（抽屉与词卡都不测坐标）。关闭：右上 ✕ / 点句子空白（_applyLineTap
        清 overlay）/ 再点其它词替换内容。word / phonetic / pos / def / example 缺失省略；
-       表外词「暂无释义」且保留可点。 -->
-  <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="word-tip on">
+       表外词「暂无释义」且保留可点。
+       🔴 2026-11-27 D2：容器加 catchtap="noop" —— 根节点 onPageTap 是「点空白关词卡」的实现，
+       卡片内部的空白（点释义 / 音标那一片）会冒泡到根 → 不加 catch 会把卡片点没。
+       catch 只吞 tap，不影响内部三个按钮各自 catchtap（子节点先消费，父节点收不到）。 -->
+  <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="word-tip on" catchtap="noop">
     <view class="wt-head">
       <view class="wt-w">{{overlay.word}}</view>
       <view class="wt-tools">
@@ -123,6 +141,19 @@
           <view class="wt-ico">
             <image class="wt-ico-img" mode="aspectFit" src="{{tipPlaying ? icons.stop : icons.play}}" />
           </view>
+        </view>
+        <!-- 🔴 2026-11-27 D1：词卡收藏按钮（本轮最重要的一条），位置 = 朗读圆钮与 ✕ **之间**。
+             与首页词卡 `.q-tip-btn` 同一形态/口径：
+               · 图标来自 utils/icons（未收藏 star.svg / 已收藏 check.svg），文案「收藏 / 已收藏」；
+               · 三态由 `tipCollect` 驱动，**文案与图标都经 collectLabel / collectIcon 算好放进 data**
+                 （`tipCollectLabel` / `tipCollectIcon`）—— 不在此另写三元文案，避免第二份真源；
+               · `busy` = 提交中（置灰 + 手势短路，见 detail.ts 的 collectTipWord 首行守卫）。
+             尺寸按 `.wt-tools` 的 gap 8rpx 收（胶囊高 48rpx < 朗读圆钮 88rpx 热区），
+             ✕ 仍在最右，不被挤出（`.wt-x` 的 padding 不变）。 -->
+        <view class="wt-btn {{tipCollect === 'done' || tipCollect === 'existed' ? 'done' : ''}} {{tipCollect === 'busy' ? 'busy' : ''}}"
+              catchtap="collectTipWord" aria-role="button" aria-label="{{tipCollectLabel}}">
+          <image class="wt-btn-ico" mode="aspectFit" src="{{tipCollectIcon}}" />
+          <text>{{tipCollectLabel}}</text>
         </view>
         <view class="wt-x" catchtap="closeTip">✕</view>
       </view>
@@ -154,6 +185,10 @@
     word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
     word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
     phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+    <!-- D7（双向同步）：已收藏动作 key 的**唯一通道**。开抽屉前按本地缓存算好（句维度 =
+         当前长按的 lines[lineIndex]），抽屉里收藏成功后本页再加一个 key。
+         元素值是 `EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 data-key 逐字同值。 -->
+    collected-keys="{{collectedKeys}}"
     bind:collect-line="onDrawerCollectLine"
     bind:collect-word="onDrawerCollectWord"
     bind:close="onDrawerClose"

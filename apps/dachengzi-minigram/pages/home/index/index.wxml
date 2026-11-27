@@ -1,6 +1,10 @@
 <!-- 大橙子英语 · 首页（tab 1 / 启动页）
-     整改后：问候 hero → 今日一句 → 常用功能（默认 NCE）→ 更多功能跳发现。 -->
-<view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}">
+     整改后：问候 hero → 今日一句 → 常用功能（默认 NCE）→ 更多功能跳发现。
+     🔴 2026-11-27 D2：根节点 bindtap="onQuotePageTap" = 「点空白关今日一句词卡」的唯一实现。
+       它**不是**透明遮罩（那会盖住正文、吃掉「点另一个生词换内容」）：
+         · 词节点 catchtap 阻断冒泡 → 点词到不了这里；面板内空白由 .q-tip 自己 catchtap 吞掉；
+         · 抽屉不在此列（它有自己的遮罩 / ✕ / 下滑三条通道），handler 只认 kind==='wordtip'。 -->
+<view class="page {{radiusClass}} {{loggedIn ? '' : 'locked'}}" bindtap="onQuotePageTap">
   <!-- 未登录：整页只渲染登录引导卡（login-gate），不发任何业务请求 -->
   <login-gate wx:if="{{!loggedIn}}" desc="学习进度和收藏都跟着账号走" agreement-url="/pages/mine/agreement/agreement" bind:logged="onLogged" />
 
@@ -83,8 +87,11 @@
     </view>
 
     <!-- 今日一句词卡：底部浮层（跟课文详情页同一形态，独立 .q-tip 前缀避免跨页样式耦合）
-         单槽位：只在 overlay.kind === 'wordtip' 时渲染，与抽屉互斥（同一个 overlay 字段） -->
-    <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="q-tip">
+         单槽位：只在 overlay.kind === 'wordtip' 时渲染，与抽屉互斥（同一个 overlay 字段）
+         🔴 2026-11-27 D2：容器 catchtap="noop" —— 根节点 onQuotePageTap 是「点空白关词卡」的实现，
+         卡片内部的空白（点释义那一片）会冒泡到根 → 不加 catch 会把卡片点没。
+         它只吞 tap，卡片内三个按钮各自的 catchtap 先消费，不受影响。 -->
+    <view wx:if="{{overlay && overlay.kind === 'wordtip'}}" class="q-tip" catchtap="noop">
       <view class="q-tip-head">
         <view class="q-tip-w">{{overlay.word}}</view>
         <view class="q-tip-tools">
@@ -136,6 +143,10 @@
       word="{{overlay && overlay.kind === 'drawer' ? overlay.word : ''}}"
       word-has-def="{{overlay && overlay.kind === 'drawer' ? overlay.hasDef : false}}"
       phonetic="{{overlay && overlay.kind === 'drawer' ? overlay.phonetic : ''}}"
+      <!-- D7（双向同步）：已收藏动作 key 的**唯一通道**。开抽屉前按缓存算好，抽屉里收藏成功后
+           本页再加一个 key —— 卡片「☆ 收藏」点亮后长按开抽屉，那一项直接是 ✓ 已收藏。
+           元素值是 `EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 data-key 逐字同值。 -->
+      collected-keys="{{collectedKeys}}"
       bind:collect-line="onDrawerCollectLine"
       bind:collect-word="onDrawerCollectWord"
       bind:close="onDrawerClose"

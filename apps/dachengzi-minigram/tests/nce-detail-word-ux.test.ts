@@ -104,7 +104,15 @@ function makeThis() {
   // 2026-11-26 变体 B：`_anchorFloat` 已删除；单槽位重构后新增 openOverlay / closeOverlay。
   // 2026-11-26 盲测 D-8：新增 `_resolveLineIdx`（文本→句下标的唯一入口，U1 ■ 定位用），
   // 桩必须同步，否则 `_onSpeakState` 在桩上下文里取不到它。
-  for (const k of ['_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip', '_subscribeReading', '_lineIdxOf', '_resolveLineIdx', '_resetPlayingState']) {
+  // 2026-11-27 D1：收藏的 payload 组装抽到 `_collectWord` / `_collectLine`（词卡与抽屉共用），
+  // 词卡三态走 `_tipCollectPatch` / `_setTipCollect` / `_clearTipCollectTimer` —— 桩必须同步。
+  for (const k of [
+    '_lookupWord', '_applyLineTap', 'toggleLine', 'openOverlay', 'closeOverlay', 'closeTip',
+    '_subscribeReading', '_lineIdxOf', '_resolveLineIdx', '_resetPlayingState',
+    '_collectWord', '_collectLine', '_tipCollectPatch', '_setTipCollect', '_clearTipCollectTimer',
+    // 2026-11-27 D7 双向同步：抽屉已收藏 key 集合的两个算口（桩必须与调用面同步）
+    '_drawerCollectedKeys', '_withCollectedKey',
+  ]) {
     ctx[k] = pageConfig[k];
   }
   return ctx;

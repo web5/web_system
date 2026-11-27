@@ -183,11 +183,29 @@ describe('A4 抽屉样式口径（D1/D2/D6/D7 + AC-B.20/B.22）', () => {
 });
 
 describe('A5 U1 停止入口归属（19:15 拍板）', () => {
-  it('详情页：■ 仅在 readingLineIdx===si 时渲染，点击 = stopLineSpeak', () => {
+  /**
+   * 🔴 2026-11-27 附加项改写（**不是放松**，判据换成了更强的形态）：
+   * 原断言逐字钉 `<text … class="sent-stop" …>■</text>` —— 字符 ■ 已按用户拍板换成
+   * `assets/icons/stop.svg`（上一批把三处播放图标统一成 SVG 后，这里是唯一的字符残留）。
+   * 因为微信 `<text>` 只支持嵌套 `<text>`、装不下 `<image>`，外层由 `<text>` 改成了 `<view>`
+   * （`display:inline-block` 保持行内排布，见 detail.wxss 的 .sent-stop）。
+   * 所以本用例改成断言「同一个入口仍然是渲染条件 + 点击 handler + **图标来自 icons.stop**」，
+   * 并反向禁止字符 ■ 回潮（回潮即红 —— 那正是用户反馈的观感不一致来源）。
+   */
+  it('详情页：停止入口仅在 readingLineIdx===si 时渲染，点击 = stopLineSpeak，图标是 stop.svg', () => {
     const w = read(DETAIL_WXML);
-    expect(w).toMatch(
-      /<text\s+wx:if="\{\{readingLineIdx === si\}\}"\s+class="sent-stop"\s+catchtap="stopLineSpeak">■<\/text>/,
-    );
+    const at = w.indexOf('class="sent-stop"');
+    expect(at).toBeGreaterThan(-1);                       // 防空转：真的抓到了那个节点
+    const node = w.slice(Math.max(0, at - 120), at + 240);
+    expect(node).toMatch(/wx:if="\{\{readingLineIdx === si\}\}"/);
+    expect(node).toMatch(/catchtap="stopLineSpeak"/);
+    // 图标 = 同一套 SVG（utils/icons 注入，wxml 不写字面量）。🔴 循环体内取的是行项上的
+    // `line.stopIcon`（不是页面级 `icons.stop`）—— tests/wxml-for-item-scope 要求循环体取值的
+    // 根标识符必须由 wx:for-item 引入，与抽屉 `item.ico` 同一套口径。
+    expect(node).toMatch(/<image class="sent-stop-ico" mode="aspectFit" src="\{\{line\.stopIcon\}\}" \/>/);
+    // 反例：字符 ■ 不许回潮（注释里可以写说明，故先剥注释再扫）
+    const rendered = w.replace(/<!--[\s\S]*?-->/g, '');
+    expect(rendered).not.toMatch(/■/);
   });
   it('首页：不得出现 .sent-stop 行尾节点 / stopQuoteSpeak 绑定（U1 冗余已去重）', () => {
     const w = read(HOME_WXML);

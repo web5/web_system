@@ -80,6 +80,43 @@
  *  F. 播放态权威源不变：仍只由 tts 的 `onSpeakState` 回流反推（P2-1/P2-2/P2-3 刚修的三处
  *     缺陷不得回退）；`onHide` 仍是「stopSpeak → 显式归零 → 退订」，`onShow` 先归零再订阅。
  * ═══════════════════════════════════════════════════════════════════════════
+ * 2026-11-27 第二批（用户逐条拍板 D1 / D2 / D7 + 附加项，全按建议）：
+ *
+ *  D1 词卡补收藏按钮（本轮最重要）：
+ *    · `.wt-tools` 里在朗读圆钮与 ✕ **之间**加一个胶囊按钮，图标/文案口径与首页词卡
+ *      `.q-tip-btn` 逐字一致（`star.svg` / `check.svg` +「收藏 / 已收藏」）；
+ *    · 三态：`☆ 收藏 → ⋯ 收藏中（禁用）→ ✓ 已收藏`；重复点显示 `✓ 已在收藏`，1.8s 后回
+ *      `已收藏`；失败回 `☆ 收藏`（错误提示由 utils/request.ts 统一，页面不弹）；
+ *      成功后**词卡不关**（与抽屉「收藏不关」同口径）；
+ *    · 🔴 未登录走本页既有形态 `setData({ guestLoginShow: true })`（内联 modal-login），
+ *      **不改 toast** —— 这是 K10 拍板保留的两页差异（首页 toast / 本页内联 modal）；
+ *    · 🔴 收藏 service 调用与抽屉**共用同一份实现**（`_collectWord` / `_collectLine`），
+ *      不写第二份 payload 组装（否则 meta / toast 文案必然漂移）。
+ *
+ *  D2 点空白关闭词卡（两页同口径；抽屉不动 —— 它本来就有遮罩 / ✕ / 下滑三条通道）：
+ *    · 页面根节点 `bindtap="onPageTap"`：点在**词**上（`e.target.dataset.w` 非空）→ 什么都不做，
+ *      把「换词」留给词节点自己的 `catchtap` → **不会**出现「先关再开」或「误关」；
+ *      点在别处（含句子空白 / 标题 / 分页条）→ `closeTip()`；
+ *    · 🔴 不用绝对定位的透明遮罩层：那会盖住正文、破坏词的可点性（用户明确否掉压暗遮罩）；
+ *    · 词卡自身容器 `catchtap="noop"` 吞掉卡片内的空白点击（否则点释义区会把卡片点没）；
+ *    · 关卡片仍走 `closeTip()`，其中「正在读这个词 → stopSpeak」的判据一个字没改。
+ *
+ *  D7 收藏态跨界面回查（别只靠内存 flag）：
+ *    · 后端没有「是否已收藏」存在性接口（只有分页列表 + keyword 模糊匹配），
+ *      静默回查会给出**假否定**，故走**本地缓存**作初值（`utils/collect-cache`，唯一真源）；
+ *    · 🔴 缓存只当初值：收藏入口**永不因「已收藏」短路**，点一下就发真实写请求
+ *      （`collectGlossary` 幂等返回 `existed:true`）→ 用户在收藏页删过的条目会被这次写请求
+ *      重新建回来，UI 不再长期撒谎；成功后一律 `rememberCollected` 刷缓存；
+ *    · 覆盖：词卡（`tipCollect` 初值）+ 抽屉（经 `collectedKeys` 一个属性把页面算好的
+ *      「已收藏动作 key 集合」交给组件，组件仍不 import 任何 services —— A8 不动）。
+ *    · 🔴 双向同步（2026-11-27 第二批，用户真机反馈「卡片收藏了、抽屉没同步」）：
+ *      方向①卡片/词卡 → 抽屉：开抽屉那一刻按缓存整体重算 key 集合；
+ *      方向②抽屉 → 卡片/词卡：抽屉收藏成功后 `_withCollectedKey` 加 key + 页面按钮 setData 点亮。
+ *      两个方向共用同一份 `collectedKeys` / 同一份缓存，不写第二套判断。
+ *
+ *  附加项：行尾停止入口 `.sent-stop` 的字符 `■` 换 `assets/icons/stop.svg`（24rpx，行内对齐）。
+ *    上一批把三处播放图标换成 SVG 后，这里成了唯一的字符残留（真机字形随系统变，观感不一致）。
+ *    `<text>` 内不能放 `<image>`（官方只支持 text 嵌套）→ 外层改 `<view>` + `display:inline-block`。
  */
 import { getNceLesson, type NceLessonDetail } from '../../../services/nce';
 import { DEFAULT_NCE_BOOK, nceBookTotal } from '../books';
@@ -88,9 +125,11 @@ import { collectGlossary } from '../../../services/glossary';
 import { isLoggedIn, loginFromGate } from '../../../services/auth';
 import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
 import { lookupWord, type WordLookup } from '../../../utils/lexicon';
-import { collectToastText, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
-// 图标路径单一真源（三处播放/收藏图标共用一套 SVG）
-import { ICONS } from '../../../utils/icons';
+import { collectToastText, EVT, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
+// 图标路径 + 收藏三态文案/图标单一真源（三处播放/收藏图标共用一套 SVG）
+import { ICONS, collectIcon, collectLabel, type CollectState } from '../../../utils/icons';
+// D7 收藏态跨界面回查：本地缓存只作初值，收藏入口永不短路（详见文件头 2026-11-27 D7 段）
+import { isCollectedCached, rememberCollected } from '../../../utils/collect-cache';
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
@@ -98,6 +137,17 @@ interface NceLineView {
   en: string;
   cn: string;
   tokens: WordToken[];
+  /**
+   * 行尾停止按钮的图标路径（U1，2026-11-27 由字符 ■ 改 stop.svg）。
+   *
+   * 🔴 为什么把常量塞进**每个行项**、而不是在 wxml 里写 `{{icons.stop}}`：
+   *   `tests/wxml-for-item-scope.test.ts` 的守卫要求「循环体内每个 `{{x.…}}` 的根标识符
+   *   x 必须由 wx:for-item / wx:for-index 引入」（它不建模页面 data 的作用域）。
+   *   `.sent` 是 `wx:for="{{lines}}"` 的循环体，在里面取 `icons.stop` 会被判越界。
+   *   抽屉组件当初遇到同一条限制，处理方式也是「把图标算进 item」（见 components/action-drawer
+   *   的 `actsView`）—— 这里沿用同一套口径，别为了省一个字段去改那条 P0 守卫。
+   */
+  stopIcon: string;
 }
 
 /** 词卡视图 = utils/lexicon 的查词结果（详情页与首页共用同一形状） */
@@ -128,8 +178,12 @@ interface DrawerWordOverlay {
   /** hasDef=true 时的音标（查表得到；缺失为空串） */
   phonetic: string;
 }
-/** 底部生词词卡（点生词弹出）：沿用 WordLookup 字段 + kind 判别位，行为与迁移前完全一致 */
-interface WordTipOverlay extends WordLookup { kind: 'wordtip'; }
+/**
+ * 底部生词词卡（点生词弹出）：沿用 WordLookup 字段 + kind 判别位，行为与迁移前完全一致。
+ * 2026-11-27 D1：新增 `lineIndex`（该词所在句下标）—— 词卡收藏也要落 `meta.lineIndex`，
+ * 与抽屉「收藏单词」同一个字段口径；缺失时收藏取 -1（老调用方 / 单测手工造 overlay）。
+ */
+interface WordTipOverlay extends WordLookup { kind: 'wordtip'; lineIndex?: number; }
 type Overlay = DrawerLineOverlay | DrawerWordOverlay | WordTipOverlay | null;
 
 /** 抽屉组件 triggerEvent 的事件对象（detail 里已解构，只用到 detail） */
@@ -173,6 +227,23 @@ function normalizeMode(v: unknown): ReadMode {
 }
 
 /**
+ * 词卡收藏按钮的**未收藏文案**（`CollectState='idle'` 时显示它）。
+ * 🔴 其余三态文案来自 `utils/icons.collectLabel`（与抽屉共用一份），这里只给基准词，
+ *    页面不另写「收藏中 / 已收藏 / 已在收藏」——那会是第二份真源。
+ */
+const TIP_COLLECT_BASE = '收藏';
+
+/**
+ * 词卡「已在收藏」提示的停留时长（ms）：1.8s 后回落到 `已收藏`。
+ *
+ * 为什么要回落：`已在收藏` 是「你刚点的这一下没有新建」的**一次性提示**，
+ * 留着它会让人以为这是个不同的状态（其实是同一个「已收藏」）。抽屉里那个提示靠
+ * 下一次点按自然覆盖，词卡没有「下一次」，只能定时回落。
+ * 1.8s ≈ 一次 wx.showToast 的默认时长（1500ms）再宽一点，用户读完就回到稳定态。
+ */
+const TIP_COLLECT_EXISTED_MS = 1800;
+
+/**
  * 切词与查表已抽到 utils/tokenize.ts / utils/lexicon.ts（2026-11-26）：
  * 首页「今日一句」与详情页共用同一套 hasDef 判定与 R3 规则表，避免两处口径漂移。
  */
@@ -204,6 +275,13 @@ Page({
   /** auth 事件订阅退订（V18 成对，页面级；组件内不订阅） */
   _offAuthExpired: null as null | (() => void),
   _offAuthLogged: null as null | (() => void),
+  /**
+   * 词卡「已在收藏」→「已收藏」的回落定时器（D1）。
+   * 🔴 凡是会让词卡内容换掉 / 消失 / 页面离开的路径都必须 clear（closeTip / 换词 / 换课 /
+   *    setReadMode / onHide / onUnload）：定时器到点时卡片可能已经不是那个词了，
+   *    补一次 `setData` 会把新词的按钮改回 `已收藏`（脏状态）。清定时器比加判据更不容易漏。
+   */
+  _tipCollectTimer: null as null | ReturnType<typeof setTimeout>,
 
   data: {
     id: 0,
@@ -252,8 +330,31 @@ Page({
     /**
      * 图标路径（wxml 不能 import ts，只能经 data 插值）。2026-11-27：词卡 ▶/■ 改 SVG，
      * 与首页卡片 / 抽屉共用 `assets/icons/*.svg`，路径唯一真源 utils/icons。
+     * 🔴 star / check 是本轮 D1 词卡收藏按钮用的两个（与首页词卡同一套，不新画）。
      */
-    icons: { play: ICONS.play, stop: ICONS.stop },
+    icons: { play: ICONS.play, stop: ICONS.stop, star: ICONS.star, check: ICONS.check },
+    /**
+     * 🔴 D1 词卡收藏三态（`utils/icons.CollectState`：idle / busy / done / existed）。
+     * 写入口只有 `_setTipCollect()`；**文案与图标也一并写进 data**（`tipCollectLabel` /
+     * `tipCollectIcon`），因为它们由 `collectLabel` / `collectIcon` 这**唯一一份**纯函数算出 ——
+     * 在 wxml 里再写一遍三元文案就是第二份真源，抽屉/词卡/首页三处必然漂移。
+     */
+    tipCollect: 'idle' as CollectState,
+    tipCollectLabel: collectLabel(TIP_COLLECT_BASE, 'idle'),
+    tipCollectIcon: collectIcon('idle'),
+    /**
+     * 🔴 D7（2026-11-27 第二批）抽屉「已收藏」态的**唯一通道**：已收藏的动作 key 数组
+     * （`EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`，与组件 `data-key` 逐字同值）。
+     *
+     * 双向同步都落在这一个字段上（组件 observer `collectedKeys` → `_seedCollect`）：
+     *  · 词卡/抽屉 → 抽屉：开抽屉那一刻按本地缓存重算（`_drawerCollectedKeys`）；
+     *  · 抽屉 → 词卡：抽屉收藏成功后把 key 加进来（`_withCollectedKey`）；词卡本身
+     *    在打开时按缓存取初值（`onWordTap`），两条路都落在同一份缓存上。
+     *
+     * 🔴 本页的收藏对象是 `lines[lineIndex]` 维度：key 集合只描述**当前长按的这句话 / 这个词**，
+     *    换句（另一次长按）必须整份重算 —— 所以它只在开抽屉时算、在成功时增量加，不做跨句缓存。
+     */
+    collectedKeys: [] as string[],
     /** 2026-11-26 ③ 正在朗读的单词（'' = 无）：驱动词卡/单词气泡按钮文案 */
     wordPlaying: '',
     /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
@@ -286,6 +387,8 @@ Page({
     // T11 / F5：页面隐藏时浮层必须归零。抽屉是 position:fixed，若留在 data 里，
     // 回到本页时「浮层自己回来」（tab 页不销毁时必现，方案 §4.4 漏洞 2）。
     if (this.data.overlay) this.setData({ overlay: null });
+    // D1：切后台后「已在收藏 → 已收藏」的回落定时器不该在后台跑（回来时卡片早已归零）
+    this._clearTipCollectTimer();
     // K9 同源：按下高亮也是页面局部态，切走必须清（否则回来时某个词还亮着蓝底）
     if (this.data.pressedWordKey >= 0) this.setData({ pressedWordKey: -1 });
   },
@@ -293,6 +396,8 @@ Page({
   onUnload() {
     this._unsubscribeReading();
     stopSpeak();
+    // D1：页面销毁，回落定时器必须清（否则到点还会在已销毁的页面上 setData）
+    this._clearTipCollectTimer();
     // 页面已销毁：只清私有播放态，不再 setData（onUnload 里 setData 无意义且可能告警）
     this._playingText = '';
     this._playingIdx = -1;
@@ -364,6 +469,8 @@ Page({
       const known = buildKnown(d.words || []);
       const lines: NceLineView[] = (d.lines || []).map((l, i) => ({
         idx: i, en: l.en, cn: l.cn, tokens: tokenize(l.en, known),
+        // 行尾停止图标随行项下发（循环作用域限制，见 NceLineView.stopIcon 的注释）
+        stopIcon: ICONS.stop,
       }));
       // V24 参考译文 = 整篇 lines[].cn 按句拼接（跳过空值）。
       // 2026-11-26 ①：分隔符由 '' 改 '\n' —— 配合 .cn-fold-c 的 white-space: pre-wrap，
@@ -376,7 +483,11 @@ Page({
         expandedIdx: -1, overlay: null,
         fullCn, cnExpanded: false, loading: false,
         wordPlaying: '', tipPlaying: false,
+        // D1/D7：换课 = 换掉全部收藏对象，词卡三态与抽屉 key 集合一并归零
+        ...this._tipCollectPatch('idle'),
+        collectedKeys: [] as string[],
       });
+      this._clearTipCollectTimer();
       this._speakingWord = '';
       this._lineHint = -1; // 换课 / 重载：句档定位提示必须失效（句子下标已换了一套）
     } catch {
@@ -401,7 +512,10 @@ Page({
       readMode: mode,
       expandedIdx: -1, overlay: null,
       tipPlaying: false,
+      // D1：切档会关掉词卡 → 三态与回落定时器一并复位
+      ...this._tipCollectPatch('idle'),
     });
+    this._clearTipCollectTimer();
   },
 
   /** V24 文末「参考译文 / 中文解释」折叠区开合（默认收起）。 */
@@ -447,6 +561,33 @@ Page({
   },
 
   /**
+   * 当前抽屉内容对应的「已收藏」key 集合（**开抽屉那一刻**的唯一算口）。
+   *
+   * 🔴 判据只有本地缓存（`utils/collect-cache`）：它是本页所有收藏入口（词卡 / 抽屉）
+   *    成功后的唯一落盘点（`rememberCollected`），所以「词卡点了收藏 → 长按开抽屉」天然对齐，
+   *    不需要第二套判断。
+   * 🔴 本页收藏对象是 `lines[lineIndex]` 维度：调用方必须把**这次长按的那一句**的原文传进来，
+   *    不能拿 `lines[0]` 或上一句的缓存顶替（否则 A 句收藏会让 B 句抽屉亮成已收藏）。
+   */
+  _drawerCollectedKeys(lineText: string, word?: string): string[] {
+    const keys: string[] = [];
+    const line = String(lineText || '').trim();
+    if (line && isCollectedCached('line', line)) keys.push(EVT.COLLECT_LINE);
+    const w = String(word || '').trim();
+    if (w && isCollectedCached('word', w)) keys.push(EVT.COLLECT_WORD);
+    return keys;
+  },
+
+  /**
+   * 往 key 集合里加一个（**换成新数组**：数组属性的 observer 按引用比较，
+   * `push` 原地改不会触发组件重算）。抽屉里收藏成功后用它即时对齐。
+   */
+  _withCollectedKey(key: string): string[] {
+    const cur = Array.isArray(this.data.collectedKeys) ? this.data.collectedKeys : [];
+    return cur.indexOf(key) >= 0 ? cur.slice() : cur.concat(key);
+  },
+
+  /**
    * 点词热区分发（E1 / AC-B.29 / AC-B.24）：
    * - 🔴 **首行守卫**：非生词（hasDef=false）→ 语义等同「点句子空白」，走 `_applyLineTap`
    *   （tap 档仍展开该句译文、其它档只清浮层），**不弹词卡、不弹抽屉、不朗读、不请求**。
@@ -476,8 +617,18 @@ Page({
       return;
     }
     const tip = this._lookupWord(w);
+    // 🔴 D1：词卡持有「该词所在句下标」，收藏时要落 meta.lineIndex（与抽屉同一个字段口径）
+    // 🔴 D7：按钮初值**从本地缓存读**，不再写死 false —— 否则收藏过的词关掉再点开又变「☆ 收藏」
+    //    （用户踩到的就是这一条）。缓存只当初值：点按钮照样发真实写请求（失效兜底见 collectTipWord）。
+    this._clearTipCollectTimer(); // 换词：上一个词的「已在收藏」回落定时器必须作废
     // 一次 setData 完成「关抽屉 + 开词卡 + 复位按钮态」，不留中间帧（T9/T10）
-    this.openOverlay({ ...tip, kind: 'wordtip' }, { tipPlaying: false });
+    this.openOverlay(
+      { ...tip, kind: 'wordtip', lineIndex: i },
+      {
+        tipPlaying: false,
+        ...this._tipCollectPatch(isCollectedCached('word', w) ? 'done' : 'idle'),
+      },
+    );
   },
 
   /**
@@ -495,8 +646,41 @@ Page({
       this._speakingWord = '';
       this._playingText = '';
     }
-    this.setData({ overlay: null, tipPlaying: false });
+    // D1：卡片消失后「已在收藏」的回落定时器没有意义（到点会改到下一次打开的词上）
+    this._clearTipCollectTimer();
+    this.setData({
+      overlay: null, tipPlaying: false,
+      ...this._tipCollectPatch('idle'),
+    });
   },
+
+  /**
+   * D2（2026-11-27）：点页面空白 → 关生词卡（两页同口径）。
+   *
+   * 🔴 三条约束（缺一条都会退化成「点词变成了关闭」）：
+   *  ① **不用绝对定位的透明遮罩**：那层会盖住正文，直接把「点另一个生词换内容」吃掉
+   *     （用户已明确否掉压暗遮罩，透明遮罩是同一个问题的另一半）；
+   *  ② 词节点自己有 `catchtap="onWordTap"`（catch 阻断冒泡）→ 点词的 tap **根本到不了**根节点，
+   *     「换词」这条路天然不受影响；
+   *  ③ `e.target.dataset.w` 这条判断是**第二道保险**：万一将来有人把词节点的 catchtap 改成
+   *     bindtap（冒泡到根），这里看到 target 是词就直接 return，仍然不会「先关再开」。
+   *     🔴 判据必须是 `e.target`（触发的那个节点）而不是 `e.currentTarget`（绑 handler 的根节点）——
+   *     用 currentTarget 恒为根节点、拿不到词的 dataset，这条保险等于没写。
+   *
+   * 只处理 `kind === 'wordtip'`：抽屉有自己的遮罩 / ✕ / 下滑三条通道，
+   * 而且抽屉根节点上不许挂 tap（见 components/action-drawer 的红线 1/2），
+   * 所以这里对抽屉**什么都不做**（点了标题区不该把抽屉关掉）。
+   */
+  onPageTap(e?: { target?: { dataset?: Record<string, unknown> } }) {
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip') return;
+    const ds = (e && e.target && e.target.dataset) || {};
+    if (String(ds.w || '')) return;     // 点在词上：换词由词节点自己处理，根节点不许插手
+    this.closeTip();
+  },
+
+  /** 词卡容器自身的 catchtap：吞掉卡片内的空白点击（否则点释义区会被根节点的 onPageTap 关掉） */
+  noop() { /* 故意留空：只消费事件 */ },
 
   /**
    * 2026-11-26 ④ 词卡「朗读」：读当前单词；再点同词由 speakText 的 same-text 语义停止。
@@ -510,6 +694,88 @@ Page({
     this._lineHint = -1; // 读词：清掉句档定位提示（U1 的 ■ 只属于句子朗读）
     void speakText(ov.word);
   },
+
+  /* ───────────── D1 词卡收藏（三态 + 与抽屉共用同一份 service 调用） ───────────── */
+
+  /**
+   * 收藏三态的**唯一 setData 载荷**（状态 + 文案 + 图标一次写完）。
+   * 🔴 三者必须同一次 setData：先改状态再改文案会闪一帧「图标变了文案没变」。
+   * 文案/图标来自 `utils/icons` 的纯函数（与抽屉 `actsView` 同一份），页面不写第二份字面量。
+   */
+  _tipCollectPatch(state: CollectState): Record<string, unknown> {
+    return {
+      tipCollect: state,
+      tipCollectLabel: collectLabel(TIP_COLLECT_BASE, state),
+      tipCollectIcon: collectIcon(state),
+    };
+  },
+
+  /** 收藏三态写入口（只动词卡按钮，不碰 overlay / 播放态） */
+  _setTipCollect(state: CollectState) {
+    this.setData(this._tipCollectPatch(state));
+  },
+
+  /** 清「已在收藏 → 已收藏」回落定时器（关闭 / 换词 / 换课 / 切档 / 卸载都要清） */
+  _clearTipCollectTimer() {
+    if (this._tipCollectTimer) {
+      clearTimeout(this._tipCollectTimer);
+      this._tipCollectTimer = null;
+    }
+  },
+
+  /** 起回落定时器：到点仅在仍停在 `existed` 时回 `done`（用户中途又点了就顺其自然） */
+  _armTipCollectRevert() {
+    this._clearTipCollectTimer();
+    this._tipCollectTimer = setTimeout(() => {
+      this._tipCollectTimer = null;
+      if (this.data.tipCollect === 'existed') this._setTipCollect('done');
+    }, TIP_COLLECT_EXISTED_MS);
+  },
+
+  /**
+   * 词卡「收藏」（D1）：`☆ 收藏 → ⋯ 收藏中（禁用）→ ✓ 已收藏`；
+   * 重复点 → `✓ 已在收藏`，1.8s 后回 `已收藏`；失败回 `☆ 收藏`。**成功后词卡不关**。
+   *
+   * 🔴 未登录：**不收词卡**，直接弹本页既有内联 modal-login（`guestLoginShow`）。
+   *    抽屉那边是「先收抽屉再弹」——因为抽屉自带遮罩，两层叠起来才是问题（K10）；
+   *    词卡没有遮罩层，收起它反而让用户失去上下文。
+   *
+   * 🔴 D7 缓存失效兜底：**这里没有 `if (已收藏) return`**。已收藏的按钮再点一次仍然调
+   *    `_collectWord`（服务端幂等，`existed:true` 不重复写入）——用户在收藏页删过的条目
+   *    会被这次写请求重新建回来，于是 UI 的 ✓ 与服务器重新一致（见 utils/collect-cache 文件头）。
+   */
+  async collectTipWord() {
+    const ov = this.data.overlay;
+    if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
+    if (this.data.tipCollect === 'busy') return;            // 提交中：防连点（按钮同时置灰）
+    if (!isLoggedIn()) {
+      this.setData({ guestLoginShow: true });               // 本页既有形态：内联 modal（不改 toast）
+      return;
+    }
+    const word = String(ov.word).toLowerCase();
+    const hasDef = !ov.none;
+    const lineIndex = typeof ov.lineIndex === 'number' && isFinite(ov.lineIndex) ? ov.lineIndex : -1;
+    this._clearTipCollectTimer();
+    this._setTipCollect('busy');
+    const r = await this._collectWord(word, hasDef, lineIndex);
+    // 结果回来时卡片可能已经关掉 / 换了词：只在仍停在同一词上才改按钮态
+    // （否则会把「下一个词」的按钮写成上一个词的结果 —— tipCollect 是单槽位）
+    const cur = this.data.overlay;
+    const same = !!cur && cur.kind === 'wordtip'
+      && String(cur.word || '').toLowerCase() === word;
+    if (!same) return;
+    if (!r.ok) {
+      this._setTipCollect('idle');                          // 失败回 ☆（错误提示由 request 层统一）
+      return;
+    }
+    if (r.existed) {
+      this._setTipCollect('existed');
+      this._armTipCollectRevert();                          // 1.8s 后回「已收藏」
+    } else {
+      this._setTipCollect('done');
+    }
+  },
+
 
   /**
    * 长按**任意英文单词**（生词或普通词）→ 打开抽屉 `scope='word'`（四项）。
@@ -538,7 +804,12 @@ Page({
         hasDef,
         phonetic: (info && info.phonetic) || '',
       },
-      { tipPlaying: false },
+      {
+        tipPlaying: false,
+        // D7（双向同步·方向 1）：词档抽屉第一行同时含「收藏此句」，两个 key 都按本地缓存算。
+        // 词/句都是**这次长按的对象**（`line.en` + `w`），不跨句复用。
+        collectedKeys: this._drawerCollectedKeys(line.en, w),
+      },
     );
   },
 
@@ -561,7 +832,12 @@ Page({
     if (!line) return;
     this.openOverlay(
       { kind: 'drawer', scope: 'line', lineIndex: i, lineText: line.en },
-      { expandedIdx: -1, tipPlaying: false },
+      {
+        expandedIdx: -1,
+        tipPlaying: false,
+        // D7（双向同步·方向 1）：句档抽屉只有「收藏此句」，按这一句的缓存算
+        collectedKeys: this._drawerCollectedKeys(line.en),
+      },
     );
   },
 
@@ -627,30 +903,48 @@ Page({
       return;
     }
     const drawer = drawerOf(this);
+    const r = await this._collectLine(isFinite(lineIndex) ? lineIndex : -1, text);
+    // D7（双向同步·方向 2）：抽屉里收藏成功 → key 集合换新数组，组件 observer 即时对齐该项
+    if (r.ok) this.setData({ collectedKeys: this._withCollectedKey(EVT.COLLECT_LINE) });
+    if (drawer) drawer.onCollectDone('line', r.ok, r.existed);
+  },
+
+  /**
+   * 收藏整句的**唯一实现**（D1 抽出）：抽屉「收藏此句」与将来的任何句子收藏入口共用一份，
+   * 不写第二份 payload 组装（sourceText / meta / toast 文案三处必然漂移）。
+   * 登录守卫**不在这里**（两页的未登录形态不同：本页内联 modal、首页 toast）——
+   * 与首页 `_collectLine` 的分工一致。
+   *
+   * 🔴 成功即 `rememberCollected('line', en)`（D7）：新建与「已存在」都算已收藏。
+   *    enMain 归一化口径与后端去重一致（见 utils/collect-cache）。
+   */
+  async _collectLine(lineIndex: number, text: string): Promise<{ ok: boolean; existed: boolean }> {
+    const fail = { ok: false, existed: false };
     const lines = this.data.lines || [];
-    const line = isFinite(lineIndex) ? lines[lineIndex] : null;
+    const line = isFinite(lineIndex) && lineIndex >= 0 ? lines[lineIndex] : null;
     const { id, book, detail } = this.data;
-    let ok = false;
-    let existed = false;
+    const en = String(text || (line ? line.en : ''));
+    if (!en) return fail;
     try {
       const res = await collectGlossary({
         tag: 'nce',
-        enMain: text || (line ? line.en : ''),
+        enMain: en,
         note: (line && line.cn) || '',
         sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
         meta: { book, lessonId: id, lineIndex },
       });
-      ok = true;
-      existed = !!res.existed;
+      const existed = !!res.existed;
+      rememberCollected('line', en);
       wx.showToast({ title: collectToastText('line', existed), icon: 'none' });
+      return { ok: true, existed };
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责（49 §5 方案 B / 11-20 治本授权）：
       // 常规失败在请求层保证「有且仅有一条中文 string toast」；页面层只保留排障留痕
       // （后端 400 的 statusCode / message 供排查），不再自行弹 toast / 不再做 hasHttpResponse 判定，
       // 避免与请求层重复弹或把数组 message 直接塞进 wx.showToast 的 title。
       console.error('[nce/collect]', err);
+      return fail;
     }
-    if (drawer) drawer.onCollectDone('line', ok, existed);
   },
 
   /**
@@ -682,34 +976,57 @@ Page({
     const drawer = drawerOf(this);
     const info = this._lookupWord(word);
     const hasDef = typeof d.hasDef === 'boolean' ? d.hasDef : !info.none;
+    const r = await this._collectWord(word, hasDef, isFinite(lineIndex) ? lineIndex : -1);
+    // D7（双向同步·方向 2）：抽屉「收藏单词」成功后 key 集合换新数组（缓存已在 _collectWord 里写）
+    if (r.ok) this.setData({ collectedKeys: this._withCollectedKey(EVT.COLLECT_WORD) });
+    if (drawer) drawer.onCollectDone('word', r.ok, r.existed);
+  },
+
+  /**
+   * 收藏单词的**唯一实现**（D1 抽出，词卡与抽屉共用）：
+   * 登录守卫留在调用方（两页授权形态不同），payload 组装 / toast 文案 / 缓存写入只此一份。
+   *
+   * `meta.hasDef` 是收藏页 E3「未收录」灰标的判据（`m.hasDef === false` 严格比较）：
+   * 必须显式写布尔，**不写 undefined、也不默认 false**（老数据无该字段 → 不显示灰标）。
+   *
+   * 🔴 成功即 `rememberCollected('word', 词)`（D7 缓存刷新，新建与 existed 都写）。
+   */
+  async _collectWord(
+    word: string,
+    hasDef: boolean,
+    lineIndex = -1,
+  ): Promise<{ ok: boolean; existed: boolean }> {
+    const fail = { ok: false, existed: false };
+    const w = String(word || '').toLowerCase();
+    if (!w) return fail;
+    const info = this._lookupWord(w);
     const { id, book, detail } = this.data;
     const note = [info.pos, info.def].filter(Boolean).join(' ');
-    let ok = false;
-    let existed = false;
     try {
       const res = await collectGlossary({
         tag: 'word',
-        enMain: info.word || word,
+        enMain: info.word || w,
         note,
         sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
         meta: {
           book,
           lessonId: id,
           lineIndex,
-          word: info.word || word,
+          word: info.word || w,
           phonetic: info.phonetic || '',
           // E3 判据字段：false → 收藏页「未收录」灰标；与首页 pages/home/index/index.ts 同形
           hasDef,
         },
       });
-      ok = true;
-      existed = !!res.existed;
+      const existed = !!res.existed;
+      rememberCollected('word', info.word || w);
       wx.showToast({ title: collectToastText('word', existed), icon: 'none' });
+      return { ok: true, existed };
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
       console.error('[nce/collectWord]', err);
+      return fail;
     }
-    if (drawer) drawer.onCollectDone('word', ok, existed);
   },
 
   /**
@@ -763,6 +1080,7 @@ Page({
     }
     stopSpeak();
     this.setData({ id: next, readingLineIdx: -1, readingPhase: 'idle', overlay: null, wordPlaying: '', tipPlaying: false });
+    this._clearTipCollectTimer(); // D1：换课，卡片要关，回落定时器作废
     this._speakingWord = '';
     this._lineHint = -1; // 换课：句档定位提示跨课无意义
     void this.load();

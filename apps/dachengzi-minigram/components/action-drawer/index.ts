@@ -240,6 +240,28 @@ Component({
      * 没有 tabBar —— 传了会凭空多出一条 107rpx 空白，且遮罩盖不到那条带。
      */
     liftBottom: { type: Boolean, value: false },
+    /**
+     * 🔴 2026-11-27 D7「收藏态双向同步」的**唯一通道**（两页共用）。
+     *
+     * 值是**已收藏的动作 key 数组**，元素取自 `EVT.COLLECT_LINE` / `EVT.COLLECT_WORD`
+     * （= 现有的 `data-key` 值，一个字不改）。页面在「开抽屉那一刻」和「自己收藏成功后」
+     * 各算一次传进来，组件只负责把命中的槽位渲染成 ✓ 已收藏。
+     *
+     * 🔴 为什么用**数组**而不是两个布尔（`lineCollected` / `wordCollected`）：
+     *   同一份「已收藏」事实只能有一个表达 —— 两个布尔会让「句有、词无」「句无、词有」这类
+     *   组合散成 4 个状态位，页面侧稍微漏写一处就出现「卡片说已收藏、抽屉说没收藏」的裂缝。
+     *   数组把「哪些 key 已收藏」当成集合，页面每次整体重算，不会漏字段。
+     *
+     * 🔴 为什么必须是属性、而不是组件自己去查：
+     *   ① A8 红线：组件只允许 import `services/tts`，收藏相关的一切（含「查是否已收藏」）
+     *      留在页面 —— 组件一旦碰 services/glossary，两页的授权形态差异就会被抹平；
+     *   ② 组件不知道「页面用的是哪个缓存口径 / 哪一课的 meta」，属性是唯一不引入耦合的通道。
+     *   ⇒ 组件收到的只是**渲染用 key 集合**，它既不持久化、也不回写页面（真状态由页面持有）。
+     *
+     * ⚠️ 与 `onCollectDone` 的分工：点完收藏后组件走自己的三态机，页面随后把 key 加进本属性，
+     *   observer 再对齐一次（命中的槽位已是 done/existed，值相同则不做任何 setData）。
+     */
+    collectedKeys: { type: Array, value: [] as string[] },
   },
 
   data: {
@@ -310,10 +332,27 @@ Component({
      * 且「关了就不许还在念」这条红线不能只押在一个 observer 上。
      */
     visible(visible: boolean) {
-      if (visible) return;
-      if (instOf(this)._speakByDrawer) stopSpeak();
-      this._resetLocalState();   // 内含 setData({ playingKey: '' }) + 来源标志复位
+      if (!visible) {
+        if (instOf(this)._speakByDrawer) stopSpeak();
+        this._resetLocalState();   // 内含 setData({ playingKey: '' }) + 来源标志复位
+        return;
+      }
+      /**
+       * 🔴 D7（2026-11-27）：**打开时**按页面给的初值点亮「已收藏」。
+       * 顺序上必须在 `_resetLocalState` 之后（关闭时它已经把 collect 归零），
+       * 所以放在 true 分支里做。
+       * 入参传 `visible` 而不是让 `_seedCollect` 自己读 `this.data.visible`：observer 的
+       * 参数才是这一次的权威值（真机上 data 会先更新，但依赖这个时序属于「靠框架实现细节」；
+       * 单测桩里也不会替我们更新 data —— 让调用方把值交进来，两条路都成立）。
+       */
+      this._seedCollect(true);
     },
+    /**
+     * 页面在抽屉**开着的时候**也可能改这个集合（本页收藏成功后把 key 加进来）。
+     * 🔴 数组属性按**引用**比较：页面必须整体换成新数组（`[...keys, k]`），
+     *    `push` 原地改不会触发 observer —— 这条已写进 `_seedCollect` 的注释与测试。
+     */
+    collectedKeys() { this._seedCollect(); },
   },
 
   lifetimes: {
@@ -328,6 +367,8 @@ Component({
       instOf(this)._speakByDrawer = false;
       // 首帧对齐一次：父组件可能在 attached 前就传了 scope
       this.setData({ acts: actsView(this.data.scope === 'word' ? 'word' : 'line', this.data.collect) });
+      // D7：若页面在**创建时**就带着 visible=true（初始值不触发 observer），这里补一次初值对齐
+      this._seedCollect();
     },
     detached() {
       this.data._alive = false;
@@ -606,6 +647,57 @@ Component({
     /** 收藏动作的槽位：`collect-line` → line、`collect-word` → word（其余按 line 兜底） */
     _collectKindOf(key: string): 'line' | 'word' {
       return key === EVT.COLLECT_WORD ? 'word' : 'line';
+    },
+
+    /**
+     * 页面传来的 key 集合里是否含某个动作 key（脏值一律当「没有」）。
+     *
+     * 🔴 只认**字符串**：属性是 `Array`，页面传 `null` / `undefined` / 数字都会走到这里。
+     *    不做隐式转换（`String(null)` 会变成 `'null'`），免得某天出现一个 `'null'` key 被当成命中。
+     */
+    _hasCollectedKey(key: string): boolean {
+      const keys = this.data.collectedKeys;
+      if (!Array.isArray(keys)) return false;
+      for (let i = 0; i < keys.length; i++) {
+        if (typeof keys[i] === 'string') {
+          const v = String(keys[i]);
+          if (v === key) return true;
+        }
+      }
+      return false;
+    },
+
+    /**
+     * 🔴 D7（2026-11-27）：按页面给的 `collectedKeys` 点亮「已收藏」（**只看显示态，不查任何接口**）。
+     *
+     * `opened` 由 `visible` observer 显式传入（那是这一次的权威值）；`collectedKeys` observer
+     * 不带参数，退回读 `this.data.visible`（它在抽屉开着时才会改变状态）。
+     *
+     * 两道守卫：
+     *  ① 抽屉没开不开工（属性在页面 data 里长期存在，关闭期间的变化不该改任何状态）；
+     *  ② 槽位在 `busy` / `existed` 时**保留原值**：
+     *     · `busy` = 收藏请求在途，用初值覆盖会让按钮从「收藏中」跳回「已收藏」（假成功）；
+     *     · `existed` = 刚回传的「✓ 已在收藏」一次性提示，页面此时会同步把 key 加进集合，
+     *       若被初值覆盖成 `done`，用户就看不到「已在收藏」这条反馈了（回归方案 B 的判据）。
+     * 值没变就不 setData（避免无意义重绘，也让「打开即已收藏」那一帧不闪）。
+     */
+    _seedCollect(opened = false) {
+      if (!opened && !this.data.visible) return;
+      const cur: CollectView = this.data.collect || IDLE_COLLECT;
+      const seeded = (state: CollectState, collected: boolean): CollectState => {
+        if (state === 'busy' || state === 'existed') return state;
+        return collected ? 'done' : 'idle';
+      };
+      const next: CollectView = {
+        line: seeded(cur.line, this._hasCollectedKey(EVT.COLLECT_LINE)),
+        word: seeded(cur.word, this._hasCollectedKey(EVT.COLLECT_WORD)),
+      };
+      if (next.line === cur.line && next.word === cur.word) return;
+      this.setData({
+        collect: next,
+        acts: actsView(this.data.scope === 'word' ? 'word' : 'line', next),
+        busy: next.line === 'busy' || next.word === 'busy',
+      });
     },
 
     /**
