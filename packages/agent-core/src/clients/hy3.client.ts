@@ -76,10 +76,15 @@ export class Hy3Client extends BaseAiClient {
   private readonly logger = new Logger(Hy3Client.name);
 
   private getApiKey(): string {
-    return process.env.HY3_API_KEY ?? '';
+    return (
+      process.env.TOKENHUB_API_KEY ||
+      process.env.HY3_API_KEY ||
+      process.env.LLM_API_KEY ||
+      ''
+    );
   }
   private getBaseUrl(): string {
-    return process.env.HY3_BASE_URL || DEFAULT_BASE_URL;
+    return process.env.TOKENHUB_BASE_URL || process.env.HY3_BASE_URL || DEFAULT_BASE_URL;
   }
   private getChatEndpoint(): string {
     const base = this.getBaseUrl().replace(/\/+$/, '');
@@ -138,7 +143,7 @@ export class Hy3Client extends BaseAiClient {
   ): Promise<ChatWithToolsResult> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`Hy3 模型不可用：请配置 HY3_API_KEY 环境变量`);
+      throw new Error(`Hy3 模型不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     const payload: Record<string, unknown> = {
@@ -233,7 +238,7 @@ export class Hy3Client extends BaseAiClient {
   ): AsyncGenerator<StreamToolEvent, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`Hy3 模型不可用：请配置 HY3_API_KEY 环境变量`);
+      throw new Error(`Hy3 模型不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     const payload: Record<string, unknown> = {
@@ -340,7 +345,7 @@ export class Hy3Client extends BaseAiClient {
   ): AsyncGenerator<StreamChunk, void, unknown> {
     const key = this.getApiKey();
     if (!key.trim()) {
-      throw new Error(`Hy3 模型不可用：请配置 HY3_API_KEY 环境变量`);
+      throw new Error(`Hy3 模型不可用：请配置 TOKENHUB_API_KEY、HY3_API_KEY 或 LLM_API_KEY`);
     }
 
     const payload: Record<string, unknown> = {
