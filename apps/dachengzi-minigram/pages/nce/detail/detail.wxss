@@ -64,17 +64,15 @@
 .wt-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
 .wt-tools { display: flex; align-items: center; gap: 8rpx; }
 /* 2026-11-26 盲测 D-1 修（AC-3.1 / AC-3.3 / AC-3.4）：词卡朗读按钮 = 圆形播放图标。
-   原型真源 `.btn-icon`（原型-变体B-底部抽屉.html:294-302）：30px 圆 / 16px 图标 / 描边品牌蓝 /
-   播放态浅蓝底 + 品牌描边；ICON.play = 三角 path、ICON.stop = 圆角方块 rect（:613-614）。
-   小程序不能内联 <svg>，故用 CSS 画同形（不引图片、不加依赖）：
-     热区 88rpx（.wt-play，AC-3.3 下限）⊃ 视觉圆 60rpx（.wt-ico）⊃ 图标 ≈32rpx（.wt-ico::before） */
+   原型真源 `.btn-icon`：30px 圆 / 16px 图标 / 描边品牌蓝 / 播放态浅蓝底 + 品牌描边。
+   尺寸口径：热区 88rpx（.wt-play，AC-3.3 下限）⊃ 视觉圆 60rpx（.wt-ico）⊃ 图标 32rpx（.wt-ico-img）。
+   🔴 2026-11-27：▶/■ 由 CSS border 三角改为**一套 SVG**（assets/icons/play.svg / stop.svg），
+      两个状态靠 `<image src>` 三元切换。`mode="aspectFit"` 必须留（默认 scaleToFill 会拉变形）。 */
 .wt-play { width: 88rpx; height: 88rpx; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; border: none; background: transparent; line-height: 1; }
 .wt-ico { width: 60rpx; height: 60rpx; border-radius: 999rpx; border: 1rpx solid rgba(37, 99, 235, .28); background: #FFFFFF; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-/* ▶ 播放三角：18rpx 高 × 14rpx 宽（≈32rpx 图标框内），填品牌蓝 */
-.wt-ico::before { content: ''; width: 0; height: 0; border-style: solid; border-width: 9rpx 0 9rpx 14rpx; border-color: transparent transparent transparent #1D4ED8; margin-left: 4rpx; }
+/* 图标 32rpx（三处统一基准；`image` 必须显式宽高，否则按 24px 固有像素撑开） */
+.wt-ico-img { width: 32rpx; height: 32rpx; }
 .wt-play.on .wt-ico { background: rgba(37, 99, 235, .06); border-color: #2563EB; }
-/* ■ 停止方块：14rpx 见方（原型 rect 10.4/24 的等比），填品牌蓝 */
-.wt-play.on .wt-ico::before { width: 14rpx; height: 14rpx; border: none; border-radius: 2rpx; background: #1D4ED8; margin-left: 0; }
 .wt-play-hv .wt-ico { background: #EFF6FF; }
 .wt-x { font-size: 30rpx; line-height: 1.2; color: #6B7280; padding: 0 6rpx; }
 .wt-w { font-family: Georgia, serif; font-size: 34rpx; font-weight: 600; color: #1D4ED8; }

@@ -41,13 +41,20 @@ const HOME_WXSS = 'pages/home/index/index.wxss';
 const HOME_TS = 'pages/home/index/index.ts';
 
 // ═════════════════════ P1-1 词卡朗读按钮 = 圆形播放图标 ═════════════════════
+//
+// 🔴 2026-11-27 改写（用户真机反馈②「播放 icon 跟抽屉的不一致，真机下更差，不是 svg icon」）：
+//    上一条实现把 ▶/■ 用 **CSS border 三角** 画在 `.wt-ico::before` / `.q-tip-ico::before` 上，
+//    抽屉用的是**另一份** CSS 三角（还是橙色 #C2410C），首页卡片干脆是**正文字符** `▶ 朗读`。
+//    三处三种画法 = 真机上三种观感。现在统一成一套 SVG（assets/icons/*.svg）。
+//    ⇒ 本组断言的**对象**从「伪元素三角的 border-width」换成「<image src> 指向哪个 SVG + 32rpx」，
+//      强度不降反升：除了尺寸，还把「图标必须是同一套资产」和「色值必须等于 token」一起钉住。
 describe('P1-1 朗读按钮形态：圆形 ▶/■ 图标 + 热区 88rpx + aria-label 双态（AC-3.1/3.3/3.4）', () => {
   const CASES = [
-    { page: '详情页', wxml: DETAIL_WXML, wxss: DETAIL_WXSS, btn: 'wt-play', ico: 'wt-ico', hv: 'wt-play-hv', playing: 'tipPlaying' },
-    { page: '首页', wxml: HOME_WXML, wxss: HOME_WXSS, btn: 'q-tip-play', ico: 'q-tip-ico', hv: 'q-tip-play-hv', playing: 'quoteWordPlaying' },
+    { page: '详情页', wxml: DETAIL_WXML, wxss: DETAIL_WXSS, btn: 'wt-play', ico: 'wt-ico', hv: 'wt-play-hv', playing: 'tipPlaying', tap: 'speakTipWord' },
+    { page: '首页', wxml: HOME_WXML, wxss: HOME_WXSS, btn: 'q-tip-play', ico: 'q-tip-ico', hv: 'q-tip-play-hv', playing: 'quoteWordPlaying', tap: 'speakQuoteWord' },
   ] as const;
 
-  it.each(CASES)('$page：热区 ≥88rpx ⊃ 视觉圆 60rpx ⊃ 图标 ≈32rpx（不是文字药丸）', ({ wxss, btn, ico }) => {
+  it.each(CASES)('$page：热区 ≥88rpx ⊃ 视觉圆 60rpx ⊃ 图标 32rpx（不是文字药丸）', ({ wxss, btn, ico }) => {
     const css = read(wxss);
     const hot = ruleOf(css, `.${btn}`);
     const w = Number((hot.match(/width:\s*([\d.]+)rpx/) || [])[1]);
@@ -58,19 +65,18 @@ describe('P1-1 朗读按钮形态：圆形 ▶/■ 图标 + 热区 88rpx + aria-
     expect(Number((circle.match(/width:\s*([\d.]+)rpx/) || [])[1])).toBe(60); // 视觉直径
     expect(Number((circle.match(/height:\s*([\d.]+)rpx/) || [])[1])).toBe(60);
     expect(circle).toMatch(/border-radius:\s*999rpx/); // 圆形而非胶囊/文字底
-    // 图标（CSS 画）：播放三角 18rpx 高 × 14rpx 宽
-    expect(stripCss(css)).toMatch(
-      new RegExp(`\\.${ico}::before\\s*\\{[^}]*border-width:\\s*9rpx 0 9rpx 14rpx`),
-    );
-    // 播放中改画方块 14rpx 见方（原型 ICON.stop 的 rect 等比）
-    expect(stripCss(css)).toMatch(
-      new RegExp(`\\.${btn}\\.on \\.${ico}::before\\s*\\{[^}]*width:\\s*14rpx[^}]*height:\\s*14rpx`),
-    );
+    // 图标 = 32rpx 的 <image>（三处统一基准；image 无显式宽高会按 24px 固有像素撑开）
+    const img = ruleOf(css, `.${ico}-img`);
+    expect(Number((img.match(/width:\s*([\d.]+)rpx/) || [])[1])).toBe(32);
+    expect(Number((img.match(/height:\s*([\d.]+)rpx/) || [])[1])).toBe(32);
+    // 反向：CSS 三角那套画法必须彻底消失（回潮即红 —— 那正是「三处不一致」的源头）
+    expect(stripCss(css)).not.toMatch(new RegExp(`\\.${ico}::before`));
+    expect(stripCss(css)).not.toMatch(/border-width:\s*9rpx 0 9rpx 14rpx/);
     // 不再有文字形态的字号/内边距痕迹（旧实现 font-size + padding + pill 圆角）
     expect(hot).not.toMatch(/font-size/);
   });
 
-  it.each(CASES)('$page：wxml 用 aria-role=button + aria-label 双态，且不再渲染文字「朗读/停止」', ({ wxml, btn, ico, playing }) => {
+  it.each(CASES)('$page：wxml 用 aria-role=button + aria-label 双态，图标是同一个 SVG 三元切换', ({ wxml, btn, ico, playing, tap }) => {
     const w = read(wxml);
     const viewedTags = w.match(/<view class="[^"]*"[\s\S]{0,300}?>/g) || [];
     const tag = viewedTags.find((t) => t.includes(btn)) || '';
@@ -78,10 +84,20 @@ describe('P1-1 朗读按钮形态：圆形 ▶/■ 图标 + 热区 88rpx + aria-
     expect(tag).toMatch(/aria-role="button"/);
     // 双态文案：来自共享常量（页面 data 注入），插值名必须让静态扫描认得出是 aria 文案
     expect(tag).toMatch(new RegExp(`aria-label="\\{\\{${playing} \\? ariaStopWord : ariaPlayWord\\}\\}"`));
-    // 子节点是纯 CSS 图标（没有文字）
-    expect(w).toMatch(new RegExp(`<view class="${ico}"></view>`));
-    // 回归反例：文字形态必须彻底消失（整页不得再有「停止 / 朗读」文字药丸）
-    expect(w).not.toMatch(/\{\{[^}]*\?\s*'停止'\s*:\s*'朗读'\}\}/);
+    // 子节点 = 圆形底 + <image> 图标；图标走 utils/icons 的 play/stop 同一套资产
+    expect(w).toMatch(new RegExp(`<view class="${ico}">`));
+    expect(w).toMatch(
+      new RegExp(`<image class="${ico}-img" mode="aspectFit" src="\\{\\{${playing} \\? icons\\.stop : icons\\.play\\}\\}"`),
+    );
+    /**
+     * 回归反例：**这个按钮**仍然是「文字药丸」（`{{播放态 ? '停止' : '朗读'}}`）即红。
+     * 🔴 断言范围必须限定在本按钮内，不能扫整页：首页页脚 .dq-act 的文案本来就是
+     * `{{quotePlaying ? '停止' : '朗读'}}`（它也有图标，合法）。扫整页会误红 —— 这一版就踩过。
+     */
+    const at = w.indexOf(`catchtap="${tap}"`);
+    expect(at).toBeGreaterThan(-1);
+    const scope = w.slice(at, at + 600);
+    expect(scope).not.toMatch(/\{\{[^}]*\?\s*'停止'\s*:\s*'朗读'\}\}/);
   });
 
   it('两页的 aria 文案取自共享常量（不各写一份字面量）', () => {
@@ -95,6 +111,90 @@ describe('P1-1 朗读按钮形态：圆形 ▶/■ 图标 + 热区 88rpx + aria-
       expect(src).not.toMatch(/['"]朗读单词['"]/);
       expect(src).not.toMatch(/['"]停止朗读['"]/);
     }
+  });
+});
+
+// ═════════════════ P1-1b 图标资产：一套 SVG + 色值必须等于 token ═════════════════
+//
+// 为什么必须把「色值」也钉成断言：`<image>` 是图片，**不能继承 CSS color**，
+// 所以 play/stop/star/check 的颜色只能烘进 SVG 文件本身。这就有「改了 app.wxss 的 token、
+// 忘了改 SVG」的漂移风险 —— 与 app.wxss「新增页面一律从这里取色，禁止硬编码色值」直接冲突。
+// 这里做**双向对账**：SVG 里的色值必须等于 app.wxss 里对应 token 的字面值。
+describe('P1-1b 图标资产：三处共用一套 SVG，色值与 app.wxss token 对账', () => {
+  const tokenOf = (name: string): string => {
+    const app = read('app.wxss');
+    const m = app.match(new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`));
+    expect(m).not.toBeNull();                 // 防空转：token 真的在 app.wxss 里
+    return m![1].toUpperCase();
+  };
+
+  it('5 个图标资产存在，且都是 svg', () => {
+    for (const f of ['play', 'stop', 'star', 'star-filled', 'check']) {
+      const p = `assets/icons/${f}.svg`;
+      const svg = read(p);
+      expect(svg).toMatch(/^<svg[\s\S]*<\/svg>\s*$/);
+      expect(svg).toMatch(/viewBox="0 0 24 24"/);
+    }
+  });
+
+  it('播放/停止/未收藏 = --brand-deep；已收藏(✓/★) = --accent-ink（改 token 不跟着改 SVG 即红）', () => {
+    const brand = tokenOf('brand-deep');
+    const accent = tokenOf('accent-ink');
+    expect(brand).toBe('#1D4ED8');
+    expect(accent).toBe('#0F766E');
+    for (const f of ['play', 'stop', 'star']) {
+      expect(read(`assets/icons/${f}.svg`).toUpperCase()).toContain(brand);
+    }
+    for (const f of ['check', 'star-filled']) {
+      expect(read(`assets/icons/${f}.svg`).toUpperCase()).toContain(accent);
+    }
+  });
+
+  it('图标路径只有 utils/icons 一份真源：三个模板 + 组件里不得出现 /assets/icons/ 字面量', () => {
+    const iconsTs = read('utils/icons.ts');
+    for (const f of ['play', 'stop', 'star', 'star-filled', 'check']) {
+      expect(iconsTs).toContain(`/assets/icons/${f}.svg`);
+    }
+    // wxml 不能 import ts，路径必须经 data 插值 —— 模板里出现字面量就是第二份真源
+    for (const f of [DETAIL_WXML, HOME_WXML, 'components/action-drawer/index.wxml']) {
+      expect(read(f)).not.toMatch(/\/assets\/icons\//);
+    }
+    for (const f of [DETAIL_TS, HOME_TS, 'components/action-drawer/index.ts']) {
+      expect(read(f)).not.toMatch(/['"]\/assets\/icons\//);
+    }
+  });
+
+  it('三个模板的每个 <image> 图标都带 mode="aspectFit"（默认 scaleToFill 会把三角/方块拉变形）', () => {
+    for (const f of [DETAIL_WXML, HOME_WXML, 'components/action-drawer/index.wxml']) {
+      const imgs = read(f).match(/<image\b[^>]*\/>/g) || [];
+      expect(imgs.length).toBeGreaterThan(0);   // 防空转
+      for (const tag of imgs) {
+        expect(tag).toMatch(/mode="aspectFit"/);
+      }
+    }
+  });
+
+  /**
+   * 🔴 2026-11-27 新增（变异验证补洞）：抽屉这一处以前只被上面那条「每个 image 带 aspectFit」间接覆盖 ——
+   * 把 `.ad-ico` 整个换回 `<text>▶/■</text>` 时，上面那条会以「imgs.length 为 0」的方式变红，
+   * 报错信息指向 aspectFit，**指不出真正的回归**（用户反馈②的原始形态：字符画法）。
+   * 这里把抽屉图标是 `<image>` 这件事本身钉住，并反向禁掉字符画法。
+   * 注意：详情页行尾 `.sent-stop` 的 `■` 是 U1 的既有合法设计，不在本条范围（故只查抽屉模板）。
+   */
+  it('抽屉动作图标 = <image src="{{… item.ico/icoOn}}">，不许退回 ▶/■ 字符画法（反馈②的根因形态）', () => {
+    const w = read('components/action-drawer/index.wxml').replace(/<!--[\s\S]*?-->/g, '');
+    // 播放态切的是**组件自己算好的 item.icoOn**（循环体不能引用页面 data，见 wxml-for-item-scope 守卫）
+    expect(w).toMatch(
+      /<image class="ad-ico" mode="aspectFit" src="\{\{playingKey === item\.key \? item\.icoOn : item\.ico\}\}" \/>/,
+    );
+    expect(w).not.toMatch(/[▶◀■□]/);
+    // 模板里只有 1 处图标节点（4 项/2 项由 wx:for 展开），多了就是第二套画法
+    expect((w.match(/class="ad-ico"/g) || []).length).toBe(1);
+    // 反向：CSS 三角那套画法不许回潮（旧实现是 .ad-ico-play / .ad-ico-stop 的 border 三角）
+    const css = stripCss(read('components/action-drawer/index.wxss'));
+    expect(css).not.toMatch(/\.ad-ico-play/);
+    expect(css).not.toMatch(/\.ad-ico-stop/);
+    expect(css).not.toMatch(/border-left:\s*[\d.]+rpx solid transparent/);
   });
 });
 

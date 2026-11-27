@@ -30,7 +30,7 @@
  */
 
 /** 编译期版本常量。改这里必须同步 `package.json.version`（单测与上传脚本都会卡）。 */
-export const APP_VERSION = '1.0.19';
+export const APP_VERSION = '1.0.20';
 
 /**
  * 取展示用版本号（不带 `v` 前缀，模板自行拼 `v`）。

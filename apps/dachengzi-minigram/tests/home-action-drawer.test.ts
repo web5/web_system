@@ -363,17 +363,27 @@ describe('首页停止入口只有一处：页脚 .dq-act（U1 行尾 ■ 已去
     expect(src('pages/home/index/index.ts')).not.toContain('stopQuoteSpeak');
   });
 
-  it('页脚保留唯一停止入口：.dq-act + quotePlaying 时文案「■ 停止」/ 否则「▶ 朗读」', () => {
+  /**
+   * 🔴 2026-11-27 改写（用户真机反馈②）：页脚的 ▶/■/☆/✓ 由**正文字符**改成一套 SVG 图标
+   * （`assets/icons/*.svg`，经 utils/icons 取路径）。断言对象从「字符文案」换成
+   * 「同一个 .dq-act 节点上的 image src 三元 + 文案二态」，强度不降：仍钉住
+   * ① 只有一个停止入口；② 播放态高亮 .on；③ 点按走同一个 speakQuote handler。
+   */
+  it('页脚保留唯一停止入口：.dq-act 一个节点，图标 ▶/■ + 文案「停止 / 朗读」二态', () => {
     const w = stripWxmlComments(src('pages/home/index/index.wxml'));
     const footOpen = w.indexOf('class="daily-foot"');
     expect(footOpen).toBeGreaterThan(-1);
     const foot = w.slice(footOpen);
     // 同一节点：播放态高亮 .on + 点按走 speakQuote（同句 same-text → tts 停止）
     expect(foot).toContain('class="dq-act {{quotePlaying ? \'on\' : \'\'}}" catchtap="speakQuote"');
-    expect(foot).toContain("{{quotePlaying ? '■ 停止' : '▶ 朗读'}}");
+    // 图标 = 同一套 SVG（play/stop），而不是正文字符 ▶ / ■
+    expect(foot).toContain('src="{{quotePlaying ? icons.stop : icons.play}}"');
+    expect(foot).toContain("{{quotePlaying ? '停止' : '朗读'}}");
+    // 反例：页脚不得再出现「▶ / ■」字符形态（回潮即红）
+    expect(foot).not.toMatch(/[▶■]/);
   });
 
-  it('页脚「■ 停止」走 speakQuote → speakText(整句)，与整句点按同一 handler', async () => {
+  it('页脚「停止」走 speakQuote → speakText(整句)，与整句点按同一 handler', async () => {
     const ctx = await ctxWithWords();
     ctx._onSpeakState({ text: QUOTE_EN, phase: 'playing' });
     expect(ctx.data.quotePlaying).toBe(true);
@@ -404,9 +414,23 @@ describe('抽屉 3 个 handler（组件只 triggerEvent，页面调 services）'
     expect(speakTextMock).not.toHaveBeenCalled();
   });
 
-  it('collect-line → tag=nce，meta 用 _sourceMeta 的 book/lessonId（P1-1 同源，不绕过）', async () => {
+  /**
+   * 🔴 2026-11-27 方案 B 改写：收藏**成功不再收抽屉**（原断言 `overlay` 为 null），
+   * 改为「抽屉留在原地 + 结果经 selectComponent('#drawer').onCollectDone 回传组件渲染三态」。
+   * `validate` 侧再多验一条：回传参数必须与 collectGlossary 的 existed 口径一致。
+   */
+  /** 真机链路复刻：先让组件进「收藏中」（点按 → busy），再由页面回传结果 */
+  function tapCollect(drawer: any, key: string) {
+    drawer.onActionTap({ currentTarget: { dataset: { key, kind: 'collect' } } });
+    expect(drawer.data.collect[key === 'collect-word' ? 'word' : 'line']).toBe('busy');
+  }
+
+  it('collect-line → tag=nce（payload 不变）+ 抽屉不关 + 回传 onCollectDone(line, ok, existed)', async () => {
     const ctx = await ctxWithWords();
+    const drawer = makeDrawer({ visible: true, scope: 'line' });
+    ctx.selectComponent = (sel: string) => (sel === '#drawer' ? drawer : null);
     ctx.onQuoteLineLongPress();
+    tapCollect(drawer, 'collect-line');
     await ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: QUOTE_EN } });
     const p = collectMock.mock.calls[0][0];
     expect(p.tag).toBe('nce');
@@ -414,14 +438,76 @@ describe('抽屉 3 个 handler（组件只 triggerEvent，页面调 services）'
     expect(p.note).toBe('他是一名工程师。');
     expect(p.meta).toEqual({ book: 'NCE2', lessonId: 4, from: 'daily' });
     expect(wxMock.showToast).toHaveBeenCalledWith({ title: '已收藏', icon: 'none' });
-    expect(ctx.data.overlay).toBeNull();
+    // 🔴 抽屉不关（方案 B 的核心）
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line' });
+    // 结果回传：组件据此切「✓ 已收藏」
+    expect(drawer.data.collect.line).toBe('done');
+    expect(ctx.data.quoteCollected).toBe(true);      // 页脚「收藏」按钮同步点亮
   });
 
-  it('collect-line 重复收藏 → 「已在收藏中」（幂等不当失败）', async () => {
+  it('collect-line 重复收藏 → 「已在收藏中」+ 回传 existed=true → 组件显示「已在收藏」', async () => {
     const ctx = await ctxWithWords();
+    const drawer = makeDrawer({ visible: true, scope: 'line' });
+    ctx.selectComponent = () => drawer;
     collectMock.mockResolvedValue({ id: 1, existed: true });
+    ctx.onQuoteLineLongPress();
+    tapCollect(drawer, 'collect-line');
     await ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: QUOTE_EN } });
     expect(wxMock.showToast).toHaveBeenCalledWith({ title: '已在收藏中', icon: 'none' });
+    expect(drawer.data.collect.line).toBe('existed');
+  });
+
+  it('收藏失败 → 抽屉不关 + 回传 ok=false（组件回原态）+ 不往外抛', async () => {
+    const ctx = await ctxWithWords();
+    const drawer = makeDrawer({ visible: true, scope: 'line' });
+    ctx.selectComponent = () => drawer;
+    collectMock.mockRejectedValue(new Error('boom'));
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    ctx.onQuoteLineLongPress();
+    tapCollect(drawer, 'collect-line');
+    await expect(ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: QUOTE_EN } })).resolves.toBeUndefined();
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer' });   // 失败也不关抽屉
+    expect(drawer.data.collect.line).toBe('idle');                // 回「☆ 收藏此句」
+    expect(ctx.data.quoteCollected).toBe(false);
+    errSpy.mockRestore();
+  });
+
+  it('取不到抽屉实例（真机首帧 / 单测桩）→ 收藏照常写完，不抛', async () => {
+    const ctx = await ctxWithWords();
+    ctx.selectComponent = () => null;
+    ctx.onQuoteLineLongPress();
+    await expect(ctx.onDrawerCollectLine({ detail: { lineIndex: 0, text: QUOTE_EN } })).resolves.toBeUndefined();
+    expect(collectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('页脚收藏按钮：成功后 quoteCollected=true（☆ → ✓ 已收藏），重复点保持 true', async () => {
+    const ctx = await ctxWithWords();
+    expect(ctx.data.quoteCollected).toBe(false);       // 初值就是未收藏（首帧不许闪已收藏）
+    await ctx.collectQuote();
+    expect(ctx.data.quoteCollected).toBe(true);
+    collectMock.mockResolvedValue({ id: 1, existed: true });
+    await ctx.collectQuote();                          // 重复点：服务端幂等 + toast 已在收藏中
+    expect(ctx.data.quoteCollected).toBe(true);
+    expect(wxMock.showToast).toHaveBeenLastCalledWith({ title: '已在收藏中', icon: 'none' });
+  });
+
+  it('页脚收藏失败 → 不点亮已收藏（不许假成功）', async () => {
+    const ctx = await ctxWithWords();
+    collectMock.mockRejectedValue(new Error('boom'));
+    const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await ctx.collectQuote();
+    expect(ctx.data.quoteCollected).toBe(false);
+    errSpy.mockRestore();
+  });
+
+  it('词卡收藏按钮：成功后 quoteWordCollected=true；换词 / 关词卡复位', async () => {
+    const ctx = await ctxWithWords();
+    ctx.onQuoteWordTap({ currentTarget: { dataset: { w: 'engineer', hasdef: true } } });
+    expect(ctx.data.quoteWordCollected).toBe(false);
+    await ctx.collectQuoteWord();
+    expect(ctx.data.quoteWordCollected).toBe(true);
+    ctx.closeQuoteTip();                               // 关词卡 → 复位
+    expect(ctx.data.quoteWordCollected).toBe(false);
   });
 
   it('collect-word（普通词）→ hasDef:false 写进 meta（收藏页 E3 灰标的判据）', async () => {
@@ -519,5 +605,56 @@ describe('不复制实现：页面只挂载组件，不自绘抽屉、不重定�
       .replace(/^\s*\/\/.*$/gm, '');
     const labels = Array.from(actions.matchAll(/label:\s*'([^']+)'/g)).map((m) => m[1]);
     expect(labels).toEqual(['朗读此句', '收藏此句', '朗读单词', '收藏单词']);
+  });
+});
+
+/**
+ * 🔴 2026-11-27 新增组（真机反馈 ①②）：**「页面 data → 视图」这一段以前没有任何断言**。
+ *
+ * 缺口形态：上面的用例全都只断言 `ctx.data.quoteCollected === true`（页面状态改了），
+ * 但没有一条断言 wxml 真的**把状态渲染出来**。于是「数据已经 true、图标还是 ☆」这种缺陷
+ * （正是用户真机反馈 ①：点完收藏 icon 状态没变）可以一路全绿地发到用户手里。
+ * 这一组把「状态字段 ↔ 渲染表达式」逐字钉住，并反向锁死字符/字符画形图标（反馈 ②）。
+ */
+describe('首页收藏/播放的「data → 视图」绑定（真机反馈 ①② 的静态守卫）', () => {
+  const wxml = stripWxmlComments(src('pages/home/index/index.wxml'));
+
+  it('页脚收藏按钮：icon / 文案 / done class 三者都必须随 quoteCollected 变', () => {
+    // 反例优先：恒定表达式（不看状态）就是缺陷形态
+    expect(wxml).not.toMatch(/class="dq-ico"[^>]*src="\{\{icons\.star\}\}"/);
+    expect(wxml).not.toMatch(/class="dq-ico"[^>]*src="\{\{icons\.check\}\}"/);
+
+    expect(wxml).toContain('src="{{quoteCollected ? icons.check : icons.star}}"');
+    expect(wxml).toContain("{{quoteCollected ? '已收藏' : '收藏'}}");
+    expect(wxml).toContain('class="dq-act {{quoteCollected ? \'done\' : \'\'}}"');
+  });
+
+  it('词卡收藏按钮：icon / 文案 / done class 三者都必须随 quoteWordCollected 变', () => {
+    expect(wxml).not.toMatch(/class="q-tip-btn-ico"[^>]*src="\{\{icons\.star\}\}"/);
+    expect(wxml).toContain('src="{{quoteWordCollected ? icons.check : icons.star}}"');
+    expect(wxml).toContain("{{quoteWordCollected ? '已收藏' : '收藏'}}");
+    expect(wxml).toContain('class="q-tip-btn {{quoteWordCollected ? \'done\' : \'\'}}"');
+  });
+
+  it('页脚朗读按钮：icon 随 quotePlaying 在 play/stop 间切换（反馈 ② 的一半）', () => {
+    expect(wxml).toContain('src="{{quotePlaying ? icons.stop : icons.play}}"');
+  });
+
+  it('反例：首页 wxml 不许再出现字符/字符画图标（▶ ■ ☆ ★ ✓ 是反馈 ② 的原始形态）', () => {
+    // 只看真正会渲染的文本，注释里可以写「原来用 ▶」这类说明
+    expect(wxml).not.toMatch(/[▶◀■□☆★✓✔]/);
+  });
+
+  it('三处图标 <image> 全部带 mode="aspectFit"（防真机拉伸变形）', () => {
+    const imgs = Array.from(wxml.matchAll(/<image\b[^>]*>/g)).map((m) => m[0]);
+    expect(imgs.length).toBeGreaterThanOrEqual(4);   // 页脚 2 + 词卡 2
+    imgs.forEach((tag) => {
+      expect(tag).toContain('mode="aspectFit"');
+      expect(tag).toMatch(/src="\{\{/);              // 路径必须走 data（utils/icons 注入），不许写死
+    });
+  });
+
+  it('图标路径不写死在 wxml 里（真机若需切 base64，只改 utils/icons 一处）', () => {
+    expect(wxml).not.toContain('/assets/icons/');
   });
 });

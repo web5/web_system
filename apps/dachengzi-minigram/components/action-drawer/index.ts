@@ -18,7 +18,11 @@
  *     `speakText / stopSpeak / onSpeakState`；其余 services（glossary / auth / nce / account …）
  *     一律禁止 import —— 收藏、未登录守卫、payload 组装、toast 文案全部留在页面，
  *     两页的差异（详情页弹内联 modal、首页 toast）才不会在组件里被抹平。
- *     另一条允许的 import 是 `utils/line-actions`（零副作用纯函数）。
+ *     ⚠️ 注意「收藏动作下沉」与「收藏 service 下沉」是两件事：2026-11-27 收藏的**三态渲染**下沉到
+ *     本组件（用户拍板方案 B），但 `collectGlossary` 仍由页面调、结果经 `onCollectDone` 回传 ——
+ *     A8 红线不动。收藏态一旦要自己查接口，就只能 import services/glossary，A8 立刻红。
+ *     另外两条允许的 import 都是零副作用纯函数层：`utils/line-actions`（动作表 / toast 文案）、
+ *     `utils/icons`（图标路径 + 收藏三态文案）。
  *  3. **不测任何坐标**。抽屉是 `position:fixed; left/right/bottom:0`，组件内没有
  *     `createSelectorQuery` / `boundingClientRect` / `scrollOffset` / `pageX·750/windowWidth`
  *     （方案 §2.0-B：B 变体把「跨层测量」这个唯一形态级难题直接消灭）。
@@ -46,6 +50,7 @@
  * 不依赖默认值（D6 要求抽屉恒为不透明白底，不随阅读档变化）。
  */
 import { EVT, actionsOf, type ActionItem } from '../../utils/line-actions';
+import { ICONS, collectIcon, collectLabel, type CollectState } from '../../utils/icons';
 /**
  * 🔴 唯一允许的 services import（A8 收窄）：朗读下沉到组件是用户 2026-11-26 拍板；
  *    收藏仍留页面以保留两页 toast / 内联 modal 的差异。静态断言在
@@ -55,8 +60,17 @@ import { speakText, stopSpeak, onSpeakState, type SpeakState } from '../../servi
 
 /** 下滑关闭阈值（rpx）：≥ 48rpx 松手即关，< 48rpx 回弹（AC-B.13 / V-B9） */
 const SWIPE_CLOSE_RPX = 48;
-/** 动作后 busy 锁时长（ms）：防连点重复请求（方案 §3.2 契约 2）。**只用于收藏**，朗读不用它 */
-const BUSY_MS = 300;
+/**
+ * 收藏「提交中」的**安全超时**（ms）：**只用于收藏**，朗读不用它。
+ *
+ * 🔴 语义已从「300ms busy 锁」升级成「等页面回传的状态机」（2026-11-27 方案 B）：
+ *   `busy` 现在由 `onCollectDone` 释放（页面收藏成功/失败后回传），这才是真正的防连点 ——
+ *   300ms 只是「人手两次点按间隔」的近似值，接口慢于 300ms 时仍会重复写入。
+ *   但「等回传」有一个新风险：页面若因异常路径忘了回传，按钮会永远停在「收藏中」。
+ *   所以保留一个**远大于真实接口超时**的兜底（8s）：到点自动回 `idle`，用户可重新点。
+ *   宁可让极端情况下多一次幂等写入（服务端 existed 兜住），也不让按钮变死。
+ */
+const COLLECT_TIMEOUT_MS = 8000;
 /**
  * 朗读点按防抖（ms）：**看起来像** busy 锁但语义完全不同 —— 朗读必须「再点一下就停」，
  * 复用 300ms busy 锁会让用户在 300ms 内点停止点不动（本组件 1.0.18 之前的真实缺陷形态）。
@@ -95,6 +109,57 @@ const FALLBACK_WINDOW_W = 375;
 interface TouchPoint { clientY?: number; pageY?: number; }
 interface TouchEventLike { touches?: TouchPoint[]; }
 interface TapEventLike { currentTarget?: { dataset?: Record<string, unknown> }; }
+
+/**
+ * 收藏三态的**唯一状态载体**（按作用域分槽：句档 / 词档可以各自独立在途）。
+ * 🔴 不放进 `data.collect` 之外的地方：三态要驱动渲染（文案 + 图标 + 置灰），必须走 data。
+ */
+interface CollectView { line: CollectState; word: CollectState; }
+
+/** 收藏态初值（换档 / 关抽屉 / 卸载都复用它，避免各处手写四个字段） */
+const IDLE_COLLECT: CollectView = Object.freeze({ line: 'idle', word: 'idle' }) as CollectView;
+
+/** 渲染用动作项：动作表原字段 + 本组件算出的图标与置灰位（动作表本身永远不被改写） */
+interface ActView extends ActionItem {
+  /** 常态图标（朗读项 = play.svg；收藏项 = 三态图标） */
+  ico: string;
+  /** 触发态图标（朗读项 = stop.svg；收藏项与常态同值，不会被用到） */
+  icoOn: string;
+  /** 该项是否正在提交（收藏中）—— 驱动置灰 + 点按短路 */
+  busy: boolean;
+  /** 该项是否处于「已收藏 / 已在收藏」（青绿态）—— 模板不自己拼文案判断 */
+  collected: boolean;
+}
+
+/**
+ * 动作表 → 渲染项。🔴 每次都从 `actionsOf()` **重新取**再叠加收藏态：
+ * 动作表的顺序 / key / 文案它一个字都不改（`data-key` 是四按钮命脉），
+ * 只在副本上把「收藏项」的 label 换成三态文案、icon 换成三态图标。
+ *
+ * 🔴 图标为什么算进 item、而不是在 wxml 里写 `{{icons.play}}`：
+ *   抽屉 wxml 的动作区是 `wx:for` 循环，而 `tests/wxml-for-item-scope.test.ts` 的守卫要求
+ *   「循环体内出现的每个 `x.` 取值，x 必须由 wx:for-item / wx:for-index 引入」。
+ *   在循环体里引用页面级 `icons` 会被它判成越界（守卫不建模页面 data 的作用域）。
+ *   与其放宽那条 P0 守卫（它守护的是「英文整段不显示」那个真实缺陷），不如把图标算进 item。
+ */
+function actsView(scope: 'line' | 'word', collect: CollectView): ActView[] {
+  return actionsOf(scope).map((a) => {
+    if (a.kind !== 'collect') {
+      return { ...a, ico: ICONS.play, icoOn: ICONS.stop, busy: false, collected: false };
+    }
+    const kind = a.key === EVT.COLLECT_LINE ? 'line' : 'word';
+    const state = collect[kind];
+    const ico = collectIcon(state);
+    return {
+      ...a,
+      label: collectLabel(a.label, state),
+      ico,
+      icoOn: ico,
+      busy: state === 'busy',
+      collected: state === 'done' || state === 'existed',
+    };
+  });
+}
 
 /**
  * 组件实例上的**逻辑层私有字段**（不进 `data`）。
@@ -178,13 +243,19 @@ Component({
   },
 
   data: {
-    /** 当前作用域下的动作集合（唯一真源在 utils/line-actions.actionsOf） */
-    acts: actionsOf('line') as ActionItem[],
+    /**
+     * 当前作用域下的动作集合（唯一真源在 utils/line-actions.actionsOf）。
+     * 🔴 2026-11-27 起这是「动作表副本 + 收藏三态」的渲染视图（`ActView`）：
+     *    朗读项的 label/stopLabel 原样保留；收藏项的 label/ico 随 `collect` 变化。
+     */
+    acts: actsView('line', IDLE_COLLECT),
+    /** 收藏三态（句档 / 词档各一格）。写入口只有 `_setCollect` 一处 */
+    collect: { ...IDLE_COLLECT } as CollectView,
     /** 下滑位移（px）：仅手势过程中非 0，驱动 transform: translateY */
     swipeY: 0,
     /** 拖拽中：关掉 transition 让抽屉跟手（松手后再开回来做回弹 / 收起动画） */
     dragging: false,
-    /** 动作 busy 锁：300ms 内忽略后续点击（**只锁收藏**，朗读走 SPEAK_TAP_GUARD_MS） */
+    /** 动作 busy 锁：任一收藏项在途时为 true（**只锁收藏**，朗读走 SPEAK_TAP_GUARD_MS） */
     busy: false,
     /** 当前按下的动作 key（按下高亮 = E4 的「反馈」，不是「暗示」）。只由收藏分支置位 */
     pressedKey: '',
@@ -213,9 +284,11 @@ Component({
   },
 
   observers: {
-    /** 换档重算动作集合：line → 2 项、word → 4 项（顺序由 actionsOf 固定） */
+    /** 换档重算动作集合：line → 2 项、word → 4 项（顺序由 actionsOf 固定；收藏态按槽位各自保留） */
     scope(scope: string) {
-      this.setData({ acts: actionsOf(scope === 'word' ? 'word' : 'line') });
+      // 🔴 换档不重置收藏态：句档 / 词档是两个独立槽位，同一抽屉里「收藏此句」成功后
+      //    切到词档再切回来，不该把已收藏态抹掉（用户就在同一个抽屉里连续操作）。
+      this.setData({ acts: actsView(scope === 'word' ? 'word' : 'line', this.data.collect) });
     },
     /**
      * 关掉时把局部态归零：下次打开不残留上次的下滑位移 / 按下高亮 / 播放态。
@@ -254,7 +327,7 @@ Component({
       // 来源标志初值：刚挂载时本实例没发起过任何朗读（不能留 undefined 让判据依赖隐式转换）
       instOf(this)._speakByDrawer = false;
       // 首帧对齐一次：父组件可能在 attached 前就传了 scope
-      this.setData({ acts: actionsOf(this.data.scope === 'word' ? 'word' : 'line') });
+      this.setData({ acts: actsView(this.data.scope === 'word' ? 'word' : 'line', this.data.collect) });
     },
     detached() {
       this.data._alive = false;
@@ -341,7 +414,13 @@ Component({
       this.setData({ dragging: false, swipeY: 0 });
     },
 
-    /** 点动作：按 kind 分流（speak = 本地调 tts；collect = busy 锁 + 抛事件） */
+    /**
+     * 点动作：按 kind 分流（speak = 本地调 tts；collect = 进「收藏中」+ 抛事件）。
+     *
+     * 🔴 收藏（2026-11-27 方案 B）：点下去只做两件事 —— 本地切「收藏中」、把事件抛给页面；
+     *    页面调完 `collectGlossary` 后通过 `onCollectDone(kind, ok, existed)` 回传结果，
+     *    组件据此切「已收藏 / 已在收藏 / 回原态」。**收不收藏不由组件判断**（A8 红线的边界）。
+     */
     onActionTap(e: TapEventLike) {
       const ds = (e.currentTarget && e.currentTarget.dataset) || {};
       const key = String(ds.key || '');
@@ -350,11 +429,37 @@ Component({
         this._onSpeakTap(key);
         return;
       }
-      // 收藏：保持既有 busy 锁 + 回页面（组件不知道页面怎么弹 toast / modal）
+      // 收藏：任一档在途时整体短路 —— 既防连点重复写入，也防两档同时在途时状态互相覆盖
       if (this.data.busy) return;
-      this.setData({ busy: true, pressedKey: key });
+      const kind = this._collectKindOf(key);
+      this._setCollect(kind, 'busy', { pressedKey: key });
       this._emitAction(key);
-      this._armBusyRelease();
+      this._armCollectTimeout(kind);
+    },
+
+    /**
+     * 收藏结果回传（**页面调，唯一入口**）。两页都是在 service 调用落地后调一次：
+     *   `this.selectComponent('#drawer').onCollectDone('line', ok, existed)`
+     *
+     * 参数语义：
+     *  - `ok=false` → 回 `idle`（错误提示由 utils/request.ts 统一弹，组件不弹任何东西）；
+     *  - `ok=true, existed=false` → `done`（✓ 已收藏）；
+     *  - `ok=true, existed=true` → `existed`（✓ 已在收藏，沿用 collectToastText 的口径）。
+     *
+     * 🔴 三道守卫，缺一条都会出脏状态：
+     *  ① `_alive`：卸载后不许 setData；
+     *  ② `visible`：抽屉已关（未登录路径会先关抽屉 / 用户自己关掉）则整体忽略 ——
+     *     状态在 `visible=false` 时已复位，迟到的回传不许把「已收藏」写到下一次打开上；
+     *  ③ 当前槽位必须仍在 `busy`：挡重复回传与两页串台（不是本轮发起的，不改状态）。
+     */
+    onCollectDone(kind: string, ok: boolean, existed = false) {
+      if (!this.data._alive) return;
+      if (!this.data.visible) return;
+      const k: 'line' | 'word' = kind === 'word' ? 'word' : 'line';
+      if (this.data.collect[k] !== 'busy') return;
+      this._clearCollectTimer();
+      const next: CollectState = !ok ? 'idle' : (existed ? 'existed' : 'done');
+      this._setCollect(k, next, { pressedKey: '' });
     },
 
     // ------------------------------------------------------------------
@@ -498,14 +603,46 @@ Component({
       this.triggerEvent(EVT.CLOSE, { via });
     },
 
-    /** busy 锁 300ms：页面可能在 await 收藏接口，期间连点会重复请求（只给收藏用） */
-    _armBusyRelease() {
-      if (this.data._busyTimer) clearTimeout(this.data._busyTimer);
+    /** 收藏动作的槽位：`collect-line` → line、`collect-word` → word（其余按 line 兜底） */
+    _collectKindOf(key: string): 'line' | 'word' {
+      return key === EVT.COLLECT_WORD ? 'word' : 'line';
+    },
+
+    /**
+     * 收藏态唯一写入口：同时刷新 `collect`（状态）与 `acts`（渲染视图）+ `busy`（全局短路位）。
+     * 🔴 三者必须在**同一次** setData 里落地：先改一个再改另一个会闪一帧「文案变了图标没变」。
+     */
+    _setCollect(kind: 'line' | 'word', state: CollectState, extra: Record<string, unknown> = {}) {
+      const collect: CollectView = { line: this.data.collect.line, word: this.data.collect.word };
+      collect[kind] = state;
+      this.setData({
+        collect,
+        acts: actsView(this.data.scope === 'word' ? 'word' : 'line', collect),
+        busy: collect.line === 'busy' || collect.word === 'busy',
+        ...extra,
+      });
+    },
+
+    /**
+     * 提交中的安全超时（见 COLLECT_TIMEOUT_MS 的注释）：页面忘了回传时把按钮救回 `idle`。
+     * 只对**同一个槽位**生效：两句/两词并发时，先到点的那个不许把另一个也重置。
+     */
+    _armCollectTimeout(kind: 'line' | 'word') {
+      this._clearCollectTimer();
       this.data._busyTimer = setTimeout(() => {
         this.data._busyTimer = 0;
         if (!this.data._alive) return;
-        this.setData({ busy: false, pressedKey: '' });
-      }, BUSY_MS) as unknown as number;
+        if (this.data.collect[kind] !== 'busy') return;
+        this._setCollect(kind, 'idle', { pressedKey: '' });
+      }, COLLECT_TIMEOUT_MS) as unknown as number;
+    },
+
+    /** 清安全超时（回传到达 / 关闭 / 卸载 都要清，避免迟到的定时器改状态） */
+    _clearCollectTimer() {
+      if (this.data._busyTimer) {
+        clearTimeout(this.data._busyTimer);
+        this.data._busyTimer = 0;
+      }
     },
 
     /** 局部态归零（隐藏 / 关闭 / 页面切后台共用一处，避免各处漏字段） */
@@ -516,11 +653,20 @@ Component({
       this.data._speakTapAt = 0;
       // 来源标志也在这里归零：调用方（visible observer / pageLifetimes.hide）都是「本次播放结束」
       instOf(this)._speakByDrawer = false;
-      if (this.data._busyTimer) {
-        clearTimeout(this.data._busyTimer);
-        this.data._busyTimer = 0;
-      }
-      this.setData({ swipeY: 0, dragging: false, busy: false, pressedKey: '', playingKey: '' });
+      this._clearCollectTimer();
+      /**
+       * 🔴 收藏态**关闭即复位**（交互原型的「待定项」在这里定死）。
+       * 原型留了两个选项：「关抽屉保留已收藏态」vs「按真实数据重查」。本实现选**复位**：
+       * 页面没有任何「这句/这个词是否已收藏」的查询接口，保留一个客户端记的「已收藏」
+       * 会在收藏记录被别处删掉后长期显示假状态；而复位只让用户多点一次（服务端幂等，不会重复写）。
+       * 代价明说：同一句收藏一次后关掉抽屉再打开，按钮回到「☆ 收藏此句」，再点会提示「已在收藏」。
+       */
+      const collect: CollectView = { ...IDLE_COLLECT };
+      this.setData({
+        swipeY: 0, dragging: false, busy: false, pressedKey: '', playingKey: '',
+        collect,
+        acts: actsView(this.data.scope === 'word' ? 'word' : 'line', collect),
+      });
     },
 
     /**

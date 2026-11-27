@@ -281,7 +281,9 @@ describe('C6 动作 → services（AC-B.15 / E3 / 权限）', () => {
     expect(payload.tag).toBe('word');
     expect(payload.meta.hasDef).toBe(false);
     expect(payload.enMain).toBe('bed');
-    expect(ctx.data.overlay).toBeNull();
+    // 🔴 2026-11-27 方案 B 口径变更：收藏成功**不再收抽屉**（原断言 toBeNull()）。
+    //    三态反馈就发生在抽屉按钮上，抽屉必须留在原地；只有未登录路径才先收起（见下一条用例）。
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
   });
 
   it('收藏生词：meta.hasDef === true', async () => {

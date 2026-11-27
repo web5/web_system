@@ -205,36 +205,40 @@
 /* ═══ 变体 C：朗读按钮的播放态（抽屉内自持，不再由页面镜像）═══
    设计真源 `原型-变体C-抽屉内朗读.html` 的 `.dact.playing`（:255-259）：
      · 整卡品牌浅底 + 品牌边框 + 主色文字；
-     · 图标位 ▶ → ■（两个图标按 .is-playing 互斥显隐，纯 CSS 画，不引图片）；
+     · 图标位 ▶ → ■（wxml 按 playingKey 二选一换 src，同一套 SVG）；
      · 文案 朗读此句/朗读单词 → 停止此句/停止单词（wxml 按 playingKey 插值 item.stopLabel）。
-   色值取原型页顶部差异说明条（Banner）同族暖色，与词卡 .wt-play 的蓝系播放态区分开：
-   抽屉是「长按后的临时浮层」，用暖色表示「这里是朗读控制」比再上一层蓝更不抢阅读焦点。 */
+   🔴 2026-11-27 归位：这里原来用的是硬编码暖色（`#FFF7ED` / `#FDBA74` / `#C2410C` 橙），
+   是全仓唯一一处违反 app.wxss「品牌（蓝色系）」「禁止硬编码色值」的孤例，且与另外两处
+   播放按钮（品牌蓝）**颜色不一致** —— 用户真机反馈「播放 icon 跟抽屉的不一致」即由此而来。
+   现在整卡播放态与首页 `.dq-act.on` 同口径：品牌浅底 + 品牌浅边 + 品牌深字（取 token，带兜底值）。 */
 .ad-act.is-playing {
-  background: #FFF7ED;
-  border-color: #FDBA74;
-  color: #C2410C;
+  background: var(--brand-soft, #EFF6FF);
+  border-color: var(--brand-100, #DBEAFE);
+  color: var(--brand-txt, #2563EB);
 }
-/* ▶ 播放三角：18rpx 高 × 14rpx 宽（与详情页词卡 .wt-ico::before 同一套 CSS 画法） */
-.ad-ico-play {
+/* 图标：一套 SVG，32rpx 视觉高度（三处统一基准）。
+   🔴 `image` 必须有显式宽高，否则会按图片固有像素比撑开 (24px)，在 26rpx 文字旁过大。
+   停止方块与播放三角在同一 24 格 viewBox 内平衡过视觉重量（见 assets/icons/*.svg）。 */
+.ad-ico {
   flex: none;
-  width: 0;
-  height: 0;
-  margin-left: 2rpx;
-  border-style: solid;
-  border-width: 9rpx 0 9rpx 14rpx;
-  border-color: transparent transparent transparent #C2410C;
+  width: 32rpx;
+  height: 32rpx;
 }
-/* ■ 停止方块：14rpx 见方 */
-.ad-ico-stop {
-  flex: none;
-  display: none;
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 2rpx;
-  background: #C2410C;
+
+/* ═══ 2026-11-27 方案 B：收藏按钮三态（原型 `原型-收藏抽屉内反馈.html` 规格表）═══
+   提交中：整卡置灰 + 不响应（连点防重复写入，挡点在逻辑层 `busy`，这里只是视觉同步）。
+   已收藏 / 已在收藏：青绿态（取 --accent-ink token，与 ✓ 图标同色族）。
+   失败：回常态（不在这里做任何处理，状态机在 ts 侧）。 */
+.ad-act.is-busy {
+  opacity: .6;
+  border-color: rgba(0, 0, 0, .06);
+  background: #FFFFFF;
 }
-.ad-act.is-playing .ad-ico-play { display: none; }
-.ad-act.is-playing .ad-ico-stop { display: block; }
+.ad-act.is-collected {
+  background: var(--accent-soft, #E4F6F2);
+  border-color: rgba(15, 118, 110, .32);
+  color: var(--accent-ink, #0F766E);
+}
 
 /* 小屏（<360px）：96rpx 折算只有 41px < 44pt（D7 / AC-B.20），格高补到 104rpx；
    40vh 在 320×568 装不下四项（C-B1），max-height 放宽到 48vh */
@@ -244,9 +248,8 @@
      特异度与上面那条 `.ad-drawer` 相同（0,2,0 > 0,1,0 已胜出），此处按源序再收一次尺寸。 */
   .ad-lift .ad-drawer { padding: 0 28rpx 20rpx; }
   .ad-act { height: 104rpx; font-size: 24rpx; gap: 6rpx; }
-  /* 图标同步缩一档（原型 .frame.sm .dact svg 18px → 16px 的等比：14/18 → 12/16） */
-  .ad-ico-play { border-width: 8rpx 0 8rpx 12rpx; margin-left: 2rpx; }
-  .ad-ico-stop { width: 12rpx; height: 12rpx; }
+  /* 图标同步缩一档（32rpx → 28rpx，仍在任务口径的 28~32rpx 区间内） */
+  .ad-ico { width: 28rpx; height: 28rpx; }
   .ad-word { font-size: 36rpx; }
   .ad-head { padding: 16rpx 0 20rpx; }
   .ad-grab { margin-top: 14rpx; }

@@ -115,26 +115,28 @@
          **不是** `tests/action-drawer.test.ts`（该文件没有 E5 组、也从不 grep catchtouchstart ——
          旧注释写错了，2026-11-26 纠正；同日假绿审计又发现②③④当时是零断言，已同步补齐）。 -->
     <view class="ad-acts" catchtouchmove="noop">
-      <!-- 2026-11-26 变体 C：朗读按钮 = ▶/■ 图标 + 文案，点按在组件内直接调 speakText（不 emit、不关抽屉）；
-           收藏按钮保持纯文字，点按仍 triggerEvent 回页面。
+      <!-- 2026-11-26 变体 C：朗读按钮 = ▶/■ 图标 + 文案，点按在组件内直接调 speakText（不 emit、不关抽屉）。
+           2026-11-27 方案 B：收藏按钮点按**也不关抽屉**，本地进「收藏中」→ 页面收藏完回传 onCollectDone
+           → 切「✓ 已收藏 / ✓ 已在收藏」，失败回「☆ 收藏」。三态文案/图标都由 ts 侧算好放进 item（不在模板判断）。
+           🔴 图标是 `<image src>` 引 `assets/icons/*.svg`（2026-11-27 用户真机反馈②：三处图标必须同一套 SVG）。
+              `ico` / `icoOn` 由 ts 侧算进 item（`playingKey` 命中就切触发态图标；收藏项两值同源）。
+              🔴 不在这里写 `{{icons.play}}`：本节点在 wx:for 循环里，循环体只允许取 item 作用域内的名字
+                （`tests/wxml-for-item-scope.test.ts` 的 P0 守卫，它守护的是「取值越界导致英文整段空白」）。
+              `mode="aspectFit"` 必须留：默认 scaleToFill 会把三角/方块拉变形。
            🔴 `data-key` 一个字母都不许改：它是 onActionTap 的唯一分流依据，改成 data-k 会让四个按钮
               全部哑掉，而「全量测试」在旧守卫下仍会全绿（正是本轮补的假绿盲区）。 -->
       <view
         wx:for="{{acts}}"
         wx:key="key"
-        class="ad-act {{item.kind === 'speak' ? 'ad-act-speak' : ''}} {{playingKey === item.key ? 'is-playing' : ''}} {{pressedKey === item.key ? 'ad-act-pressed' : ''}}"
+        class="ad-act {{item.kind === 'speak' ? 'ad-act-speak' : ''}} {{playingKey === item.key ? 'is-playing' : ''}} {{pressedKey === item.key ? 'ad-act-pressed' : ''}} {{item.busy ? 'is-busy' : ''}} {{item.collected ? 'is-collected' : ''}}"
         data-key="{{item.key}}"
         data-kind="{{item.kind}}"
         aria-role="button"
-        aria-label="{{playingKey === item.key ? item.stopLabel : item.label}}"
+        aria-label="{{item.kind === 'speak' ? (playingKey === item.key ? item.stopLabel : item.label) : item.label}}"
         catchtap="onActionTap"
       >
-        <block wx:if="{{item.kind === 'speak'}}">
-          <!-- 两个图标互斥显隐由 wxss 的 .is-playing 控制（纯 CSS 画，不引图片 / 不引 SVG） -->
-          <view class="ad-ico ad-ico-play"></view>
-          <view class="ad-ico ad-ico-stop"></view>
-        </block>
-        <text class="ad-act-lb">{{playingKey === item.key ? item.stopLabel : item.label}}</text>
+        <image class="ad-ico" mode="aspectFit" src="{{playingKey === item.key ? item.icoOn : item.ico}}" />
+        <text class="ad-act-lb">{{item.kind === 'speak' ? (playingKey === item.key ? item.stopLabel : item.label) : item.label}}</text>
       </view>
     </view>
   </view>

@@ -338,12 +338,14 @@ describe('需求③ V12~V18：长按单词 → 抽屉（朗读单词 / 收藏单
     expect(p.sourceText).toContain('Lesson 7');
   });
 
-  it('V15 反例：收藏接口失败 → 不抛、不崩、抽屉已收起', async () => {
+  it('V15 反例：收藏接口失败 → 不抛、不崩、抽屉不关（失败回原态，不假成功）', async () => {
     const ctx = await loaded();
     mockGlossary.reject = true;
     ctx.onWordLongPress({ currentTarget: { dataset: { i: '0', w: 'play', hasdef: true } } });
     await expect(ctx.onDrawerCollectWord({ detail: { word: 'play', lineIndex: 0, hasDef: true } })).resolves.toBeUndefined();
-    expect(ctx.data.overlay).toBeNull();
+    // 🔴 2026-11-27 方案 B 口径变更：收藏**成功/失败都不关抽屉**（原断言 toBeNull()），
+    //    反馈就地发生在按钮上（失败 → 回「☆ 收藏单词」）。只有未登录路径才先收起。
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'word' });
   });
 
   it('V18 未登录收藏单词 → 弹「请先登录」，不调接口', async () => {
@@ -532,6 +534,27 @@ describe('回归：点句子朗读 / 收藏（口径未被本次改动改坏）'
     expect(p.tag).toBe('nce');
     expect(p.enMain).toBe('Do you like plays');
     expect(p.meta).toMatchObject({ book: 'NCE2', lessonId: 7, lineIndex: 2 });
+  });
+
+  /**
+   * 🔴 2026-11-27 新增（方案 B + 变异验证补洞）：
+   * 上面那条只验证了 payload，**没有一条断言「整句收藏成功后抽屉仍开着」**。
+   * 把 `onDrawerCollectLine` 里加一句 `this.closeOverlay()` 全绿通过 ——
+   * 而那正是方案 B 明确要杜绝的行为（用户要在抽屉里看到 ✓ 已收藏，且能接着点朗读单词）。
+   * 同时钉住「结果经 `drawer.onCollectDone(kind, ok, existed)` 回传」这条 A8 契约（组件不碰 service）。
+   */
+  it('收藏整句（已登录）→ 抽屉不关 + 经 onCollectDone(line, ok, existed) 回传（方案 B / A8）', async () => {
+    const ctx = await loaded();
+    ctx.onLongPress({ currentTarget: { dataset: { i: '2' } } });        // 打开抽屉
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line' });
+    const onCollectDone = jest.fn();
+    ctx.selectComponent = (sel: string) => (sel === '#drawer' ? { onCollectDone } : null);
+    await ctx.onDrawerCollectLine({ detail: { lineIndex: 2, text: LINES[2].en } });
+    // 抽屉仍在（只有未登录路径才先收起）
+    expect(ctx.data.overlay).toMatchObject({ kind: 'drawer', scope: 'line', lineIndex: 2 });
+    expect(ctx.data.guestLoginShow).toBe(false);
+    expect(onCollectDone).toHaveBeenCalledTimes(1);
+    expect(onCollectDone).toHaveBeenCalledWith('line', true, false);
   });
 
   it('load 后所有浮层/播放态归零（换课不残留旧浮层、旧词卡与旧坐标字段）', async () => {

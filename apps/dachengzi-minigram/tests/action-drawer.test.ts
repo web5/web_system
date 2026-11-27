@@ -357,26 +357,140 @@ describe('动作事件 payload（方案 §3.2 契约 3：不带任何页面上�
   });
 });
 
-describe('busy 锁 300ms（防连点重复请求 · **只锁收藏**）', () => {
+// ═════════ 收藏三态（2026-11-27 方案 B：抽屉内收藏反馈，用户拍板「这个交互应该通用的」）═════════
+//
+// 设计真源 `30-任务产物/2026-11-27-收藏下沉抽屉-交互原型/原型-收藏抽屉内反馈.html` 规格表：
+//   点收藏（新建）  → 抽屉**不关**，`☆ 收藏此句 → 收藏中 → ✓ 已收藏`
+//   点收藏（已存在）→ 抽屉不关，`✓ 已在收藏`（沿用 collectToastText 的 existed 口径）
+//   收藏失败        → 抽屉不关，回 `☆ 收藏此句`
+//   连点收藏        → 提交中禁用（`data-busy` 挡重复写入）
+//   未登录          → 抽屉**关**（不叠两层遮罩）→ 页面走既有授权形态（首页 toast / 详情页 modal）
+//
+// 🔴 架构约束（A8 红线）：组件不 import services/glossary —— 收藏由**页面**调，结果经
+//    `onCollectDone(kind, ok, existed)` 回传，组件只负责三态渲染。所以本组用例全部走
+//    「点按 → 组件进 busy → 手工调 onCollectDone 模拟页面回传」这条真实链路。
+describe('收藏三态 · 提交中 / 已收藏 / 已在收藏 / 失败回原态（方案 B）', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('同一动作连点两次只触发一次；300ms 后可再次触发', () => {
-    const c = makeDrawer({ visible: true, scope: 'line', lineIndex: 0, lineText: 'A.' });
-    c.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
-    c.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
-    expect(c.triggerEvent).toHaveBeenCalledTimes(1);
+  function opened(scope: 'line' | 'word' = 'line') {
+    const c = makeDrawer({ visible: true, scope, lineText: 'A.', lineIndex: 0, word: 'w' });
+    c.scope(scope);
+    return c;
+  }
+  function tap(c: Record<string, any>, key: string) {
+    const item = (c.data.acts as any[]).find((a) => a.key === key);
+    c.onActionTap({ currentTarget: { dataset: { key, kind: item ? item.kind : '' } } });
+  }
+  const labelOf = (c: Record<string, any>, key: string) =>
+    (c.data.acts as any[]).find((a) => a.key === key).label;
+  const icoOf = (c: Record<string, any>, key: string) =>
+    (c.data.acts as any[]).find((a) => a.key === key).ico;
+
+  it('点收藏 → 进「收藏中」：collect=busy、文案变「收藏中」、图标仍是空心星；抽屉不关', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    expect(c.data.collect.line).toBe('busy');
     expect(c.data.busy).toBe(true);
-    jest.advanceTimersByTime(300);
+    expect(labelOf(c, 'collect-line')).toBe('收藏中');
+    expect(icoOf(c, 'collect-line')).toBe('/assets/icons/star.svg');
+    expect(c.triggerEvent).toHaveBeenCalledWith('collect-line', { lineIndex: 0, text: 'A.' });
+    expect(c.data.visible).toBe(true);                 // 🔴 收藏不关抽屉（方案 B 的核心）
+  });
+
+  it('提交中连点 → 只 emit 一次（真正的防连点是状态机，不是 300ms 计时器）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    tap(c, 'collect-line');
+    jest.advanceTimersByTime(400);                     // 旧实现 300ms 后已解锁 → 这里必须仍然挡住
+    tap(c, 'collect-line');
+    expect(c.triggerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('页面回传 ok / existed=false → ✓ 已收藏（图标换 check）+ 解除 busy', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.onCollectDone('line', true, false);
+    expect(c.data.collect.line).toBe('done');
     expect(c.data.busy).toBe(false);
-    c.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
+    expect(labelOf(c, 'collect-line')).toBe('已收藏');
+    expect(icoOf(c, 'collect-line')).toBe('/assets/icons/check.svg');
+    expect(c.data.visible).toBe(true);
+  });
+
+  it('页面回传 ok / existed=true → ✓ 已在收藏（重复收藏不是失败）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.onCollectDone('line', true, true);
+    expect(c.data.collect.line).toBe('existed');
+    expect(labelOf(c, 'collect-line')).toBe('已在收藏');
+    expect(icoOf(c, 'collect-line')).toBe('/assets/icons/check.svg');
+  });
+
+  it('页面回传 ok=false → 回「☆ 收藏此句」（失败不留假成功态）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.onCollectDone('line', false, false);
+    expect(c.data.collect.line).toBe('idle');
+    expect(c.data.busy).toBe(false);
+    expect(labelOf(c, 'collect-line')).toBe('收藏此句');
+    expect(icoOf(c, 'collect-line')).toBe('/assets/icons/star.svg');
+  });
+
+  it('已收藏后仍可再点（不是一次性死按钮）：再进 busy → 回传 existed → 已在收藏', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.onCollectDone('line', true, false);
+    expect(labelOf(c, 'collect-line')).toBe('已收藏');
+    tap(c, 'collect-line');                            // 重复点：允许，用户要的是「已在收藏」提示
+    expect(c.data.collect.line).toBe('busy');
     expect(c.triggerEvent).toHaveBeenCalledTimes(2);
+    c.onCollectDone('line', true, true);
+    expect(labelOf(c, 'collect-line')).toBe('已在收藏');
+  });
+
+  it('页面忘了回传 → 超时兜底回 idle（按钮不许死在「收藏中」）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    expect(c.data.collect.line).toBe('busy');
+    jest.advanceTimersByTime(8000);
+    expect(c.data.collect.line).toBe('idle');
+    expect(c.data.busy).toBe(false);
+  });
+
+  it('关抽屉（visible false）→ 收藏态复位：重开不残留「已收藏」（原型待定项：本实现选复位）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.onCollectDone('line', true, false);
+    expect(c.data.collect.line).toBe('done');
+    c.visible(false);
+    expect(c.data.collect.line).toBe('idle');
+    expect(labelOf(c, 'collect-line')).toBe('收藏此句');
+  });
+
+  it('抽屉已关时迟到的回传不改状态（未登录路径先关抽屉，回传不许把已收藏写到下一次打开）', () => {
+    const c = opened('line');
+    tap(c, 'collect-line');
+    c.visible(false);
+    c.onCollectDone('line', true, false);
+    expect(c.data.collect.line).toBe('idle');
+  });
+
+  it('两个槽位互不串台：line 在途不影响 word 的文案与图标', () => {
+    const c = opened('word');
+    tap(c, 'collect-line');
+    expect(labelOf(c, 'collect-line')).toBe('收藏中');
+    expect(labelOf(c, 'collect-word')).toBe('收藏单词');
+    // 另一档在途时整体 busy，因此 word 点不动（防两档并发写坏状态）
+    tap(c, 'collect-word');
+    expect(c.triggerEvent).toHaveBeenCalledTimes(1);
   });
 
   it('空 key 不触发任何事件（脏 dataset 防御）', () => {
     const c = makeDrawer({ visible: true, scope: 'line' });
     c.onActionTap({ currentTarget: { dataset: {} } });
     expect(c.triggerEvent).not.toHaveBeenCalled();
+    expect(c.data.collect.line).toBe('idle');
   });
 
   it('detached 后定时器到点不再 setData（防卸载后 setData 告警）', () => {
@@ -385,7 +499,7 @@ describe('busy 锁 300ms（防连点重复请求 · **只锁收藏**）', () => 
     c.onActionTap({ currentTarget: { dataset: { key: 'collect-line' } } });
     const spy = jest.spyOn(c, 'setData');
     c.detached();
-    jest.advanceTimersByTime(500);
+    jest.advanceTimersByTime(9000);
     expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -89,6 +89,8 @@ import { isLoggedIn, loginFromGate } from '../../../services/auth';
 import { tokenize, buildKnown, type WordToken } from '../../../utils/tokenize';
 import { lookupWord, type WordLookup } from '../../../utils/lexicon';
 import { collectToastText, ARIA_WORD_PLAY, ARIA_WORD_STOP } from '../../../utils/line-actions';
+// 图标路径单一真源（三处播放/收藏图标共用一套 SVG）
+import { ICONS } from '../../../utils/icons';
 
 interface NceLineView {
   /** 稳定 key（wx:key），避免嵌套 wx:for 下默认 index 遮蔽 */
@@ -135,6 +137,28 @@ interface DrawerEvent<T> { detail?: T; }
 interface SpeakLineDetail { lineIndex?: number; text?: string; }
 interface SpeakWordDetail { word?: string; lineIndex?: number; }
 interface CollectWordDetail extends SpeakWordDetail { hasDef?: boolean; }
+
+/**
+ * 抽屉组件实例（用于回传收藏结果）。**模块级纯函数，不做页面方法** ——
+ * 单测里的页面上下文是手搓对象（只挂被调用的那几个方法），写成 `this._drawerRef()`
+ * 会在任何「只调收藏 handler」的用例里 `not a function`。
+ *
+ * 防御式取：`selectComponent` 不存在（单测桩）/ 首次打开前取不到 / 组件已销毁 → 返回 null，
+ * 调用方跳过回传即可（收藏态在抽屉关闭时会整体复位，不会停在「收藏中」）。
+ */
+function drawerOf(self: unknown): { onCollectDone: (kind: string, ok: boolean, existed: boolean) => void } | null {
+  try {
+    const s = self as { selectComponent?: (sel: string) => unknown };
+    const comp = (typeof s.selectComponent === 'function'
+      ? s.selectComponent('#drawer')
+      : null) as unknown as { onCollectDone?: (kind: string, ok: boolean, existed: boolean) => void } | null;
+    return comp && typeof comp.onCollectDone === 'function'
+      ? (comp as { onCollectDone: (kind: string, ok: boolean, existed: boolean) => void })
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 interface NceTapEvent {
   currentTarget: { dataset: Record<string, string | number | boolean | undefined> };
@@ -225,6 +249,11 @@ Page({
      */
     ariaPlayWord: ARIA_WORD_PLAY,
     ariaStopWord: ARIA_WORD_STOP,
+    /**
+     * 图标路径（wxml 不能 import ts，只能经 data 插值）。2026-11-27：词卡 ▶/■ 改 SVG，
+     * 与首页卡片 / 抽屉共用 `assets/icons/*.svg`，路径唯一真源 utils/icons。
+     */
+    icons: { play: ICONS.play, stop: ICONS.stop },
     /** 2026-11-26 ③ 正在朗读的单词（'' = 无）：驱动词卡/单词气泡按钮文案 */
     wordPlaying: '',
     /** V6 T1 未登录守卫弹窗 modal-login「请先登录」 */
@@ -582,20 +611,27 @@ Page({
   /**
    * 「收藏此句」：`collectGlossary({tag:'nce'})` 契约不变；T1 未登录仍弹本页内联 modal-login
    * 「请先登录」（首页同位置是 wx.showToast —— 这个差异**有意保留**，不下沉到公共层）。
+   *
+   * 🔴 2026-11-27 方案 B（用户拍板，两页通用）：**收藏成功不再收抽屉**
+   *    （原实现第一行就 `closeOverlay()`），按钮就地走三态，结果经 `onCollectDone` 回传组件。
+   *    未登录路径不变：**先收起抽屉 → 再弹内联 modal**（不叠两层遮罩，K10）。
    */
   async onDrawerCollectLine(e: DrawerEvent<SpeakLineDetail>) {
     const d = (e && e.detail) || {};
     const lineIndex = Number(d.lineIndex);
     const text = String(d.text || '');
-    // V-B11：动作后立即收起（BB9：未登录也是「抽屉先收起 → toast 请先登录」）
-    this.closeOverlay();
+    // V-B11 / BB9：**未登录**动作后立即收起（否则 modal 会叠在遮罩上）
     if (!isLoggedIn()) {
+      this.closeOverlay();
       this.setData({ guestLoginShow: true });
       return;
     }
+    const drawer = drawerOf(this);
     const lines = this.data.lines || [];
     const line = isFinite(lineIndex) ? lines[lineIndex] : null;
     const { id, book, detail } = this.data;
+    let ok = false;
+    let existed = false;
     try {
       const res = await collectGlossary({
         tag: 'nce',
@@ -604,7 +640,9 @@ Page({
         sourceText: `Lesson ${id} · ${detail ? detail.title : ''}`,
         meta: { book, lessonId: id, lineIndex },
       });
-      wx.showToast({ title: collectToastText('line', !!res.existed), icon: 'none' });
+      ok = true;
+      existed = !!res.existed;
+      wx.showToast({ title: collectToastText('line', existed), icon: 'none' });
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责（49 §5 方案 B / 11-20 治本授权）：
       // 常规失败在请求层保证「有且仅有一条中文 string toast」；页面层只保留排障留痕
@@ -612,6 +650,7 @@ Page({
       // 避免与请求层重复弹或把数组 message 直接塞进 wx.showToast 的 title。
       console.error('[nce/collect]', err);
     }
+    if (drawer) drawer.onCollectDone('line', ok, existed);
   },
 
   /**
@@ -634,15 +673,19 @@ Page({
     const word = String(d.word || '').toLowerCase();
     const lineIndex = Number(d.lineIndex);
     if (!word) return;
-    this.closeOverlay();
+    // 未登录：先收起抽屉 → 再弹内联 modal（与 onDrawerCollectLine 同口径，K10）
     if (!isLoggedIn()) {
+      this.closeOverlay();
       this.setData({ guestLoginShow: true });
       return;
     }
+    const drawer = drawerOf(this);
     const info = this._lookupWord(word);
     const hasDef = typeof d.hasDef === 'boolean' ? d.hasDef : !info.none;
     const { id, book, detail } = this.data;
     const note = [info.pos, info.def].filter(Boolean).join(' ');
+    let ok = false;
+    let existed = false;
     try {
       const res = await collectGlossary({
         tag: 'word',
@@ -659,12 +702,22 @@ Page({
           hasDef,
         },
       });
-      wx.showToast({ title: collectToastText('word', !!res.existed), icon: 'none' });
+      ok = true;
+      existed = !!res.existed;
+      wx.showToast({ title: collectToastText('word', existed), icon: 'none' });
     } catch (err) {
       // 失败提示由 utils/request.ts 统一负责；页面只留排障痕
       console.error('[nce/collectWord]', err);
     }
+    if (drawer) drawer.onCollectDone('word', ok, existed);
   },
+
+  /**
+   * 🔴 收藏结果回传（见文件顶部 2026-11-27 段落）：抽屉组件只负责三态渲染，
+   * 收藏仍由本页调 service，结果经 `selectComponent('#drawer').onCollectDone` 回传。
+   * 组件实例由模块级 `drawerOf(this)` 取（不写成页面方法：单测的 `this` 是手搓对象，
+   * 只挂了被调用的那几个方法，页面方法一多就会 `not a function`）。
+   */
 
   /**
    * 🔴 U1（2026-11-26 19:15 用户拍板）：句子行尾「■ 停止」。

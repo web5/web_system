@@ -99,14 +99,17 @@ describe('A2 公共层复用：不许第二份动作表 / 第二份抽屉结构'
    * 朗读下沉到组件是**用户 2026-11-26 拍板**（设计真源 `原型-变体C-抽屉内朗读.html`：
    * 抽屉持有原文，朗读不再回页面中转）→ 组件必须能调 `services/tts`；其余 services
    * （glossary / auth / nce / account …）仍一律禁止，收藏与两页授权差异继续留在页面。
-   * 所以断言收窄成「恰好两个 import：line-actions + services/tts」。
+   * 🔴 2026-11-27 再放宽**一格**（不是放宽 services，而是多一个纯函数层）：收藏三态的
+   * 文案/图标下沉到组件（方案 B），路径与文案常量来自 `utils/icons` —— 零副作用纯常量层。
+   * services 侧仍**恰好一个** `services/tts`（这条一个字都不许松）。
    */
-  it('组件只 import utils/line-actions 与 services/tts（其余 services 一律禁止）', () => {
+  it('组件只 import 两个 utils 纯函数层 + 恰好一个 services/tts（其余 services 一律禁止）', () => {
     const ts = read(DRAWER_TS);
     const imports = ts.match(/^import .*$/gm) || [];
-    expect(imports).toHaveLength(2);
+    expect(imports).toHaveLength(3);
     expect(imports[0]).toMatch(/from '\.\.\/\.\.\/utils\/line-actions'/);
-    expect(imports[1]).toMatch(/from '\.\.\/\.\.\/services\/tts'/);
+    expect(imports[1]).toMatch(/from '\.\.\/\.\.\/utils\/icons'/);
+    expect(imports[2]).toMatch(/from '\.\.\/\.\.\/services\/tts'/);
     const servicesImports = ts.match(/from '[^']*services\/[^']*'/g) || [];
     expect(servicesImports).toEqual(["from '../../services/tts'"]);
     expect(ts).not.toMatch(/require\(['"][^'"]*services\//);
@@ -191,10 +194,17 @@ describe('A5 U1 停止入口归属（19:15 拍板）', () => {
     expect(w).not.toMatch(/class="sent-stop"/);
     expect(w).not.toMatch(/stopQuoteSpeak/);
   });
-  it('首页停止入口唯一：页脚 .dq-act 一处（catchtap="speakQuote"）', () => {
+  it('首页停止入口唯一：页脚 .dq-act 一处（catchtap="speakQuote"，图标 ■ 来自 SVG）', () => {
     const w = read(HOME_WXML).replace(/<!--[\s\S]*?-->/g, '');
-    const stops = w.match(/■\s*停止/g) || [];
-    expect(stops).toHaveLength(1);
+    // 🔴 2026-11-27：■ 由正文字符改成 stop.svg（用户真机反馈②），判据跟着看「图标来源」。
+    //    断言范围限定在**页脚**：词卡里的圆形播放按钮同样有 stop 态图标，扫整页必然误红。
+    const footAt = w.indexOf('class="daily-foot"');
+    expect(footAt).toBeGreaterThan(-1);
+    const foot = w.slice(footAt, w.indexOf('class="daily-foot"') + 700);
+    expect(foot.match(/icons\.stop/g) || []).toHaveLength(1);
+    expect(foot).toMatch(/catchtap="speakQuote"[\s\S]{0,300}?icons\.stop/);
+    // 反例：字符形态的 ■ 停止 不许回潮
+    expect(w).not.toMatch(/■\s*停止/);
   });
 });
 
