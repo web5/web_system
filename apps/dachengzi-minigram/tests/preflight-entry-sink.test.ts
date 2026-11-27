@@ -17,7 +17,9 @@
  * 🔴 关于「不许真出码」：本文件里凡是会走完门禁、继续往下跑的用例，一律注入
  *    MINIPROGRAM_CI_PATH=<不存在的目录>，让 `require(miniprogram-ci)` 必然炸掉 ——
  *    走不到网络请求、也走不到写二维码。本该失败的门禁用例则同时带 --expect-version 9.9.9。
- *    另断言 `.ci-output` 文件数跑前跑后一致（零新增产物）。
+ *    另断言 `.ci-output` 文件数跑前跑后一致（零新增产物）。数的时候**忽略 `__` 前缀**的
+ *    测试脚手架（`preflight.test.ts` 的哨兵 `__sentinel-<pid>.png` 就在同一目录里）——
+ *    不忽略会与并行 worker 抢同一真实目录而间歇性红，理由与自证见 `ciOutputFileCount()`。
  *
  * 为什么用子进程而不是 require：preview.js / upload.js 都是「顶部即执行」的脚本（没有
  * `require.main === module` 保护，也不该加），require 进来会真的跑一遍。子进程还能同时
@@ -25,6 +27,7 @@
  */
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 jest.setTimeout(120000);
@@ -92,12 +95,30 @@ function countOf(haystack: string, needle: string): number {
 /** 报表抬头（printReport 的第一行，唯一标识「跑了一次门禁」）。 */
 const REPORT_HEAD = '出码前检查（P1–P6';
 
-/** `.ci-output` 里的文件数（递归；目录不存在算 0）。 */
-function ciOutputFileCount(): number {
-  const root = path.join(APP_ROOT, '.ci-output');
+/**
+ * `.ci-output` 里的**产物**文件数（递归；目录不存在算 0）。
+ *
+ * 🔴 为什么要排除 `__` 前缀（2026-11-27 修并行 flake，根因见下）：
+ *    `preflight.test.ts` 为了钉住「测试不许删真实产物」，会在**同一个真实** `.ci-output/` 里
+ *    铺一个哨兵 `__sentinel-<pid>.png`（beforeAll 铺、哨兵用例 finally 收 —— 那个用例必须
+ *    早于/晚于本文件都成立，因为它是事故回归）。jest 默认多 worker 并行，两个 suite 抢同一
+ *    真实目录时，本文件「跑前跑后文件数一致」的判据会把哨兵的**出生**或**消失**数成产物变化
+ *    → 间歇性红。两个方向都实测到过：`Expected: 0 / Received: 1`（哨兵刚出生）、
+ *    `Expected: 1 / Received: 0`（哨兵被 afterAll 清掉）。
+ *    （合并前不红是假绿：旧代码 finally 直接把整个目录删掉 → 计数归 0，兄弟用例 mkdir 重建为
+ *      空 → 两边都是 0「恰好」相等。把待清理对象从「整个目录」缩到「一个文件」才暴露出来。）
+ *
+ * 约定：**测试脚手架文件一律以 `__` 开头**，真实产物不会这么起名（`cli-preview-qr.png` /
+ * `cli-preview-qr.meta.json` / `preview-qr.png` / `args.json`）。所以这里只排除 `__` 前缀，
+ * **不是**改成「只数白名单」：别处只要冒出任何非 `__` 的文件，判据照样红（见下方自证用例）。
+ *
+ * root 可传入 —— 自证用例用临时目录验判据本身，避免并行时又去碰真实目录。
+ */
+function ciOutputFileCount(root: string = path.join(APP_ROOT, '.ci-output')): number {
   const walk = (dir: string): number => {
     let n = 0;
     for (const name of fs.readdirSync(dir)) {
+      if (name.startsWith('__')) continue; // 测试脚手架（跨 suite 哨兵），不是产物
       const full = path.join(dir, name);
       n += fs.statSync(full).isDirectory() ? walk(full) : 1;
     }
@@ -105,6 +126,47 @@ function ciOutputFileCount(): number {
   };
   return fs.existsSync(root) ? walk(root) : 0;
 }
+
+// ============================================================ 判据自证（不碰真实目录）
+
+/**
+ * 🔴 这条 describe 是「排除 `__` 前缀」这个改动的防呆：证明判据没有被排空、也没被排过头。
+ *
+ * 用 `os.tmpdir()` 里的临时目录造现场 —— **绝不**碰真实的 `.ci-output`，所以它自己
+ * 不会成为新的并行干扰源（这正是本次 flake 的教训：判据不许依赖共享目录的即时状态）。
+ */
+describe('零产物判据本身（临时目录自证：只忽略 __ 前缀，别的文件一个都不放过）', () => {
+  it('产物与陌生文件都数得到，`__` 前缀的测试脚手架被忽略', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-out-count-'));
+    try {
+      // 2 个真实产物名
+      fs.writeFileSync(path.join(tmp, 'cli-preview-qr.png'), 'png');
+      fs.writeFileSync(path.join(tmp, 'cli-preview-qr.meta.json'), '{}');
+      // 1 个跨 suite 哨兵（必须被忽略，否则就是本次 flake 的复现）
+      fs.writeFileSync(path.join(tmp, '__sentinel-12345.png'), 'SENTINEL');
+      // 2 个「谁也不知道哪来的」文件（必须被数到，否则判据形同虚设）
+      fs.writeFileSync(path.join(tmp, 'stray-unknown.txt'), 'oops');
+      fs.mkdirSync(path.join(tmp, 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'nested', 'deep.json'), '{}');
+
+      // 2 + 2 = 4（递归计入 nested），哨兵不计
+      expect(ciOutputFileCount(tmp)).toBe(4);
+
+      // 反证：把哨兵改成不以 __ 开头 → 立刻被数到（证明排除面只有 __ 前缀，不是整类忽略）
+      fs.renameSync(
+        path.join(tmp, '__sentinel-12345.png'),
+        path.join(tmp, 'sentinel-12345.png'),
+      );
+      expect(ciOutputFileCount(tmp)).toBe(5);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('目录不存在算 0（不抛错）', () => {
+    expect(ciOutputFileCount(path.join(os.tmpdir(), `no-such-ci-out-${process.pid}`))).toBe(0);
+  });
+});
 
 // ============================================================ E1 直连被门禁拦住
 
