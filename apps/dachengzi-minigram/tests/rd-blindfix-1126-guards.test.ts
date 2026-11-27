@@ -217,8 +217,27 @@ describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
      * `catchtouchstart`，不许把 touchmove 也禁掉（那是拦页面滚动穿透用的）。
      *
      * 抽屉系 token 的判定口径：**前缀** `/^ad(-|$)/`。
-     * 覆盖 `ad` / `ad-drawer` / `ad-acts` / `ad-mask` / `ad-close` / `ad-inner` … 全部；
+     * 覆盖 `ad` / `ad-drawer` / `ad-acts` / `ad-mask` / `ad-close` / `ad-inner` …；
      * 不误纳 `adx` / `x-ad` / `bad`（否则将来某个无关 class 会被拖进来当抽屉系白名单成员）。
+     *
+     * ⚠️ 覆盖面 = `<view>` 起始标签 ∩ class token 命中 `ad-*` 前缀，**不是全覆盖**。已知逃逸面：
+     *   ① 命名不在 `ad-*` 家族（另起 `class="sheet-body"` 的容器挂 catchtouchstart）；
+     *   ② class 全插值（`class="{{wrapCls}}"`）—— 静态扫描拿不到 token；
+     *   ③ 非 `<view>` 起始标签（`<text>` / `<block>` / `<scroll-view>` …，目前本组件没有）。
+     * ①② 已于 2026-11-27 独立盲测实测确认「挂上 catchtouchstart 仍 25/25 全绿」。
+     * ⇒ 新增抽屉系节点请沿用 `ad-` 前缀；机器兜底交给下面 ④ 的**绝对口径**。
+     *
+     * 🔴 裁定理由（2026-11-27 纠正上一版的说法）：上一版这里写「**静态正则本质上无法穷尽** ⇒
+     *    所以边界只落成文字、不写成断言」——那句结论不成立，且与本用例下方 ④ 自相矛盾（④ 就是
+     *    把 ①②③ 一起封住的**断言**）。准确表述：
+     *      · 对 ① 命名不在 `ad-*` 与 ③ 非 view 标签，「静态正则无法穷尽」**不成立**：它们只是
+     *        「**用 class token 去匹配**」这一条路抓不到，换一个不依赖 class 名的口径就抓得到；
+     *      · 只有 ② class 全插值，其真值由运行时 data 决定，静态确实无法预知；
+     *      · 因此结论不是「放弃断言」，而是「**换掉匹配口径**」：不依赖 class 名、也不依赖标签
+     *        类型，直接禁「任何起始标签上的 catchtouchstart」。② 的「具体哪个节点在跑」虽不可知，
+     *        但「凡是节点就一律不许挂」这条绝对禁令照样把它封死。
+     * ⇒ ①②③ 已**落地为 ④ 绝对口径**（见本用例下方）；上面那段「覆盖面边界」文字只作为
+     *   「为什么会有 ④」的解释保留，不再具备「所以不写断言」的含义。
      */
     const isDrawerToken = (tok: string): boolean => /^ad(-|$)/.test(tok);
     // 筛子自测：口径本身也要被钉住，否则「改个正则」就能静默放宽（含「新增节点自动纳入」）
@@ -264,6 +283,29 @@ describe('P2-6 下滑手势不从按钮区起拖（BB6）', () => {
     }
     // ③ 反向保险：`.ad-mask` 的 catchtouchmove（拦页面滚动穿透）不许被顺手删掉
     expect(tagsWithToken('ad-mask')[0] || '').toMatch(/catchtouchmove="noop"/);
+
+    /**
+     * ④ 🔴🔴 **绝对口径**（2026-11-27 team-lead 批准，`rd-engineer-drawer-guards-commit` 提出）：
+     * 上面基于 class token 的筛选有**三类已实测逃逸**（见函数头注释：非 `ad-*` 命名 /
+     * class 全插值 / 非 `<view>` 标签），改成「本文件内**任何**起始标签都不许 catchtouchstart」，
+     * 三条一起封掉：
+     *   · 不需要 class 名 → 封「非 `ad-*` 命名」（`sheet-body` 那类）；
+     *   · 不需要 token   → 封「class 全插值」（`class="{{wrapCls}}"`）；
+     *   · 不限标签类型   → 封「非 `<view>` 标签」。
+     * 为什么成立：本组件 wxml 整个文件就是抽屉本身，**任何**节点 catch 掉 touchstart 都是同一个
+     * bug（父 catch → 子按钮 tap 全灭），不存在「合法的 catchtouchstart」；反向也没有误红面
+     * （`catchtouchmove="noop"` 不在禁令内，`.ad-mask` 那条照样保留）。
+     *
+     * 🔴 使用注意：**别在本文件或组件 wxml 的注释里写「完整起始标签 + catchtouchstart」的示例** ——
+     *    注释也会被这条正则扫到（`viewTags` / `allTags` 都不剥注释），会自己把自己测红。
+     *    正则要求 `<` 后紧跟字母，所以 `<!--` 不会被命中；但写成真标签形态就会。
+     */
+    const allTags = w.match(/<[a-zA-Z][\w-]*\b[^>]*>/g) || [];
+    expect(allTags.length).toBeGreaterThanOrEqual(10);   // 防空转前置（当前实测 16 个 <view> + 其余标签）
+    for (const tag of allTags) {
+      expect(tag).not.toMatch(/catchtouchstart/);
+      expect(tag).not.toMatch(/catch:touchstart/);
+    }
     /**
      * 🔴 2026-11-26 补的零覆盖项：根节点必须保留 `bindtouchcancel="onTouchEnd"`。
      * 缺它 → 手势被系统打断（来电 / 下拉通知栏 / 手势冲突）时 touchend 不触发，

@@ -90,9 +90,25 @@
               `ad-mask` / `ad-drawer` / `ad-acts` / `ad-close` / 将来的 `ad-inner` …）都不得
               `catchtouchstart` —— 只查 `.ad-acts` 一处是不够的：挪到 `.ad-drawer` 或最外层 `.ad`
               上同一个 bug 原地复活（子按钮 tap 全灭）。口径 2026-11-27 从「精确等于 ad/ad-drawer」
-              收紧成前缀匹配，并对 `ad` / `ad-drawer` / `ad-acts` 三个节点各做一次点名断言；
-              ⚠️ 覆盖面只到 `<view …>` 起始标签（不含 `<text>` / `<block>` / `<scroll-view>`
-              上挂的 catchtouchstart —— 那类节点目前一个也没有，将来加了要同步扩守卫）；
+              收紧成前缀匹配，并对 `ad` / `ad-drawer` / `ad-acts` 三个节点各做一次点名断言。
+              🔴 **覆盖面边界（最容易踩坑的一条，务必读完）**：本守卫是靠 **class token 前缀 `ad-*`**
+              去筛节点的，因此下面三类节点**逃逸**、它根本拦不住：
+                · 逃逸面 ① —— 命名不在 `ad-*` 家族：另起一个 `class="sheet-body"` 的容器节点并挂
+                  `catchtouchstart`，守卫扫不到它；
+                · 逃逸面 ② —— class 全插值：`class="{{wrapCls}}"` 这种，静态扫描剥掉 `{{…}}` 后
+                  拿不到任何 token，同样扫不到；
+                · 逃逸面 ③ —— 非 `view` 标签：`text` / `block` / `scroll-view` 之类的起始标签压根
+                  不在筛选集合里（目前本组件一个也没有）。
+              ①② 已于 2026-11-27 独立盲测实测确认：给上述节点挂上 `catchtouchstart` 后**仍全绿**
+              —— 这不是你漏配了什么，是这条守卫的固有盲区。
+              ⇒ 两条硬要求，给所有后来人：
+                (a) **新增抽屉系节点必须沿用 `ad-` 前缀**（`ad-inner` / `ad-body` 这一类）。否则你
+                    就落进逃逸面 ①：父节点 catch 掉 touchstart 后子按钮 tap 全灭，而测试依旧全绿。
+                (b) 机器兜底**不靠**上面这条前缀守卫，而靠 `tests/rd-blindfix-1126-guards.test.ts`
+                    P2-6 组里的 **④ 绝对口径**：整个 wxml 文件内**任何**起始标签一律禁 `catchtouchstart`
+                    （不依赖 class 名、不依赖标签类型），①②③ 三条一起封死。别删它、别放宽它。
+              ⚠️ 遗留：非 `view` 标签（逃逸面 ③）在本组件当前一个也没有；将来若真加了，④ 会兜住，
+              但 ② 这条前缀守卫的文字说明需同步扩写；
            ③ `.ad-act` 起始标签必须带 `data-key="{{item.key}}"` 与 `data-kind="{{item.kind}}"`
               （`data-key` 一丢 → `onActionTap` 首行 `if (!key) return` 静默返回，四按钮全哑）；
            ④ `.ad-drawer` 必须保留 `bindtouchcancel="onTouchEnd"`（缺它手势被系统打断后抽屉歪着停住）。
