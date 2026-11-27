@@ -36,60 +36,88 @@ AI 能力        → 该行的 capabilities / tools 字段（CapabilityRef 引�
 
 ---
 
-## 2. 应用清单：线上共 8 个
+## 2. 应用清单：线上共 14 个（2026-11-27 直查 `agent_definitions`）
 
 | id | 名称 | 模型 | 能力 | 定位 |
 | --- | --- | --- | --- | --- |
-| `translate` | 翻译官 | `hy3` | 无工具（纯模型） | 多语种互译与润色 |
-| `music` | 音乐推荐官 | `deepseek/deepseek-v4-flash` | 3 个 tool | 按场景/心情/口味推歌并出卡片 |
-| `general` | 通用助手 | `deepseek/deepseek-v4-flash` | `web-search` | 日常问答兜底 + 联网搜索 |
-| `contract-risk` | 合同翻译官 | `hy3` | 3 个 tool | 合同条款风险体检（带真实数字） |
-| `bianbian` | 变变创作助手 | `hy3` | `image-gen` | AI 绘画 / 生图 |
-| `study-assistant` | 科豆学习助手 | `hy3` | `image-gen` | 少儿知识答疑与辅导 |
-| `deploy` | 发布助手 | `deepseek/deepseek-v4-flash` | 9 个 mcp | 微前端模块/后端服务发布、灰度、回滚 |
-| `web-system-dev` | web_system 研发助手 | `deepseek/deepseek-v4-flash` | 4 个 mcp（知识检索） | 检索本仓库工程知识答疑 |
+| `acc-agent` | 验收Agent | `hy3` | 1 个 skill（`web-system-paper`；不产生工具） | 验收场景助手，加载论文学习技能出动态 |
+| `baike` | 百科科普 | `hy3` | 无工具（纯模型） | 百科科普问答，先结论后原理 |
+| `bianbian` | 变变创作助手 | `hy3` | 1 个 tool（`image-gen`） | 面向小朋友的形象/场景 AI 生图 |
+| `contract-risk` | 合同翻译官 | `deepseek-v4-flash` | 4 个 tool | 合同条款风险体检，算真实利率与维权金额 |
+| `deploy` | 发布助手 | `deepseek-v4-flash` | 9 个 mcp | 微前端发布、灰度与回滚的流水线助手 |
+| `emotion` | 情感陪聊 | `hy3` | 3 个 tool | 情绪陪伴为主，兼做音乐推荐出卡片 |
+| `general` | 通用助手 | `hy3` | 3 个 tool | 日常问答与闲聊兜底，能力上只剩音乐推荐 |
+| `general-assistant` | 通用问答 | `deepseek-v4-flash` | 3 个 tool（`tools` 里的 `web-search` 被忽略） | 全能问答主入口，联网搜索未生效 |
+| `horoscope` | 星座时运 | `hy3` | 无工具（纯模型） | 星座时运娱乐解读，强制带免责声明 |
+| `study-assistant` | 科豆学习助手 | `hy3` | 1 个 tool（`image-gen`） | 少儿学习辅导，可调用生图辅助讲解 |
+| `tool` | 工具服务 | `hy3` | 无工具（纯模型；虽名为工具服务） | 汇率/天气/计算入口，当前未挂任何工具 |
+| `translate` | 语言翻译官 | `deepseek-v4-flash` | 无工具（纯模型） | 四段式翻译与润色，纯模型无工具 |
+| `web-system-dev` | web_system 研发助手 | `deepseek-v4-flash` | 4 个 mcp（2 个 ref / 4 条授权） | 检索本仓库工程知识答研发问题 |
+| `widget-demo` | Widget 演示助手 | `hy3` | 1 个 tool（`present-widget`） | 对话内生成投票/图表/表单组件演示 |
 
-> ⚠️ **本表与本行下方那句均为 2026-10 编写时的快照，2026-11-27 复核已与库不符，勿当现况引用**：
-> - 实际 `agent_definitions` 为 **14 条**，本表只列 8 条，漏 `acc-agent` / `baike` / `emotion` / `general-assistant` / `horoscope` / `tool` / `widget-demo`；
-> - `music` **在库中不存在**；
-> - 模型列 4 处不符：`contract-risk` / `translate` 实为 `deepseek-v4-flash`（非 `hy3`）；`general` 实为 `hy3`（带前缀的是 `general-assistant`）；`deploy` / `web-system-dev` 为**裸名**，不带前缀。
->
-> **模型列一律以数据库字典为准**，判据与自查 SQL 见 §5.1。本表待按库重写（独立任务，不在本次改动范围）。
+**读这张表前必须知道的四件事**
 
-其中 `translate` / `music` / `general` 是用户最常提到的三个，也是**外部自动化任务之外**的代表性应用。
+1. **「能力」列是实际生效的集合，不是数据库原始字段。** 判据见 §5.2：`capabilities` 非 NULL 时 `tools` 整列被忽略（空数组 `[]` 也算非 NULL）。
+2. **`model` 列以本环境字典为准**，判据与自查 SQL 见 §5.1。本表模型只有 `hy3` 与 `deepseek-v4-flash` 两个值，**没有任何 `deepseek/` 前缀**。
+3. **本表是 2026-11-27 直查本机库的结果**；各环境的字典与定义可能不同，跨环境引用前请自行核对。
+4. 表只列 id / 名称 / 模型 / 能力 / 定位五项，**`maxSteps`、`temperature`、`systemPrompt` 等运行参数不在表内**，见 §3。
+
+> ⚠️ 三处最容易误读，先说明：
+> - `acc-agent` 的能力是 **`skill` 不是 `tool`**。skill 是行为守则，不进工具列表，所以它「有技能、无工具」（不是「1 个工具」）。
+> - `general-assistant` 是**唯一**一条 `tools` 被 `capabilities` 吃掉的：`tools` 写着 `web-search`，但 `capabilities` 是 3 个音乐工具，实际拿不到联网。其余 `capabilities`/`tools` 双非空的条目属同集冗余或 mcp 口径差异，不是缺陷。
+> - 🔴 **全表 14 条没有任何一条实际生效 `web-search`**，且本机 / dev / prod 三环境 `.env` 都没有搜索服务凭据（`BING_SEARCH_API_KEY` 等），所以**联网搜索当前整体不可用**，不是单个 agent 的配置问题。
+
+其中 `translate` / `contract-risk` / `general` 是用户最常提到的三个，也是**外部自动化任务之外**的代表性应用。
+
 
 ---
 
 ## 3. 逐个应用详情
 
-### 3.1 `translate` 翻译官
+> 本节覆盖 8 条，其中 `music` **在库中不存在**（见 3.2）。库里另有 7 条（`acc-agent` / `baike` / `emotion` / `general-assistant` / `horoscope` / `tool` / `widget-demo`）只有 §2 表格的一行，尚未展开详情。
+>
+> 🔴 **本节数字以库为准，与代码种子 `builtinSeeds()`（`servers/ai-service/src/agent-def/agent-def.service.ts`）不一致时以库为准。** 本节历史上是照代码种子写的，2026-11-27 逐条比对后发现 4 节共 9 处实质不符（`translate` / `music` / `general` / `contract-risk`），已修正。
+>
+> ⚠️ 另有一条通病：**14 条 agent 的 `keywords` 列全为 NULL**。本节各处列出的「路由关键词」都只存在于代码种子，**没有一条落库**，因此关键词规则路由在当前库状态下不会命中任何一条。
 
-- **能力**：无工具（纯模型能力），`maxSteps: 4`，`temperature: 0.4`
+### 3.1 `translate` 语言翻译官
+
+- **模型**：`deepseek-v4-flash`（库实际值；代码种子写的是 `hy3`）
+- **能力**：无工具（纯模型能力），`maxSteps: 4`，`temperature: 0.3`
 - **输出契约（硬性，顺序固定）**：【推荐译文】【直译对照】【委婉版】【语气要点】四段
-- **路由关键词**：`翻译` `译成` `翻成` `英文怎么说` `英语怎么说` `英文怎么讲` `英语怎么讲` `中文怎么说` `日语怎么说` `韩语怎么说` `用英语` `用英文` `润色` `translation`
+- **路由关键词**（仅存在于代码种子，库 `keywords` 为 NULL）：`翻译` `译成` `翻成` `英文怎么说` `英语怎么说` `英文怎么讲` `英语怎么讲` `中文怎么说` `日语怎么说` `韩语怎么说` `用英语` `用英文` `润色` `translation`
 - **红线**：不删减、不臆造；专有名词/人名照原样保留
 - **注意**：关键词是**字面量子串**匹配（拼成 `|` 正则），所以「英文怎么说」覆盖不了「英语怎么说」——同类说法必须逐个列全。2026-10-08 事故就是这个原因。
-- 另有一份历史种子 `specs/kedou-ai-minigram/agent-translate.sql`（名为「语言翻译官」、模型不同），与代码种子 id 相同、name/model 不同，属历史双份。
+- 另有一份历史种子 `specs/kedou-ai-minigram/agent-translate.sql`，与代码种子 id 相同、name/model 不同，属历史双份；库里的 `name` 是「语言翻译官」。
 
-### 3.2 `music` 音乐推荐官
+### 3.2 `music` 音乐推荐官 —— **库中不存在，本节对应的是代码种子**
 
-- **能力**：`present-music-card` / `save-music-taste` / `list-music-providers`，`maxSteps: 4`，`temperature: 0.8`
-- **流程（硬性）**：先 `list-music-providers` 取渠道 → `present-music-card` 出 1–3 首（title/artist/reason）→ 用户表达偏好时 `save-music-taste` 记住（**跨会话生效**）
-- **路由关键词**：17 个（来首音乐 / 来首歌 / 放首歌 / 推荐音乐 / 听歌 / 歌单 / 背景音乐 / BGM / 配乐 …）
+2026-11-27 直查：`agent_definitions` **没有 `music` 这一行**，`agent_definition_versions` 里也**没有任何 `music` 版本**——不是被删了，是**从未以这个 id 落库**。
+
+本节原来描述的三个能力（`list-music-providers` / `present-music-card` / `save-music-taste`）现在挂在 `general`、`emotion`、`general-assistant` 三条定义上。
+
+过时的直接来源是仓库里仍然存在的**孤儿种子** `scripts/seed-music-agent.sql`（第 38 行仍 `INSERT INTO agent_definitions`）——谁跑了它，谁就会造出一条本节描述的 `music`。
+
+本节原有的两条纪律仍然正确，继续适用于现在承载这三个工具的其他 agent：
+
 - **红线**：歌名歌手必须真实存在，不确定就换一首确定的，绝不编造
-- **配套表**：`music_providers`（渠道配置，种子 `qqmusic_h5`）、`user_taste_profiles`（用户口味档案，跨会话记忆）
-- **注意**：`capabilities` 字段必须是 **NULL 而不是 `[]`**（见 §5.2）
+- **注意**：`capabilities` 字段必须是 **NULL 而不是 `[]`**（见 §5.2）——`translate` 恰好是 `[]` 的反例
+
+配套表 `music_providers`（渠道配置，种子 `qqmusic_h5`）与 `user_taste_profiles`（用户口味档案，跨会话记忆）仍然存在。
 
 ### 3.3 `general` 通用助手
 
-- **能力**：`web-search`，`maxSteps: 8`，`temperature: 0.7`
-- **关键词**：**空数组** —— 它是兜底，不靠关键词命中，路由失败时落到它
-- **职责**：日常提问、闲聊、通用知识问答；需要实时信息（新闻/天气/行情）时调 `web-search`
+- **模型**：`hy3`（库实际值；代码种子写的是 `deepseek-v4-flash`）
+- **能力**：3 个 tool —— `list-music-providers` / `present-music-card` / `save-music-taste`；`tools` 为空，`maxSteps: 5`，`temperature: 0.7`
+- **关键词**：库 `keywords` 为 **NULL** —— 它是兜底，不靠关键词命中，路由失败时落到它
+- **职责**：日常提问、闲聊、通用知识问答
+- 🔴 **它没有联网搜索**：`web-search` 不在它的能力里（`tools` 为空，`capabilities` 是音乐三件套）。2026-11-27 实测它明确回答「我目前没有可用的 web-search 工具……我现有的能力主要是音乐推荐」。
 - **边界**：需求明显属于专业场景时，提示用户去对应入口
 
 ### 3.4 `contract-risk` 合同翻译官
 
-- **能力**：`contract-cleaner`（OCR 清洗）/ `contract-rule`（法定标准库扫描）/ `contract-irr`（真实利率 IRR/APR 计算），`maxSteps: 12`，`temperature: 0.3`
+- **模型**：`deepseek-v4-flash`
+- **能力**：4 个 tool —— `contract-cleaner`（OCR 清洗）/ `contract-rule`（法定标准库扫描）/ `contract-irr`（真实利率 IRR/APR 计算）/ `contract-benchmark`，`maxSteps: 20`，`temperature: 0.3`
 - **输出**：只输出一个 JSON 对象，字段 `scene` / `conclusion` / `keyNumbers` / `signals` / `rights` / `disclaimer`
 - **合规红线**：只解读不推荐；必须附免责声明；测算必须基于工具真实数值，不得臆造
 - **配套字典**：`contract_scene`（消费贷/车贷/医疗险/车险/租赁/其他）、`contract_risk_level`（danger/warn/ok）
@@ -190,13 +218,19 @@ SELECT name, model FROM agent_definitions
 
 模型清单和单价都在字典 `dict_items`（`type_code='llm_models'`）的 `attrs` 里（`input_price_per1k` / `output_price_per1k`），`model_pricing` 表**已退役**。三级回落：DB 字典 → `TOKENHUB_MODELS` 环境变量 → 代码内置，60s 轮询。
 
+⚠️ **但当前没有任何一条配了单价**：2026-11-27 实测三环境，本机多数条目连价格 key 都没有、`hy4-preview` 是 `0/0`、dev/prod 的 `attrs` 直接是 NULL。⇒ **所有模型 run 的成本现在全按 0 记**。要让成本统计有意义，必须先补真实单价；补之前任何「成本」口径的结论都不成立。
+
+⚠️ 另注：`attrs` **不参与模型注册**，注册只取 `value`（见 §5.1）。所以填 `attrs` 只影响单价与 UI 展示，填错了不会导致模型注册失败。
+
 ---
 
-## 6. 容易误认但**不存在**的东西
+## 6. 容易误认的东西
+
+> 本节第一行已于 2026-11-27 被证伪，保留原文并标注，因为「以为它不存在」这件事本身还会再发生。
 
 | 看起来像 | 实际情况 |
 | --- | --- |
-| `horoscope`（星座）/ `tool` / `baike` / `emotion` | 只出现在 `intent-classifier.ts` 的 `LEGACY_RULE_TABLE` 废弃兼容表里，**线上不存在**。该文件注释明确写了「不要在这里加新的 agent」 |
+| ~~`horoscope`（星座）/ `tool` / `baike` / `emotion`~~ **← 此行已证伪** | 🔴 **2026-11-27 直查：这四个 id 全部在库，且都是 `status='published'` + `enabled=1`**（见 §2 表格）。它们确实**也**出现在 `LEGACY_RULE_TABLE` 废弃兼容表里，但那是意图分类在「未传 routingHints」时的降级兜底表，**不代表线上不存在**。<br>`intent-classifier.ts` 现位于 `packages/agent-core/src/core/`（不在 `servers/ai-agent/src`），其注释原文是「未传 routingHints 时才退回 LEGACY_RULE_TABLE（仅供旧单测 / 降级兼容，不要在新代码依赖）」——「不要依赖」针对的是这张旧规则表，**不是**说这些 agent 不存在 |
 | `ai_app` / `ai_application` / `ai_capability` 表 | 全仓不存在 |
 | 独立的 prompt 模板表 | 不存在，prompt 就是 `system_prompt` 列 |
 | 应用-模型绑定关系表 | 不存在，只是 `model` 单值字符串 |
