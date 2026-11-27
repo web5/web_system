@@ -314,7 +314,7 @@ MINIPROGRAM_CI_PATH=<ci-dir>/node_modules npm run preview
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `PREVIEW_PAGE` | `pages/chat/index/index` | 扫码直达页面 |
+| `PREVIEW_PAGE` | `pages/welcome/index/index` | 扫码直达页面（默认值以 `scripts/preview.js` 为准） |
 | `PREVIEW_QUERY` | 空 | 页面参数 |
 | `PREVIEW_SCENE` | 空 | 场景值 |
 
