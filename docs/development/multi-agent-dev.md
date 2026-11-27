@@ -70,17 +70,48 @@
 - 主仓 `web_system` 当前已回到 `master`（2026-11-09 甲方案修复）；**构建/发布只在 master 工作树做**，别在它上面切分支改业务代码。
 - 验版本（确认构建源没错）：`curl -s http://127.0.0.1:6000/__manifest__` 看网关实际会加载哪个 commit；`bash scripts/health-check.sh local` 做全量巡检。
 
-### 3.1 `pnpm --filter` 包名不匹配时退出码仍为 0（静默假成功）
+### 3.1 `pnpm --filter` 静默假成功（包名不匹配、脚本名不存在都返回 0）
 
 2026-11-27 实测：执行 `pnpm --filter @kedouai/ai-agent build`，输出 `No projects matched the filters`，但**退出码是 0**。在 `set -e` 或 CI 里看起来是构建成功，实际一个包都没构建，产物时间戳不变。
 
 原因是包名写错：`@kedouai/` 前缀只属于 `packages/agent-core`，服务包实名是 `@web-system/ai-agent`。
 
-判据（三选一，建议叠加前两条）：
+**但包名只是第一种成因。** `--filter` 的「脚本通道」还有第二种静默：**包名全对、只是脚本名不存在时，退出码同样是 0**。下面五形态实测把两类一起摆出来。
 
-1. 先在 workspace 里确认包名存在：`pnpm ls --filter @web-system/ai-agent --depth -1`
+**五形态实测**（全部 `out=$(cmd); c=$?` 捕获，**未走管道**）：
+
+| # | 形态 | 命令 | 退出码 | 输出 | 判定 |
+|---|---|---|---|---|---|
+| 1 | `--filter` + `run` + 缺脚本 | `pnpm --filter deploy-console-server run __no_such_script__` | **0** | `None of the selected packages has a "__no_such_script__" script` | ❌ 静默 |
+| 2 | 形态 1 + `--fail-if-no-match` | 同上加该 flag | **0** | 同上 | ❌ **flag 不覆盖** |
+| 3 | `--filter` **简写**（本节示例就是这种写法） | `pnpm --filter deploy-console-server __no_such_script__` | **0** | 同上 | ❌ 静默 |
+| 4 | 包目录内直跑 | `cd servers/deploy-console && pnpm run __no_such_script__` | **1** | `ERR_PNPM_NO_SCRIPT  Missing script: …` | ✅ 正确失败 |
+| 5 | `--filter` + `exec` 子进程失败 | `pnpm --filter deploy-console-server exec node -e "process.exit(3)"` | **1**（非 3） | `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 3` | ⚠️ 失败可见，退出码被压成 1 |
+
+**第二种成因与判据的关系（判据本身没错，是覆盖不全）**：
+
+- **现象**：`pnpm --filter <pkg> <script>`（简写、不带 `run`）在**脚本名不存在**时，打印 `None of the selected packages has a "<script>" script`，但**退出码 0**。包名全对也一样。
+- **位置**：这正是下方判据 1 示例所用的形态，**读者最容易顺手沿用**。
+- **缺口只在判据 1**：判据 1 只防「包名写错」，对「包名对、脚本名错」不覆盖。判据 2（验产物时间戳）与判据 3（`--reporter=append-only` 看有没有真的执行 build 步骤）**对两类成因都有效**——脚本没跑，产物就不会更新，append-only 下也看不到任何 build 步骤。
+- **所以判据 2/3 是必守项，不因其「看起来像辅助手段」而省略**；要根治则改用安全形态（见判据 4）。
+
+判据（建议 1+2 叠加；构建/测试一律追加 4）：
+
+1. 先在 workspace 里确认包名存在：`pnpm ls --filter @web-system/ai-agent --depth -1`。命令侧可加 `--fail-if-no-match`，让「无匹配」直接非零退出（pnpm 9.15.0 实测生效；注意**顶层 `pnpm --help` 不列该 flag**，要看 `pnpm run --help`）。
+   ⚠️ 该 flag 只守「没有项目匹配到 filter」，**不覆盖**「匹配到项目但脚本不存在」——后者仍是 exit 0（形态 1/2/3）。**它不是解法，只是补丁；不要理解成「加了 flag 就安全」。**
 2. 构建后**必须验产物**，不要只看退出码：`ls -l servers/ai-agent/dist/main.js`（时间戳应为本次）+ `grep -c "TOKENHUB_API_KEY" packages/agent-core/dist/clients/hy3.client.js`
 3. 用 `--filter ... --reporter=append-only` 观察是否真的执行了 build 步骤
+4. **命令形态本身就是判据**：构建/测试优先 `cd <pkg> && pnpm run <script>`（缺脚本 exit 1，错误自动暴露）或 `pnpm --filter <pkg> exec <cmd>`（失败非零，`set -e` 抓得住）；**只要用了 `--filter` 的脚本通道（含简写），就必须配判据 2 的产物校验，不认退出码。**
+
+**包名不能从目录名推**（27 个 workspace 包里有 4 个例外，2026-11-27 实测）：`deploy-console` 出现两次且两个包名都无作用域 —— `servers/deploy-console` → `deploy-console-server`、`apps/deploy-console` → `deploy-console-web`；`packages/kedou-agent` → `kedou-agent`；`packages/agent-core` → `@kedouai/agent-core`（全仓唯一 `@kedouai`）。猜 `--filter @web-system/deploy-console` 会两个都匹配不到、都 exit 0。
+
+**取证方法**（管道会吞掉退出码，本案两个角色各踩过一次，是高频陷阱而非个人粗心）：
+
+- ❌ `cmd | tail -5; echo $?` —— 拿到的是 **`tail`** 的退出码。曾因此差点把「缺脚本 exit 0」这个结论建在假数据上。
+- ✅ `out=$(cmd 2>&1); c=$?`
+- 必须用管道时：`zsh` 是 `$pipestatus`（小写、1-based），`bash` 是 `PIPESTATUS`（大写、0-based），两者不可混用。
+
+**CI 现状（恰好安全，不是按安全形态写的）**：`quality-gate.yml:204-205` 用 `pnpm --filter … exec vite build`，落在形态 5（失败可见），当前不需要改。第 203 行的多包简写 `pnpm --filter … build` 落在形态 3，现值涉及的 4 个包（shared / types / ui / agent-message）都确有 `build` 脚本，所以**暂时**不会静默 —— 这是「恰好安全」：任一包把脚本改名，该行就会不报错地跳过它。
 
 同一模式适用于所有 `--filter` 用法，不限于构建。
 

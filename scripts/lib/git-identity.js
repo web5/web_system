@@ -1,12 +1,10 @@
 /**
  * git-identity — 「我正在测/出的到底是哪份代码」的判据（零外部依赖，纯函数 + 注入 exec）
  *
- * ⚠️ 本文件是 `scripts/lib/miniprogram-preflight.js` 里 P3（版本真实性）同名实现的
- *    **抽取副本**：`readGitIdentity` / `isSameSha` 逐字搬出，逻辑零改动
- *    （含 `git status --short` 必须保留前导空格的 `keepLeading` 口径）。
- *    preflight 侧待后续单独收敛 —— **本轮刻意不改 `miniprogram-preflight.js`**：
- *    那是 52KB 出码核心，动它有回归风险，收敛留给单独一轮做。
- *    在那之前：这两处同名实现**改动时两边都要看**，任何一侧语义漂移都会让
+ * ⚠️ 本文件是 **唯一实现**：`scripts/lib/miniprogram-preflight.js`（P3 版本真实性）与
+ *    `packages/mp-e2e/src/version-guard.js`（E2E 版本守卫）都 require 本文件，两处不再各留副本。
+ *    逻辑从 preflight 侧逐字搬出，零改动（含 `git status --short` 必须保留前导空格的 `keepLeading` 口径）。
+ *    **改动此处同时影响出码前预检与 E2E**：任何一侧语义漂移都会让
  *    「出码前预检说版本对」与「E2E 说版本对」得出不同结论。
  *
  * 为什么要有它（真实事故，2026-11-27 大橙子整包编译失败）：

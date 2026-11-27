@@ -3,10 +3,13 @@
  *
  * 全部用假 `execFileSync`，不依赖本仓库当前 git 状态：
  *   真跑 `git` 的话，断言会随「当前分支/是否脏」漂移，等于把测试绑在开发者的工作区上。
+ *
+ * 2026-11-28 盲测发现：原 ⑫ 与设计文档写反，已按「声明了期望就必须核对」修正
+ *   （拆成 ⑫a「共享层缺失 + 未设变量 → 不抛」与 ⑫b「共享层缺失 + 设了变量 → 必抛」）。
  */
 
 const path = require('path');
-const { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH } = require('../../src/version-guard');
+const { checkVersionConsistency, EXPECT_SHA_ENV, SHARED_IDENTITY_PATH, parseShaListFallback } = require('../../src/version-guard');
 
 const PROJECT = '/tmp/mp-app-fixture';
 
@@ -146,11 +149,22 @@ describe('version-guard 判定矩阵', () => {
     expect(result).toMatchObject({ dirty: true, matched: true });
   });
 
-  test('⑫ 共享层缺失（mp-e2e 被单独拷走）→ 只 warn 跳过，不失败；即使设了变量也不抛', () => {
-    const { result, text } = runGuard({ env: { [EXPECT_SHA_ENV]: 'deadbeef' }, loadIdentity: () => null });
+  test('⑫a 共享层缺失（mp-e2e 被单独拷走）+ 未设变量 → 只 warn 跳过，不失败', () => {
+    const { result, text } = runGuard({ env: {}, loadIdentity: () => null });
     expect(text).toContain('[mp-e2e] warning: 共享层');
     expect(text).toContain('跳过版本一致性校验');
     expect(result).toEqual({ ok: true, sha: '', branch: '', dirty: false, matched: null });
+  });
+
+  test('⑫b 共享层缺失 + 设了 MP_E2E_EXPECT_SHA → 必抛（声明了期望就必须能核对）', () => {
+    // 2026-11-28 盲测 P1：这条原先和 ⑫a 合并成一句「即使设了变量也不抛」，
+    // 与文件头「设了但读不到 git → throw」写反 —— 共享层缺失同样是「读不到 git 身份」。
+    const { err } = catchGuard({ env: { [EXPECT_SHA_ENV]: 'deadbeef' }, loadIdentity: () => null });
+    expect(err).toBeTruthy();
+    expect(err.message).toContain('deadbeef');            // 已声明的期望 sha 必须回显
+    expect(err.message).toContain(SHARED_IDENTITY_PATH);  // 缺失的绝对路径必须回显
+    expect(err.message).toContain(EXPECT_SHA_ENV);        // 变量名要回显（一眼看出该去掉哪个）
+    expect(err.message).toContain('git-identity.js');     // 处置①：指出该确认哪个文件
   });
 
   test('⑬ 空串 / 纯空白 / 纯逗号的期望值等价于未设（不许把空值当「必须匹配空 sha」）', () => {
@@ -207,6 +221,14 @@ describe('共享层 scripts/lib/git-identity.js', () => {
     expect(shared.parseShaList('')).toEqual([]);
     expect(shared.parseShaList(undefined)).toEqual([]);
     expect(shared.parseShaList(null)).toEqual([]);
+    // 🔴 2026-11-28 复审补（不新增 it，保持用例数 64）：version-guard 的「共享层缺失」分支用的是
+    //    本地 parseShaListFallback —— 那是**同构的第二份实现**。共享层哪天改了分隔符 / trim 规则，
+    //    它会静默漂移，而漂移只影响「声明了期望却没被识别」这种最不该出错的地方。
+    //    下面逐例对拍，把「两份规则必须等价」钉成断言。
+    for (const v of [undefined, null, '', '   ', ', ,', 'a', 'a, b ,c', 'a , b ,', 'a,,b', ',a',
+      'a1b2c3d,deadbeef', 'deadbeef, cafebabe ,', 123]) {
+      expect(parseShaListFallback(v)).toEqual(shared.parseShaList(v));
+    }
   });
 
   test('describeIdentity：正常 branch@sha / detached 裸 sha / git 不可用', () => {
