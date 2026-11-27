@@ -47,7 +47,7 @@ import { ICONS } from '../../../utils/icons';
 // D7 收藏态跨界面回查（2026-11-27）：本地缓存只作**初值**，收藏入口永不因「已收藏」短路。
 // 后端没有「是否已收藏」存在性接口（只有分页列表 + keyword 模糊），静默回查会给出假否定，
 // 故走缓存 + 写请求纠正兜底 —— 详见 utils/collect-cache.ts 文件头。
-import { isCollectedCached, rememberCollected } from '../../../utils/collect-cache';
+import { isCollectedCached, rememberCollected, normalizeCollectKey } from '../../../utils/collect-cache';
 
 /** 册别角标文案（A3 方案①，原型 d3c3730281e758d8）：中文册名 + · L{课号}；
  *  book 缺失/非法 → 返回空串（WXML 隐藏 pill，不显 undefined）；lessonId 缺失只显册名，绝不编造课号。 */
@@ -892,8 +892,19 @@ Page({
    */
   async collectQuote() {
     const q = this.data.quote;
+    // 🔴 收藏目标快照（2026-11-27 P0「异步回调串台」）：await 之前先记下**这次收的是哪一句**。
+    //    判据用 `normalizeCollectKey`（与收藏缓存、后端 hashOf 同一份归一化）→「同一个键」
+    //    就是「同一个收藏对象」，不引入第二套比较标准。
+    const target = normalizeCollectKey(q.en);
     const r = await this._collectLine(q.en, q.cn);
-    if (r.ok && !this.data.quoteCollected) this.setData({ quoteCollected: true });
+    if (!r.ok) return;
+    // 响应回来时用户可能已经换句（`_applyQuote` 已按新句重算了 `quoteCollected`）：
+    // 只有**仍停在原来那一句**上才写回，否则这句的「已收藏」会把下一句点亮成假状态
+    // （对照详情页 `collectTipWord` 的 same 复核，detail.ts:760-766）。
+    const cur = this.data.quote;
+    const same = !!cur && normalizeCollectKey(cur.en) === target;
+    if (!same) return;
+    if (!this.data.quoteCollected) this.setData({ quoteCollected: true });
   },
 
   /**
@@ -947,8 +958,19 @@ Page({
   async collectQuoteWord() {
     const ov = this.data.overlay;
     if (!ov || ov.kind !== 'wordtip' || !ov.word) return;
+    // 🔴 收藏目标快照（2026-11-27 P0「异步回调串台」）：await 之前记住这次收的是**哪个词**
+    //    （小写归一，与详情页 `collectTipWord` 的 `word` 变量逐字同口径，detail.ts:755）。
+    const word = String(ov.word).toLowerCase();
     const r = await this._collectWord(ov.word, true);
-    if (r.ok && !this.data.quoteWordCollected) this.setData({ quoteWordCollected: true });
+    if (!r.ok) return;
+    // 响应回来时词卡可能已经**关掉**，也可能已经**换成另一个词**：只在仍停在同一个词上才改
+    // 按钮态。`quoteWordCollected` 是单槽位，不复核就会把「下一个词」的按钮写成上一个词的
+    // 结果（B 明明没收藏过却显示 ✓ 已收藏）—— 判据与详情页 detail.ts:760-766 一致。
+    const cur = this.data.overlay;
+    const same = !!cur && cur.kind === 'wordtip'
+      && String(cur.word || '').toLowerCase() === word;
+    if (!same) return;
+    if (!this.data.quoteWordCollected) this.setData({ quoteWordCollected: true });
   },
 
   /**
